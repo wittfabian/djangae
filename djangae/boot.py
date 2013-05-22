@@ -55,6 +55,7 @@ def setup_paths():
     if not appengine_on_path():
         for path in possible_sdk_locations():
             if os.path.exists(path):
+                os.environ['APP_ENGINE_SDK'] = path
                 sys.path.insert(1, path)
                 logging.info("Using App Engine SDK at '%s'", path)
                 break
