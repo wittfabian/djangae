@@ -1,16 +1,19 @@
-from .boot import setup_paths
+from .boot import setup_paths, on_production
 
 class DjangaeApplication(object):
     @staticmethod
     def fix_sandbox():
+        if on_production():
+            return
+
         setup_paths()
 
         from google.appengine.tools.devappserver2.python import sandbox
 
-        sandbox._WHITE_LIST_C_MODULES.extend([
-            '_sqlite3'
-        ])
-
+        if '_sqlite3' not in sandbox._WHITE_LIST_C_MODULES:
+            sandbox._WHITE_LIST_C_MODULES.extend([
+                '_sqlite3'
+            ])
 
     def __init__(self, application):
         setup_paths()
