@@ -73,7 +73,10 @@ class Command(BaseRunserverCommand):
                 dev_appserver,
                 find_project_root(),
                 "-p",
-                self.port
+                self.port,
+                "--use_sqlite",
+                "--high_replication",
+                "--allow_skipped_files"
             ]
         else:
             dev_appserver = os.path.join(sdk_path, "dev_appserver.py")
