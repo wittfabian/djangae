@@ -1,6 +1,7 @@
 import os
 import sys
 import time
+from optparse import make_option
 
 from django.core.management.commands.runserver import BaseRunserverCommand
 
@@ -18,8 +19,14 @@ class Command(BaseRunserverCommand):
     will be deployed to.
     """
 
+    option_list = BaseRunserverCommand.option_list + (
+        make_option('--old', '-o', action='store_true', dest='use_old_dev_appserver',
+            default=False, help='Tells GAE to use the old dev_appserver.'),
+    )
+
     def inner_run(self, *args, **options):
         shutdown_message = options.get('shutdown_message', '')
+        use_old_dev_appserver = options.get('use_old_dev_appserver')
         quit_command = 'CTRL-BREAK' if sys.platform == 'win32' else 'CONTROL-C'
 
         from djangae.boot import setup_paths, find_project_root
@@ -60,16 +67,24 @@ class Command(BaseRunserverCommand):
         #Will have been set by setup_paths
         sdk_path = os.environ['APP_ENGINE_SDK']
 
-        dev_appserver = os.path.join(sdk_path, "dev_appserver.py")
-
-        command = [
-            dev_appserver,
-            find_project_root(),
-            "--port",
-            self.port,
-            "--admin_port",
-            "8001"
-        ]
+        if use_old_dev_appserver:
+            dev_appserver = os.path.join(sdk_path, "old_dev_appserver.py")
+            command = [
+                dev_appserver,
+                find_project_root(),
+                "-p",
+                self.port
+            ]
+        else:
+            dev_appserver = os.path.join(sdk_path, "dev_appserver.py")
+            command = [
+                dev_appserver,
+                find_project_root(),
+                "--port",
+                self.port,
+                "--admin_port",
+                "8001"
+            ]
 
         time.sleep(1)
 
