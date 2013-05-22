@@ -61,7 +61,6 @@ class Command(BaseRunserverCommand):
         sdk_path = os.environ['APP_ENGINE_SDK']
 
         dev_appserver = os.path.join(sdk_path, "dev_appserver.py")
-        wrapper_script = os.path.join(os.path.dirname(__file__), "wrapper")
 
         command = [
             dev_appserver,
