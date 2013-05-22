@@ -61,6 +61,7 @@ class Command(BaseRunserverCommand):
         sdk_path = os.environ['APP_ENGINE_SDK']
 
         dev_appserver = os.path.join(sdk_path, "dev_appserver.py")
+        wrapper_script = os.path.join(os.path.dirname(__file__), "wrapper")
 
         command = [
             dev_appserver,
@@ -76,7 +77,8 @@ class Command(BaseRunserverCommand):
         process = Popen(
             command,
             stdout=sys.__stdout__,
-            stderr=sys.__stderr__
+            stderr=sys.__stderr__,
+            cwd=find_project_root()
         )
 
         #This makes sure that dev_appserver gets killed on reload
