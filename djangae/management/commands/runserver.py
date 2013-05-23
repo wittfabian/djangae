@@ -29,7 +29,7 @@ class Command(BaseRunserverCommand):
         use_old_dev_appserver = options.get('use_old_dev_appserver')
         quit_command = 'CTRL-BREAK' if sys.platform == 'win32' else 'CONTROL-C'
 
-        from djangae.boot import setup_paths, find_project_root
+        from djangae.boot import setup_paths, find_project_root, data_root
         setup_paths()
 
         from django.conf import settings
@@ -76,7 +76,9 @@ class Command(BaseRunserverCommand):
                 self.port,
                 "--use_sqlite",
                 "--high_replication",
-                "--allow_skipped_files"
+                "--allow_skipped_files",
+                "--datastore_path",
+                os.path.join(data_root(), "datastore.db")
             ]
         else:
             dev_appserver = os.path.join(sdk_path, "dev_appserver.py")
@@ -86,7 +88,9 @@ class Command(BaseRunserverCommand):
                 "--port",
                 self.port,
                 "--admin_port",
-                "8001"
+                "8001",
+                "--storage_path",
+                data_root()
             ]
 
         time.sleep(1)
