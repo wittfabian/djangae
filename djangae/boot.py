@@ -13,6 +13,29 @@ def find_project_root():
 
     raise RuntimeError("Unable to locate manage.py on sys.path")
 
+def data_root():
+    return os.path.join(find_project_root(), ".gaedata")
+
+def application_id():
+    setup_paths()
+    from google.appengine.api import app_identity
+
+    try:
+        result = app_identity.get_application_id()
+    except AttributeError:
+        result = None
+
+    if not result:
+        from google.appengine.tools import dev_appserver
+        appconfig = dev_appserver.LoadAppConfig(
+            find_project_root(), {},
+            default_partition='dev'
+        )[0]
+
+        result = appconfig.application.split('~', 1)[-1]
+
+    return result
+
 def possible_sdk_locations():
     POSSIBLE_SDK_LOCATIONS = [
         os.path.join(find_project_root(), "google_appengine"),
