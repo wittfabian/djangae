@@ -6,7 +6,8 @@ from django.db.models.fields import NOT_PROVIDED
 from django.db.models.query import QuerySet
 from django.db.models.sql import aggregates as sqlaggregates
 from django.db.models.sql.compiler import SQLCompiler
-from django.db.models.sql.constants import LOOKUP_SEP, MULTI, SINGLE
+from django.db.models.constants import LOOKUP_SEP
+from django.db.models.sql.constants import MULTI, SINGLE
 from django.db.models.sql.where import AND, OR
 from django.db.utils import DatabaseError, IntegrityError
 from django.utils.tree import Node
@@ -437,12 +438,11 @@ class NonrelCompiler(SQLCompiler):
         Returns fields which should get loaded from the back-end by the
         current query.
         """
-
         # We only set this up here because related_select_fields isn't
         # populated until execute_sql() has been called.
-        if self.query.select_fields:
-            fields = (self.query.select_fields +
-                      self.query.related_select_fields)
+        if self.query.select:
+            fields = ([ x[1] for x in self.query.select] +
+                      [ x[1] for x in self.query.related_select_cols])
         else:
             fields = self.query.model._meta.fields
 

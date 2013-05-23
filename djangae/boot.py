@@ -32,7 +32,9 @@ def application_id():
             default_partition='dev'
         )[0]
 
-        result = appconfig.application.split('~', 1)[-1]
+        os.environ['APPLICATION_ID'] = appconfig.application
+        result = app_identity.get_application_id()
+
 
     return result
 

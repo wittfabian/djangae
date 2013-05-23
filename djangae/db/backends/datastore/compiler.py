@@ -1,24 +1,21 @@
 from functools import wraps
 import sys
 
-from django.db.models.fields import AutoField
-from django.db.models.sql import aggregates as sqlaggregates
-from django.db.models.sql.constants import LOOKUP_SEP, MULTI, SINGLE
-from django.db.models.sql.where import AND, OR
-from django.db.utils import DatabaseError, IntegrityError
-from django.utils.tree import Node
+from django.db.models.sql.constants import MULTI
+from django.db.utils import DatabaseError
 
 from google.appengine.api.datastore import Entity, Query, MultiQuery, \
     Put, Get, Delete
 from google.appengine.api.datastore_errors import Error as GAEError
 from google.appengine.api.datastore_types import Key, Text
 
-from djangotoolbox.db.basecompiler import (
+from .nonrel.basecompiler import (
     NonrelQuery,
     NonrelCompiler,
     NonrelInsertCompiler,
     NonrelUpdateCompiler,
-    NonrelDeleteCompiler)
+    NonrelDeleteCompiler
+)
 
 from .db_settings import get_model_indexes
 from .expressions import ExpressionEvaluator
