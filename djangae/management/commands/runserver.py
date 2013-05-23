@@ -93,8 +93,6 @@ class Command(BaseRunserverCommand):
                 data_root()
             ]
 
-        time.sleep(1)
-
         process = Popen(
             command,
             stdout=sys.__stdout__,
