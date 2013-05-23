@@ -2,6 +2,7 @@ import os
 import signal
 import sys
 import time
+from optparse import make_option
 from subprocess import Popen
 
 from django.core.management.base import BaseCommand
@@ -9,11 +10,21 @@ from django.core.management.base import BaseCommand
 
 class Command(BaseCommand):
 
-    option_list = BaseCommand.option_list
+    # I'd like to use --application and --version, but --version is already
+    # included in BaseCommand.option_list, and for being consistent, I'm
+    # using app-id and app-version
+    option_list = BaseCommand.option_list + (
+        make_option('--app-id', '-A', dest='application', default=None,
+            help='Set the application, overriding the application value from app.yaml file.'),
+        make_option('--app-version', '-V', dest='version', default=None,
+            help='Set the (major) version, overriding the version value from app.yaml file.'),
+    )
     help = "Deploy your application into Google App Engine"
 
     def handle(self, *args, **options):
         shutdown_message = options.get('shutdown_message', '')
+        application = options.get('application')
+        version = options.get('version')
 
         from djangae.boot import setup_paths, find_project_root
         setup_paths()
@@ -30,13 +41,19 @@ class Command(BaseCommand):
 
         appcfg = os.path.join(sdk_path, "appcfg.py")
 
-        # very simple for now, only runs appcfg.py update .
-        # TODO: Add more options and route them to appcfg.py
+        # very simple for now, only runs appcfg.py update . and some
+        # extra parameters like app id or version
+
         command = [
             appcfg,
             "update",
             project_root
         ]
+
+        if application:
+            command += ["-A", application]
+        if version:
+            command += ["-V", version]
 
         process = Popen(
             command,
