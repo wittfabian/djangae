@@ -19,7 +19,7 @@ from .nonrel.base import (
     NonrelDatabaseWrapper
 )
 
-from djangae.boot import data_root, setup_paths, application_id
+from djangae.boot import data_root, setup_paths, application_id, find_project_root
 
 DATASTORE_PATHS = {
     'datastore_path': os.path.join(data_root(), 'datastore'),
@@ -277,9 +277,7 @@ class DatabaseIntrospection(NonrelDatabaseIntrospection):
 
         return [kind.key().name() for kind in Query(kind='__kind__').Run()]
 
-
 class DatabaseWrapper(NonrelDatabaseWrapper):
-
     def __init__(self, *args, **kwds):
         super(DatabaseWrapper, self).__init__(*args, **kwds)
         setup_paths() #Make sure we can find appengine
@@ -296,7 +294,26 @@ class DatabaseWrapper(NonrelDatabaseWrapper):
         self.remote_api_path = options.get('REMOTE_API_PATH', None)
         self.secure_remote_api = options.get('SECURE_REMOTE_API', True)
 
-        logging.error("Datastore stubs are not being configured yet")
+        from google.appengine.api import datastore_errors
+
+        class DatabaseErrors(object):
+            DataError = datastore_errors.BadValueError
+            OperationalError = datastore_errors.InternalError
+            IntegrityError = datastore_errors.Error
+            InternalError = datastore_errors.InternalError
+            ProgrammingError = datastore_errors.BadRequestError
+            NotSupportedError = datastore_errors.BadQueryError
+            DatabaseError = datastore_errors.InternalError
+            InterfaceError = datastore_errors.InternalError
+            Error = datastore_errors.Error
+
+        self.Database = DatabaseErrors
+
+    def get_connection_params(self):
+        return {}
+
+    def init_connection_state(self):
+        pass
 
     def flush(self):
         """
@@ -305,6 +322,41 @@ class DatabaseWrapper(NonrelDatabaseWrapper):
         """
 
         logging.error("Datastore flush is not implemented")
+
+    def get_new_connection(self, conn_params):
+        from google.appengine.datastore import datastore_stub_util
+        from google.appengine.datastore import datastore_sqlite_stub
+        from google.appengine.api import apiproxy_stub_map
+
+        datastore_stub = datastore_sqlite_stub.DatastoreSqliteStub(
+            "dev~" + application_id(),
+            os.path.join(data_root(), 'datastore.db'),
+            False,
+            trusted=False,
+            root_path=find_project_root(),
+            auto_id_policy=datastore_stub_util.SCATTERED
+        )
+
+        datastore_stub.SetConsistencyPolicy(datastore_stub_util.PseudoRandomHRConsistencyPolicy())
+        apiproxy_stub_map.apiproxy.ReplaceStub('datastore_v3', datastore_stub)
+
+        class FakeConnection:
+            def commit(self):
+                pass
+
+        return FakeConnection()
+
+    def _set_autocommit(self, value):
+        pass
+
+    def close(self):
+        from google.appengine.api import apiproxy_stub_map
+        from google.appengine.datastore import datastore_stub_util
+        datastore_stub = apiproxy_stub_map.apiproxy.GetStub('datastore_v3')
+
+        if isinstance(datastore_stub, datastore_stub_util.BaseTransactionManager):
+            logging.info('Applying all pending transactions and saving the datastore')
+            datastore_stub.Write()
 
 
 def delete_all_entities():

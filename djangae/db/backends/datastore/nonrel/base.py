@@ -658,4 +658,5 @@ class NonrelDatabaseWrapper(BaseDatabaseWrapper):
     }
 
     def _cursor(self):
+        self.ensure_connection()
         return FakeCursor()

@@ -58,6 +58,8 @@ class NonrelQuery(object):
     def __init__(self, compiler, fields):
         self.compiler = compiler
         self.connection = compiler.connection
+        self.connection.ensure_connection()
+
         self.ops = compiler.connection.ops
         self.query = compiler.query # sql.Query
         self.fields = fields
@@ -346,6 +348,7 @@ class NonrelCompiler(SQLCompiler):
         Handles SQL-like aggregate queries. This class only emulates COUNT
         by using abstract NonrelQuery.count method.
         """
+
         aggregates = self.query.aggregate_select.values()
 
         # Simulate a count().
