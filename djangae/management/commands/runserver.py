@@ -87,9 +87,7 @@ class Command(BaseRunserverCommand):
                 find_project_root(),
                 "--port",
                 self.port,
-                "--admin_port",
-                "8001",
-                "--storage_path",
+                "--datastore_path",
                 data_root()
             ]
 

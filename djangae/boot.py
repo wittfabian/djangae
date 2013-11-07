@@ -2,6 +2,30 @@ import logging
 import os
 import sys
 
+def setup_datastore_stubs():
+    from google.appengine.datastore import datastore_sqlite_stub
+    from google.appengine.api import apiproxy_stub_map
+    from google.appengine.datastore import datastore_stub_util
+    
+    app_id = application_id()
+    
+    datastore = datastore_sqlite_stub.DatastoreSqliteStub(
+        "dev~" + app_id, 
+        os.path.join(data_root(), "datastore"), 
+        require_indexes=False,
+        trusted=False, 
+        root_path=find_project_root(),
+        use_atexit=True
+    )
+    
+    datastore.SetConsistencyPolicy(
+          datastore_stub_util.TimeBasedHRConsistencyPolicy()
+    )
+    
+    apiproxy_stub_map.apiproxy.ReplaceStub(
+        'datastore_v3', datastore
+    )
+
 def find_project_root():
     """
         Go through the path, and look for manage.py
@@ -14,7 +38,10 @@ def find_project_root():
     raise RuntimeError("Unable to locate manage.py on sys.path")
 
 def data_root():
-    return os.path.join(find_project_root(), ".gaedata")
+    path = os.path.join(find_project_root(), ".gaedata")
+    if not os.path.exists(path):
+        os.makedirs(path)
+    return path
 
 def application_id():
     setup_paths()
