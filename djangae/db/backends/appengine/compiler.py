@@ -1,13 +1,18 @@
 from django.db.models.sql import compiler
 from djangae.db.backends.appengine.query import Query
-
+from django.db.models.sql.datastructures import EmptyResultSet
 from django.db.models.sql.constants import MULTI, SINGLE, GET_ITERATOR_CHUNK_SIZE
 
 class SQLCompiler(compiler.SQLCompiler):
     query_class = Query
 
     def execute_sql(self, result_type=MULTI):
-        sql, params = self.as_sql()
+        try:
+            sql, params = self.as_sql()
+        except EmptyResultSet:
+            #This query couldn't match anything (e.g. thing__in=[])
+            sql = None
+
         if not sql:
             if result_type == MULTI:
                 return iter([])

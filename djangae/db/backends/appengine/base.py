@@ -79,11 +79,12 @@ class Cursor(object):
         self.start_cursor = None
         self.returned_ids = []
         self.queried_fields = []
+        self.query_done = True
 
     @property
     def query(self):
         return self.queries[0]
-    
+
     @query.setter
     def query(self, value):
         if self.queries:
@@ -117,88 +118,88 @@ class Cursor(object):
 
     def _update_projection_state(self, field, lookup_type):
         db_type = field.db_type(self.connection)
-        
+
         disable_projection = False
         projected_fields = self.query.GetQueryOptions().projection
-        
+
         if not projected_fields or field.column not in projected_fields:
             return
-        
+
         if db_type in ("text", "bytes"):
             disable_projection = True
-            
+
         if lookup_type in ('exact', 'in'):
             disable_projection = True
-        
+
         if disable_projection:
             new_queries = []
             for query in self.queries:
                 new_query = datastore.Query(query._Query__kind) #Nasty
                 new_query.update(query)
                 new_queries.append(new_query)
-                
+
             self.queries = new_queries
 
     def _apply_filters(self, model, where, negated=False):
         if where.negated:
             negated = not negated
-        
+
         if not negated and where.connector != AND:
             raise DatabaseError("Only AND filters are supported")
-            
+
         for child in where.children:
             if isinstance(child, Node):
                 self._apply_filters(model, child, negated)
                 continue
-                
+
             field, lookup_type, value = self._parse_child(model, child)
             self._apply_filter(model, field, lookup_type, negated, value)
-        
+
         if where.negated:
             negated = not negated
-    
+
     def _apply_filter(self, model, field, lookup_type, negated, value, query_to_update=None):
         query_to_update = query_to_update or self.query
-        
+
         if lookup_type not in OPERATORS_MAP:
             raise DatabaseError("Lookup type %r isn't supported." % lookup_type)
-        
+
         column = field.column
         if field.primary_key:
             column = "__key__"
-            
+
         #Disable projection queries if neccessary
         self._update_projection_state(field, lookup_type)
-        
+
         op = OPERATORS_MAP.get(lookup_type)
-                
+
         if op is None:
             if lookup_type == "in":
                 new_queries = []
                 for query in self.queries:
-                    for v in value:                    
+                    for v in value:
                         new_query = datastore.Query(model._meta.db_table)
                         new_query.update(query)
                         new_query = self._apply_filter(model, field, 'exact', negated, v, query_to_update=new_query)
                         new_queries.append(new_query)
-                                            
+
                 self.queries = new_queries
                 return
-    
+
         if op is None:
             import pdb; pdb.set_trace()
-                                                  
+
         assert(op is not None)
-        
+
         query_to_update["%s %s" % (column, op)] = value
         return query_to_update
-        
+
     def _parse_child(self, model, child):
         constraint, lookup_type, annotation, value = child
         packed, value = constraint.process(lookup_type, value, self.connection)
         alias, column, db_type = packed
         field = constraint.field
-        
+
         #FIXME: Add support for simple inner joins
         opts = model._meta
         if alias and alias != opts.db_table:
@@ -212,11 +213,11 @@ class Cursor(object):
             assert field.primary_key
             field = opts.get_field(column[:-3]) #Remove _id
             assert field.rel is not None
-        
+
         #FIXME: Probably need to do some processing of the value here like
-        #djangoappengine does    
-        return field, lookup_type, value            
-            
+        #djangoappengine does
+        return field, lookup_type, value
+
     def execute_appengine_query(self, model, query):
         if isinstance(query, InsertQuery):
             self.returned_ids = datastore.Put([ self.django_instance_to_entity(model, query.fields, query.raw, x) for x in query.objs ])
@@ -229,7 +230,7 @@ class Cursor(object):
             else:
                 projection = None
                 self.queried_fields = [ x.column for x in model._meta.fields ]
-            
+
             pk_field = model._meta.pk.name
             try:
                 #Set the column name to __key__ and then we know the order it came
@@ -243,7 +244,7 @@ class Cursor(object):
                 projection=projection
             )
 
-            #Apply filters            
+            #Apply filters
             self._apply_filters(model, query.where)
 
             try:
@@ -252,16 +253,22 @@ class Cursor(object):
             except IndexError:
                 pass
 
+        self.query_done = False
+
 
     def fetchmany(self, size):
-        logging.error("NOT IMPLEMENTED: Called fetchmany")
-        if self.results is None:
+        logging.error("NOT FULLY IMPLEMENTED: Called fetchmany")
+        if self.results is None and not self.query_done:
             if not self.queries:
-                raise Database.Error()      
-                  
-            self.results = self.query.Run(limit=size, start=self.start_cursor)
+                raise Database.Error()
 
-        self.start_cursor = self.query.GetCursor()
+            if isinstance(self.query, datastore.MultiQuery):
+                self.results = self.query.Run()
+                self.query_done = True
+            else:
+                self.results = self.query.Run(limit=size, start=self.start_cursor)
+                self.start_cursor = self.query.GetCursor()
+                self.query_done = not self.results
 
         results = []
         for entity in self.results:
@@ -273,7 +280,7 @@ class Cursor(object):
                     result.append(entity.get(col))
 
             results.append(tuple(result))
-        
+
         return results
 
     @property
@@ -336,14 +343,14 @@ class DatabaseCreation(BaseDatabaseCreation):
         'AbstractIterableField':      'list',
         'ListField':                  'list',
         'RawField':                   'raw',
-        'BlobField':                  'bytes',            
+        'BlobField':                  'bytes',
         'TextField':                  'text',
         'XMLField':                   'text',
         'SetField':                   'list',
         'DictField':                  'bytes',
         'EmbeddedModelField':         'bytes'
     }
-    
+
     def sql_create_model(self, model, *args, **kwargs):
         return [], {}
 
