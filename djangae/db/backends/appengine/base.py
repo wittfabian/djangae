@@ -214,9 +214,36 @@ class Cursor(object):
             field = opts.get_field(column[:-3]) #Remove _id
             assert field.rel is not None
 
+        def normalize_value(_value, _lookup_type, _annotation):
+            # Undo Field.get_db_prep_lookup putting most values in a list
+            # (a subclass may override this, so check if it's a list) and
+            # losing the (True / False) argument to the "isnull" lookup.
+            if _lookup_type not in ('in', 'range', 'year') and \
+               isinstance(value, (tuple, list)):
+                if len(_value) > 1:
+                    raise DatabaseError("Filter lookup type was %s; expected the "
+                                        "filter argument not to be a list. Only "
+                                        "'in'-filters can be used with lists." %
+                                        lookup_type)
+                elif lookup_type == 'isnull':
+                    _value = _annotation
+                else:
+                    _value = _value[0]
+
+            # Remove percents added by Field.get_db_prep_lookup (useful
+            # if one were to use the value in a LIKE expression).
+            if _lookup_type in ('startswith', 'istartswith'):
+                _value = _value[:-1]
+            elif _lookup_type in ('endswith', 'iendswith'):
+                _value = _value[1:]
+            elif _lookup_type in ('contains', 'icontains'):
+                _value = _value[1:-1]
+
+            return _value
+
         #FIXME: Probably need to do some processing of the value here like
         #djangoappengine does
-        return field, lookup_type, value
+        return field, lookup_type, normalize_value(value, lookup_type, annotation)
 
     def execute_appengine_query(self, model, query):
         if isinstance(query, InsertQuery):
@@ -285,7 +312,6 @@ class Cursor(object):
 
     @property
     def lastrowid(self):
-        logging.error("NOT IMPLEMENTED: Last row id")
         return self.returned_ids[-1].id_or_name()
 
 class Database(object):
@@ -306,6 +332,17 @@ class DatabaseOperations(BaseDatabaseOperations):
 
     def quote_name(self, name):
         return name
+
+    def sql_flush(self, style, tables, seqs, allow_cascade):
+        logging.info("Flushing datastore")
+
+        for table in tables:
+            all_the_things = list(datastore.Query(table, keys_only=True).Run())
+            while all_the_things:
+                datastore.Delete(all_the_things)
+                all_the_things = list(datastore.Query(table, keys_only=True).Run())
+
+        return []
 
 class DatabaseClient(BaseDatabaseClient):
     pass
@@ -360,6 +397,12 @@ class DatabaseCreation(BaseDatabaseCreation):
     def sql_indexes_for_model(self, model, *args, **kwargs):
         return []
 
+    def _create_test_db(self, verbosity, autoclobber):
+        pass
+
+    def _destroy_test_db(self, name, verbosity):
+        pass
+
 class DatabaseIntrospection(BaseDatabaseIntrospection):
     def get_table_list(self, cursor):
         return metadata.get_kinds()
@@ -374,6 +417,7 @@ class DatabaseSchemaEditor(BaseDatabaseSchemaEditor):
 
 class DatabaseFeatures(BaseDatabaseFeatures):
     empty_fetchmany_value = []
+    supports_transactions = False #FIXME: Make this True!
 
 class DatabaseWrapper(BaseDatabaseWrapper):
     operators = {
