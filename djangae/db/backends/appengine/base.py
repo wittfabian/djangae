@@ -30,6 +30,8 @@ from google.appengine.api import datastore
 from django.db.models.sql.where import AND, OR
 from django.utils.tree import Node
 
+from django.core.cache import cache
+
 OPERATORS_MAP = {
     'exact': '=',
     'gt': '>',
@@ -53,6 +55,38 @@ class IntegrityError(DatabaseError):
 
 class NotSupportedError(DatabaseError):
     pass
+
+DEFAULT_CACHE_TIMEOUT = 10
+
+def cache_entity(model, entity):
+    unique_combinations = get_uniques_from_model(model)
+
+    unique_keys = []
+    for fields in unique_combinations:
+        key_parts = [ (x, entity[x]) for x in fields ]
+        unique_keys.append(generate_unique_key(model, key_parts))
+
+    for key in unique_keys:
+        logging.error("Caching entity with key %s", key)
+        cache.set(key, entity, DEFAULT_CACHE_TIMEOUT)
+
+def get_uniques_from_model(model):
+    uniques = [ [ model._meta.get_field(y).column for y in x ] for x in model._meta.unique_together ]
+    uniques.extend([[x.column] for x in model._meta.fields if x.unique])
+    return uniques
+
+def generate_unique_key(model, fields_and_values):
+    fields_and_values = sorted(fields_and_values, key=lambda x: x[0]) #Sort by field name
+
+    key = '%s.%s|' % (model._meta.app_label, model._meta.db_table)
+    key += '|'.join(['%s:%s' % (field, value) for field, value in fields_and_values])
+    return key
+
+def get_entity_from_cache(key):
+    entity = cache.get(key)
+    if entity:
+        logging.error("Got entity from cache with key %s", key)
+    return entity
 
 class Connection(object):
     """ Dummy connection class """
@@ -80,6 +114,8 @@ class Cursor(object):
         self.returned_ids = []
         self.queried_fields = []
         self.query_done = True
+        self.all_filters = []
+        self.last_query_model = None
 
     @property
     def query(self):
@@ -140,7 +176,7 @@ class Cursor(object):
 
             self.queries = new_queries
 
-    def _apply_filters(self, model, where, negated=False):
+    def _apply_filters(self, model, where, all_filters, negated=False):
         if where.negated:
             negated = not negated
 
@@ -149,11 +185,14 @@ class Cursor(object):
 
         for child in where.children:
             if isinstance(child, Node):
-                self._apply_filters(model, child, negated)
+                self._apply_filters(model, child, negated, all_filters)
                 continue
 
             field, lookup_type, value = self._parse_child(model, child)
-            self._apply_filter(model, field, lookup_type, negated, value)
+            applied_filter = self._apply_filter(model, field, lookup_type, negated, value)
+            if applied_filter is not None:
+                #IN queries return None here, all_filters is empty on an IN query
+                all_filters.append(applied_filter)
 
         if where.negated:
             negated = not negated
@@ -180,7 +219,7 @@ class Cursor(object):
                     for v in value:
                         new_query = datastore.Query(model._meta.db_table)
                         new_query.update(query)
-                        new_query = self._apply_filter(model, field, 'exact', negated, v, query_to_update=new_query)
+                        self._apply_filter(model, field, 'exact', negated, v, query_to_update=new_query)
                         new_queries.append(new_query)
 
                 self.queries = new_queries
@@ -192,7 +231,7 @@ class Cursor(object):
         assert(op is not None)
 
         query_to_update["%s %s" % (column, op)] = value
-        return query_to_update
+        return (column, op, value)
 
     def _parse_child(self, model, child):
         constraint, lookup_type, annotation, value = child
@@ -247,7 +286,13 @@ class Cursor(object):
 
     def execute_appengine_query(self, model, query):
         if isinstance(query, InsertQuery):
-            self.returned_ids = datastore.Put([ self.django_instance_to_entity(model, query.fields, query.raw, x) for x in query.objs ])
+            entities = [ self.django_instance_to_entity(model, query.fields, query.raw, x) for x in query.objs ]
+            self.returned_ids = datastore.Put(entities)
+
+            #Now cache them, temporarily to help avoid consistency errors
+            for key, entity in zip(self.returned_ids, entities):
+                entity[model._meta.pk.column] = key.id_or_name()
+                cache_entity(model, entity)
 
         else:
             #Store the fields we are querying on so we can process the results
@@ -271,21 +316,26 @@ class Cursor(object):
                 projection=projection
             )
 
+            self.all_filters = []
             #Apply filters
-            self._apply_filters(model, query.where)
+            self._apply_filters(model, query.where, self.all_filters)
 
             try:
                 self.queries[1]
                 self.queries = [ datastore.MultiQuery(self.queries, []) ]
             except IndexError:
                 pass
+            self.last_query_model = model
 
         self.query_done = False
 
 
     def fetchmany(self, size):
         logging.error("NOT FULLY IMPLEMENTED: Called fetchmany")
-        if self.results is None and not self.query_done:
+        if self.query_done:
+            return []
+
+        if self.results is None:
             if not self.queries:
                 raise Database.Error()
 
@@ -293,9 +343,39 @@ class Cursor(object):
                 self.results = self.query.Run()
                 self.query_done = True
             else:
-                self.results = self.query.Run(limit=size, start=self.start_cursor)
-                self.start_cursor = self.query.GetCursor()
-                self.query_done = not self.results
+                #Try and get the entity from the cache, this is to work around HRD issues
+                #and boost performance!
+                entity_from_cache = None
+                if self.all_filters and self.last_query_model:
+                    #Get all the exact filters
+                    try:
+                        exact_filters = [ x for x in self.all_filters if x[1] == "=" ]
+                    except:
+                        import ipdb; ipdb.set_trace()
+                    lookup = { x[0]:x[2] for x in exact_filters }
+
+                    unique_combinations = get_uniques_from_model(self.last_query_model)
+                    for fields in unique_combinations:
+                        final_key = []
+                        for field in fields:
+                            if field in lookup:
+                                final_key.append((field, lookup[field]))
+                                continue
+                            else:
+                                break
+                        else:
+                            #We've found a unique combination!
+                            unique_key = generate_unique_key(self.last_query_model, final_key)
+                            entity_from_cache = get_entity_from_cache(unique_key)
+
+                if entity_from_cache is None:
+                    self.results = self.query.Run(limit=size, start=self.start_cursor)
+                    self.start_cursor = self.query.GetCursor()
+                    self.query_done = not self.results
+                else:
+                    self.results = [ entity_from_cache ]
+                    self.query_done = True
+                    self.start_cursor = None
 
         results = []
         for entity in self.results:
