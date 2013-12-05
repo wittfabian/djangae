@@ -348,10 +348,7 @@ class Cursor(object):
                 entity_from_cache = None
                 if self.all_filters and self.last_query_model:
                     #Get all the exact filters
-                    try:
-                        exact_filters = [ x for x in self.all_filters if x[1] == "=" ]
-                    except:
-                        import ipdb; ipdb.set_trace()
+                    exact_filters = [ x for x in self.all_filters if x[1] == "=" ]
                     lookup = { x[0]:x[2] for x in exact_filters }
 
                     unique_combinations = get_uniques_from_model(self.last_query_model)
