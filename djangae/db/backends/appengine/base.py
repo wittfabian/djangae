@@ -26,6 +26,7 @@ from django.db.models.sql.subqueries import InsertQuery
 
 from google.appengine.ext.db import metadata
 from google.appengine.api import datastore
+from google.appengine.api.datastore_types import Key
 
 from django.db.models.sql.where import AND, OR
 from django.utils.tree import Node
@@ -277,6 +278,12 @@ class Cursor(object):
                 _value = _value[1:]
             elif _lookup_type in ('contains', 'icontains'):
                 _value = _value[1:-1]
+
+            if db_type == 'key':
+                if isinstance(_value, (list, tuple)):
+                    _value = [ Key.from_path(field.model._meta.db_table, x) for x in _value]
+                else:
+                    _value = Key.from_path(field.model._meta.db_table, _value)
 
             return _value
 
