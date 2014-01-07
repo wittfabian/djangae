@@ -19,6 +19,12 @@ class Command(BaseRunserverCommand):
     will be deployed to.
     """
 
+    def __init__(self, *args, **kwargs):
+        from djangae.boot import setup_paths
+        setup_paths()
+
+        super(Command, self).__init__(*args, **kwargs)
+
     option_list = BaseRunserverCommand.option_list + (
         make_option('--old', '-o', action='store_true', dest='use_old_dev_appserver',
             default=False, help='Tells GAE to use the old dev_appserver.'),
