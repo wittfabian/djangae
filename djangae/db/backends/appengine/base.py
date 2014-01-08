@@ -32,6 +32,9 @@ from django.utils.tree import Node
 
 from django.core.cache import cache
 
+from google.appengine.ext import testbed
+
+
 OPERATORS_MAP = {
     'exact': '=',
     'gt': '>',
@@ -468,6 +471,10 @@ class DatabaseCreation(BaseDatabaseCreation):
         'EmbeddedModelField':         'bytes'
     }
 
+    def __init__(self, *args, **kwargs):
+        self.testbed = None
+        super(DatabaseCreation, self).__init__(*args, **kwargs)
+
     def sql_create_model(self, model, *args, **kwargs):
         return [], {}
 
@@ -478,10 +485,41 @@ class DatabaseCreation(BaseDatabaseCreation):
         return []
 
     def _create_test_db(self, verbosity, autoclobber):
-        pass
+        
+        # Testbed exists in memory
+        test_database_name = ':memory:'
+
+        # Init test stubs
+        self.testbed = testbed.Testbed()
+        self.testbed.activate()
+
+        self.testbed.init_app_identity_stub()
+        self.testbed.init_blobstore_stub()
+        self.testbed.init_capability_stub()
+        self.testbed.init_channel_stub()
+        self.testbed.init_datastore_v3_stub()
+        self.testbed.init_files_stub()
+        # FIXME! dependencies PIL
+        # self.testbed.init_images_stub()
+        self.testbed.init_logservice_stub()
+        self.testbed.init_mail_stub()
+        self.testbed.init_memcache_stub()
+        self.testbed.init_taskqueue_stub()
+        self.testbed.init_urlfetch_stub()
+        self.testbed.init_user_stub()
+        self.testbed.init_xmpp_stub()
+        # self.testbed.init_search_stub()
+
+        # Init all the stubs!
+        # self.testbed.init_all_stubs()
+
+        return test_database_name
+
 
     def _destroy_test_db(self, name, verbosity):
-        pass
+        if self.testbed:
+            self.testbed.deactivate()
+
 
 class DatabaseIntrospection(BaseDatabaseIntrospection):
     def get_table_list(self, cursor):
