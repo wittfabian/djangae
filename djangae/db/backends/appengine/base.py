@@ -71,7 +71,7 @@ def cache_entity(model, entity):
         unique_keys.append(generate_unique_key(model, key_parts))
 
     for key in unique_keys:
-        logging.error("Caching entity with key %s", key)
+#        logging.error("Caching entity with key %s", key)
         cache.set(key, entity, DEFAULT_CACHE_TIMEOUT)
 
 def get_uniques_from_model(model):
@@ -88,8 +88,8 @@ def generate_unique_key(model, fields_and_values):
 
 def get_entity_from_cache(key):
     entity = cache.get(key)
-    if entity:
-        logging.error("Got entity from cache with key %s", key)
+#    if entity:
+#        logging.error("Got entity from cache with key %s", key)
     return entity
 
 class Connection(object):
@@ -359,7 +359,6 @@ class Cursor(object):
             return None
 
     def fetchmany(self, size):
-        logging.error("NOT FULLY IMPLEMENTED: Called fetchmany")
         if self.query_done:
             return []
 
