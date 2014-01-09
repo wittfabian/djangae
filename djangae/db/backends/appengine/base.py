@@ -26,7 +26,7 @@ from django.db.models.sql.subqueries import InsertQuery
 
 from google.appengine.ext.db import metadata
 from google.appengine.api import datastore
-from google.appengine.api.datastore_types import Key
+from google.appengine.api.datastore_types import Key, Text
 
 from django.db.models.sql.where import AND, OR
 from django.utils.tree import Node
@@ -136,21 +136,33 @@ class Cursor(object):
     def django_instance_to_entity(self, model, fields, raw, instance):
         field_values = {}
 
+        primary_key = None
         for field in fields:
-
             value = field.get_db_prep_save(
                 getattr(instance, field.attname) if raw else field.pre_save(instance, instance._state.adding),
                 connection = self.connection
             )
-
+                
             if (not field.null and not field.primary_key) and value is None:
                 raise IntegrityError("You can't set %s (a non-nullable "
                                          "field) to None!" % field.name)
 
-            #value = self.connection.ops.value_for_db(value, field)
-            field_values[field.column] = value
+            if field.primary_key:
+                primary_key = value
+            else:
+                value = self.connection.ops.value_for_db(value, field)
+                field_values[field.column] = value
 
-        entity = datastore.Entity(model._meta.db_table)
+        kwargs = {}
+        if primary_key:
+            if isinstance(primary_key, int):
+                kwargs["id"] = primary_key
+            elif isinstance(primary_key, basestring):
+                kwargs["name"] = primary_key
+            else:
+                raise ValueError("Invalid primary key value")
+            
+        entity = datastore.Entity(model._meta.db_table, **kwargs)
         entity.update(field_values)
         return entity
 
@@ -436,7 +448,32 @@ class DatabaseOperations(BaseDatabaseOperations):
                 all_the_things = list(datastore.Query(table, keys_only=True).Run())
 
         return []
+        
+    def value_for_db(self, value, field):
+        from google.appengine.api.datastore_types import Blob, Text
+        from google.appengine.api.datastore_errors import BadArgumentError, BadValueError
 
+        if value is None:
+            return None
+
+        # Convert decimals to strings preserving order.
+        if field.__class__.__name__ == 'DecimalField':
+            value = decimal_to_string(
+                value, field.max_digits, field.decimal_places)
+
+        db_type = self.connection.creation.db_type(field)                
+        
+        if db_type == 'string' or db_type == 'text':
+            if isinstance(value, str):
+                value = value.decode('utf-8')
+            if db_type == 'text':
+                value = Text(value)
+        elif db_type == 'bytes':
+            # Store BlobField, DictField and EmbeddedModelField values as Blobs.
+            value = Blob(value)
+            
+        return value
+                                
 class DatabaseClient(BaseDatabaseClient):
     pass
 
@@ -467,7 +504,6 @@ class DatabaseCreation(BaseDatabaseCreation):
         'PositiveSmallIntegerField':  'integer',
         'SlugField':                  'string',
         'SmallIntegerField':          'integer',
-        'TextField':                  'string',
         'TimeField':                  'time',
         'URLField':                   'string',
         'AbstractIterableField':      'list',
@@ -480,6 +516,9 @@ class DatabaseCreation(BaseDatabaseCreation):
         'DictField':                  'bytes',
         'EmbeddedModelField':         'bytes'
     }
+
+    def db_type(self, field):
+        return self.data_types[field.__class__.__name__]
 
     def __init__(self, *args, **kwargs):
         self.testbed = None
