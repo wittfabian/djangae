@@ -120,6 +120,7 @@ class Cursor(object):
         self.query_done = True
         self.all_filters = []
         self.last_query_model = None
+        self.rowcount = -1
 
     @property
     def query(self):
@@ -282,7 +283,7 @@ class Cursor(object):
             elif _lookup_type in ('contains', 'icontains'):
                 _value = _value[1:-1]
 
-            if db_type == 'key':
+            if field.primary_key:
                 if isinstance(_value, (list, tuple)):
                     _value = [ Key.from_path(field.model._meta.db_table, x) for x in _value]
                 else:
@@ -339,6 +340,11 @@ class Cursor(object):
 
         self.query_done = False
 
+    def fetchone(self):
+        try:
+            return self.fetchmany(1)[0]
+        except IndexError:
+            return None
 
     def fetchmany(self, size):
         logging.error("NOT FULLY IMPLEMENTED: Called fetchmany")
