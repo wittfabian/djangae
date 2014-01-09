@@ -71,7 +71,7 @@ def cache_entity(model, entity):
         unique_keys.append(generate_unique_key(model, key_parts))
 
     for key in unique_keys:
-#        logging.error("Caching entity with key %s", key)
+        #logging.error("Caching entity with key %s", key)
         cache.set(key, entity, DEFAULT_CACHE_TIMEOUT)
 
 def get_uniques_from_model(model):
@@ -308,6 +308,8 @@ class Cursor(object):
         return field, lookup_type, normalize_value(value, lookup_type, annotation)
 
     def execute_appengine_query(self, model, query):
+        #FIXME: MUST UNCACHE ENTITY ON DELETE
+    
         if isinstance(query, InsertQuery):
             entities = [ self.django_instance_to_entity(model, query.fields, query.raw, x) for x in query.objs ]
             self.returned_ids = datastore.Put(entities)
@@ -440,6 +442,7 @@ class DatabaseOperations(BaseDatabaseOperations):
     def sql_flush(self, style, tables, seqs, allow_cascade):
         logging.info("Flushing datastore")
 
+        cache.clear()
         for table in tables:
             all_the_things = list(datastore.Query(table, keys_only=True).Run())
             while all_the_things:
@@ -545,6 +548,7 @@ class DatabaseCreation(BaseDatabaseCreation):
         self.testbed.init_blobstore_stub()
         self.testbed.init_capability_stub()
         self.testbed.init_channel_stub()
+                 
         self.testbed.init_datastore_v3_stub()
         self.testbed.init_files_stub()
         # FIXME! dependencies PIL
@@ -564,7 +568,7 @@ class DatabaseCreation(BaseDatabaseCreation):
         return test_database_name
 
 
-    def _destroy_test_db(self, name, verbosity):
+    def _destroy_test_db(self, name, verbosity):        
         if self.testbed:
             self.testbed.deactivate()
 
