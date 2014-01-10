@@ -3,8 +3,25 @@ from djangae.db.backends.appengine.query import Query
 from django.db.models.sql.datastructures import EmptyResultSet
 from django.db.models.sql.constants import MULTI, SINGLE, GET_ITERATOR_CHUNK_SIZE
 
+#Following two ImportError blocks are for < 1.6 compatibility
+try:
+    from django.db.models.sql.compiler import SQLDateCompiler as DateCompiler
+except ImportError:
+    class DateCompiler(object):
+        pass
+
+try:
+    from django.db.models.sql.compiler import SQLDateTimeCompiler as DateTimeCompiler
+except ImportError:
+    class DateTimeCompiler(object):
+        pass
+
 class SQLCompiler(compiler.SQLCompiler):
     query_class = Query
+
+    def __init__(self, *args, **kwargs):
+        self.ordering_aliases = None
+        super(SQLCompiler, self).__init__(*args, **kwargs)
 
     def execute_sql(self, result_type=MULTI):
         try:
@@ -77,9 +94,9 @@ class SQLAggregateCompiler(compiler.SQLAggregateCompiler, SQLCompiler):
     pass
 
 
-class SQLDateCompiler(compiler.SQLDateCompiler, SQLCompiler):
+class SQLDateCompiler(DateCompiler, SQLCompiler):
     pass
 
 
-class SQLDateTimeCompiler(compiler.SQLDateTimeCompiler, SQLCompiler):
+class SQLDateTimeCompiler(DateTimeCompiler, SQLCompiler):
     pass
