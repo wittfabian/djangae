@@ -3,25 +3,28 @@ import os
 import sys
 
 def setup_datastore_stubs():
+    if "test" in sys.argv:
+        return
+
     from google.appengine.datastore import datastore_sqlite_stub
     from google.appengine.api import apiproxy_stub_map
     from google.appengine.datastore import datastore_stub_util
-    
+
     app_id = application_id()
-    
+
     datastore = datastore_sqlite_stub.DatastoreSqliteStub(
-        "dev~" + app_id, 
-        os.path.join(data_root(), "datastore"), 
+        "dev~" + app_id,
+        os.path.join(data_root(), "datastore"),
         require_indexes=False,
-        trusted=False, 
+        trusted=False,
         root_path=find_project_root(),
         use_atexit=True
     )
-    
+
     datastore.SetConsistencyPolicy(
           datastore_stub_util.TimeBasedHRConsistencyPolicy()
     )
-    
+
     apiproxy_stub_map.apiproxy.ReplaceStub(
         'datastore_v3', datastore
     )
