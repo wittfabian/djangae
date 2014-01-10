@@ -99,6 +99,16 @@ def setup_built_in_library_paths():
     from dev_appserver import fix_sys_path
     fix_sys_path()
 
+    django_version = 1.5 #FIXME: Read this from app.yaml, and throw if not supported
+
+    if django_version != 1.4:
+        #Remove default django
+        sys.path = [ x for x in sys.path if "django-1.4" not in x ]
+
+    django_folder = "django-" + str(django_version)
+    sys.path.insert(1, os.path.join(os.environ['APP_ENGINE_SDK'], "lib", django_folder))
+
+
 def datastore_available():
     from google.appengine.api import apiproxy_stub_map
     return bool(apiproxy_stub_map.apiproxy.GetStub('datastore_v3'))
