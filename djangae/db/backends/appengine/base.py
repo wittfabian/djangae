@@ -22,7 +22,7 @@ from django.db.backends import (
 
 from django.db.backends.schema import BaseDatabaseSchemaEditor
 from django.db.backends.creation import BaseDatabaseCreation
-from django.db.models.sql.subqueries import InsertQuery
+from django.db.models.sql.subqueries import InsertQuery, DeleteQuery
 
 from google.appengine.ext.db import metadata
 from google.appengine.api import datastore
@@ -316,7 +316,6 @@ class Cursor(object):
             for key, entity in zip(self.returned_ids, entities):
                 entity[model._meta.pk.column] = key.id_or_name()
                 cache_entity(model, entity)
-
         else:
             #Store the fields we are querying on so we can process the results
             self.queried_fields = [ x.col[1] for x in query.select ]
@@ -352,13 +351,14 @@ class Cursor(object):
 
         self.query_done = False
 
+
     def fetchone(self):
         try:
             return self.fetchmany(1)[0]
         except IndexError:
             return None
 
-    def fetchmany(self, size):
+    def fetchmany(self, size, delete_flag=False):
         logging.error("NOT FULLY IMPLEMENTED: Called fetchmany")
         if self.query_done:
             return []
@@ -402,6 +402,9 @@ class Cursor(object):
                     self.query_done = True
                     self.start_cursor = None
 
+        # If exit here don't have to parse the results, for deletion
+        if delete_flag:
+            return
         results = []
         for entity in self.results:
             result = []
@@ -414,6 +417,11 @@ class Cursor(object):
             results.append(tuple(result))
 
         return results
+
+    def delete(self):
+        datastore.Delete([entity for entity in self.results])
+
+
 
     @property
     def lastrowid(self):
