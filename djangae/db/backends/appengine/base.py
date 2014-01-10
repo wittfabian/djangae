@@ -131,6 +131,27 @@ class Connection(object):
     def close(self):
         pass
 
+class FlushCommand(object):
+    """
+        sql_flush returns the SQL statements to flush the database,
+        which are then executed by cursor.execute()
+
+        We instead return a list of FlushCommands which are called by
+        our cursor.execute
+    """
+    def __init__(self, table):
+        self.table = table
+
+    def execute(self):
+        table = self.table
+
+        all_the_things = list(datastore.Query(table, keys_only=True).Run())
+        while all_the_things:
+            datastore.Delete(all_the_things)
+            all_the_things = list(datastore.Query(table, keys_only=True).Run())
+
+        cache.clear()
+
 class Cursor(object):
     """ Dummy cursor class """
     def __init__(self, connection):
@@ -165,7 +186,7 @@ class Cursor(object):
                 getattr(instance, field.attname) if raw else field.pre_save(instance, instance._state.adding),
                 connection = self.connection
             )
-                
+
             if (not field.null and not field.primary_key) and value is None:
                 raise IntegrityError("You can't set %s (a non-nullable "
                                          "field) to None!" % field.name)
@@ -184,13 +205,16 @@ class Cursor(object):
                 kwargs["name"] = primary_key
             else:
                 raise ValueError("Invalid primary key value")
-            
+
         entity = datastore.Entity(model._meta.db_table, **kwargs)
         entity.update(field_values)
         return entity
 
     def execute(self, sql, *params):
-        raise RuntimeError("Can't execute traditional SQL: '%s'", sql)
+        if isinstance(sql, FlushCommand):
+            sql.execute()
+        else:
+            raise RuntimeError("Can't execute traditional SQL: '%s'", sql)
 
     def _update_projection_state(self, field, lookup_type):
         db_type = field.db_type(self.connection)
@@ -332,7 +356,7 @@ class Cursor(object):
 
     def execute_appengine_query(self, model, query):
         #FIXME: MUST UNCACHE ENTITY ON DELETE
-    
+
         if isinstance(query, InsertQuery):
             entities = [ self.django_instance_to_entity(model, query.fields, query.raw, x) for x in query.objs ]
             self.returned_ids = datastore.Put(entities)
@@ -428,7 +452,7 @@ class Cursor(object):
                     self.start_cursor = None
 
         # If exit here don't have to parse the results, for deletion
-        if delete_flag:            
+        if delete_flag:
             return
 
         results = []
@@ -444,7 +468,7 @@ class Cursor(object):
 
         return results
 
-    def delete(self):        
+    def delete(self):
         [ uncache_entity(self.last_query_model, e) for e in self.results ]
         datastore.Delete(self.results)
 
@@ -472,17 +496,8 @@ class DatabaseOperations(BaseDatabaseOperations):
         return name
 
     def sql_flush(self, style, tables, seqs, allow_cascade):
-        logging.info("Flushing datastore")
+        return [ FlushCommand(table) for table in tables ]
 
-        cache.clear()
-        for table in tables:
-            all_the_things = list(datastore.Query(table, keys_only=True).Run())
-            while all_the_things:
-                datastore.Delete(all_the_things)
-                all_the_things = list(datastore.Query(table, keys_only=True).Run())
-
-        return []
-        
     def value_for_db(self, value, field):
         from google.appengine.api.datastore_types import Blob, Text
         from google.appengine.api.datastore_errors import BadArgumentError, BadValueError
@@ -495,8 +510,8 @@ class DatabaseOperations(BaseDatabaseOperations):
             value = decimal_to_string(
                 value, field.max_digits, field.decimal_places)
 
-        db_type = self.connection.creation.db_type(field)                
-        
+        db_type = self.connection.creation.db_type(field)
+
         if db_type == 'string' or db_type == 'text':
             if isinstance(value, str):
                 value = value.decode('utf-8')
@@ -505,9 +520,9 @@ class DatabaseOperations(BaseDatabaseOperations):
         elif db_type == 'bytes':
             # Store BlobField, DictField and EmbeddedModelField values as Blobs.
             value = Blob(value)
-            
+
         return value
-                                
+
 class DatabaseClient(BaseDatabaseClient):
     pass
 
@@ -568,7 +583,7 @@ class DatabaseCreation(BaseDatabaseCreation):
         return []
 
     def _create_test_db(self, verbosity, autoclobber):
-        
+
         # Testbed exists in memory
         test_database_name = ':memory:'
 
@@ -580,7 +595,7 @@ class DatabaseCreation(BaseDatabaseCreation):
         self.testbed.init_blobstore_stub()
         self.testbed.init_capability_stub()
         self.testbed.init_channel_stub()
-                 
+
         self.testbed.init_datastore_v3_stub()
         self.testbed.init_files_stub()
         # FIXME! dependencies PIL
@@ -600,7 +615,7 @@ class DatabaseCreation(BaseDatabaseCreation):
         return test_database_name
 
 
-    def _destroy_test_db(self, name, verbosity):        
+    def _destroy_test_db(self, name, verbosity):
         if self.testbed:
             self.testbed.deactivate()
 
