@@ -56,8 +56,17 @@ class SQLInsertCompiler(compiler.SQLInsertCompiler, SQLCompiler):
         return self.connection.ops.last_insert_id(cursor,
                 self.query.get_meta().db_table, self.query.get_meta().pk.column)
 
+
 class SQLDeleteCompiler(compiler.SQLDeleteCompiler, SQLCompiler):
-    pass
+    def execute_sql(self, result_type=None):
+        results = super(SQLDeleteCompiler, self).execute_sql()
+        cursor = self.connection.cursor()
+        cursor.execute_appengine_query(self.query.model, self.query)
+        cursor.fetchmany(GET_ITERATOR_CHUNK_SIZE, delete_flag=True)
+        if not cursor:
+            return
+        cursor.delete()
+        return
 
 
 class SQLUpdateCompiler(compiler.SQLUpdateCompiler, SQLCompiler):
