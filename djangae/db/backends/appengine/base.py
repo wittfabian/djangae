@@ -67,12 +67,35 @@ def cache_entity(model, entity):
 
     unique_keys = []
     for fields in unique_combinations:
-        key_parts = [ (x, entity[x]) for x in fields ]
+        key_parts = []
+        for x in fields:
+            if x == model._meta.pk.column and x not in entity:
+                value = entity.key().id_or_name()
+            else:
+                value = entity[x]
+            key_parts.append((x, value))
+
         unique_keys.append(generate_unique_key(model, key_parts))
 
     for key in unique_keys:
         #logging.error("Caching entity with key %s", key)
         cache.set(key, entity, DEFAULT_CACHE_TIMEOUT)
+
+def uncache_entity(model, entity):
+    unique_combinations = get_uniques_from_model(model)
+
+    unique_keys = []
+    for fields in unique_combinations:
+        key_parts = []
+        for x in fields:
+            if x == model._meta.pk.column and x not in entity:
+                value = entity.key().id_or_name()
+            else:
+                value = entity[x]
+            key_parts.append((x, value))
+
+        key = generate_unique_key(model, key_parts)
+        cache.delete(key)
 
 def get_uniques_from_model(model):
     uniques = [ [ model._meta.get_field(y).column for y in x ] for x in model._meta.unique_together ]
@@ -362,7 +385,6 @@ class Cursor(object):
 
 
     def fetchmany(self, size, delete_flag=False):
-        logging.error("NOT FULLY IMPLEMENTED: Called fetchmany")
         if self.query_done:
             return []
 
@@ -406,8 +428,9 @@ class Cursor(object):
                     self.start_cursor = None
 
         # If exit here don't have to parse the results, for deletion
-        if delete_flag:
+        if delete_flag:            
             return
+
         results = []
         for entity in self.results:
             result = []
@@ -421,10 +444,9 @@ class Cursor(object):
 
         return results
 
-    def delete(self):
-        datastore.Delete([entity for entity in self.results])
-
-
+    def delete(self):        
+        [ uncache_entity(self.last_query_model, e) for e in self.results ]
+        datastore.Delete(self.results)
 
     @property
     def lastrowid(self):
