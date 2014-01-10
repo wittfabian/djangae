@@ -20,7 +20,13 @@ from django.db.backends import (
     BaseDatabaseValidation
 )
 
-from django.db.backends.schema import BaseDatabaseSchemaEditor
+try:
+    from django.db.backends.schema import BaseDatabaseSchemaEditor
+except ImportError:
+    #Django < 1.6 doesn't have BaseDatabaseSchemaEditor
+    class BaseDatabaseSchemaEditor(object):
+        pass
+
 from django.db.backends.creation import BaseDatabaseCreation
 from django.db.models.sql.subqueries import InsertQuery, DeleteQuery
 
@@ -249,7 +255,7 @@ class Cursor(object):
 
         for child in where.children:
             if isinstance(child, Node):
-                self._apply_filters(model, child, negated, all_filters)
+                self._apply_filters(model, child, all_filters, negated=negated)
                 continue
 
             field, lookup_type, value = self._parse_child(model, child)
@@ -367,7 +373,14 @@ class Cursor(object):
                 cache_entity(model, entity)
         else:
             #Store the fields we are querying on so we can process the results
-            self.queried_fields = [ x.col[1] for x in query.select ]
+            self.queried_fields = []
+            for x in query.select:
+                if isinstance(x, tuple):
+                    #Django < 1.6 compatibility
+                    self.queried_fields.append(x[1])
+                else:
+                    self.queried_fields.append(x.col[1])
+
             if self.queried_fields:
                 projection = self.queried_fields
             else:
@@ -495,7 +508,7 @@ class DatabaseOperations(BaseDatabaseOperations):
     def quote_name(self, name):
         return name
 
-    def sql_flush(self, style, tables, seqs, allow_cascade):
+    def sql_flush(self, style, tables, seqs, allow_cascade=False):
         return [ FlushCommand(table) for table in tables ]
 
     def value_for_db(self, value, field):
@@ -664,7 +677,8 @@ class DatabaseWrapper(BaseDatabaseWrapper):
         return {}
 
     def get_new_connection(self, params):
-        return Connection(self, params)
+        conn = Connection(self, params)
+        return conn
 
     def init_connection_state(self):
         pass
@@ -673,9 +687,15 @@ class DatabaseWrapper(BaseDatabaseWrapper):
         pass
 
     def create_cursor(self):
+        if not self.connection:
+            self.connection = self.get_new_connection(self.settings_dict)
+
         return Cursor(self.connection)
 
     def schema_editor(self, *args, **kwargs):
         return DatabaseSchemaEditor(self, *args, **kwargs)
 
+    def _cursor(self):
+        #for < Django 1.6 compatiblity
+        return self.create_cursor()
 
