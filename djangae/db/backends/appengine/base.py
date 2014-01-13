@@ -158,6 +158,44 @@ class FlushCommand(object):
 
         cache.clear()
 
+class InsertCommand(object):
+    def __init__(self, model, entities):
+        self.entities = entities
+        self.model = model
+
+def django_instance_to_entity(connection, model, fields, raw, instance):
+    field_values = {}
+
+    primary_key = None
+    for field in fields:
+        value = field.get_db_prep_save(
+            getattr(instance, field.attname) if raw else field.pre_save(instance, instance._state.adding),
+            connection = connection
+        )
+
+        if (not field.null and not field.primary_key) and value is None:
+            raise IntegrityError("You can't set %s (a non-nullable "
+                                     "field) to None!" % field.name)
+
+        if field.primary_key:
+            primary_key = value
+        else:
+            value = connection.ops.value_for_db(value, field)
+            field_values[field.column] = value
+
+    kwargs = {}
+    if primary_key:
+        if isinstance(primary_key, int):
+            kwargs["id"] = primary_key
+        elif isinstance(primary_key, basestring):
+            kwargs["name"] = primary_key
+        else:
+            raise ValueError("Invalid primary key value")
+
+    entity = datastore.Entity(model._meta.db_table, **kwargs)
+    entity.update(field_values)
+    return entity
+
 class Cursor(object):
     """ Dummy cursor class """
     def __init__(self, connection):
@@ -183,42 +221,17 @@ class Cursor(object):
         else:
             self.queries = [ value ]
 
-    def django_instance_to_entity(self, model, fields, raw, instance):
-        field_values = {}
-
-        primary_key = None
-        for field in fields:
-            value = field.get_db_prep_save(
-                getattr(instance, field.attname) if raw else field.pre_save(instance, instance._state.adding),
-                connection = self.connection
-            )
-
-            if (not field.null and not field.primary_key) and value is None:
-                raise IntegrityError("You can't set %s (a non-nullable "
-                                         "field) to None!" % field.name)
-
-            if field.primary_key:
-                primary_key = value
-            else:
-                value = self.connection.ops.value_for_db(value, field)
-                field_values[field.column] = value
-
-        kwargs = {}
-        if primary_key:
-            if isinstance(primary_key, int):
-                kwargs["id"] = primary_key
-            elif isinstance(primary_key, basestring):
-                kwargs["name"] = primary_key
-            else:
-                raise ValueError("Invalid primary key value")
-
-        entity = datastore.Entity(model._meta.db_table, **kwargs)
-        entity.update(field_values)
-        return entity
-
     def execute(self, sql, *params):
         if isinstance(sql, FlushCommand):
             sql.execute()
+        elif isinstance(sql, InsertCommand):
+            self.returned_ids = datastore.Put(sql.entities)
+
+            #Now cache them, temporarily to help avoid consistency errors
+            for key, entity in zip(self.returned_ids, sql.entities):
+                entity[sql.model._meta.pk.column] = key.id_or_name()
+                cache_entity(sql.model, entity)
+
         else:
             raise RuntimeError("Can't execute traditional SQL: '%s'", sql)
 
@@ -361,55 +374,44 @@ class Cursor(object):
         return field, lookup_type, normalize_value(value, lookup_type, annotation)
 
     def execute_appengine_query(self, model, query):
-        #FIXME: MUST UNCACHE ENTITY ON DELETE
-
-        if isinstance(query, InsertQuery):
-            entities = [ self.django_instance_to_entity(model, query.fields, query.raw, x) for x in query.objs ]
-            self.returned_ids = datastore.Put(entities)
-
-            #Now cache them, temporarily to help avoid consistency errors
-            for key, entity in zip(self.returned_ids, entities):
-                entity[model._meta.pk.column] = key.id_or_name()
-                cache_entity(model, entity)
-        else:
-            #Store the fields we are querying on so we can process the results
-            self.queried_fields = []
-            for x in query.select:
-                if isinstance(x, tuple):
-                    #Django < 1.6 compatibility
-                    self.queried_fields.append(x[1])
-                else:
-                    self.queried_fields.append(x.col[1])
-
-            if self.queried_fields:
-                projection = self.queried_fields
+        #Store the fields we are querying on so we can process the results
+        self.queried_fields = []
+        for x in query.select:
+            if isinstance(x, tuple):
+                #Django < 1.6 compatibility
+                self.queried_fields.append(x[1])
             else:
-                projection = None
-                self.queried_fields = [ x.column for x in model._meta.fields ]
+                self.queried_fields.append(x.col[1])
 
-            pk_field = model._meta.pk.name
-            try:
-                #Set the column name to __key__ and then we know the order it came
-                #if the id was asked for
-                self.queried_fields[self.queried_fields.index(pk_field)] = "__key__"
-            except ValueError:
-                pass
+        if self.queried_fields:
+            projection = self.queried_fields
+        else:
+            projection = None
+            self.queried_fields = [ x.column for x in model._meta.fields ]
 
-            self.query = datastore.Query(
-                model._meta.db_table,
-                projection=projection
-            )
+        pk_field = model._meta.pk.name
+        try:
+            #Set the column name to __key__ and then we know the order it came
+            #if the id was asked for
+            self.queried_fields[self.queried_fields.index(pk_field)] = "__key__"
+        except ValueError:
+            pass
 
-            self.all_filters = []
-            #Apply filters
-            self._apply_filters(model, query.where, self.all_filters)
+        self.query = datastore.Query(
+            model._meta.db_table,
+            projection=projection
+        )
 
-            try:
-                self.queries[1]
-                self.queries = [ datastore.MultiQuery(self.queries, []) ]
-            except IndexError:
-                pass
-            self.last_query_model = model
+        self.all_filters = []
+        #Apply filters
+        self._apply_filters(model, query.where, self.all_filters)
+
+        try:
+            self.queries[1]
+            self.queries = [ datastore.MultiQuery(self.queries, []) ]
+        except IndexError:
+            pass
+        self.last_query_model = model
 
         self.query_done = False
 
@@ -536,6 +538,12 @@ class DatabaseOperations(BaseDatabaseOperations):
 
         return value
 
+    def last_insert_id(self, cursor, db_table, column):
+        return cursor.lastrowid
+
+    def fetch_returned_insert_id(self, cursor):
+        return cursor.lastrowid
+
 class DatabaseClient(BaseDatabaseClient):
     pass
 
@@ -648,6 +656,7 @@ class DatabaseSchemaEditor(BaseDatabaseSchemaEditor):
 class DatabaseFeatures(BaseDatabaseFeatures):
     empty_fetchmany_value = []
     supports_transactions = False #FIXME: Make this True!
+    can_return_id_from_insert = True
 
 class DatabaseWrapper(BaseDatabaseWrapper):
     operators = {
