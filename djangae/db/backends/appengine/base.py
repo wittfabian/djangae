@@ -29,7 +29,7 @@ except ImportError:
 
 from django.db.backends.creation import BaseDatabaseCreation
 from django.db.models.sql.subqueries import InsertQuery, DeleteQuery
-
+from django.db import models
 from google.appengine.ext.db import metadata
 from google.appengine.api import datastore
 from google.appengine.api.datastore_types import Key, Text
@@ -307,6 +307,9 @@ class Cursor(object):
 
                 self.queries = new_queries
                 return
+            elif lookup_type == "isnull":
+                op = "="
+                value = None
 
         if op is None:
             import pdb; pdb.set_trace()
@@ -316,8 +319,29 @@ class Cursor(object):
         query_to_update["%s %s" % (column, op)] = value
         return (column, op, value)
 
+    def fix_fk_null(self, query, constraint):
+        alias = constraint.alias
+        table_name = query.alias_map[alias][TABLE_NAME]
+        lhs_join_col, rhs_join_col = join_cols(query.alias_map[alias])
+        if table_name != constraint.field.rel.to._meta.db_table or \
+                rhs_join_col != constraint.field.rel.to._meta.pk.column or \
+                lhs_join_col != constraint.field.column:
+            return
+        next_alias = query.alias_map[alias][LHS_ALIAS]
+        if not next_alias:
+            return
+        self.unref_alias(query, alias)
+        alias = next_alias
+        constraint.col = constraint.field.column
+        constraint.alias = alias
+
     def _parse_child(self, model, child):
         constraint, lookup_type, annotation, value = child
+
+        if constraint.field is not None and lookup_type == 'isnull' and \
+            isinstance(constraint.field, models.ForeignKey):
+            self.fix_fk_null(self.query, constraint)
+
         packed, value = constraint.process(lookup_type, value, self.connection)
         alias, column, db_type = packed
         field = constraint.field
