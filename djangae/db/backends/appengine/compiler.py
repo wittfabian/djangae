@@ -16,6 +16,8 @@ except ImportError:
     class DateTimeCompiler(object):
         pass
 
+from .base import django_instance_to_entity, InsertCommand
+
 class SQLCompiler(compiler.SQLCompiler):
     query_class = Query
 
@@ -61,17 +63,17 @@ class SQLCompiler(compiler.SQLCompiler):
         return result
 
 class SQLInsertCompiler(compiler.SQLInsertCompiler, SQLCompiler):
-    def execute_sql(self, return_id=False):
-        assert not (return_id and len(self.query.objs) != 1)
-        self.return_id = return_id
-        cursor = self.connection.cursor()
-        cursor.execute_appengine_query(self.query.model, self.query)
-        if not (return_id and cursor):
-            return
-        if self.connection.features.can_return_id_from_insert:
-            return self.connection.ops.fetch_returned_insert_id(cursor)
-        return self.connection.ops.last_insert_id(cursor,
-                self.query.get_meta().db_table, self.query.get_meta().pk.column)
+    def __init__(self, *args, **kwargs):
+        self.return_id = None
+        super(SQLInsertCompiler, self).__init__(*args, **kwargs)
+
+    def as_sql(self):
+        entities = [
+            django_instance_to_entity(self.connection, self.query.model, self.query.fields, self.query.raw, x)
+            for x in self.query.objs
+        ]
+
+        return [ (InsertCommand(self.query.model, entities), []) ]
 
 
 class SQLDeleteCompiler(compiler.SQLDeleteCompiler, SQLCompiler):
