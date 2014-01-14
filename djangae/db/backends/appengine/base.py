@@ -127,6 +127,7 @@ class Connection(object):
         self.creation = wrapper.creation
         self.ops = wrapper.ops
         self.params = params
+        self.queries = []
 
     def rollback(self):
         pass
@@ -225,6 +226,8 @@ class Cursor(object):
         if isinstance(sql, FlushCommand):
             sql.execute()
         elif isinstance(sql, InsertCommand):
+            self.connection.queries.append(sql)
+
             self.returned_ids = datastore.Put(sql.entities)
 
             #Now cache them, temporarily to help avoid consistency errors
