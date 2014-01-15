@@ -191,6 +191,7 @@ def django_instance_to_entity(connection, model, fields, raw, instance):
                     " that is over 500 characters. THIS IS AN ERROR IN YOUR PROGRAM.",
                     RuntimeWarning
                 )
+                primary_key = primary_key[:500]
 
             kwargs["name"] = primary_key
         else:
