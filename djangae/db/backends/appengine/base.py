@@ -79,6 +79,7 @@ def cache_entity(model, entity):
                 value = entity.key().id_or_name()
             else:
                 value = entity[x]
+
             key_parts.append((x, value))
 
         unique_keys.append(generate_unique_key(model, key_parts))
@@ -161,6 +162,9 @@ class FlushCommand(object):
 
 class InsertCommand(object):
     def __init__(self, model, entities):
+        if model._meta.get_parent_list() and not model._meta.abstract:
+            raise RuntimeError("Multi-table inheritance is not supported")
+
         self.entities = entities
         self.model = model
 
@@ -401,6 +405,9 @@ class Cursor(object):
         return field, lookup_type, normalize_value(value, lookup_type, annotation)
 
     def execute_appengine_query(self, model, query):
+        if model._meta.get_parent_list() and not model._meta.abstract:
+            raise RuntimeError("Multi-table inheritance is not supported")
+
         #Store the fields we are querying on so we can process the results
         self.queried_fields = []
         for x in query.select:
