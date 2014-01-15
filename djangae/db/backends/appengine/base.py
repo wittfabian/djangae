@@ -1,13 +1,6 @@
-"""
-Dummy database backend for Django.
-
-Django uses this if the database ENGINE setting is empty (None or empty string).
-
-Each of these API functions, except connection.close(), raises
-ImproperlyConfigured.
-"""
-
 import logging
+import warnings
+
 from itertools import islice
 
 from django.core.exceptions import ImproperlyConfigured
@@ -33,7 +26,7 @@ from django.db import models
 from google.appengine.ext.db import metadata
 from google.appengine.api import datastore
 from google.appengine.api.datastore_types import Key, Text
-
+from django.db.models.sql.constants import MULTI, SINGLE, GET_ITERATOR_CHUNK_SIZE
 from django.db.models.sql.where import AND, OR
 from django.utils.tree import Node
 
@@ -193,6 +186,12 @@ def django_instance_to_entity(connection, model, fields, raw, instance):
         if isinstance(primary_key, int):
             kwargs["id"] = primary_key
         elif isinstance(primary_key, basestring):
+            if len(primary_key) >= 500:
+                warnings.warn("Truncating primary key"
+                    " that is over 500 characters. THIS IS AN ERROR IN YOUR PROGRAM.",
+                    RuntimeWarning
+                )
+
             kwargs["name"] = primary_key
         else:
             raise ValueError("Invalid primary key value")
@@ -209,6 +208,7 @@ class Cursor(object):
         self.queries = []
         self.start_cursor = None
         self.returned_ids = []
+        self.returned_keys = [] #This is used during deletion
         self.queried_fields = []
         self.query_done = True
         self.all_filters = []
@@ -500,16 +500,18 @@ class Cursor(object):
                     self.query_done = True
                     self.start_cursor = None
 
-        # If exit here don't have to parse the results, for deletion
-        if delete_flag:
-            return
-
+        self.returned_keys = []
         results = []
         for entity in self.results:
+            if delete_flag:
+                uncache_entity(self.last_query_model, entity)      
+
             result = []
             for col in self.queried_fields:
                 if col == "__key__":
-                    result.append(entity.key().id_or_name())
+                    key = entity.key()
+                    self.returned_keys.append(key)
+                    result.append(key.id_or_name())
                 else:
                     result.append(entity.get(col))
 
@@ -518,8 +520,9 @@ class Cursor(object):
         return results
 
     def delete(self):
-        [ uncache_entity(self.last_query_model, e) for e in self.results ]
-        datastore.Delete(self.results)
+        #Passing the delete_flag will uncache the entities
+        self.fetchmany(GET_ITERATOR_CHUNK_SIZE, delete_flag=True)
+        datastore.Delete(self.returned_keys)
 
     @property
     def lastrowid(self):
