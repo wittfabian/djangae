@@ -87,10 +87,7 @@ class SQLDeleteCompiler(compiler.SQLDeleteCompiler, SQLCompiler):
         results = super(SQLDeleteCompiler, self).execute_sql()
         cursor = self.connection.cursor()
         cursor.execute_appengine_query(self.query.model, self.query)
-        cursor.fetchmany(GET_ITERATOR_CHUNK_SIZE, delete_flag=True)
-        if not cursor:
-            return
-        cursor.delete()
+        cursor.delete()        
         return
 
 
