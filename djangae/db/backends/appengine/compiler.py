@@ -2,6 +2,8 @@ from django.db.models.sql import compiler
 from djangae.db.backends.appengine.query import Query
 from django.db.models.sql.datastructures import EmptyResultSet
 from django.db.models.sql.constants import MULTI, SINGLE, GET_ITERATOR_CHUNK_SIZE
+from django.db import connections
+from django.conf import settings
 
 #Following two ImportError blocks are for < 1.6 compatibility
 try:
@@ -40,6 +42,10 @@ class SQLCompiler(compiler.SQLCompiler):
 
         cursor = self.connection.cursor()
         cursor.execute_appengine_query(self.query.model, self.query)
+
+        # This at least satisfies the most basic unit tests.
+        if connections[self.using].use_debug_cursor or (connections[self.using].use_debug_cursor is None and settings.DEBUG):
+            self.connection.queries.append({'sql': repr(self.query)})
 
         if not result_type:
             return cursor
