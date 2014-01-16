@@ -2,6 +2,33 @@ import logging
 import os
 import sys
 
+def setup_datastore_stubs():
+    if "test" in sys.argv:
+        return
+
+    from google.appengine.datastore import datastore_sqlite_stub
+    from google.appengine.api import apiproxy_stub_map
+    from google.appengine.datastore import datastore_stub_util
+
+    app_id = application_id()
+
+    datastore = datastore_sqlite_stub.DatastoreSqliteStub(
+        "dev~" + app_id,
+        os.path.join(data_root(), "datastore"),
+        require_indexes=False,
+        trusted=False,
+        root_path=find_project_root(),
+        use_atexit=True
+    )
+
+    datastore.SetConsistencyPolicy(
+          datastore_stub_util.TimeBasedHRConsistencyPolicy()
+    )
+
+    apiproxy_stub_map.apiproxy.ReplaceStub(
+        'datastore_v3', datastore
+    )
+
 def find_project_root():
     """
         Go through the path, and look for manage.py
@@ -14,7 +41,10 @@ def find_project_root():
     raise RuntimeError("Unable to locate manage.py on sys.path")
 
 def data_root():
-    return os.path.join(find_project_root(), ".gaedata")
+    path = os.path.join(find_project_root(), ".gaedata")
+    if not os.path.exists(path):
+        os.makedirs(path)
+    return path
 
 def application_id():
     setup_paths()
@@ -68,6 +98,16 @@ def appengine_on_path():
 def setup_built_in_library_paths():
     from dev_appserver import fix_sys_path
     fix_sys_path()
+
+    django_version = 1.5 #FIXME: Read this from app.yaml, and throw if not supported
+
+    if django_version != 1.4:
+        #Remove default django
+        sys.path = [ x for x in sys.path if "django-1.4" not in x ]
+
+    django_folder = "django-" + str(django_version)
+    sys.path.insert(1, os.path.join(os.environ['APP_ENGINE_SDK'], "lib", django_folder))
+
 
 def datastore_available():
     from google.appengine.api import apiproxy_stub_map
