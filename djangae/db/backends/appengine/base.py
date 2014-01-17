@@ -228,6 +228,7 @@ class Cursor(object):
             self.queried_fields = sql.queried_fields
             self.last_query_model = sql.model
             self.aggregate_type = "count" if sql.is_count else None
+            self._do_fetch()
 
         elif isinstance(sql, FlushCommand):
             sql.execute()
@@ -261,13 +262,6 @@ class Cursor(object):
         constraint.alias = alias
 
 
-    def fetchone(self):
-        try:
-            return self.fetchmany(1)[0]
-        except IndexError:
-            return None
-
-
     def _run_query(self, limit=None, start=None, aggregate_type=None):
         if aggregate_type is None:
             return self.query.Run(limit=limit, start=start)
@@ -276,14 +270,8 @@ class Cursor(object):
         else:
             raise RuntimeError("Unsupported query type")
 
-    def fetchmany(self, size, delete_flag=False):
-        if self.query_done:
-            return []
-
-        if self.aggregate_type:
-            size = None #Don't limit aggregates...
-
-        if self.results is None:
+    def _do_fetch(self):
+        if not self.results:
             if isinstance(self.query, datastore.MultiQuery):
                 self.results = self._run_query(aggregate_type=self.aggregate_type)
                 self.query_done = True
@@ -311,35 +299,60 @@ class Cursor(object):
                             entity_from_cache = get_entity_from_cache(unique_key)
 
                 if entity_from_cache is None:
-                    self.results = self._run_query(limit=size, start=self.start_cursor, aggregate_type=self.aggregate_type)
-                    self.start_cursor = self.query.GetCursor()
-                    self.query_done = not self.results
+                    self.results = self._run_query(aggregate_type=self.aggregate_type)
                 else:
                     self.results = [ entity_from_cache ]
-                    self.query_done = True
-                    self.start_cursor = None
 
-        if self.aggregate_type:
-            return [ (self.results,) ]
+            self.row_index = 0
 
-        results = []
+    def next(self):
+        row = self.fetchone()
+        if row is None:
+            raise StopIteration
+        return row
 
-        for entity in self.results:
-            if delete_flag:
-                uncache_entity(self.last_query_model, entity)      
+    def fetchone(self, delete_flag=False):
+        try:
+            if isinstance(self.results, int):
+                #Handle aggregate (e.g. count)
+                return (self.results, )
+            else:
+                entity = self.results.next()
+        except StopIteration:
+            entity = None
 
-            result = []
-            for col in self.queried_fields:
-                if col == "__key__":
-                    key = entity.key()
-                    self.returned_ids.append(key)
-                    result.append(key.id_or_name())
-                else:
-                    result.append(entity.get(col))
+        if entity is None:
+            return None
 
-            results.append(tuple(result))
+        if delete_flag:
+            uncache_entity(self.last_query_model, entity)      
 
-        return results
+        result = []
+        for col in self.queried_fields:
+            if col == "__key__":
+                key = entity.key()
+                self.returned_ids.append(key)
+                result.append(key.id_or_name())
+            else:
+                result.append(entity.get(col))
+
+        return result
+
+    def fetchmany(self, size, delete_flag=False):
+        if not self.results:
+            return []
+
+        result = []
+        i = 0
+        while i < size:
+            entity = self.fetchone(delete_flag)
+            if entity is None:
+                break
+
+            result.append(entity)
+            i += 1
+
+        return result
 
     def delete(self):
         #Passing the delete_flag will uncache the entities
@@ -349,6 +362,9 @@ class Cursor(object):
     @property
     def lastrowid(self):
         return self.returned_ids[-1].id_or_name()
+
+    def __iter__(self):
+        return self
 
 class Database(object):
     """ Fake DB API 2.0 for App engine """
@@ -566,6 +582,3 @@ class DatabaseWrapper(BaseDatabaseWrapper):
     def _cursor(self):
         #for < Django 1.6 compatiblity
         return self.create_cursor()
-
-    def cursor(self):
-        return self._cursor()
