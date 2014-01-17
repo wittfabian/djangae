@@ -18,55 +18,77 @@ except ImportError:
     class DateTimeCompiler(object):
         pass
 
-from .base import django_instance_to_entity, InsertCommand
+from .base import django_instance_to_entity
+from .commands import InsertCommand, SelectCommand
 
 class SQLCompiler(compiler.SQLCompiler):
     query_class = Query
 
-    def __init__(self, *args, **kwargs):
-        self.ordering_aliases = None
-        super(SQLCompiler, self).__init__(*args, **kwargs)
+    def as_sql(self):
 
-    def execute_sql(self, result_type=MULTI):
-        try:
-            sql, params = self.as_sql()
-        except EmptyResultSet:
-            #This query couldn't match anything (e.g. thing__in=[])
-            sql = None
-
-        if not sql:
-            if result_type == MULTI:
-                return iter([])
+        queried_fields = []
+        for x in self.query.select:
+            if isinstance(x, tuple):
+                #Django < 1.6 compatibility
+                queried_fields.append(x[1])
             else:
-                return None
+                queried_fields.append(x.col[1])
 
-        cursor = self.connection.cursor()
-        cursor.execute_appengine_query(self.query.model, self.query)
+        where = self.query.where.as_sql(
+            qn=self.quote_name_unless_alias, 
+            connection=self.connection
+        )
+    
+        select = SelectCommand(
+            self.connection,
+            self.query.model, 
+            queried_fields,
+            where=self.query.where
+        )
 
-        # This at least satisfies the most basic unit tests.
-        if connections[self.using].use_debug_cursor or (connections[self.using].use_debug_cursor is None and settings.DEBUG):
-            self.connection.queries.append({'sql': repr(self.query)})
+        print(where)
+        return (select, [])
 
-        if not result_type:
-            return cursor
-        if result_type == SINGLE:
-            if self.ordering_aliases:
-                return cursor.fetchone()[:-len(self.ordering_aliases)]
-            return cursor.fetchone()
+#    def execute_sql(self, result_type=MULTI):
+#        try:
+#            sql, params = self.as_sql()
+#        except EmptyResultSet:
+#            #This query couldn't match anything (e.g. thing__in=[])
+#            sql = None
 
-        # The MULTI case.
-        if self.ordering_aliases:
-            result = order_modified_iter(cursor, len(self.ordering_aliases),
-                    self.connection.features.empty_fetchmany_value)
-        else:
-            result = iter((lambda: cursor.fetchmany(GET_ITERATOR_CHUNK_SIZE)),
-                    self.connection.features.empty_fetchmany_value)
-        if not self.connection.features.can_use_chunked_reads:
-            # If we are using non-chunked reads, we return the same data
-            # structure as normally, but ensure it is all read into memory
-            # before going any further.
-            return list(result)
-        return result
+#        if not sql:
+#            if result_type == MULTI:
+#                return iter([])
+#            else:
+#                return None
+
+#        cursor = self.connection.cursor()
+#        cursor.execute_appengine_query(self.query.model, self.query)
+
+#        # This at least satisfies the most basic unit tests.
+#        if connections[self.using].use_debug_cursor or (connections[self.using].use_debug_cursor is None and settings.DEBUG):
+#            self.connection.queries.append({'sql': repr(self.query)})
+
+#        if not result_type:
+#            return cursor
+#        if result_type == SINGLE:
+#            if self.ordering_aliases:
+#                return cursor.fetchone()[:-len(self.ordering_aliases)]
+#            return cursor.fetchone()
+#
+#        # The MULTI case.
+#        if self.ordering_aliases:
+#            result = order_modified_iter(cursor, len(self.ordering_aliases),
+#                    self.connection.features.empty_fetchmany_value)
+#        else:
+#            result = iter((lambda: cursor.fetchmany(GET_ITERATOR_CHUNK_SIZE)),
+#                    self.connection.features.empty_fetchmany_value)
+#        if not self.connection.features.can_use_chunked_reads:
+#            # If we are using non-chunked reads, we return the same data
+#            # structure as normally, but ensure it is all read into memory
+#            # before going any further.
+#            return list(result)
+#        return result
 
 class SQLInsertCompiler(compiler.SQLInsertCompiler, SQLCompiler):
     def __init__(self, *args, **kwargs):
