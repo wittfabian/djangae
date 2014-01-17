@@ -39,11 +39,22 @@ class SQLCompiler(compiler.SQLCompiler):
             connection=self.connection
         )
     
+        is_count = False
+        if self.query.aggregates:
+            if self.query.aggregates.keys() == [ None ]:
+                if self.query.aggregates[None].col == "*":
+                    is_count = True
+                else:
+                    raise RuntimeError("Counting anything other than '*' is not supported")
+            else:
+                raise RuntimeError("Unsupported aggregate query")
+
         select = SelectCommand(
             self.connection,
             self.query.model, 
             queried_fields,
-            where=self.query.where
+            where=self.query.where,
+            is_count=is_count
         )
 
         print(where)
