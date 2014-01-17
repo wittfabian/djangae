@@ -1,10 +1,15 @@
+from google.appengine.api import datastore
+from django.core.cache import cache
+
+from django.db.models.sql.where import AND, OR
 
 class SelectCommand(object):
-    def __init__(self, connection, model, queried_fields, where):
+    def __init__(self, connection, model, queried_fields, where, is_count=False):
         self.connection = connection
         self.pk_col = model._meta.pk.column
         self.model = model
         self.queried_fields = queried_fields
+        self.is_count = is_count
 
         if not self.queried_fields:
             self.queried_fields = [ x.column for x in model._meta.fields ]
@@ -24,8 +29,14 @@ class SelectCommand(object):
         except ValueError:
             pass
            
-    def parse_where_and_check_projection(self, where):
+    def parse_where_and_check_projection(self, where, negated=False):
         result = []
+
+        if where.negated:
+            negated = not negated
+
+        if not negated and where.connector != AND:
+            raise DatabaseError("Only AND filters are supported")
 
         for child in where.children:
             if isinstance(child, tuple):

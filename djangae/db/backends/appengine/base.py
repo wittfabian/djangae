@@ -185,41 +185,49 @@ class Cursor(object):
         self.queries = []
         self.start_cursor = None
         self.returned_ids = []
-        self.returned_keys = [] #This is used during deletion
         self.queried_fields = []
         self.query_done = True
         self.all_filters = []
         self.last_query_model = None
         self.rowcount = -1
 
-    @property
-    def query(self):
-        return self.queries[0]
-
-    @query.setter
-    def query(self, value):
-        if self.queries:
-            self.queries[0] = value
-        else:
-            self.queries = [ value ]
-
     def execute(self, sql, *params):
         if isinstance(sql, SelectCommand):
+            in_filter = None
+
             query = datastore.Query(
                 sql.model._meta.db_table,
                 projection=sql.projection
             )
 
             for column, op, value in sql.where:
-                op = OPERATORS_MAP[op]
-                assert(op)
+                final_op = OPERATORS_MAP[op]
+                
+                if final_op is None:
+                    if op == "in":
+                        in_filter = (column, op, value)
+                        continue
 
-                query["%s %s" % (column, op)] = value
+                query["%s %s" % (column, final_op)] = value
+
+            if in_filter:
+                queries = []
+                column, op, value = in_filter
+                for val in value:
+                    new_query = datastore.Query(sql.model._meta.db_table)
+                    new_query.update(query)
+                    new_query["%s =" % column] = val
+                    queries.append(new_query)
+
+                query = datastore.MultiQuery(queries, [])
+
 
             self.query = query
             self.results = None
             self.query_done = False
             self.queried_fields = sql.queried_fields
+            self.last_query_model = sql.model
+            self.aggregate_type = "count" if sql.is_count else None
 
         elif isinstance(sql, FlushCommand):
             sql.execute()
@@ -235,90 +243,6 @@ class Cursor(object):
 
         else:
             raise RuntimeError("Can't execute traditional SQL: '%s'", sql)
-
-    def _update_projection_state(self, field, lookup_type):
-        db_type = field.db_type(self.connection)
-
-        disable_projection = False
-        projected_fields = self.query.GetQueryOptions().projection
-
-        if not projected_fields or field.column not in projected_fields:
-            return
-
-        if db_type in ("text", "bytes"):
-            disable_projection = True
-
-        if lookup_type in ('exact', 'in'):
-            disable_projection = True
-
-        if disable_projection:
-            new_queries = []
-            for query in self.queries:
-                new_query = datastore.Query(query._Query__kind) #Nasty
-                new_query.update(query)
-                new_queries.append(new_query)
-
-            self.queries = new_queries
-
-    def _apply_filters(self, model, where, all_filters, negated=False):
-        if where.negated:
-            negated = not negated
-
-        if not negated and where.connector != AND:
-            raise DatabaseError("Only AND filters are supported")
-
-        for child in where.children:
-            if isinstance(child, Node):
-                self._apply_filters(model, child, all_filters, negated=negated)
-                continue
-
-            field, lookup_type, value = self._parse_child(model, child)
-            applied_filter = self._apply_filter(model, field, lookup_type, negated, value)
-            if applied_filter is not None:
-                #IN queries return None here, all_filters is empty on an IN query
-                all_filters.append(applied_filter)
-
-        if where.negated:
-            negated = not negated
-
-    def _apply_filter(self, model, field, lookup_type, negated, value, query_to_update=None):
-        query_to_update = query_to_update or self.query
-
-        if lookup_type not in OPERATORS_MAP:
-            raise DatabaseError("Lookup type %r isn't supported." % lookup_type)
-
-        column = field.column
-        if field.primary_key:
-            column = "__key__"
-
-        #Disable projection queries if neccessary
-        self._update_projection_state(field, lookup_type)
-
-        op = OPERATORS_MAP.get(lookup_type)
-
-        if op is None:
-            if lookup_type == "in":
-                new_queries = []
-                for query in self.queries:
-                    for v in value:
-                        new_query = datastore.Query(model._meta.db_table)
-                        new_query.update(query)
-                        self._apply_filter(model, field, 'exact', negated, v, query_to_update=new_query)
-                        new_queries.append(new_query)
-
-                self.queries = new_queries
-                return
-            elif lookup_type == "isnull":
-                op = "="
-                value = None
-
-        if op is None:
-            import pdb; pdb.set_trace()
-
-        assert(op is not None)
-
-        query_to_update["%s %s" % (column, op)] = value
-        return (column, op, value)
 
     def fix_fk_null(self, query, constraint):
         alias = constraint.alias
@@ -336,110 +260,6 @@ class Cursor(object):
         constraint.col = constraint.field.column
         constraint.alias = alias
 
-    def _parse_child(self, model, child):
-        constraint, lookup_type, annotation, value = child
-
-        if constraint.field is not None and lookup_type == 'isnull' and \
-            isinstance(constraint.field, models.ForeignKey):
-            self.fix_fk_null(self.query, constraint)
-
-        packed, value = constraint.process(lookup_type, value, self.connection)
-        alias, column, db_type = packed
-        field = constraint.field
-
-        #FIXME: Add support for simple inner joins
-        opts = model._meta
-        if alias and alias != opts.db_table:
-            raise DatabaseError("This database doesn't support JOINs "
-                                "and multi-table inheritance.")
-
-        # For parent.child_set queries the field held by the constraint
-        # is the parent's primary key, while the field the filter
-        # should consider is the child's foreign key field.
-        if column != field.column:
-            assert field.primary_key
-            field = opts.get_field(column[:-3]) #Remove _id
-            assert field.rel is not None
-
-        def normalize_value(_value, _lookup_type, _annotation):
-            # Undo Field.get_db_prep_lookup putting most values in a list
-            # (a subclass may override this, so check if it's a list) and
-            # losing the (True / False) argument to the "isnull" lookup.
-            if _lookup_type not in ('in', 'range', 'year') and \
-               isinstance(value, (tuple, list)):
-                if len(_value) > 1:
-                    raise DatabaseError("Filter lookup type was %s; expected the "
-                                        "filter argument not to be a list. Only "
-                                        "'in'-filters can be used with lists." %
-                                        lookup_type)
-                elif lookup_type == 'isnull':
-                    _value = _annotation
-                else:
-                    _value = _value[0]
-
-            # Remove percents added by Field.get_db_prep_lookup (useful
-            # if one were to use the value in a LIKE expression).
-            if _lookup_type in ('startswith', 'istartswith'):
-                _value = _value[:-1]
-            elif _lookup_type in ('endswith', 'iendswith'):
-                _value = _value[1:]
-            elif _lookup_type in ('contains', 'icontains'):
-                _value = _value[1:-1]
-
-            if field.primary_key:
-                if isinstance(_value, (list, tuple)):
-                    _value = [ Key.from_path(field.model._meta.db_table, x) for x in _value]
-                else:
-                    _value = Key.from_path(field.model._meta.db_table, _value)
-
-            return _value
-
-        #FIXME: Probably need to do some processing of the value here like
-        #djangoappengine does
-        return field, lookup_type, normalize_value(value, lookup_type, annotation)
-
-    def execute_appengine_query(self, model, query):
-        #Store the fields we are querying on so we can process the results
-        self.queried_fields = []
-        for x in query.select:
-            if isinstance(x, tuple):
-                #Django < 1.6 compatibility
-                self.queried_fields.append(x[1])
-            else:
-                self.queried_fields.append(x.col[1])
-
-        if self.queried_fields:
-            projection = self.queried_fields
-        else:
-            projection = None
-            self.queried_fields = [ x.column for x in model._meta.fields ]
-
-        pk_field = model._meta.pk.name
-        try:
-            #Set the column name to __key__ and then we know the order it came
-            #if the id was asked for
-            self.queried_fields[self.queried_fields.index(pk_field)] = "__key__"
-        except ValueError:
-            pass
-
-        self.query = datastore.Query(
-            model._meta.db_table,
-            projection=projection
-        )
-
-        self.all_filters = []
-        #Apply filters
-        self._apply_filters(model, query.where, self.all_filters)
-
-        try:
-            self.queries[1]
-            self.queries = [ datastore.MultiQuery(self.queries, []) ]
-        except IndexError:
-            pass
-        self.last_query_model = model
-
-        self.query_done = False
-
 
     def fetchone(self):
         try:
@@ -448,16 +268,24 @@ class Cursor(object):
             return None
 
 
+    def _run_query(self, limit=None, start=None, aggregate_type=None):
+        if aggregate_type is None:
+            return self.query.Run(limit=limit, start=start)
+        elif self.aggregate_type == "count":
+            return self.query.Count(limit=limit, start=start)
+        else:
+            raise RuntimeError("Unsupported query type")
+
     def fetchmany(self, size, delete_flag=False):
         if self.query_done:
             return []
 
-        if self.results is None:
-            if not self.queries:
-                raise Database.Error()
+        if self.aggregate_type:
+            size = None #Don't limit aggregates...
 
+        if self.results is None:
             if isinstance(self.query, datastore.MultiQuery):
-                self.results = self.query.Run()
+                self.results = self._run_query(aggregate_type=self.aggregate_type)
                 self.query_done = True
             else:
                 #Try and get the entity from the cache, this is to work around HRD issues
@@ -483,7 +311,7 @@ class Cursor(object):
                             entity_from_cache = get_entity_from_cache(unique_key)
 
                 if entity_from_cache is None:
-                    self.results = self.query.Run(limit=size, start=self.start_cursor)
+                    self.results = self._run_query(limit=size, start=self.start_cursor, aggregate_type=self.aggregate_type)
                     self.start_cursor = self.query.GetCursor()
                     self.query_done = not self.results
                 else:
@@ -491,7 +319,9 @@ class Cursor(object):
                     self.query_done = True
                     self.start_cursor = None
 
-        self.returned_keys = []
+        if self.aggregate_type:
+            return [ (self.results,) ]
+
         results = []
 
         for entity in self.results:
@@ -502,7 +332,7 @@ class Cursor(object):
             for col in self.queried_fields:
                 if col == "__key__":
                     key = entity.key()
-                    self.returned_keys.append(key)
+                    self.returned_ids.append(key)
                     result.append(key.id_or_name())
                 else:
                     result.append(entity.get(col))
@@ -514,7 +344,7 @@ class Cursor(object):
     def delete(self):
         #Passing the delete_flag will uncache the entities
         self.fetchmany(GET_ITERATOR_CHUNK_SIZE, delete_flag=True)
-        datastore.Delete(self.returned_keys)
+        datastore.Delete(self.returned_ids)
 
     @property
     def lastrowid(self):
