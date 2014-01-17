@@ -34,6 +34,11 @@ from django.core.cache import cache
 
 from google.appengine.ext import testbed
 
+from .commands import (
+    SelectCommand, 
+    InsertCommand, 
+    FlushCommand
+)
 
 OPERATORS_MAP = {
     'exact': '=',
@@ -132,35 +137,6 @@ class Connection(object):
     def close(self):
         pass
 
-class FlushCommand(object):
-    """
-        sql_flush returns the SQL statements to flush the database,
-        which are then executed by cursor.execute()
-
-        We instead return a list of FlushCommands which are called by
-        our cursor.execute
-    """
-    def __init__(self, table):
-        self.table = table
-
-    def execute(self):
-        table = self.table
-
-        all_the_things = list(datastore.Query(table, keys_only=True).Run())
-        while all_the_things:
-            datastore.Delete(all_the_things)
-            all_the_things = list(datastore.Query(table, keys_only=True).Run())
-
-        cache.clear()
-
-class InsertCommand(object):
-    def __init__(self, model, entities):
-        if model._meta.get_parent_list() and not model._meta.abstract:
-            raise RuntimeError("Multi-table inheritance is not supported")
-
-        self.entities = entities
-        self.model = model
-
 def django_instance_to_entity(connection, model, fields, raw, instance):
     field_values = {}
 
@@ -228,7 +204,24 @@ class Cursor(object):
             self.queries = [ value ]
 
     def execute(self, sql, *params):
-        if isinstance(sql, FlushCommand):
+        if isinstance(sql, SelectCommand):
+            query = datastore.Query(
+                sql.model._meta.db_table,
+                projection=sql.projection
+            )
+
+            for column, op, value in sql.where:
+                op = OPERATORS_MAP[op]
+                assert(op)
+
+                query["%s %s" % (column, op)] = value
+
+            self.query = query
+            self.results = None
+            self.query_done = False
+            self.queried_fields = sql.queried_fields
+
+        elif isinstance(sql, FlushCommand):
             sql.execute()
         elif isinstance(sql, InsertCommand):
             self.connection.queries.append(sql)
@@ -406,9 +399,6 @@ class Cursor(object):
         return field, lookup_type, normalize_value(value, lookup_type, annotation)
 
     def execute_appengine_query(self, model, query):
-        if model._meta.get_parent_list() and not model._meta.abstract:
-            raise RuntimeError("Multi-table inheritance is not supported")
-
         #Store the fields we are querying on so we can process the results
         self.queried_fields = []
         for x in query.select:
@@ -503,6 +493,7 @@ class Cursor(object):
 
         self.returned_keys = []
         results = []
+
         for entity in self.results:
             if delete_flag:
                 uncache_entity(self.last_query_model, entity)      
@@ -746,3 +737,5 @@ class DatabaseWrapper(BaseDatabaseWrapper):
         #for < Django 1.6 compatiblity
         return self.create_cursor()
 
+    def cursor(self):
+        return self._cursor()
