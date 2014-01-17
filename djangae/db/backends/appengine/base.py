@@ -53,6 +53,7 @@ OPERATORS_MAP = {
     'startswith': None,
     'range': None,
     'year': None,
+    'gt_and_lt': None #Special case combined filter
 }
 
 class DatabaseError(Exception):
@@ -193,34 +194,46 @@ class Cursor(object):
 
     def execute(self, sql, *params):
         if isinstance(sql, SelectCommand):
-            in_filter = None
+            combined_filters = []
 
             query = datastore.Query(
                 sql.model._meta.db_table,
                 projection=sql.projection
             )
 
+            print(sql.where)
+
             for column, op, value in sql.where:
                 final_op = OPERATORS_MAP[op]
                 
                 if final_op is None:
                     if op == "in":
-                        in_filter = (column, op, value)
+                        combined_filters.append((column, op, value))
                         continue
+                    elif op == "gt_and_lt":
+                        combined_filters.append((column, op, value))
+                        continue
+                    assert(0)
 
                 query["%s %s" % (column, final_op)] = value
 
-            if in_filter:
+            if combined_filters:
                 queries = []
-                column, op, value = in_filter
-                for val in value:
-                    new_query = datastore.Query(sql.model._meta.db_table)
-                    new_query.update(query)
-                    new_query["%s =" % column] = val
-                    queries.append(new_query)
+                for column, op, value in combined_filters:
+                    if op == "in":
+                        for val in value:
+                            new_query = datastore.Query(sql.model._meta.db_table)
+                            new_query.update(query)
+                            new_query["%s =" % column] = val
+                            queries.append(new_query)
+                    elif op == "gt_and_lt":
+                        for tmp_op in ("<", ">"):
+                            new_query = datastore.Query(sql.model._meta.db_table)
+                            new_query.update(query)
+                            new_query["%s %s" % (column, tmp_op)] = value
+                            queries.append(new_query)                        
 
                 query = datastore.MultiQuery(queries, [])
-
 
             self.query = query
             self.results = None
@@ -263,6 +276,10 @@ class Cursor(object):
 
 
     def _run_query(self, limit=None, start=None, aggregate_type=None):
+
+        if "<" in str(self.query):
+            import ipdb; ipdb.set_trace()
+
         if aggregate_type is None:
             return self.query.Run(limit=limit, start=start)
         elif self.aggregate_type == "count":
