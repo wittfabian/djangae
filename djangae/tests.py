@@ -30,8 +30,8 @@ class EdgeCaseTests(TestCase):
 		self.assertEqual(5, len(results))
 
 		#Double exclude not supported
-		qs = User.objects.exclude(username="E").exclude(username="A")		
-		self.assertRaises(RuntimeError, qs)
+		with self.assertRaises(RuntimeError):
+			list(User.objects.exclude(username="E").exclude(username="A"))
 
 		results = User.objects.filter(username="A", email="test@example.com")
 		self.assertEqual(1, len(results))
@@ -42,5 +42,6 @@ class EdgeCaseTests(TestCase):
 		self.assertEqual(3, User.objects.exclude(email="test3@example.com").count())
 		self.assertEqual(1, User.objects.filter(username="A").exclude(email="test3@example.com").count())
 
-		qs = User.objects.exclude(username="E").exclude(username="A")		
-		self.assertRaises(RuntimeError, qs)
+		with self.assertRaises(RuntimeError):
+			list(User.objects.exclude(username="E").exclude(username="A"))
+		
