@@ -51,9 +51,15 @@ class SelectCommand(object):
                     if db_type in ("bytes", "text"):
                         self.projection = None
 
-                return (constraint.col, op, value)
+                if negated:
+                    if op == "exact":
+                        result.append((constraint.col, "gt_and_lt", value))
+                    else:
+                        raise RuntimeError("Unsupported negated lookup: " + op)
+                else:
+                    result.append((constraint.col, op, value))
             else:
-                result.append(self.parse_where_and_check_projection(child))
+                result.extend(self.parse_where_and_check_projection(child, negated))
         return result
 
     def is_supported(self):

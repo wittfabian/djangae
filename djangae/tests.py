@@ -33,6 +33,9 @@ class EdgeCaseTests(TestCase):
 		qs = User.objects.exclude(username="E").exclude(username="A")		
 		self.assertRaises(RuntimeError, qs)
 
+		results = User.objects.filter(username="A", email="test@example.com")
+		self.assertEqual(1, len(results))
+
 	def test_counts(self):
 		self.assertEqual(5, User.objects.count())
 		self.assertEqual(2, User.objects.filter(email="test3@example.com").count())
@@ -41,4 +44,3 @@ class EdgeCaseTests(TestCase):
 
 		qs = User.objects.exclude(username="E").exclude(username="A")		
 		self.assertRaises(RuntimeError, qs)
-		
