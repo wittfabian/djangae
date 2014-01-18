@@ -57,7 +57,7 @@ class SQLCompiler(compiler.SQLCompiler):
             is_count=is_count
         )
 
-        print(where)
+        #print(where)
         return (select, [])
 
 #    def execute_sql(self, result_type=MULTI):
