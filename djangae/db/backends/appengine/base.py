@@ -201,7 +201,7 @@ class Cursor(object):
                 projection=sql.projection
             )
 
-            print(sql.where)
+            #print(sql.where)
 
             for column, op, value in sql.where:
                 final_op = OPERATORS_MAP[op]
@@ -213,6 +213,10 @@ class Cursor(object):
                     elif op == "gt_and_lt":
                         combined_filters.append((column, op, value))
                         continue
+                    elif op == "isnull":
+                        query["%s ="] = None
+                        continue
+
                     assert(0)
 
                 query["%s %s" % (column, final_op)] = value
