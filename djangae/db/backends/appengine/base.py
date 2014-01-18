@@ -216,22 +216,25 @@ class Cursor(object):
                     assert(0)
 
                 query["%s %s" % (column, final_op)] = value
-
+            
             if combined_filters:
-                queries = []
+                queries = [ query ]
                 for column, op, value in combined_filters:
-                    if op == "in":
-                        for val in value:
-                            new_query = datastore.Query(sql.model._meta.db_table)
-                            new_query.update(query)
-                            new_query["%s =" % column] = val
-                            queries.append(new_query)
-                    elif op == "gt_and_lt":
-                        for tmp_op in ("<", ">"):
-                            new_query = datastore.Query(sql.model._meta.db_table)
-                            new_query.update(query)
-                            new_query["%s %s" % (column, tmp_op)] = value
-                            queries.append(new_query)                        
+                    new_queries = []
+                    for query in queries:                        
+                        if op == "in":
+                            for val in value:
+                                new_query = datastore.Query(sql.model._meta.db_table)
+                                new_query.update(query)
+                                new_query["%s =" % column] = val
+                                new_queries.append(new_query)
+                        elif op == "gt_and_lt":
+                            for tmp_op in ("<", ">"):
+                                new_query = datastore.Query(sql.model._meta.db_table)
+                                new_query.update(query)
+                                new_query["%s %s" % (column, tmp_op)] = value
+                                new_queries.append(new_query)                        
+                    queries = new_queries
 
                 query = datastore.MultiQuery(queries, [])
 
@@ -276,10 +279,6 @@ class Cursor(object):
 
 
     def _run_query(self, limit=None, start=None, aggregate_type=None):
-
-        if "<" in str(self.query):
-            import ipdb; ipdb.set_trace()
-
         if aggregate_type is None:
             return self.query.Run(limit=limit, start=start)
         elif self.aggregate_type == "count":

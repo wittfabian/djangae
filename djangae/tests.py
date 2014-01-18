@@ -1,6 +1,12 @@
 from django.test import TestCase
+from django.db import models
 
-from django.contrib.auth.models import User
+class User(models.Model):
+	username = models.CharField(max_length=32)
+	email = models.EmailField()
+
+	def __unicode__(self):
+		return self.username
 
 class EdgeCaseTests(TestCase):
 	def setUp(self):
@@ -19,8 +25,8 @@ class EdgeCaseTests(TestCase):
 		self.assertItemsEqual(["A", "B"], [x.username for x in results])
 
 		results = User.objects.filter(username__in=["A", "B"]).exclude(username="A")
-		self.assertEqual(1, len(results))
-		self.assertItemsEqual(["A"], [x.username for x in results])
+		self.assertEqual(1, len(results), results)
+		self.assertItemsEqual(["B"], [x.username for x in results])
 
 		results = User.objects.filter(username__lt="E")
 		self.assertEqual(4, len(results))
