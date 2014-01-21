@@ -11,12 +11,19 @@ class SelectCommand(object):
         self.queried_fields = queried_fields
         self.is_count = is_count
 
+        self.included_pks = []
+        self.excluded_pks = []
+
         if not self.queried_fields:
             self.queried_fields = [ x.column for x in model._meta.fields ]
 
         projection_fields = [ x for x in self.queried_fields if x != self.pk_col ]
         self.projected_fields = set(projection_fields)
+        
         self.projection = projection_fields or None     
+        if model._meta.parents:
+            self.projection = None
+            
         self.keys_only = False
         self.where = self.parse_where_and_check_projection(where)
 
@@ -52,21 +59,28 @@ class SelectCommand(object):
                         self.projection = None
 
                 if negated:
+                    if op in ("exact", "in") and constraint.field.primary_key:
+                        self.excluded_pks.append(value)
+                    #else: FIXME when excluded_pks is handled, we can put the
+                    #next section in an else block
                     if op == "exact":
-                        result.append((constraint.col, "gt_and_lt", value))
+                        col = constraint.col
+                        result.append((col, "gt_and_lt", value))
                     else:
                         raise RuntimeError("Unsupported negated lookup: " + op)
                 else:
-                    result.append((constraint.col, op, value))
+                    if op in ("exact", "in") and constraint.field.primary_key:
+                        if isinstance(value, (list, tuple)):
+                            self.included_pks.extend(list(value))
+                        else:
+                            self.included_pks.append(value)
+                    #else: FIXME when included_pks is handled, we can put the
+                    #next section in an else block
+                    col = constraint.col
+                    result.append((col, op, value))
             else:
                 result.extend(self.parse_where_and_check_projection(child, negated))
         return result
-
-    def is_supported(self):
-        if model._meta.get_parent_list() and not model._meta.abstract:                    
-            return (False, "Multi-table inheritance is not supported")
-
-        return (True, "")
 
 class FlushCommand(object):
     """
@@ -91,8 +105,5 @@ class FlushCommand(object):
 
 class InsertCommand(object):
     def __init__(self, model, entities):
-        if model._meta.get_parent_list() and not model._meta.abstract:
-            raise RuntimeError("Multi-table inheritance is not supported")
-
         self.entities = entities
         self.model = model

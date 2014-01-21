@@ -8,6 +8,15 @@ class User(models.Model):
 	def __unicode__(self):
 		return self.username
 
+class MultiTableParent(models.Model):
+	parent_field = models.CharField(max_length=32)
+
+class MultiTableChildOne(MultiTableParent):
+	child_one_field = models.CharField(max_length=32)
+
+class MultiTableChildTwo(MultiTableParent):
+	child_two_field = models.CharField(max_length=32)
+
 class EdgeCaseTests(TestCase):
 	def setUp(self):
 		User.objects.create(username="A", email="test@example.com")
@@ -15,6 +24,19 @@ class EdgeCaseTests(TestCase):
 		User.objects.create(username="C", email="test2@example.com")
 		User.objects.create(username="D", email="test3@example.com")
 		User.objects.create(username="E", email="test3@example.com")
+
+	def test_multi_table_inheritance(self):
+		parent = MultiTableParent.objects.create(parent_field="parent1")
+		child1 = MultiTableChildOne.objects.create(parent_field="child1", child_one_field="child1")
+		child2 = MultiTableChildTwo.objects.create(parent_field="child2", child_two_field="child2")
+
+		self.assertEqual(3, MultiTableParent.objects.count())
+		self.assertItemsEqual([parent.pk, child1.pk, child2.pk], list(MultiTableParent.objects.values_list('pk', flat=True)))
+		self.assertEqual(1, MultiTableChildOne.objects.count())
+		self.assertEqual(child1, MultiTableChildOne.objects.get())
+
+		self.assertEqual(1, MultiTableChildTwo.objects.count())
+		self.assertEqual(child2, MultiTableChildTwo.objects.get())
 
 	def test_unusual_queries(self):
 		results = User.objects.all()
