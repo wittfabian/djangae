@@ -180,7 +180,7 @@ def django_instance_to_entity(connection, model, fields, raw, instance):
         
     #FIXME: This will only work for two levels of inheritance
     for obj in model._meta.get_all_related_objects():            
-        if obj.parent_model == model:
+        if model in [ x for x in obj.model._meta.parents if not x._meta.abstract]:
             try:
                 related_obj = getattr(instance, obj.var_name)
             except obj.model.DoesNotExist:
@@ -270,7 +270,14 @@ class Cursor(object):
                 if column == sql.pk_col:
                     column = "__key__"
                     if isinstance(value, basestring):
-                        value = Key.from_path(inheritance_root._meta.db_table, name=value)
+                        value = value[:500]
+                        left = value[500:]
+                        if left:
+                            warnings.warn("Truncating primary key"
+                                " that is over 500 characters. THIS IS AN ERROR IN YOUR PROGRAM.",
+                                RuntimeWarning
+                            )
+                        value = Key.from_path(inheritance_root._meta.db_table, value)
                     else:
                         value = Key.from_path(inheritance_root._meta.db_table, value)
 
