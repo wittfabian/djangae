@@ -139,23 +139,65 @@ class Connection(object):
         pass
 
 def django_instance_to_entity(connection, model, fields, raw, instance):
-    field_values = {}
+    uses_inheritance = False
+    inheritance_root = model
+    db_table = model._meta.db_table
 
-    primary_key = None
-    for field in fields:
-        value = field.get_db_prep_save(
-            getattr(instance, field.attname) if raw else field.pre_save(instance, instance._state.adding),
+    def value_from_instance(_instance, _field):
+        value = _field.get_db_prep_save(
+            getattr(_instance, _field.attname) if raw else _field.pre_save(_instance, _instance._state.adding),
             connection = connection
         )
 
-        if (not field.null and not field.primary_key) and value is None:
+        if (not _field.null and not _field.primary_key) and value is None:
             raise IntegrityError("You can't set %s (a non-nullable "
-                                     "field) to None!" % field.name)
+                                     "field) to None!" % _field.name)
 
-        if field.primary_key:
+        is_primary_key = False
+        if _field.primary_key and _field.model == inheritance_root:
+            is_primary_key = True
+        
+        value = connection.ops.value_for_db(value, _field)
+        return value, is_primary_key
+
+    if [ x for x in model._meta.get_parent_list() if not x._meta.abstract]:
+        #We can simulate multi-table inheritance by using the same approach as
+        #datastore "polymodels". Here we store the classes that form the heirarchy
+        #and extend the fields to include those from parent models
+        classes = [ model._meta.db_table ]
+        for parent in model._meta.get_parent_list():
+            if not parent._meta.parents:
+                #If this is the top parent, override the db_table
+                db_table = parent._meta.db_table
+                inheritance_root = parent
+
+            classes.append(parent._meta.db_table)
+            for field in parent._meta.fields:
+                fields.append(field)
+
+        uses_inheritance = True
+
+        
+    #FIXME: This will only work for two levels of inheritance
+    for obj in model._meta.get_all_related_objects():            
+        if obj.parent_model == model:
+            try:
+                related_obj = getattr(instance, obj.var_name)
+            except obj.model.DoesNotExist:
+                #We don't have a child attached to this field
+                #so ignore
+                continue
+
+            for field in related_obj._meta.fields:
+                fields.append(field)
+
+    field_values = {}
+    primary_key = None
+    for field in fields:
+        value, is_primary_key = value_from_instance(instance, field)
+        if is_primary_key:
             primary_key = value
         else:
-            value = connection.ops.value_for_db(value, field)
             field_values[field.column] = value
 
     kwargs = {}
@@ -174,8 +216,13 @@ def django_instance_to_entity(connection, model, fields, raw, instance):
         else:
             raise ValueError("Invalid primary key value")
 
-    entity = datastore.Entity(model._meta.db_table, **kwargs)
+    entity = datastore.Entity(db_table, **kwargs)
     entity.update(field_values)
+
+    if uses_inheritance:        
+        entity["class"] = classes
+
+    print inheritance_root.__name__ if inheritance_root else "None", model.__name__, entity
     return entity
 
 class Cursor(object):
@@ -193,19 +240,40 @@ class Cursor(object):
         self.rowcount = -1
 
     def execute(self, sql, *params):
-        if isinstance(sql, SelectCommand):
+        if isinstance(sql, SelectCommand):            
             combined_filters = []
 
+            inheritance_root = sql.model
+
+            concrete_parents = [ x for x in sql.model._meta.parents if not x._meta.abstract]
+
+            if concrete_parents:
+                for parent in sql.model._meta.get_parent_list():
+                    if not parent._meta.parents:
+                        #If this is the top parent, override the db_table
+                        inheritance_root = parent
+
             query = datastore.Query(
-                sql.model._meta.db_table,
+                inheritance_root._meta.db_table,
                 projection=sql.projection
             )
 
-            #print(sql.where)
+            #Only filter on class if we have some non-abstract parents
+            if concrete_parents and not sql.model._meta.proxy:
+                query["class ="] = sql.model._meta.db_table
+
+            print sql.model.__name__, sql.where
 
             for column, op, value in sql.where:
                 final_op = OPERATORS_MAP[op]
                 
+                if column == sql.pk_col:
+                    column = "__key__"
+                    if isinstance(value, basestring):
+                        value = Key.from_path(inheritance_root._meta.db_table, name=value)
+                    else:
+                        value = Key.from_path(inheritance_root._meta.db_table, value)
+
                 if final_op is None:
                     if op == "in":
                         combined_filters.append((column, op, value))
@@ -259,7 +327,15 @@ class Cursor(object):
 
             #Now cache them, temporarily to help avoid consistency errors
             for key, entity in zip(self.returned_ids, sql.entities):
-                entity[sql.model._meta.pk.column] = key.id_or_name()
+                pk_column = sql.model._meta.pk.column
+
+                #If there are parent models, search the parents for the
+                #first primary key which isn't a relation field
+                for parent in sql.model._meta.parents.keys():
+                    if not parent._meta.pk.rel:
+                        pk_column = parent._meta.pk.column
+                    
+                entity[pk_column] = key.id_or_name()
                 cache_entity(sql.model, entity)
 
         else:
