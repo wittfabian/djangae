@@ -17,10 +17,21 @@ class SelectCommand(object):
         if not self.queried_fields:
             self.queried_fields = [ x.column for x in model._meta.fields ]
 
-        projection_fields = [ x for x in self.queried_fields if x != self.pk_col ]
-        self.projected_fields = set(projection_fields)
-        
-        self.projection = projection_fields or None     
+        projection_fields = []
+        for field in self.queried_fields:
+            if field == self.pk_col:
+                continue
+
+            #Text and byte fields aren't indexed, so we can't do a 
+            #projection query
+            db_type = model._meta.get_field(field).db_type(connection)
+            if db_type in ("bytes", "text"):                        
+                projection_fields = []
+                break
+
+            projection_fields.append(field)
+
+        self.projection = list(set(projection_fields)) or None     
         if model._meta.parents:
             self.projection = None
             
@@ -50,12 +61,11 @@ class SelectCommand(object):
                 constraint, op, annotation, value = child
 
                 #Disable projection if it's not supported
-                if constraint.col in self.projected_fields:
+                if self.projection and constraint.col in self.projection:
                     if op in ("exact", "in"):
-                        self.projection = None
-
-                    db_type = constraint.field.db_type(self.connection)
-                    if db_type in ("bytes", "text"):
+                        #If we are projecting, but we are doing an 
+                        #equality filter on one of the columns, then we 
+                        #can't project
                         self.projection = None
 
                 if negated:
