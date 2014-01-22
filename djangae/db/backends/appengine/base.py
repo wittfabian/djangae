@@ -53,7 +53,7 @@ OPERATORS_MAP = {
     'startswith': None,
     'range': None,
     'year': None,
-    'gt_and_lt': None #Special case combined filter
+    'gt_and_lt': None #Special case inequality combined filter
 }
 
 class DatabaseError(Exception):
@@ -420,7 +420,7 @@ class Cursor(object):
                 #Handle aggregate (e.g. count)
                 return (self.results, )
             else:
-                entity = self.results.next()
+                entity = self.results.next()                
         except StopIteration:
             entity = None
 
