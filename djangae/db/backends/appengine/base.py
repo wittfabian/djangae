@@ -40,22 +40,6 @@ from .commands import (
     FlushCommand
 )
 
-OPERATORS_MAP = {
-    'exact': '=',
-    'gt': '>',
-    'gte': '>=',
-    'lt': '<',
-    'lte': '<=',
-
-    # The following operators are supported with special code below.
-    'isnull': None,
-    'in': None,
-    'startswith': None,
-    'range': None,
-    'year': None,
-    'gt_and_lt': None #Special case inequality combined filter
-}
-
 class DatabaseError(Exception):
     pass
 
@@ -229,102 +213,16 @@ class Cursor(object):
     """ Dummy cursor class """
     def __init__(self, connection):
         self.connection = connection
-        self.results = None
-        self.queries = []
         self.start_cursor = None
         self.returned_ids = []
-        self.queried_fields = []
-        self.query_done = True
-        self.all_filters = []
-        self.last_query_model = None
         self.rowcount = -1
+        self.last_select_command = None
+        self.last_delete_command = None
 
     def execute(self, sql, *params):
         if isinstance(sql, SelectCommand):            
-            combined_filters = []
-
-            inheritance_root = sql.model
-
-            concrete_parents = [ x for x in sql.model._meta.parents if not x._meta.abstract]
-
-            if concrete_parents:
-                for parent in sql.model._meta.get_parent_list():
-                    if not parent._meta.parents:
-                        #If this is the top parent, override the db_table
-                        inheritance_root = parent
-
-            query = datastore.Query(
-                inheritance_root._meta.db_table,
-                projection=sql.projection
-            )
-
-            #Only filter on class if we have some non-abstract parents
-            if concrete_parents and not sql.model._meta.proxy:
-                query["class ="] = sql.model._meta.db_table
-
-            print sql.model.__name__, sql.where
-
-            for column, op, value in sql.where:
-                final_op = OPERATORS_MAP[op]
-                
-                if column == sql.pk_col:
-                    column = "__key__"
-                    if isinstance(value, basestring):
-                        value = value[:500]
-                        left = value[500:]
-                        if left:
-                            warnings.warn("Truncating primary key"
-                                " that is over 500 characters. THIS IS AN ERROR IN YOUR PROGRAM.",
-                                RuntimeWarning
-                            )
-                        value = Key.from_path(inheritance_root._meta.db_table, value)
-                    else:
-                        value = Key.from_path(inheritance_root._meta.db_table, value)
-
-                if final_op is None:
-                    if op == "in":
-                        combined_filters.append((column, op, value))
-                        continue
-                    elif op == "gt_and_lt":
-                        combined_filters.append((column, op, value))
-                        continue
-                    elif op == "isnull":
-                        query["%s ="] = None
-                        continue
-
-                    assert(0)
-
-                query["%s %s" % (column, final_op)] = value
-            
-            if combined_filters:
-                queries = [ query ]
-                for column, op, value in combined_filters:
-                    new_queries = []
-                    for query in queries:                        
-                        if op == "in":
-                            for val in value:
-                                new_query = datastore.Query(sql.model._meta.db_table)
-                                new_query.update(query)
-                                new_query["%s =" % column] = val
-                                new_queries.append(new_query)
-                        elif op == "gt_and_lt":
-                            for tmp_op in ("<", ">"):
-                                new_query = datastore.Query(sql.model._meta.db_table)
-                                new_query.update(query)
-                                new_query["%s %s" % (column, tmp_op)] = value
-                                new_queries.append(new_query)                        
-                    queries = new_queries
-
-                query = datastore.MultiQuery(queries, [])
-
-            self.query = query
-            self.results = None
-            self.query_done = False
-            self.queried_fields = sql.queried_fields
-            self.last_query_model = sql.model
-            self.aggregate_type = "count" if sql.is_count else None
-            self._do_fetch()
-
+            self.last_select_command = sql
+            self.last_select_command.execute()                    
         elif isinstance(sql, FlushCommand):
             sql.execute()
         elif isinstance(sql, InsertCommand):
@@ -364,50 +262,6 @@ class Cursor(object):
         constraint.col = constraint.field.column
         constraint.alias = alias
 
-
-    def _run_query(self, limit=None, start=None, aggregate_type=None):
-        if aggregate_type is None:
-            return self.query.Run(limit=limit, start=start)
-        elif self.aggregate_type == "count":
-            return self.query.Count(limit=limit, start=start)
-        else:
-            raise RuntimeError("Unsupported query type")
-
-    def _do_fetch(self):
-        if not self.results:
-            if isinstance(self.query, datastore.MultiQuery):
-                self.results = self._run_query(aggregate_type=self.aggregate_type)
-                self.query_done = True
-            else:
-                #Try and get the entity from the cache, this is to work around HRD issues
-                #and boost performance!
-                entity_from_cache = None
-                if self.all_filters and self.last_query_model:
-                    #Get all the exact filters
-                    exact_filters = [ x for x in self.all_filters if x[1] == "=" ]
-                    lookup = { x[0]:x[2] for x in exact_filters }
-
-                    unique_combinations = get_uniques_from_model(self.last_query_model)
-                    for fields in unique_combinations:
-                        final_key = []
-                        for field in fields:
-                            if field in lookup:
-                                final_key.append((field, lookup[field]))
-                                continue
-                            else:
-                                break
-                        else:
-                            #We've found a unique combination!
-                            unique_key = generate_unique_key(self.last_query_model, final_key)
-                            entity_from_cache = get_entity_from_cache(unique_key)
-
-                if entity_from_cache is None:
-                    self.results = self._run_query(aggregate_type=self.aggregate_type)
-                else:
-                    self.results = [ entity_from_cache ]
-
-            self.row_index = 0
-
     def next(self):
         row = self.fetchone()
         if row is None:
@@ -416,11 +270,11 @@ class Cursor(object):
 
     def fetchone(self, delete_flag=False):
         try:
-            if isinstance(self.results, int):
+            if isinstance(self.last_select_command.results, int):
                 #Handle aggregate (e.g. count)
-                return (self.results, )
+                return (self.last_select_command.results, )
             else:
-                entity = self.results.next()                
+                entity = self.last_select_command.results.next()                
         except StopIteration:
             entity = None
 
@@ -428,10 +282,10 @@ class Cursor(object):
             return None
 
         if delete_flag:
-            uncache_entity(self.last_query_model, entity)      
+            uncache_entity(self.last_select_command.model, entity)      
 
         result = []
-        for col in self.queried_fields:
+        for col in self.last_select_command.queried_fields:
             if col == "__key__":
                 key = entity.key()
                 self.returned_ids.append(key)
@@ -442,7 +296,7 @@ class Cursor(object):
         return result
 
     def fetchmany(self, size, delete_flag=False):
-        if not self.results:
+        if not self.last_select_command.results:
             return []
 
         result = []
