@@ -21,6 +21,8 @@ except ImportError:
 from .base import django_instance_to_entity
 from .commands import InsertCommand, SelectCommand
 
+from google.appengine.api import datastore
+
 class SQLCompiler(compiler.SQLCompiler):
     query_class = Query
 
@@ -60,47 +62,6 @@ class SQLCompiler(compiler.SQLCompiler):
         #print(where)
         return (select, [])
 
-#    def execute_sql(self, result_type=MULTI):
-#        try:
-#            sql, params = self.as_sql()
-#        except EmptyResultSet:
-#            #This query couldn't match anything (e.g. thing__in=[])
-#            sql = None
-
-#        if not sql:
-#            if result_type == MULTI:
-#                return iter([])
-#            else:
-#                return None
-
-#        cursor = self.connection.cursor()
-#        cursor.execute_appengine_query(self.query.model, self.query)
-
-#        # This at least satisfies the most basic unit tests.
-#        if connections[self.using].use_debug_cursor or (connections[self.using].use_debug_cursor is None and settings.DEBUG):
-#            self.connection.queries.append({'sql': repr(self.query)})
-
-#        if not result_type:
-#            return cursor
-#        if result_type == SINGLE:
-#            if self.ordering_aliases:
-#                return cursor.fetchone()[:-len(self.ordering_aliases)]
-#            return cursor.fetchone()
-#
-#        # The MULTI case.
-#        if self.ordering_aliases:
-#            result = order_modified_iter(cursor, len(self.ordering_aliases),
-#                    self.connection.features.empty_fetchmany_value)
-#        else:
-#            result = iter((lambda: cursor.fetchmany(GET_ITERATOR_CHUNK_SIZE)),
-#                    self.connection.features.empty_fetchmany_value)
-#        if not self.connection.features.can_use_chunked_reads:
-#            # If we are using non-chunked reads, we return the same data
-#            # structure as normally, but ensure it is all read into memory
-#            # before going any further.
-#            return list(result)
-#        return result
-
 class SQLInsertCompiler(compiler.SQLInsertCompiler, SQLCompiler):
     def __init__(self, *args, **kwargs):
         self.return_id = None
@@ -116,12 +77,16 @@ class SQLInsertCompiler(compiler.SQLInsertCompiler, SQLCompiler):
 
 
 class SQLDeleteCompiler(compiler.SQLDeleteCompiler, SQLCompiler):
-    def execute_sql(self, result_type=None):
-        results = super(SQLDeleteCompiler, self).execute_sql()
-        cursor = self.connection.cursor()
-        cursor.execute_appengine_query(self.query.model, self.query)
-        cursor.delete()        
-        return
+    def execute_sql(self, *args, **kwargs):
+        result, params = SQLCompiler.as_sql(self)
+
+        #Override the selected fields so we force a keys_only
+        #query
+        result.keys_only = True
+        result.projection = None        
+        result.execute()
+
+        datastore.Delete(result.results)
 
 
 class SQLUpdateCompiler(compiler.SQLUpdateCompiler, SQLCompiler):
