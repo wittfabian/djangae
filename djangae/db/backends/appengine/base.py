@@ -1,9 +1,5 @@
-import logging
 import warnings
 
-from itertools import islice
-
-from django.core.exceptions import ImproperlyConfigured
 from django.db.backends import (
     BaseDatabaseOperations,
     BaseDatabaseClient,
@@ -23,24 +19,20 @@ except ImportError:
 from django.conf import settings
 from django.utils import timezone
 from django.db.backends.creation import BaseDatabaseCreation
-from django.db.models.sql.subqueries import InsertQuery, DeleteQuery
-from django.db import models
 from google.appengine.ext.db import metadata
 from google.appengine.api import datastore
-from google.appengine.api.datastore_types import Key, Text
-from django.db.models.sql.constants import MULTI, SINGLE, GET_ITERATOR_CHUNK_SIZE
-from django.db.models.sql.where import AND, OR
-from django.utils.tree import Node
-
+from google.appengine.api.datastore_types import Blob, Text
+from django.db.models.sql.constants import GET_ITERATOR_CHUNK_SIZE
+from django.db.backends.util import format_number
 from django.core.cache import cache
 
 from google.appengine.ext import testbed
-from google.appengine.api.datastore_types import Blob, Text
 
 from .commands import (
     SelectCommand,
     InsertCommand,
-    FlushCommand
+    FlushCommand,
+    get_field_from_column
 )
 
 class DatabaseError(Exception):
@@ -297,7 +289,20 @@ class Cursor(object):
                 self.returned_ids.append(key)
                 result.append(key.id_or_name())
             else:
-                result.append(entity.get(col))
+                value = entity.get(col)
+                field = get_field_from_column(self.last_select_command.model, col)
+
+                type = field.get_internal_type()
+                if type == "DateTimeField":
+                    value = self.connection.ops.value_from_db_datetime(value)
+                elif type == "DateField":
+                    value = self.connection.ops.value_from_db_date(value)
+                elif type == "TimeField":
+                    value = self.connection.ops.value_from_db_time(value)
+                elif type == "DecimalField":
+                    value = self.connection.ops.value_from_db_decimal(value)
+
+                result.append(value)
 
         return result
 
@@ -353,6 +358,37 @@ def make_timezone_naive(value):
             raise ValueError("Djangae backend does not support timezone-aware datetimes when USE_TZ is False.")
     return value
 
+def decimal_to_string(value, max_digits=16, decimal_places=0):
+    """
+    Converts decimal to a unicode string for storage / lookup by nonrel
+    databases that don't support decimals natively.
+
+    This is an extension to `django.db.backends.util.format_number`
+    that preserves order -- if one decimal is less than another, their
+    string representations should compare the same (as strings).
+
+    TODO: Can't this be done using string.format()?
+          Not in Python 2.5, str.format is backported to 2.6 only.
+    """
+
+    # Handle sign separately.
+    if value.is_signed():
+        sign = u'-'
+        value = abs(value)
+    else:
+        sign = u''
+
+    # Let Django quantize and cast to a string.
+    value = format_number(value, max_digits, decimal_places)
+
+    # Pad with zeroes to a constant width.
+    n = value.find('.')
+    if n < 0:
+        n = len(value)
+    if n < max_digits - decimal_places:
+        value = u'0' * (max_digits - decimal_places - n) + value
+    return sign + value
+
 class DatabaseOperations(BaseDatabaseOperations):
     compiler_module = "djangae.db.backends.appengine.compiler"
 
@@ -397,6 +433,24 @@ class DatabaseOperations(BaseDatabaseOperations):
     def value_to_db_decimal(self, value, max_digits, decimal_places):
         return decimal_to_string(value, max_digits, decimal_places)
 
+    ##Unlike value_to_db, these are not overridden or standard Django, it's just nice to have symmetry
+    def value_from_db_datetime(self, value):
+        if value is not None and settings.USE_TZ and timezone.is_naive(value):
+            value = value.replace(tzinfo=timezone.utc)
+        return value
+
+    def value_from_db_date(self, value):
+        if value is not None and settings.USE_TZ and timezone.is_naive(value):
+            value = value.replace(tzinfo=timezone.utc)
+        return value
+
+    def value_from_db_time(self, value):
+        if value is not None and settings.USE_TZ and timezone.is_naive(value):
+            value = value.replace(tzinfo=timezone.utc)
+        return value
+
+    def value_from_db_decimal(self, value):
+        return value
 
 class DatabaseClient(BaseDatabaseClient):
     pass
