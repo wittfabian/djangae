@@ -37,10 +37,10 @@ class SQLCompiler(compiler.SQLCompiler):
                 queried_fields.append(x.col[1])
 
         where = self.query.where.as_sql(
-            qn=self.quote_name_unless_alias, 
+            qn=self.quote_name_unless_alias,
             connection=self.connection
         )
-    
+
         is_count = False
         if self.query.aggregates:
             if self.query.aggregates.keys() == [ None ]:
@@ -53,7 +53,7 @@ class SQLCompiler(compiler.SQLCompiler):
 
         select = SelectCommand(
             self.connection,
-            self.query.model, 
+            self.query.model,
             queried_fields,
             where=self.query.where,
             is_count=is_count
@@ -83,7 +83,7 @@ class SQLDeleteCompiler(compiler.SQLDeleteCompiler, SQLCompiler):
         #Override the selected fields so we force a keys_only
         #query
         result.keys_only = True
-        result.projection = None        
+        result.projection = None
         result.execute()
 
         datastore.Delete(result.results)
