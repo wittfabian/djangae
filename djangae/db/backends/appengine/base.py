@@ -35,8 +35,8 @@ from django.core.cache import cache
 from google.appengine.ext import testbed
 
 from .commands import (
-    SelectCommand, 
-    InsertCommand, 
+    SelectCommand,
+    InsertCommand,
     FlushCommand
 )
 
@@ -140,7 +140,7 @@ def django_instance_to_entity(connection, model, fields, raw, instance):
         is_primary_key = False
         if _field.primary_key and _field.model == inheritance_root:
             is_primary_key = True
-        
+
         value = connection.ops.value_for_db(value, _field)
         return value, is_primary_key
 
@@ -161,9 +161,9 @@ def django_instance_to_entity(connection, model, fields, raw, instance):
 
         uses_inheritance = True
 
-        
+
     #FIXME: This will only work for two levels of inheritance
-    for obj in model._meta.get_all_related_objects():            
+    for obj in model._meta.get_all_related_objects():
         if model in [ x for x in obj.model._meta.parents if not x._meta.abstract]:
             try:
                 related_obj = getattr(instance, obj.var_name)
@@ -203,10 +203,10 @@ def django_instance_to_entity(connection, model, fields, raw, instance):
     entity = datastore.Entity(db_table, **kwargs)
     entity.update(field_values)
 
-    if uses_inheritance:        
+    if uses_inheritance:
         entity["class"] = classes
 
-    print inheritance_root.__name__ if inheritance_root else "None", model.__name__, entity
+    #print inheritance_root.__name__ if inheritance_root else "None", model.__name__, entity
     return entity
 
 class Cursor(object):
@@ -220,9 +220,9 @@ class Cursor(object):
         self.last_delete_command = None
 
     def execute(self, sql, *params):
-        if isinstance(sql, SelectCommand):            
+        if isinstance(sql, SelectCommand):
             self.last_select_command = sql
-            self.last_select_command.execute()                    
+            self.last_select_command.execute()
         elif isinstance(sql, FlushCommand):
             sql.execute()
         elif isinstance(sql, InsertCommand):
@@ -239,7 +239,7 @@ class Cursor(object):
                 for parent in sql.model._meta.parents.keys():
                     if not parent._meta.pk.rel:
                         pk_column = parent._meta.pk.column
-                    
+
                 entity[pk_column] = key.id_or_name()
                 cache_entity(sql.model, entity)
 
@@ -274,7 +274,7 @@ class Cursor(object):
                 #Handle aggregate (e.g. count)
                 return (self.last_select_command.results, )
             else:
-                entity = self.last_select_command.results.next()                
+                entity = self.last_select_command.results.next()
         except StopIteration:
             entity = None
 
@@ -282,7 +282,7 @@ class Cursor(object):
             return None
 
         if delete_flag:
-            uncache_entity(self.last_select_command.model, entity)      
+            uncache_entity(self.last_select_command.model, entity)
 
         result = []
         for col in self.last_select_command.queried_fields:
