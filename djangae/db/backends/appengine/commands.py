@@ -21,6 +21,13 @@ OPERATORS_MAP = {
     'gt_and_lt': None #Special case inequality combined filter
 }
 
+def get_field_from_column(model, column):
+    #FIXME: memoize this!
+    for field in model._meta.fields:
+        if field.column == column:
+            return field
+    return None
+
 class SelectCommand(object):
     def __init__(self, connection, model, queried_fields, where, is_count=False):
         self.connection = connection
@@ -44,19 +51,20 @@ class SelectCommand(object):
             if field == self.pk_col:
                 continue
 
-            #Text and byte fields aren't indexed, so we can't do a 
+            #Text and byte fields aren't indexed, so we can't do a
             #projection query
-            db_type = model._meta.get_field(field).db_type(connection)
-            if db_type in ("bytes", "text"):                        
+            db_type = get_field_from_column(model, field).db_type(connection)
+
+            if db_type in ("bytes", "text"):
                 projection_fields = []
                 break
 
             projection_fields.append(field)
 
-        self.projection = list(set(projection_fields)) or None     
+        self.projection = list(set(projection_fields)) or None
         if model._meta.parents:
             self.projection = None
-            
+
         self.where = self.parse_where_and_check_projection(where)
 
         try:
@@ -65,12 +73,12 @@ class SelectCommand(object):
             pk_index = self.queried_fields.index(self.pk_col)
             self.queried_fields[pk_index] = "__key__"
 
-            #If the only field queried was the key, then we can do a keys_only 
+            #If the only field queried was the key, then we can do a keys_only
             #query
             self.keys_only = len(self.queried_fields) == 1
         except ValueError:
             pass
-           
+
     def parse_where_and_check_projection(self, where, negated=False):
         result = []
 
@@ -87,8 +95,8 @@ class SelectCommand(object):
                 #Disable projection if it's not supported
                 if self.projection and constraint.col in self.projection:
                     if op in ("exact", "in"):
-                        #If we are projecting, but we are doing an 
-                        #equality filter on one of the columns, then we 
+                        #If we are projecting, but we are doing an
+                        #equality filter on one of the columns, then we
                         #can't project
                         self.projection = None
 
@@ -142,11 +150,11 @@ class SelectCommand(object):
         if concrete_parents and not self.model._meta.proxy:
             query["class ="] = self.model._meta.db_table
 
-        print self.model.__name__, self.where
+        #print self.model.__name__, self.where
 
         for column, op, value in self.where:
             final_op = OPERATORS_MAP[op]
-            
+
             def clean_pk_value(_value):
                 if isinstance(_value, basestring):
                     _value = _value[:500]
@@ -184,12 +192,12 @@ class SelectCommand(object):
                 assert(0)
 
             query["%s %s" % (column, final_op)] = value
-        
+
         if combined_filters:
             queries = [ query ]
             for column, op, value in combined_filters:
                 new_queries = []
-                for query in queries:                        
+                for query in queries:
                     if op == "in":
                         for val in value:
                             new_query = datastore.Query(self.model._meta.db_table)
@@ -201,7 +209,7 @@ class SelectCommand(object):
                             new_query = datastore.Query(self.model._meta.db_table)
                             new_query.update(query)
                             new_query["%s %s" % (column, tmp_op)] = value
-                            new_queries.append(new_query)                        
+                            new_queries.append(new_query)
                 queries = new_queries
 
             query = datastore.MultiQuery(queries, [])
