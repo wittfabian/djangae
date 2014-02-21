@@ -1,3 +1,5 @@
+import logging
+
 from google.appengine.api import datastore
 from google.appengine.api.datastore_types import Key, Text
 
@@ -150,7 +152,7 @@ class SelectCommand(object):
         if concrete_parents and not self.model._meta.proxy:
             query["class ="] = self.model._meta.db_table
 
-        #print self.model.__name__, self.where
+        logging.info("Select query: {0}, {1}".format(self.model.__name__, self.where))
 
         for column, op, value in self.where:
             final_op = OPERATORS_MAP[op]
