@@ -20,6 +20,8 @@ except ImportError:
     class BaseDatabaseSchemaEditor(object):
         pass
 
+from django.conf import settings
+from django.utils import timezone
 from django.db.backends.creation import BaseDatabaseCreation
 from django.db.models.sql.subqueries import InsertQuery, DeleteQuery
 from django.db import models
@@ -128,10 +130,15 @@ def django_instance_to_entity(connection, model, fields, raw, instance):
     db_table = model._meta.db_table
 
     def value_from_instance(_instance, _field):
-        value = _field.get_db_prep_save(
-            getattr(_instance, _field.attname) if raw else _field.pre_save(_instance, _instance._state.adding),
-            connection = connection
-        )
+        value = getattr(_instance, _field.attname) if raw else _field.pre_save(_instance, _instance._state.adding)
+
+        #Some types don't need converting (e.g. a date field would be converted to a string by
+        # get_db_prep_save, we don't want that!
+        if _field.get_internal_type() not in ("DateTimeField", "DateField", "TimeField"):
+            value = _field.get_db_prep_save(
+                value,
+                connection = connection
+            )
 
         if (not _field.null and not _field.primary_key) and value is None:
             raise IntegrityError("You can't set %s (a non-nullable "
@@ -142,6 +149,7 @@ def django_instance_to_entity(connection, model, fields, raw, instance):
             is_primary_key = True
 
         value = connection.ops.value_for_db(value, _field)
+
         return value, is_primary_key
 
     if [ x for x in model._meta.get_parent_list() if not x._meta.abstract]:
@@ -353,7 +361,8 @@ class DatabaseOperations(BaseDatabaseOperations):
             return None
 
         # Convert decimals to strings preserving order.
-        if field.__class__.__name__ == 'DecimalField':
+        field_kind = field.get_internal_type()
+        if field_kind == 'DecimalField':
             value = decimal_to_string(
                 value, field.max_digits, field.decimal_places)
 
@@ -367,7 +376,12 @@ class DatabaseOperations(BaseDatabaseOperations):
         elif db_type == 'bytes':
             # Store BlobField, DictField and EmbeddedModelField values as Blobs.
             value = Blob(value)
-
+        elif field_kind == 'DateTimeField':
+            if timezone.is_aware(value):
+                if settings.USE_TZ:
+                    value = value.astimezone(timezone.utc).replace(tzinfo=None)
+                else:
+                    raise ValueError("Djangoappengine backend does not support timezone-aware datetimes when USE_TZ is False.")
         return value
 
     def last_insert_id(self, cursor, db_table, column):
