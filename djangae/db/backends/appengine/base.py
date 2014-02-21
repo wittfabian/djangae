@@ -132,13 +132,10 @@ def django_instance_to_entity(connection, model, fields, raw, instance):
     def value_from_instance(_instance, _field):
         value = getattr(_instance, _field.attname) if raw else _field.pre_save(_instance, _instance._state.adding)
 
-        #Some types don't need converting (e.g. a date field would be converted to a string by
-        # get_db_prep_save, we don't want that!
-        if _field.get_internal_type() not in ("DateTimeField", "DateField", "TimeField"):
-            value = _field.get_db_prep_save(
-                value,
-                connection = connection
-            )
+        value = _field.get_db_prep_save(
+            value,
+            connection = connection
+        )
 
         if (not _field.null and not _field.primary_key) and value is None:
             raise IntegrityError("You can't set %s (a non-nullable "
@@ -389,6 +386,10 @@ class DatabaseOperations(BaseDatabaseOperations):
 
     def fetch_returned_insert_id(self, cursor):
         return cursor.lastrowid
+
+    def value_to_db_datetime(self, value): return value
+    def value_to_db_date(self, value): return value
+    def value_to_db_time(self, value): return value
 
 class DatabaseClient(BaseDatabaseClient):
     pass
