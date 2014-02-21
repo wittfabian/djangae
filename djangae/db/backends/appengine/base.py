@@ -35,6 +35,7 @@ from django.utils.tree import Node
 from django.core.cache import cache
 
 from google.appengine.ext import testbed
+from google.appengine.api.datastore_types import Blob, Text
 
 from .commands import (
     SelectCommand,
@@ -341,6 +342,17 @@ class Database(object):
     NotSupportedError = NotSupportedError
     InterfaceError = DatabaseError
 
+def make_timezone_naive(value):
+    if value is None:
+        return None
+
+    if timezone.is_aware(value):
+        if settings.USE_TZ:
+            value = value.astimezone(timezone.utc).replace(tzinfo=None)
+        else:
+            raise ValueError("Djangae backend does not support timezone-aware datetimes when USE_TZ is False.")
+    return value
+
 class DatabaseOperations(BaseDatabaseOperations):
     compiler_module = "djangae.db.backends.appengine.compiler"
 
@@ -351,17 +363,8 @@ class DatabaseOperations(BaseDatabaseOperations):
         return [ FlushCommand(table) for table in tables ]
 
     def value_for_db(self, value, field):
-        from google.appengine.api.datastore_types import Blob, Text
-        from google.appengine.api.datastore_errors import BadArgumentError, BadValueError
-
         if value is None:
             return None
-
-        # Convert decimals to strings preserving order.
-        field_kind = field.get_internal_type()
-        if field_kind == 'DecimalField':
-            value = decimal_to_string(
-                value, field.max_digits, field.decimal_places)
 
         db_type = self.connection.creation.db_type(field)
 
@@ -373,12 +376,7 @@ class DatabaseOperations(BaseDatabaseOperations):
         elif db_type == 'bytes':
             # Store BlobField, DictField and EmbeddedModelField values as Blobs.
             value = Blob(value)
-        elif field_kind == 'DateTimeField':
-            if timezone.is_aware(value):
-                if settings.USE_TZ:
-                    value = value.astimezone(timezone.utc).replace(tzinfo=None)
-                else:
-                    raise ValueError("Djangoappengine backend does not support timezone-aware datetimes when USE_TZ is False.")
+
         return value
 
     def last_insert_id(self, cursor, db_table, column):
@@ -387,9 +385,18 @@ class DatabaseOperations(BaseDatabaseOperations):
     def fetch_returned_insert_id(self, cursor):
         return cursor.lastrowid
 
-    def value_to_db_datetime(self, value): return value
-    def value_to_db_date(self, value): return value
-    def value_to_db_time(self, value): return value
+    def value_to_db_datetime(self, value):
+        return make_timezone_naive(value)
+
+    def value_to_db_date(self, value):
+        return make_timezone_naive(value)
+
+    def value_to_db_time(self, value):
+        return make_timezone_naive(value)
+
+    def value_to_db_decimal(self, value, max_digits, decimal_places):
+        return decimal_to_string(value, max_digits, decimal_places)
+
 
 class DatabaseClient(BaseDatabaseClient):
     pass
