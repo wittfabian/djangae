@@ -1,13 +1,6 @@
-"""
-Dummy database backend for Django.
-
-Django uses this if the database ENGINE setting is empty (None or empty string).
-
-Each of these API functions, except connection.close(), raises
-ImproperlyConfigured.
-"""
-
 import logging
+import warnings
+
 from itertools import islice
 
 from django.core.exceptions import ImproperlyConfigured
@@ -20,33 +13,32 @@ from django.db.backends import (
     BaseDatabaseValidation
 )
 
-from django.db.backends.schema import BaseDatabaseSchemaEditor
-from django.db.backends.creation import BaseDatabaseCreation
-from django.db.models.sql.subqueries import InsertQuery
+try:
+    from django.db.backends.schema import BaseDatabaseSchemaEditor
+except ImportError:
+    #Django < 1.6 doesn't have BaseDatabaseSchemaEditor
+    class BaseDatabaseSchemaEditor(object):
+        pass
 
+from django.db.backends.creation import BaseDatabaseCreation
+from django.db.models.sql.subqueries import InsertQuery, DeleteQuery
+from django.db import models
 from google.appengine.ext.db import metadata
 from google.appengine.api import datastore
-from google.appengine.api.datastore_types import Key
-
+from google.appengine.api.datastore_types import Key, Text
+from django.db.models.sql.constants import MULTI, SINGLE, GET_ITERATOR_CHUNK_SIZE
 from django.db.models.sql.where import AND, OR
 from django.utils.tree import Node
 
 from django.core.cache import cache
 
-OPERATORS_MAP = {
-    'exact': '=',
-    'gt': '>',
-    'gte': '>=',
-    'lt': '<',
-    'lte': '<=',
+from google.appengine.ext import testbed
 
-    # The following operators are supported with special code below.
-    'isnull': None,
-    'in': None,
-    'startswith': None,
-    'range': None,
-    'year': None,
-}
+from .commands import (
+    SelectCommand, 
+    InsertCommand, 
+    FlushCommand
+)
 
 class DatabaseError(Exception):
     pass
@@ -64,12 +56,36 @@ def cache_entity(model, entity):
 
     unique_keys = []
     for fields in unique_combinations:
-        key_parts = [ (x, entity[x]) for x in fields ]
+        key_parts = []
+        for x in fields:
+            if x == model._meta.pk.column and x not in entity:
+                value = entity.key().id_or_name()
+            else:
+                value = entity[x]
+
+            key_parts.append((x, value))
+
         unique_keys.append(generate_unique_key(model, key_parts))
 
     for key in unique_keys:
-        logging.error("Caching entity with key %s", key)
+        #logging.error("Caching entity with key %s", key)
         cache.set(key, entity, DEFAULT_CACHE_TIMEOUT)
+
+def uncache_entity(model, entity):
+    unique_combinations = get_uniques_from_model(model)
+
+    unique_keys = []
+    for fields in unique_combinations:
+        key_parts = []
+        for x in fields:
+            if x == model._meta.pk.column and x not in entity:
+                value = entity.key().id_or_name()
+            else:
+                value = entity[x]
+            key_parts.append((x, value))
+
+        key = generate_unique_key(model, key_parts)
+        cache.delete(key)
 
 def get_uniques_from_model(model):
     uniques = [ [ model._meta.get_field(y).column for y in x ] for x in model._meta.unique_together ]
@@ -85,8 +101,8 @@ def generate_unique_key(model, fields_and_values):
 
 def get_entity_from_cache(key):
     entity = cache.get(key)
-    if entity:
-        logging.error("Got entity from cache with key %s", key)
+#    if entity:
+#        logging.error("Got entity from cache with key %s", key)
     return entity
 
 class Connection(object):
@@ -95,6 +111,7 @@ class Connection(object):
         self.creation = wrapper.creation
         self.ops = wrapper.ops
         self.params = params
+        self.queries = []
 
     def rollback(self):
         pass
@@ -105,298 +122,206 @@ class Connection(object):
     def close(self):
         pass
 
+def django_instance_to_entity(connection, model, fields, raw, instance):
+    uses_inheritance = False
+    inheritance_root = model
+    db_table = model._meta.db_table
+
+    def value_from_instance(_instance, _field):
+        value = _field.get_db_prep_save(
+            getattr(_instance, _field.attname) if raw else _field.pre_save(_instance, _instance._state.adding),
+            connection = connection
+        )
+
+        if (not _field.null and not _field.primary_key) and value is None:
+            raise IntegrityError("You can't set %s (a non-nullable "
+                                     "field) to None!" % _field.name)
+
+        is_primary_key = False
+        if _field.primary_key and _field.model == inheritance_root:
+            is_primary_key = True
+        
+        value = connection.ops.value_for_db(value, _field)
+        return value, is_primary_key
+
+    if [ x for x in model._meta.get_parent_list() if not x._meta.abstract]:
+        #We can simulate multi-table inheritance by using the same approach as
+        #datastore "polymodels". Here we store the classes that form the heirarchy
+        #and extend the fields to include those from parent models
+        classes = [ model._meta.db_table ]
+        for parent in model._meta.get_parent_list():
+            if not parent._meta.parents:
+                #If this is the top parent, override the db_table
+                db_table = parent._meta.db_table
+                inheritance_root = parent
+
+            classes.append(parent._meta.db_table)
+            for field in parent._meta.fields:
+                fields.append(field)
+
+        uses_inheritance = True
+
+        
+    #FIXME: This will only work for two levels of inheritance
+    for obj in model._meta.get_all_related_objects():            
+        if model in [ x for x in obj.model._meta.parents if not x._meta.abstract]:
+            try:
+                related_obj = getattr(instance, obj.var_name)
+            except obj.model.DoesNotExist:
+                #We don't have a child attached to this field
+                #so ignore
+                continue
+
+            for field in related_obj._meta.fields:
+                fields.append(field)
+
+    field_values = {}
+    primary_key = None
+    for field in fields:
+        value, is_primary_key = value_from_instance(instance, field)
+        if is_primary_key:
+            primary_key = value
+        else:
+            field_values[field.column] = value
+
+    kwargs = {}
+    if primary_key:
+        if isinstance(primary_key, int):
+            kwargs["id"] = primary_key
+        elif isinstance(primary_key, basestring):
+            if len(primary_key) >= 500:
+                warnings.warn("Truncating primary key"
+                    " that is over 500 characters. THIS IS AN ERROR IN YOUR PROGRAM.",
+                    RuntimeWarning
+                )
+                primary_key = primary_key[:500]
+
+            kwargs["name"] = primary_key
+        else:
+            raise ValueError("Invalid primary key value")
+
+    entity = datastore.Entity(db_table, **kwargs)
+    entity.update(field_values)
+
+    if uses_inheritance:        
+        entity["class"] = classes
+
+    print inheritance_root.__name__ if inheritance_root else "None", model.__name__, entity
+    return entity
+
 class Cursor(object):
     """ Dummy cursor class """
     def __init__(self, connection):
         self.connection = connection
-        self.results = None
-        self.queries = []
         self.start_cursor = None
         self.returned_ids = []
-        self.queried_fields = []
-        self.query_done = True
-        self.all_filters = []
-        self.last_query_model = None
-
-    @property
-    def query(self):
-        return self.queries[0]
-
-    @query.setter
-    def query(self, value):
-        if self.queries:
-            self.queries[0] = value
-        else:
-            self.queries = [ value ]
-
-    def django_instance_to_entity(self, model, fields, raw, instance):
-        field_values = {}
-
-        for field in fields:
-
-            value = field.get_db_prep_save(
-                getattr(instance, field.attname) if raw else field.pre_save(instance, instance._state.adding),
-                connection = self.connection
-            )
-
-            if (not field.null and not field.primary_key) and value is None:
-                raise IntegrityError("You can't set %s (a non-nullable "
-                                         "field) to None!" % field.name)
-
-            #value = self.connection.ops.value_for_db(value, field)
-            field_values[field.column] = value
-
-        entity = datastore.Entity(model._meta.db_table)
-        entity.update(field_values)
-        return entity
+        self.rowcount = -1
+        self.last_select_command = None
+        self.last_delete_command = None
 
     def execute(self, sql, *params):
-        raise RuntimeError("Can't execute traditional SQL: '%s'", sql)
+        if isinstance(sql, SelectCommand):            
+            self.last_select_command = sql
+            self.last_select_command.execute()                    
+        elif isinstance(sql, FlushCommand):
+            sql.execute()
+        elif isinstance(sql, InsertCommand):
+            self.connection.queries.append(sql)
 
-    def _update_projection_state(self, field, lookup_type):
-        db_type = field.db_type(self.connection)
-
-        disable_projection = False
-        projected_fields = self.query.GetQueryOptions().projection
-
-        if not projected_fields or field.column not in projected_fields:
-            return
-
-        if db_type in ("text", "bytes"):
-            disable_projection = True
-
-        if lookup_type in ('exact', 'in'):
-            disable_projection = True
-
-        if disable_projection:
-            new_queries = []
-            for query in self.queries:
-                new_query = datastore.Query(query._Query__kind) #Nasty
-                new_query.update(query)
-                new_queries.append(new_query)
-
-            self.queries = new_queries
-
-    def _apply_filters(self, model, where, all_filters, negated=False):
-        if where.negated:
-            negated = not negated
-
-        if not negated and where.connector != AND:
-            raise DatabaseError("Only AND filters are supported")
-
-        for child in where.children:
-            if isinstance(child, Node):
-                self._apply_filters(model, child, negated, all_filters)
-                continue
-
-            field, lookup_type, value = self._parse_child(model, child)
-            applied_filter = self._apply_filter(model, field, lookup_type, negated, value)
-            if applied_filter is not None:
-                #IN queries return None here, all_filters is empty on an IN query
-                all_filters.append(applied_filter)
-
-        if where.negated:
-            negated = not negated
-
-    def _apply_filter(self, model, field, lookup_type, negated, value, query_to_update=None):
-        query_to_update = query_to_update or self.query
-
-        if lookup_type not in OPERATORS_MAP:
-            raise DatabaseError("Lookup type %r isn't supported." % lookup_type)
-
-        column = field.column
-        if field.primary_key:
-            column = "__key__"
-
-        #Disable projection queries if neccessary
-        self._update_projection_state(field, lookup_type)
-
-        op = OPERATORS_MAP.get(lookup_type)
-
-        if op is None:
-            if lookup_type == "in":
-                new_queries = []
-                for query in self.queries:
-                    for v in value:
-                        new_query = datastore.Query(model._meta.db_table)
-                        new_query.update(query)
-                        self._apply_filter(model, field, 'exact', negated, v, query_to_update=new_query)
-                        new_queries.append(new_query)
-
-                self.queries = new_queries
-                return
-
-        if op is None:
-            import pdb; pdb.set_trace()
-
-        assert(op is not None)
-
-        query_to_update["%s %s" % (column, op)] = value
-        return (column, op, value)
-
-    def _parse_child(self, model, child):
-        constraint, lookup_type, annotation, value = child
-        packed, value = constraint.process(lookup_type, value, self.connection)
-        alias, column, db_type = packed
-        field = constraint.field
-
-        #FIXME: Add support for simple inner joins
-        opts = model._meta
-        if alias and alias != opts.db_table:
-            raise DatabaseError("This database doesn't support JOINs "
-                                "and multi-table inheritance.")
-
-        # For parent.child_set queries the field held by the constraint
-        # is the parent's primary key, while the field the filter
-        # should consider is the child's foreign key field.
-        if column != field.column:
-            assert field.primary_key
-            field = opts.get_field(column[:-3]) #Remove _id
-            assert field.rel is not None
-
-        def normalize_value(_value, _lookup_type, _annotation):
-            # Undo Field.get_db_prep_lookup putting most values in a list
-            # (a subclass may override this, so check if it's a list) and
-            # losing the (True / False) argument to the "isnull" lookup.
-            if _lookup_type not in ('in', 'range', 'year') and \
-               isinstance(value, (tuple, list)):
-                if len(_value) > 1:
-                    raise DatabaseError("Filter lookup type was %s; expected the "
-                                        "filter argument not to be a list. Only "
-                                        "'in'-filters can be used with lists." %
-                                        lookup_type)
-                elif lookup_type == 'isnull':
-                    _value = _annotation
-                else:
-                    _value = _value[0]
-
-            # Remove percents added by Field.get_db_prep_lookup (useful
-            # if one were to use the value in a LIKE expression).
-            if _lookup_type in ('startswith', 'istartswith'):
-                _value = _value[:-1]
-            elif _lookup_type in ('endswith', 'iendswith'):
-                _value = _value[1:]
-            elif _lookup_type in ('contains', 'icontains'):
-                _value = _value[1:-1]
-
-            if db_type == 'key':
-                if isinstance(_value, (list, tuple)):
-                    _value = [ Key.from_path(field.model._meta.db_table, x) for x in _value]
-                else:
-                    _value = Key.from_path(field.model._meta.db_table, _value)
-
-            return _value
-
-        #FIXME: Probably need to do some processing of the value here like
-        #djangoappengine does
-        return field, lookup_type, normalize_value(value, lookup_type, annotation)
-
-    def execute_appengine_query(self, model, query):
-        if isinstance(query, InsertQuery):
-            entities = [ self.django_instance_to_entity(model, query.fields, query.raw, x) for x in query.objs ]
-            self.returned_ids = datastore.Put(entities)
+            self.returned_ids = datastore.Put(sql.entities)
 
             #Now cache them, temporarily to help avoid consistency errors
-            for key, entity in zip(self.returned_ids, entities):
-                entity[model._meta.pk.column] = key.id_or_name()
-                cache_entity(model, entity)
+            for key, entity in zip(self.returned_ids, sql.entities):
+                pk_column = sql.model._meta.pk.column
+
+                #If there are parent models, search the parents for the
+                #first primary key which isn't a relation field
+                for parent in sql.model._meta.parents.keys():
+                    if not parent._meta.pk.rel:
+                        pk_column = parent._meta.pk.column
+                    
+                entity[pk_column] = key.id_or_name()
+                cache_entity(sql.model, entity)
 
         else:
-            #Store the fields we are querying on so we can process the results
-            self.queried_fields = [ x.col[1] for x in query.select ]
-            if self.queried_fields:
-                projection = self.queried_fields
+            raise RuntimeError("Can't execute traditional SQL: '%s'", sql)
+
+    def fix_fk_null(self, query, constraint):
+        alias = constraint.alias
+        table_name = query.alias_map[alias][TABLE_NAME]
+        lhs_join_col, rhs_join_col = join_cols(query.alias_map[alias])
+        if table_name != constraint.field.rel.to._meta.db_table or \
+                rhs_join_col != constraint.field.rel.to._meta.pk.column or \
+                lhs_join_col != constraint.field.column:
+            return
+        next_alias = query.alias_map[alias][LHS_ALIAS]
+        if not next_alias:
+            return
+        self.unref_alias(query, alias)
+        alias = next_alias
+        constraint.col = constraint.field.column
+        constraint.alias = alias
+
+    def next(self):
+        row = self.fetchone()
+        if row is None:
+            raise StopIteration
+        return row
+
+    def fetchone(self, delete_flag=False):
+        try:
+            if isinstance(self.last_select_command.results, int):
+                #Handle aggregate (e.g. count)
+                return (self.last_select_command.results, )
             else:
-                projection = None
-                self.queried_fields = [ x.column for x in model._meta.fields ]
+                entity = self.last_select_command.results.next()                
+        except StopIteration:
+            entity = None
 
-            pk_field = model._meta.pk.name
-            try:
-                #Set the column name to __key__ and then we know the order it came
-                #if the id was asked for
-                self.queried_fields[self.queried_fields.index(pk_field)] = "__key__"
-            except ValueError:
-                pass
+        if entity is None:
+            return None
 
-            self.query = datastore.Query(
-                model._meta.db_table,
-                projection=projection
-            )
+        if delete_flag:
+            uncache_entity(self.last_select_command.model, entity)      
 
-            self.all_filters = []
-            #Apply filters
-            self._apply_filters(model, query.where, self.all_filters)
+        result = []
+        for col in self.last_select_command.queried_fields:
+            if col == "__key__":
+                key = entity.key()
+                self.returned_ids.append(key)
+                result.append(key.id_or_name())
+            else:
+                result.append(entity.get(col))
 
-            try:
-                self.queries[1]
-                self.queries = [ datastore.MultiQuery(self.queries, []) ]
-            except IndexError:
-                pass
-            self.last_query_model = model
+        return result
 
-        self.query_done = False
-
-
-    def fetchmany(self, size):
-        logging.error("NOT FULLY IMPLEMENTED: Called fetchmany")
-        if self.query_done:
+    def fetchmany(self, size, delete_flag=False):
+        if not self.last_select_command.results:
             return []
 
-        if self.results is None:
-            if not self.queries:
-                raise Database.Error()
+        result = []
+        i = 0
+        while i < size:
+            entity = self.fetchone(delete_flag)
+            if entity is None:
+                break
 
-            if isinstance(self.query, datastore.MultiQuery):
-                self.results = self.query.Run()
-                self.query_done = True
-            else:
-                #Try and get the entity from the cache, this is to work around HRD issues
-                #and boost performance!
-                entity_from_cache = None
-                if self.all_filters and self.last_query_model:
-                    #Get all the exact filters
-                    exact_filters = [ x for x in self.all_filters if x[1] == "=" ]
-                    lookup = { x[0]:x[2] for x in exact_filters }
+            result.append(entity)
+            i += 1
 
-                    unique_combinations = get_uniques_from_model(self.last_query_model)
-                    for fields in unique_combinations:
-                        final_key = []
-                        for field in fields:
-                            if field in lookup:
-                                final_key.append((field, lookup[field]))
-                                continue
-                            else:
-                                break
-                        else:
-                            #We've found a unique combination!
-                            unique_key = generate_unique_key(self.last_query_model, final_key)
-                            entity_from_cache = get_entity_from_cache(unique_key)
+        return result
 
-                if entity_from_cache is None:
-                    self.results = self.query.Run(limit=size, start=self.start_cursor)
-                    self.start_cursor = self.query.GetCursor()
-                    self.query_done = not self.results
-                else:
-                    self.results = [ entity_from_cache ]
-                    self.query_done = True
-                    self.start_cursor = None
-
-        results = []
-        for entity in self.results:
-            result = []
-            for col in self.queried_fields:
-                if col == "__key__":
-                    result.append(entity.key().id_or_name())
-                else:
-                    result.append(entity.get(col))
-
-            results.append(tuple(result))
-
-        return results
+    def delete(self):
+        #Passing the delete_flag will uncache the entities
+        self.fetchmany(GET_ITERATOR_CHUNK_SIZE, delete_flag=True)
+        datastore.Delete(self.returned_ids)
 
     @property
     def lastrowid(self):
         return self.returned_ids[-1].id_or_name()
+
+    def __iter__(self):
+        return self
 
 class Database(object):
     """ Fake DB API 2.0 for App engine """
@@ -417,16 +342,39 @@ class DatabaseOperations(BaseDatabaseOperations):
     def quote_name(self, name):
         return name
 
-    def sql_flush(self, style, tables, seqs, allow_cascade):
-        logging.info("Flushing datastore")
+    def sql_flush(self, style, tables, seqs, allow_cascade=False):
+        return [ FlushCommand(table) for table in tables ]
 
-        for table in tables:
-            all_the_things = list(datastore.Query(table, keys_only=True).Run())
-            while all_the_things:
-                datastore.Delete(all_the_things)
-                all_the_things = list(datastore.Query(table, keys_only=True).Run())
+    def value_for_db(self, value, field):
+        from google.appengine.api.datastore_types import Blob, Text
+        from google.appengine.api.datastore_errors import BadArgumentError, BadValueError
 
-        return []
+        if value is None:
+            return None
+
+        # Convert decimals to strings preserving order.
+        if field.__class__.__name__ == 'DecimalField':
+            value = decimal_to_string(
+                value, field.max_digits, field.decimal_places)
+
+        db_type = self.connection.creation.db_type(field)
+
+        if db_type == 'string' or db_type == 'text':
+            if isinstance(value, str):
+                value = value.decode('utf-8')
+            if db_type == 'text':
+                value = Text(value)
+        elif db_type == 'bytes':
+            # Store BlobField, DictField and EmbeddedModelField values as Blobs.
+            value = Blob(value)
+
+        return value
+
+    def last_insert_id(self, cursor, db_table, column):
+        return cursor.lastrowid
+
+    def fetch_returned_insert_id(self, cursor):
+        return cursor.lastrowid
 
 class DatabaseClient(BaseDatabaseClient):
     pass
@@ -458,7 +406,6 @@ class DatabaseCreation(BaseDatabaseCreation):
         'PositiveSmallIntegerField':  'integer',
         'SlugField':                  'string',
         'SmallIntegerField':          'integer',
-        'TextField':                  'string',
         'TimeField':                  'time',
         'URLField':                   'string',
         'AbstractIterableField':      'list',
@@ -472,6 +419,13 @@ class DatabaseCreation(BaseDatabaseCreation):
         'EmbeddedModelField':         'bytes'
     }
 
+    def db_type(self, field):
+        return self.data_types[field.__class__.__name__]
+
+    def __init__(self, *args, **kwargs):
+        self.testbed = None
+        super(DatabaseCreation, self).__init__(*args, **kwargs)
+
     def sql_create_model(self, model, *args, **kwargs):
         return [], {}
 
@@ -482,10 +436,42 @@ class DatabaseCreation(BaseDatabaseCreation):
         return []
 
     def _create_test_db(self, verbosity, autoclobber):
-        pass
+
+        # Testbed exists in memory
+        test_database_name = ':memory:'
+
+        # Init test stubs
+        self.testbed = testbed.Testbed()
+        self.testbed.activate()
+
+        self.testbed.init_app_identity_stub()
+        self.testbed.init_blobstore_stub()
+        self.testbed.init_capability_stub()
+        self.testbed.init_channel_stub()
+
+        self.testbed.init_datastore_v3_stub()
+        self.testbed.init_files_stub()
+        # FIXME! dependencies PIL
+        # self.testbed.init_images_stub()
+        self.testbed.init_logservice_stub()
+        self.testbed.init_mail_stub()
+        self.testbed.init_memcache_stub()
+        self.testbed.init_taskqueue_stub()
+        self.testbed.init_urlfetch_stub()
+        self.testbed.init_user_stub()
+        self.testbed.init_xmpp_stub()
+        # self.testbed.init_search_stub()
+
+        # Init all the stubs!
+        # self.testbed.init_all_stubs()
+
+        return test_database_name
+
 
     def _destroy_test_db(self, name, verbosity):
-        pass
+        if self.testbed:
+            self.testbed.deactivate()
+
 
 class DatabaseIntrospection(BaseDatabaseIntrospection):
     def get_table_list(self, cursor):
@@ -502,6 +488,7 @@ class DatabaseSchemaEditor(BaseDatabaseSchemaEditor):
 class DatabaseFeatures(BaseDatabaseFeatures):
     empty_fetchmany_value = []
     supports_transactions = False #FIXME: Make this True!
+    can_return_id_from_insert = True
 
 class DatabaseWrapper(BaseDatabaseWrapper):
     operators = {
@@ -531,7 +518,8 @@ class DatabaseWrapper(BaseDatabaseWrapper):
         return {}
 
     def get_new_connection(self, params):
-        return Connection(self, params)
+        conn = Connection(self, params)
+        return conn
 
     def init_connection_state(self):
         pass
@@ -540,9 +528,14 @@ class DatabaseWrapper(BaseDatabaseWrapper):
         pass
 
     def create_cursor(self):
+        if not self.connection:
+            self.connection = self.get_new_connection(self.settings_dict)
+
         return Cursor(self.connection)
 
     def schema_editor(self, *args, **kwargs):
         return DatabaseSchemaEditor(self, *args, **kwargs)
 
-
+    def _cursor(self):
+        #for < Django 1.6 compatiblity
+        return self.create_cursor()
