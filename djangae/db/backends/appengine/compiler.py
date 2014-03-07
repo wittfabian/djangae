@@ -19,7 +19,7 @@ except ImportError:
         pass
 
 from .base import django_instance_to_entity
-from .commands import InsertCommand, SelectCommand
+from .commands import InsertCommand, SelectCommand, UpdateCommand
 
 from google.appengine.api import datastore
 
@@ -77,6 +77,7 @@ class SQLInsertCompiler(compiler.SQLInsertCompiler, SQLCompiler):
 
 
 class SQLDeleteCompiler(compiler.SQLDeleteCompiler, SQLCompiler):
+    
     def execute_sql(self, *args, **kwargs):
         result, params = SQLCompiler.as_sql(self)
 
@@ -90,7 +91,13 @@ class SQLDeleteCompiler(compiler.SQLDeleteCompiler, SQLCompiler):
 
 
 class SQLUpdateCompiler(compiler.SQLUpdateCompiler, SQLCompiler):
-    pass
+    
+    def __init__(self, *args, **kwargs):
+        super(SQLUpdateCompiler, self).__init__(*args, **kwargs)
+
+    def as_sql(self):
+        return (UpdateCommand(self.connection, self.query.model, self.query.values, where=self.query.where), [])
+
 
 
 class SQLAggregateCompiler(compiler.SQLAggregateCompiler, SQLCompiler):
