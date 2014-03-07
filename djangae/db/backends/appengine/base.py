@@ -1,4 +1,5 @@
 import warnings
+import datetime
 
 from django.db.backends import (
     BaseDatabaseOperations,
@@ -32,6 +33,7 @@ from .commands import (
     SelectCommand,
     InsertCommand,
     FlushCommand,
+    UpdateCommand,
     get_field_from_column
 )
 
@@ -175,6 +177,8 @@ def django_instance_to_entity(connection, model, fields, raw, instance):
 
     field_values = {}
     primary_key = None
+    
+    # primary.key = self.model._meta.pk
     for field in fields:
         value, is_primary_key = value_from_instance(instance, field)
         if is_primary_key:
@@ -240,9 +244,34 @@ class Cursor(object):
 
                 entity[pk_column] = key.id_or_name()
                 cache_entity(sql.model, entity)
-
         else:
+            import pdb;pdb.set_trace() 
             raise RuntimeError("Can't execute traditional SQL: '%s'", sql)
+
+        if isinstance(sql, UpdateCommand):      
+            # Because UpdateCommand is a subclass of SelectCommand, the behavior of
+            # isinstance will return True for both this check and the previous
+            # SelectCommand check
+            self.connection.queries.append(sql)
+            results = self.last_select_command.results
+            entities = []
+            for result in results:
+                for field, param, value in self.last_select_command.values:
+                    result[field.name] = value
+                    entities.append(result)
+            self.returned_ids = datastore.Put(entities)
+            #Now cache them, temporarily to help avoid consistency errors
+            for key, entity in zip(self.returned_ids, entities):
+                pk_column = sql.model._meta.pk.column
+
+                #If there are parent models, search the parents for the
+                #first primary key which isn't a relation field
+                for parent in sql.model._meta.parents.keys():
+                    if not parent._meta.pk.rel:
+                        pk_column = parent._meta.pk.column
+
+                entity[pk_column] = key.id_or_name()
+                cache_entity(sql.model, entity)
 
     def fix_fk_null(self, query, constraint):
         alias = constraint.alias
@@ -422,29 +451,44 @@ class DatabaseOperations(BaseDatabaseOperations):
         return cursor.lastrowid
 
     def value_to_db_datetime(self, value):
-        return make_timezone_naive(value)
+        value = make_timezone_naive(value)
+        return value
 
     def value_to_db_date(self, value):
-        return make_timezone_naive(value)
+        value = make_timezone_naive(value)
+        return value
 
     def value_to_db_time(self, value):
-        return make_timezone_naive(value)
+        value = make_timezone_naive(value)
+        return value
 
     def value_to_db_decimal(self, value, max_digits, decimal_places):
         return decimal_to_string(value, max_digits, decimal_places)
 
     ##Unlike value_to_db, these are not overridden or standard Django, it's just nice to have symmetry
     def value_from_db_datetime(self, value):
+        if isinstance(value, long):
+            #App Engine Query's don't return datetime fields (unlike Get) I HAVE NO IDEA WHY, APP ENGINE SUCKS MONKEY BALLS
+            value = datetime.datetime.fromtimestamp(float(value) / 1000000.0)
+            
         if value is not None and settings.USE_TZ and timezone.is_naive(value):
             value = value.replace(tzinfo=timezone.utc)
         return value
 
     def value_from_db_date(self, value):
+        if isinstance(value, long):
+            #App Engine Query's don't return datetime fields (unlike Get) I HAVE NO IDEA WHY, APP ENGINE SUCKS MONKEY BALLS
+            value = datetime.datetime.fromtimestamp(float(value) / 1000000.0).date()
+    
         if value is not None and settings.USE_TZ and timezone.is_naive(value):
             value = value.replace(tzinfo=timezone.utc)
         return value
 
     def value_from_db_time(self, value):
+        if isinstance(value, long):
+            #App Engine Query's don't return datetime fields (unlike Get) I HAVE NO IDEA WHY, APP ENGINE SUCKS MONKEY BALLS
+            value = datetime.datetime.fromtimestamp(float(value) / 1000000.0).time()
+    
         if value is not None and settings.USE_TZ and timezone.is_naive(value):
             value = value.replace(tzinfo=timezone.utc)
         return value
