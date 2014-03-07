@@ -1,4 +1,5 @@
 import warnings
+import datetime
 
 from django.db.backends import (
     BaseDatabaseOperations,
@@ -247,7 +248,7 @@ class Cursor(object):
             import pdb;pdb.set_trace() 
             raise RuntimeError("Can't execute traditional SQL: '%s'", sql)
 
-        if isinstance(sql, UpdateCommand):
+        if isinstance(sql, UpdateCommand):      
             # Because UpdateCommand is a subclass of SelectCommand, the behavior of
             # isinstance will return True for both this check and the previous
             # SelectCommand check
@@ -450,29 +451,44 @@ class DatabaseOperations(BaseDatabaseOperations):
         return cursor.lastrowid
 
     def value_to_db_datetime(self, value):
-        return make_timezone_naive(value)
+        value = make_timezone_naive(value)
+        return value
 
     def value_to_db_date(self, value):
-        return make_timezone_naive(value)
+        value = make_timezone_naive(value)
+        return value
 
     def value_to_db_time(self, value):
-        return make_timezone_naive(value)
+        value = make_timezone_naive(value)
+        return value
 
     def value_to_db_decimal(self, value, max_digits, decimal_places):
         return decimal_to_string(value, max_digits, decimal_places)
 
     ##Unlike value_to_db, these are not overridden or standard Django, it's just nice to have symmetry
     def value_from_db_datetime(self, value):
+        if isinstance(value, long):
+            #App Engine Query's don't return datetime fields (unlike Get) I HAVE NO IDEA WHY, APP ENGINE SUCKS MONKEY BALLS
+            value = datetime.datetime.fromtimestamp(float(value) / 1000000.0)
+            
         if value is not None and settings.USE_TZ and timezone.is_naive(value):
             value = value.replace(tzinfo=timezone.utc)
         return value
 
     def value_from_db_date(self, value):
+        if isinstance(value, long):
+            #App Engine Query's don't return datetime fields (unlike Get) I HAVE NO IDEA WHY, APP ENGINE SUCKS MONKEY BALLS
+            value = datetime.datetime.fromtimestamp(float(value) / 1000000.0).date()
+    
         if value is not None and settings.USE_TZ and timezone.is_naive(value):
             value = value.replace(tzinfo=timezone.utc)
         return value
 
     def value_from_db_time(self, value):
+        if isinstance(value, long):
+            #App Engine Query's don't return datetime fields (unlike Get) I HAVE NO IDEA WHY, APP ENGINE SUCKS MONKEY BALLS
+            value = datetime.datetime.fromtimestamp(float(value) / 1000000.0).time()
+    
         if value is not None and settings.USE_TZ and timezone.is_naive(value):
             value = value.replace(tzinfo=timezone.utc)
         return value
