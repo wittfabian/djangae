@@ -289,3 +289,8 @@ class InsertCommand(object):
     def __init__(self, model, entities):
         self.entities = entities
         self.model = model
+
+class UpdateCommand(SelectCommand):
+    def __init__(self, connection, model, values, where):
+        self.values = values
+        super(UpdateCommand, self).__init__(connection, model, [model._meta.pk.column], where=where, is_count=False)
