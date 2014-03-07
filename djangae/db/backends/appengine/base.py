@@ -223,10 +223,13 @@ class Cursor(object):
 
     def execute(self, sql, *params):
         if isinstance(sql, SelectCommand):
+            #Also catches subclasses of SelectCommand (e.g Update)
             self.last_select_command = sql
-            self.last_select_command.execute()
+            self.rowcount = self.last_select_command.execute() or -1
         elif isinstance(sql, FlushCommand):
             sql.execute()
+        elif isinstance(sql, UpdateCommand):
+            self.rowcount = sql.execute()
         elif isinstance(sql, InsertCommand):
             self.connection.queries.append(sql)
 
@@ -247,31 +250,6 @@ class Cursor(object):
         else:
             import pdb;pdb.set_trace() 
             raise RuntimeError("Can't execute traditional SQL: '%s'", sql)
-
-        if isinstance(sql, UpdateCommand):      
-            # Because UpdateCommand is a subclass of SelectCommand, the behavior of
-            # isinstance will return True for both this check and the previous
-            # SelectCommand check
-            self.connection.queries.append(sql)
-            results = self.last_select_command.results
-            entities = []
-            for result in results:
-                for field, param, value in self.last_select_command.values:
-                    result[field.name] = value
-                    entities.append(result)
-            self.returned_ids = datastore.Put(entities)
-            #Now cache them, temporarily to help avoid consistency errors
-            for key, entity in zip(self.returned_ids, entities):
-                pk_column = sql.model._meta.pk.column
-
-                #If there are parent models, search the parents for the
-                #first primary key which isn't a relation field
-                for parent in sql.model._meta.parents.keys():
-                    if not parent._meta.pk.rel:
-                        pk_column = parent._meta.pk.column
-
-                entity[pk_column] = key.id_or_name()
-                cache_entity(sql.model, entity)
 
     def fix_fk_null(self, query, constraint):
         alias = constraint.alias
