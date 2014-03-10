@@ -15,6 +15,7 @@ from django.core.files.uploadhandler import FileUploadHandler, \
     StopFutureHandlers
 from django.core.exceptions import ImproperlyConfigured
 from django.http import HttpResponse
+from django.http.multipartparser import ChunkIter, Parser, LazyStream, FILE
 from django.utils.encoding import smart_str, force_unicode, filepath_to_uri
 
 from google.appengine.api import files
@@ -153,10 +154,55 @@ class BlobstoreFileUploadHandler(FileUploadHandler):
     """
     File upload handler for the Google App Engine Blobstore.
     """
+    def __init__(self, request=None):
+        super(BlobstoreFileUploadHandler, self).__init__(request)
+        self.content_type_extras = {}
+
+    def handle_raw_input(self, input_data, META, content_length, boundary, encoding=None):
+        """
+        If a file is posted, normally `input_data` would represent the
+        request object and reading from it would use `input_data._stream`
+        which is a simple wrapper around `input_data.META['wsgi.input']`
+        but can't be reset (i.e. seek(0)) after consuming it only once.
+
+        It's fair to assume that we only use this uploader if there is
+        NO file submitted directly to our application but to the
+        blobstore.
+
+        N.B. this *must* return None, otherwise it won't do the usual parsing
+             in django.http.multiparser
+        """
+        # This is pretty much the same as in django.http.multiparser.MultiPartParser
+        wsgi_input = self.request.META['wsgi.input']
+        if hasattr(wsgi_input, 'tell'):
+            original_pos = wsgi_input.tell()
+        else:
+            original_pos = 0
+        try:
+            # Instantiate the parser and stream:
+            stream = LazyStream(ChunkIter(wsgi_input, self.chunk_size))
+
+            for item_type, meta_data, field_stream in Parser(stream, boundary):
+                if item_type != FILE:
+                    continue
+
+                try:
+                    disposition = meta_data['content-disposition'][1]
+                    field_name = disposition['name'].strip()
+                except (KeyError, IndexError, AttributeError):
+                    continue
+
+                self.content_type_extras[field_name] = meta_data.get('content-type', (0, {}))[1]
+        finally:
+            # We need to set it back to the original position,
+            # otherwise the multiparser won't be able to consume
+            # this file-like object again.
+            if hasattr(wsgi_input, 'seek'):
+                wsgi_input.seek(original_pos)
 
     def new_file(self, *args, **kwargs):
         super(BlobstoreFileUploadHandler, self).new_file(*args, **kwargs)
-        blobkey = self.content_type_extra.get('blob-key')
+        blobkey = self.content_type_extras[self.field_name].get('blob-key')
         self.active = blobkey is not None
         if self.active:
             self.blobkey = BlobKey(blobkey)
