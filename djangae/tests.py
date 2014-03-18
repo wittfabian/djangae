@@ -4,7 +4,7 @@ from django.test import TestCase, RequestFactory
 from django.db import models
 
 from .storage import BlobstoreFileUploadHandler
-
+from google.appengine.api.datastore_errors import EntityNotFoundError
 
 class User(models.Model):
     username = models.CharField(max_length=32)
@@ -90,7 +90,10 @@ class BlobstoreFileUploadHandlerTest(TestCase):
 
     def setUp(self):
         self.request = RequestFactory().get('/')
-        self.request.META = {'wsgi.input': self._create_wsgi_input()}
+        self.request.META = {
+            'wsgi.input': self._create_wsgi_input(),
+            'content-type': 'message/external-body; blob-key="PLOF0qOie14jzHWJXEa9HA=="; access-type="X-AppEngine-BlobKey"'
+        }
         self.uploader = BlobstoreFileUploadHandler(self.request)
 
     def _create_wsgi_input(self):
@@ -115,33 +118,15 @@ class BlobstoreFileUploadHandlerTest(TestCase):
                         ' name="field-salutation"\r\n\r\nmrs\r\n'
                         '--===============7417945581544019063==--')
 
-    def test_blob_key_gets_parsed_out(self):
-        self.uploader.handle_raw_input(None, None, None,
-                                       boundary=self.boundary.encode('ascii'),
-                                       encoding='utf-8')
-
-        file_field_name = 'field-file'
-        self.assertTrue(file_field_name in self.uploader.content_type_extras.keys())
-        self.assertEqual(
-            self.uploader.content_type_extras[file_field_name].get('blob-key'),
-            "PLOF0qOie14jzHWJXEa9HA=="
-        )
-
     def test_non_existing_files_do_not_get_created(self):
         file_field_name = 'field-file'
-        self.uploader.content_type_extras[file_field_name] = {}
-        self.uploader.new_file(file_field_name, 'file_name', None, None)
-        self.assertFalse(self.uploader.active)
-        self.assertIsNone(self.uploader.file_complete(None))
+        self.assertRaises(StopFutureHandlers, self.uploader.new_file, file_field_name, 'file_name', None, None)
+        self.assertRaises(EntityNotFoundError, self.uploader.file_complete, None)
 
     def test_blob_key_creation(self):
         file_field_name = 'field-file'
-        self.uploader.content_type_extras[file_field_name] = {
-            'blob-key': "PLOF0qOie14jzHWJXEa9HA=="
-        }
         self.assertRaises(
             StopFutureHandlers,
             self.uploader.new_file, file_field_name, 'file_name', None, None
         )
-        self.assertTrue(self.uploader.active)
         self.assertIsNotNone(self.uploader.blobkey)
