@@ -77,7 +77,7 @@ class SQLInsertCompiler(compiler.SQLInsertCompiler, SQLCompiler):
 
 
 class SQLDeleteCompiler(compiler.SQLDeleteCompiler, SQLCompiler):
-    
+
     def execute_sql(self, *args, **kwargs):
         result, params = SQLCompiler.as_sql(self)
 
@@ -91,7 +91,7 @@ class SQLDeleteCompiler(compiler.SQLDeleteCompiler, SQLCompiler):
 
 
 class SQLUpdateCompiler(compiler.SQLUpdateCompiler, SQLCompiler):
-    
+
     def __init__(self, *args, **kwargs):
         super(SQLUpdateCompiler, self).__init__(*args, **kwargs)
 
