@@ -13,6 +13,15 @@ class User(models.Model):
     def __unicode__(self):
         return self.username
 
+class Permission(models.Model):
+    user = models.ForeignKey(User)
+    perm = models.CharField(max_length=32)
+
+    def __unicode__(self):
+        return u"{0} for {1}".format(self.perm, self.user)
+
+    class Meta:
+        ordering = ('user__username', 'perm')
 
 class MultiTableParent(models.Model):
     parent_field = models.CharField(max_length=32)
@@ -83,6 +92,39 @@ class EdgeCaseTests(TestCase):
 
         with self.assertRaises(RuntimeError):
             list(User.objects.exclude(username="E").exclude(username="A"))
+
+
+    def test_deletion(self):
+        count = User.objects.count()
+
+        self.assertTrue(count)
+
+        User.objects.filter(username="A").delete()
+
+        self.assertEqual(count - 1, User.objects.count())
+
+        User.objects.filter(username="B").exclude(username="B").delete() #Should do nothing
+
+        self.assertEqual(count - 1, User.objects.count())
+
+        User.objects.all().delete()
+
+        count = User.objects.count()
+
+        self.assertFalse(count)
+
+    def test_select_related(self):
+        """ select_related should be a no-op... for now """
+        user = User.objects.get(username="A")
+        perm = Permission.objects.create(user=user, perm="test_perm")
+        select_related = [ (p.perm, p.user.username) for p in user.permission_set.select_related() ]
+        self.assertEqual(user.username, select_related[0][1])
+
+    def test_cross_selects(self):
+        user = User.objects.get(username="A")
+        perm = Permission.objects.create(user=user, perm="test_perm")
+        perms = list(Permission.objects.all().values_list("user__username", "perm"))
+        self.assertEqual("A", perms[0][0])
 
 
 class BlobstoreFileUploadHandlerTest(TestCase):
