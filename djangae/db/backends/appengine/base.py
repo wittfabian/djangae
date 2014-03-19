@@ -177,7 +177,7 @@ def django_instance_to_entity(connection, model, fields, raw, instance):
 
     field_values = {}
     primary_key = None
-    
+
     # primary.key = self.model._meta.pk
     for field in fields:
         value, is_primary_key = value_from_instance(instance, field)
@@ -248,7 +248,7 @@ class Cursor(object):
                 entity[pk_column] = key.id_or_name()
                 cache_entity(sql.model, entity)
         else:
-            import pdb;pdb.set_trace() 
+            import pdb;pdb.set_trace()
             raise RuntimeError("Can't execute traditional SQL: '%s'", sql)
 
     def fix_fk_null(self, query, constraint):
@@ -433,7 +433,6 @@ class DatabaseOperations(BaseDatabaseOperations):
         return value
 
     def value_to_db_date(self, value):
-        value = make_timezone_naive(value)
         return value
 
     def value_to_db_time(self, value):
@@ -448,7 +447,7 @@ class DatabaseOperations(BaseDatabaseOperations):
         if isinstance(value, long):
             #App Engine Query's don't return datetime fields (unlike Get) I HAVE NO IDEA WHY, APP ENGINE SUCKS MONKEY BALLS
             value = datetime.datetime.fromtimestamp(float(value) / 1000000.0)
-            
+
         if value is not None and settings.USE_TZ and timezone.is_naive(value):
             value = value.replace(tzinfo=timezone.utc)
         return value
@@ -457,19 +456,19 @@ class DatabaseOperations(BaseDatabaseOperations):
         if isinstance(value, long):
             #App Engine Query's don't return datetime fields (unlike Get) I HAVE NO IDEA WHY, APP ENGINE SUCKS MONKEY BALLS
             value = datetime.datetime.fromtimestamp(float(value) / 1000000.0).date()
-    
+
         if value is not None and settings.USE_TZ and timezone.is_naive(value):
             value = value.replace(tzinfo=timezone.utc)
-        return value
+        return value.date()
 
     def value_from_db_time(self, value):
         if isinstance(value, long):
             #App Engine Query's don't return datetime fields (unlike Get) I HAVE NO IDEA WHY, APP ENGINE SUCKS MONKEY BALLS
             value = datetime.datetime.fromtimestamp(float(value) / 1000000.0).time()
-    
+
         if value is not None and settings.USE_TZ and timezone.is_naive(value):
             value = value.replace(tzinfo=timezone.utc)
-        return value
+        return value.time()
 
     def value_from_db_decimal(self, value):
         return value
@@ -587,6 +586,7 @@ class DatabaseFeatures(BaseDatabaseFeatures):
     empty_fetchmany_value = []
     supports_transactions = False #FIXME: Make this True!
     can_return_id_from_insert = True
+    supports_select_related = False
 
 class DatabaseWrapper(BaseDatabaseWrapper):
     operators = {
