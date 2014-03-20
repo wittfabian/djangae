@@ -36,10 +36,10 @@ class SQLCompiler(compiler.SQLCompiler):
             else:
                 queried_fields.append(x.col[1])
 
-        where = self.query.where.as_sql(
-            qn=self.quote_name_unless_alias,
-            connection=self.connection
-        )
+        #where = self.query.where.as_sql(
+        #    qn=self.quote_name_unless_alias,
+        #    connection=self.connection
+        #)
 
         is_count = False
         if self.query.aggregates:
