@@ -39,6 +39,9 @@ def special_index_exists(model_class, field_name, index_type):
 def special_indexes_for_model(model_class):
     return _special_indexes.get(_get_table_from_model(model_class))
 
+def special_indexes_for_column(model_class, column):
+    return _special_indexes.get(_get_table_from_model(model_class), {}).get(column, [])
+
 def write_special_indexes():
     index_file = _get_index_file()
 
@@ -47,14 +50,14 @@ def write_special_indexes():
 
 def add_special_index(model_class, field_name, index_type):
     from djangae.boot import on_production, in_testing
+    from django.conf import settings
 
     load_special_indexes()
 
     if special_index_exists(model_class, field_name, index_type):
         return
 
-    if on_production() or in_testing():
-        import pdb; pdb.set_trace()
+    if on_production() or (in_testing() and not getattr(settings, "GENERATE_SPECIAL_INDEXES_DURING_TESTING", False)):
         raise RuntimeError("There is a missing index in your djangaeidx.yaml - \n\n{0}:\n\t{1}: [{2}]".format(
             _get_table_from_model(model_class), field_name, index_type)
         )
@@ -64,3 +67,30 @@ def add_special_index(model_class, field_name, index_type):
     ).setdefault(field_name, []).append(index_type)
 
     write_special_indexes()
+
+
+class Indexer(object):
+    def validate_can_be_indexed(self, value):
+        """Return True if the value is indexable, False otherwise"""
+        raise NotImplementedError()
+
+    def prep_value_for_database(self, value): raise NotImplementedError()
+    def prep_value_for_query(self, value): raise NotImplementedError()
+    def indexed_column_name(self, field_column): raise NotImplementedError()
+
+class IExactIndexer(Indexer):
+    def validate_can_be_indexed(self, value):
+        return len(value) < 500
+
+    def prep_value_for_database(self, value):
+        return value.lower()
+
+    def prep_value_for_query(self, value):
+        return value.lower()
+
+    def indexed_column_name(self, field_column):
+        return "_idx_iexact_{0}".format(field_column)
+
+REQUIRES_SPECIAL_INDEXES = {
+    "iexact": IExactIndexer,
+}
