@@ -93,8 +93,10 @@ class Command(BaseRunserverCommand):
                 find_project_root(),
                 "--port",
                 self.port,
-                "--datastore_path",
-                data_root()
+                "--storage_path",
+                data_root(),
+                "--admin_port",
+                str(int(self.port) + 1)
             ]
 
         process = Popen(
@@ -121,5 +123,3 @@ class Command(BaseRunserverCommand):
                 sys.stdout.write(shutdown_message)
 
         sys.exit(process.returncode)
-
-
