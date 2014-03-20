@@ -1,13 +1,14 @@
 import logging
 import itertools
+import warnings
 
 from google.appengine.api import datastore
-from google.appengine.api.datastore_types import Key, Text
+from google.appengine.api.datastore_types import Key
 
 from django.core.cache import cache
 
-from django.db.models.sql.where import AND, OR
-from djangae.indexing import load_special_indexes, special_indexes_for_column, REQUIRES_SPECIAL_INDEXES
+from django.db.models.sql.where import AND
+from djangae.indexing import special_indexes_for_column, REQUIRES_SPECIAL_INDEXES, add_special_index
 
 OPERATORS_MAP = {
     'exact': '=',
@@ -22,7 +23,8 @@ OPERATORS_MAP = {
     'startswith': None,
     'range': None,
     'year': None,
-    'gt_and_lt': None #Special case inequality combined filter
+    'gt_and_lt': None, #Special case inequality combined filter
+    'iexact': None
 }
 
 def get_field_from_column(model, column):
@@ -160,8 +162,6 @@ class SelectCommand(object):
         logging.info("Select query: {0}, {1}".format(self.model.__name__, self.where))
 
         for column, op, value in self.where:
-            final_op = OPERATORS_MAP[op]
-
             def clean_pk_value(_value):
                 if isinstance(_value, basestring):
                     _value = _value[:500]
@@ -185,20 +185,31 @@ class SelectCommand(object):
                 else:
                     value = clean_pk_value(value)
 
+            final_op = OPERATORS_MAP.get(op)
             if final_op is None:
-                if op == "in":
-                    combined_filters.append((column, op, value))
-                    continue
-                elif op == "gt_and_lt":
-                    combined_filters.append((column, op, value))
-                    continue
-                elif op == "isnull":
-                    query["%s ="] = None
-                    continue
+                if op in REQUIRES_SPECIAL_INDEXES:
+                    add_special_index(self.model, column, op) #Add the index if we can (e.g. on dev_appserver)
 
-                assert(0)
+                    if op not in special_indexes_for_column(self.model, column):
+                        raise RuntimeError("There is a missing index in your djangaeidx.yaml - \n\n{0}:\n\t{1}: [{2}]".format(
+                            self.model, column, op)
+                        )
 
-            query["%s %s" % (column, final_op)] = value
+                    indexer = REQUIRES_SPECIAL_INDEXES[op]
+                    column = indexer.indexed_column_name(column)
+                    value = indexer.prep_value_for_query(value)
+                    query["%s =" % column] = value
+                else:
+                    if op == "in":
+                        combined_filters.append((column, op, value))
+                    elif op == "gt_and_lt":
+                        combined_filters.append((column, op, value))
+                    elif op == "isnull":
+                        raise NotImplementedError("Unimplemented operator {0}".format(op))
+                    else:
+                        raise NotImplementedError("Unimplemented operator {0}".format(op))
+            else:
+                query["%s %s" % (column, final_op)] = value
 
         if combined_filters:
             queries = [ query ]
@@ -221,7 +232,7 @@ class SelectCommand(object):
 
             query = datastore.MultiQuery(queries, [])
 
-        print query
+        #print query
         self.query = query
         self.results = None
         self.query_done = False
@@ -324,7 +335,7 @@ class UpdateCommand(object):
 
                 #Add special indexed fields
                 for index in special_indexes_for_column(self.model, field.column):
-                    indexer = REQUIRES_SPECIAL_INDEXES[index]()
+                    indexer = REQUIRES_SPECIAL_INDEXES[index]
                     result[indexer.indexed_column_name(field.column)] = indexer.prep_value_for_database(value)
 
             entities.append(result)
