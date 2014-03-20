@@ -15,6 +15,7 @@ from django.core.files.uploadhandler import FileUploadHandler, \
     StopFutureHandlers
 from django.core.exceptions import ImproperlyConfigured
 from django.http import HttpResponse
+from django.http.multipartparser import ChunkIter, Parser, LazyStream, FILE
 from django.utils.encoding import smart_str, force_unicode, filepath_to_uri
 
 from google.appengine.api import files
@@ -153,27 +154,36 @@ class BlobstoreFileUploadHandler(FileUploadHandler):
     """
     File upload handler for the Google App Engine Blobstore.
     """
+    def __init__(self, request=None):
+        super(BlobstoreFileUploadHandler, self).__init__(request)
+        self.blobkey = None
 
-    def new_file(self, *args, **kwargs):
-        super(BlobstoreFileUploadHandler, self).new_file(*args, **kwargs)
-        blobkey = self.content_type_extra.get('blob-key')
-        self.active = blobkey is not None
-        if self.active:
-            self.blobkey = BlobKey(blobkey)
+    def new_file(self, field_name, file_name, content_type, content_length, charset=None):
+        result = super(BlobstoreFileUploadHandler, self).new_file(field_name, file_name, content_type, content_length, charset)
+
+        ct_header = self.request.META.get("content-type")
+        if not ct_header or "blob-key" not in ct_header:
+            return result
+
+        parts = [ [ y.strip("'").strip('"').strip() for y in x.split("=", 1) ] for x in ct_header.split(";") if len(x.split("=", 1)) == 2]
+        self.blobkey = dict(parts).get("blob-key")
+
+        if self.blobkey:
+            self.blobkey = BlobKey(self.blobkey)
             raise StopFutureHandlers()
 
     def receive_data_chunk(self, raw_data, start):
         """
         Add the data to the StringIO file.
         """
-        if not self.active:
+        if not self.blobkey:
             return raw_data
 
     def file_complete(self, file_size):
         """
         Return a file object if we're activated.
         """
-        if not self.active:
+        if not self.blobkey:
             return
 
         return BlobstoreUploadedFile(
@@ -205,4 +215,3 @@ class BlobstoreUploadedFile(UploadedFile):
 
     def multiple_chunks(self, chunk_size=1024 * 128):
         return True
-
