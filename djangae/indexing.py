@@ -92,5 +92,5 @@ class IExactIndexer(Indexer):
         return "_idx_iexact_{0}".format(field_column)
 
 REQUIRES_SPECIAL_INDEXES = {
-    "iexact": IExactIndexer,
+    "iexact": IExactIndexer(),
 }

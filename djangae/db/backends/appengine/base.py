@@ -190,7 +190,7 @@ def django_instance_to_entity(connection, model, fields, raw, instance):
 
         #Add special indexed fields
         for index in special_indexes_for_column(model, field.column):
-            indexer = REQUIRES_SPECIAL_INDEXES[index]()
+            indexer = REQUIRES_SPECIAL_INDEXES[index]
             field_values[indexer.indexed_column_name(field.column)] = indexer.prep_value_for_database(value)
 
     kwargs = {}
