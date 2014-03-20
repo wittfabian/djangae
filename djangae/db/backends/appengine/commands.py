@@ -103,7 +103,7 @@ class SelectCommand(object):
 
                 #Disable projection if it's not supported
                 if self.projection and constraint.col in self.projection:
-                    if op in ("exact", "in"):
+                    if op in ("exact", "in", "isnull"):
                         #If we are projecting, but we are doing an
                         #equality filter on one of the columns, then we
                         #can't project
@@ -205,7 +205,7 @@ class SelectCommand(object):
                     elif op == "gt_and_lt":
                         combined_filters.append((column, op, value))
                     elif op == "isnull":
-                        raise NotImplementedError("Unimplemented operator {0}".format(op))
+                        query["%s =" % column] = None
                     else:
                         raise NotImplementedError("Unimplemented operator {0}".format(op))
             else:
