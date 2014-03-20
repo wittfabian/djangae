@@ -3,6 +3,8 @@ from django.core.files.uploadhandler import StopFutureHandlers
 from django.test import TestCase, RequestFactory
 from django.db import models
 
+from djangae.indexing import add_special_index
+
 from .storage import BlobstoreFileUploadHandler
 from google.appengine.api.datastore_errors import EntityNotFoundError
 
@@ -37,6 +39,8 @@ class MultiTableChildTwo(MultiTableParent):
 
 class EdgeCaseTests(TestCase):
     def setUp(self):
+        add_special_index(User, "username", "iexact")
+
         User.objects.create(username="A", email="test@example.com")
         User.objects.create(username="B", email="test@example.com")
         User.objects.create(username="C", email="test2@example.com")
@@ -125,6 +129,10 @@ class EdgeCaseTests(TestCase):
         perm = Permission.objects.create(user=user, perm="test_perm")
         perms = list(Permission.objects.all().values_list("user__username", "perm"))
         self.assertEqual("A", perms[0][0])
+
+    def test_iexact(self):
+        user = User.objects.get(username__iexact="a")
+        self.assertEqual("A", user.username)
 
 
 class BlobstoreFileUploadHandlerTest(TestCase):

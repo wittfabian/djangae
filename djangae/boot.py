@@ -116,6 +116,9 @@ def datastore_available():
 def on_production():
     return 'SERVER_SOFTWARE' in os.environ and not os.environ['SERVER_SOFTWARE'].startswith("Development")
 
+def in_testing():
+    return "test" in sys.argv
+
 def setup_paths():
     if not appengine_on_path():
         for k in [k for k in sys.modules if k.startswith('google')]:
