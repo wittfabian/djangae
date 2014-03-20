@@ -13,7 +13,7 @@ The intention is to basically do what djangoappengine has done up to now, but wi
  * Integrate elements of djangotoolbox into the core, including a non-user-nullable ListField where NULL fields return [] to workaround the App Engine datastore not storing empty lists
  * Implement caching where it makes sense to work around HRD issues
 
- ## Status
+## Status
 
  * Environment/path setup - The SDK is detected, sys.path is configured, everything happens in the WSGI middleware
  * Custom runserver command - This wraps dev_appserver to provide a seamless experience, works with Djangos autoreload (something that djangoappengine couldn't manage)
