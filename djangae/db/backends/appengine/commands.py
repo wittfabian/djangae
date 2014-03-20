@@ -57,7 +57,9 @@ class SelectCommand(object):
 
                 #Text and byte fields aren't indexed, so we can't do a
                 #projection query
-                db_type = get_field_from_column(model, field).db_type(connection)
+                f = get_field_from_column(model, field)
+                assert f #If this happens, we have a cross-table select going on! #FIXME
+                db_type = f.db_type(connection)
 
                 if db_type in ("bytes", "text"):
                     projection_fields = []
@@ -218,6 +220,7 @@ class SelectCommand(object):
 
             query = datastore.MultiQuery(queries, [])
 
+        print query
         self.query = query
         self.results = None
         self.query_done = False
@@ -279,11 +282,9 @@ class FlushCommand(object):
 
     def execute(self):
         table = self.table
-
-        all_the_things = list(datastore.Query(table, keys_only=True).Run())
-        while all_the_things:
-            datastore.Delete(all_the_things)
-            all_the_things = list(datastore.Query(table, keys_only=True).Run())
+        query = datastore.Query(table, keys_only=True)
+        while query.Count():
+            datastore.Delete(query.Run())
 
         cache.clear()
 
@@ -295,12 +296,12 @@ class InsertCommand(object):
 class DeleteCommand(object):
     def __init__(self, connection, model, where):
         self.select = SelectCommand(connection, model, [model._meta.pk.column], where=where, is_count=False)
-        
+
     def execute(self):
         self.select.execute()
         datastore.Delete(self.select.results)
         #FIXME: Remove from the cache
-    
+
 class UpdateCommand(object):
     def __init__(self, connection, model, values, where):
         self.select = SelectCommand(connection, model, [], where=where, is_count=False, projection_enabled=False)
@@ -310,7 +311,7 @@ class UpdateCommand(object):
         from .base import cache_entity
 
         self.select.execute()
-        
+
         results = self.select.results
         entities = []
         i = 0
@@ -319,11 +320,11 @@ class UpdateCommand(object):
             for field, param, value in self.values:
                 result[field.attname] = value
             entities.append(result)
-        
+
         returned_ids = datastore.Put(entities)
-        
+
         model = self.select.model
-        
+
         #Now cache them, temporarily to help avoid consistency errors
         for key, entity in itertools.izip(returned_ids, entities):
             pk_column = model._meta.pk.column
