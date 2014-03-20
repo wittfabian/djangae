@@ -27,6 +27,8 @@ from django.db.models.sql.constants import GET_ITERATOR_CHUNK_SIZE
 from django.db.backends.util import format_number
 from django.core.cache import cache
 
+from djangae.indexing import load_special_indexes
+
 from google.appengine.ext import testbed
 
 from .commands import (
@@ -617,6 +619,7 @@ class DatabaseWrapper(BaseDatabaseWrapper):
 
     def get_new_connection(self, params):
         conn = Connection(self, params)
+        load_special_indexes() #make sure special indexes are loaded
         return conn
 
     def init_connection_state(self):
