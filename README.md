@@ -21,21 +21,21 @@ The intention is to basically do what djangoappengine has done up to now, but wi
  * Unique-field caching layer is implemented, but transactions will currently break it, I'll fix this up once the contrib tests pass.
 
 
- ## TODO
+## TODO
 
- ### Special Indexing
+### Special Indexing
 
 This is what I've termed the old-style dbindexer magic that allow stuff like iexact to work. How it works in Djangae is when you run a query on the dev_appserver (e.g. username__iexact="bananas"), an index is added to djangaeidx.yaml (just like index.yaml). From that point onwards every save of the field should create an associated _idx_*** field storing a transformed version of the value. Special lookups (like iexact) will then use this field.
 
 Status: 90% - the yaml file is generated during tests (although I haven't implemented the dev_appserver sandbox circumvention yet). iexact is implemented.
 
- ### Unique Caching
+### Unique Caching
 
 This is implemented hackily and brokenly. We should follow the same logic as NDB here (with the in-context vs memcache layer) but extend it to unique field values. We also need to make sure we follow the same logic with transactions as they do to ensure they work correctly.
 
 Status: 10% - needs a total rewrite, I have an uncommitted file that started stubbing this out. I just need to get around to doing it
 
- ### Cross-kind Selects
+### Cross-kind Selects
 
 We should be able to support a select that bridges a single join, on a single model provided the where does not cross models. For example Permission.objects.values_list("user__username", "id"). We can do this while processing the result set by gathering related keys, doing a single datastore Get(keys) and reading the resulting field value. In the above example, after processing the auth_permission results, we can do a Get for the users, and update the result set. This behaviour should be supported (to allow more of Django to work by default) but should log a warning in the Djangae slow query log (see below).
 
