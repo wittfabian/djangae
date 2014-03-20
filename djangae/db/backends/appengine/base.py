@@ -27,7 +27,7 @@ from django.db.models.sql.constants import GET_ITERATOR_CHUNK_SIZE
 from django.db.backends.util import format_number
 from django.core.cache import cache
 
-from djangae.indexing import load_special_indexes
+from djangae.indexing import load_special_indexes, special_indexes_for_column, REQUIRES_SPECIAL_INDEXES
 
 from google.appengine.ext import testbed
 
@@ -187,6 +187,11 @@ def django_instance_to_entity(connection, model, fields, raw, instance):
             primary_key = value
         else:
             field_values[field.column] = value
+
+        #Add special indexed fields
+        for index in special_indexes_for_column(model, field.column):
+            indexer = REQUIRES_SPECIAL_INDEXES[index]()
+            field_values[indexer.indexed_column_name(field.column)] = indexer.prep_value_for_database(value)
 
     kwargs = {}
     if primary_key:

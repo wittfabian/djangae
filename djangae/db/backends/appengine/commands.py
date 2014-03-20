@@ -7,6 +7,7 @@ from google.appengine.api.datastore_types import Key, Text
 from django.core.cache import cache
 
 from django.db.models.sql.where import AND, OR
+from djangae.indexing import load_special_indexes, special_indexes_for_column, REQUIRES_SPECIAL_INDEXES
 
 OPERATORS_MAP = {
     'exact': '=',
@@ -304,6 +305,7 @@ class DeleteCommand(object):
 
 class UpdateCommand(object):
     def __init__(self, connection, model, values, where):
+        self.model = model
         self.select = SelectCommand(connection, model, [], where=where, is_count=False, projection_enabled=False)
         self.values = values
 
@@ -318,7 +320,13 @@ class UpdateCommand(object):
         for result in results:
             i += 1
             for field, param, value in self.values:
-                result[field.attname] = value
+                result[field.column] = value
+
+                #Add special indexed fields
+                for index in special_indexes_for_column(self.model, field.column):
+                    indexer = REQUIRES_SPECIAL_INDEXES[index]()
+                    result[indexer.indexed_column_name(field.column)] = indexer.prep_value_for_database(value)
+
             entities.append(result)
 
         returned_ids = datastore.Put(entities)
