@@ -41,6 +41,7 @@ We should be able to support a select that bridges a single join, on a single mo
 
 Status: 0% - needs to be done to make the contrib.auth tests pass
 
+
  ### Slow Query Logging
 
 We should have a special log for when Djangae performs an inefficient query, or if an unsupported ordering is requested. This should be displayed in the terminal when running locally, but not on production. We should log in the following situations:
@@ -51,6 +52,7 @@ We should have a special log for when Djangae performs an inefficient query, or 
     The query was totally unsupported (e.g. ManyToMany, join etc.) - Error
 
 Status: 0% - needs to be done
+
 
  ### Break up django_instance_to_entity
 
