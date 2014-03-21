@@ -10,6 +10,7 @@ from django.core.cache import cache
 from django.db.models.sql.where import AND
 from djangae.indexing import special_indexes_for_column, REQUIRES_SPECIAL_INDEXES, add_special_index
 
+
 OPERATORS_MAP = {
     'exact': '=',
     'gt': '>',
@@ -35,7 +36,11 @@ def get_field_from_column(model, column):
     return None
 
 class SelectCommand(object):
-    def __init__(self, connection, model, queried_fields, where, is_count=False, projection_enabled=True):
+    def __init__(self, connection, model, queried_fields, where, is_count=False, ordering=[], projection_enabled=True):
+        assert isinstance(is_count, bool)
+        assert isinstance(ordering, list)
+        assert isinstance(projection_enabled, bool)
+
         self.connection = connection
         self.pk_col = model._meta.pk.column
         self.model = model
@@ -47,6 +52,7 @@ class SelectCommand(object):
         self.has_inequality_filter = False
         self.all_filters = []
         self.results = None
+        self.ordering = ordering
 
         if not self.queried_fields:
             self.queried_fields = [ x.column for x in model._meta.fields ]
@@ -103,7 +109,7 @@ class SelectCommand(object):
 
                 #Disable projection if it's not supported
                 if self.projection and constraint.col in self.projection:
-                    if op in ("exact", "in"):
+                    if op in ("exact", "in", "isnull"):
                         #If we are projecting, but we are doing an
                         #equality filter on one of the columns, then we
                         #can't project
@@ -205,11 +211,19 @@ class SelectCommand(object):
                     elif op == "gt_and_lt":
                         combined_filters.append((column, op, value))
                     elif op == "isnull":
-                        raise NotImplementedError("Unimplemented operator {0}".format(op))
+                        query["%s =" % column] = None
                     else:
                         raise NotImplementedError("Unimplemented operator {0}".format(op))
             else:
                 query["%s %s" % (column, final_op)] = value
+
+        ##Apply any ordering
+        if self.ordering:
+            ordering = [
+                (x.lstrip("-"), datastore.Query.DESCENDING if x.startswith("-") else datastore.Query.ASCENDING)
+                for x in self.ordering
+            ]
+            query.Order(*ordering)
 
         if combined_filters:
             queries = [ query ]
@@ -319,8 +333,10 @@ class UpdateCommand(object):
         self.model = model
         self.select = SelectCommand(connection, model, [], where=where, is_count=False, projection_enabled=False)
         self.values = values
+        self.connection = connection
 
     def execute(self):
+        from .base import get_prepared_db_value, MockInstance
         from .base import cache_entity
 
         self.select.execute()
@@ -331,7 +347,7 @@ class UpdateCommand(object):
         for result in results:
             i += 1
             for field, param, value in self.values:
-                result[field.column] = value
+                result[field.column] = get_prepared_db_value(self.connection, MockInstance(field, value), field)
 
                 #Add special indexed fields
                 for index in special_indexes_for_column(self.model, field.column):
