@@ -18,10 +18,61 @@ The intention is to basically do what djangoappengine has done up to now, but wi
  * Environment/path setup - The SDK is detected, sys.path is configured, everything happens in the WSGI middleware
  * Custom runserver command - This wraps dev_appserver to provide a seamless experience, works with Djangos autoreload (something that djangoappengine couldn't manage)
  * Connector is mostly implemented, many contrib tests are passing
- * Unique-field caching layer is implemented, but transactions will currently break it, I'll fix this up once the contrib tests pass.
-
 
 ## TODO
+
+### Bug Fixing
+
+Implement the FK Null Fix from dbindexer (which manipulates the query in the case a join is used for isnull). Should fix the following failure:
+
+    ======================================================================
+    ERROR: test_session_save_on_500 (django.contrib.sessions.tests.SessionMiddlewareTests)
+    ----------------------------------------------------------------------
+    Traceback (most recent call last):
+      File "/home/lukebens/Potato/Djangae-testapp/google_appengine/lib/django-1.5/django/contrib/sessions/tests.py", line 548, in test_session_save_on_500
+        self.assertNotIn('hello', request.session.load())
+      File "/home/lukebens/Potato/Djangae-testapp/google_appengine/lib/django-1.5/django/contrib/sessions/backends/db.py", line 18, in load
+        expire_date__gt=timezone.now()
+      File "/home/lukebens/Potato/Djangae-testapp/google_appengine/lib/django-1.5/django/db/models/manager.py", line 143, in get
+        return self.get_query_set().get(*args, **kwargs)
+      File "/home/lukebens/Potato/Djangae-testapp/google_appengine/lib/django-1.5/django/db/models/query.py", line 398, in get
+        num = len(clone)
+      File "/home/lukebens/Potato/Djangae-testapp/google_appengine/lib/django-1.5/django/db/models/query.py", line 106, in __len__
+        self._result_cache = list(self.iterator())
+      File "/home/lukebens/Potato/Djangae-testapp/google_appengine/lib/django-1.5/django/db/models/query.py", line 317, in iterator
+        for row in compiler.results_iter():
+      File "/home/lukebens/Potato/Djangae-testapp/google_appengine/lib/django-1.5/django/db/models/sql/compiler.py", line 775, in results_iter
+        for rows in self.execute_sql(MULTI):
+      File "/home/lukebens/Potato/Djangae-testapp/google_appengine/lib/django-1.5/django/db/models/sql/compiler.py", line 840, in execute_sql
+        cursor.execute(sql, params)
+      File "/home/lukebens/Potato/Djangae-testapp/djangae/db/backends/appengine/base.py", line 262, in execute
+        self.rowcount = self.last_select_command.execute() or -1
+      File "/home/lukebens/Potato/Djangae-testapp/djangae/db/backends/appengine/commands.py", line 214, in execute
+        query["%s =" % column] = None
+      File "/home/lukebens/Potato/Djangae-testapp/google_appengine/google/appengine/api/datastore.py", line 1759, in __setitem__
+        match = self._CheckFilter(filter, value)
+      File "/home/lukebens/Potato/Djangae-testapp/google_appengine/google/appengine/api/datastore.py", line 1898, in _CheckFilter
+        (datastore_types.KEY_SPECIAL_PROPERTY, value, typename(value)))
+    BadFilterError: invalid filter: __key__ filter value must be a Key; received None (a NoneType).
+
+The following test also started failing, we need to investigate to find the failing query and fix up Djangae
+
+    ======================================================================
+    FAIL: test_formset_instance (django.contrib.formtools.tests.wizard.forms.FormTests)
+    ----------------------------------------------------------------------
+    Traceback (most recent call last):
+      File "/home/lukebens/Potato/Djangae-testapp/google_appengine/lib/django-1.5/django/contrib/formtools/tests/wizard/forms.py", line 192, in test_formset_instance
+        self.assertEqual(instance.get_form().initial_form_count(), 1)
+    AssertionError: 0 != 1
+
+
+### djangae.contrib.auth
+
+This is a duplication of django.contrib.auth which we should fix up to remove the ManyToMany fields (using ListFields). We should make the minimal changes, but also add an additional authentication backend that uses App Engine's users API
+
+### Memcache backend
+
+I think we need a memcache backend. Take a look at djappengine on GitHub, perhaps we could just use the one from there. Although I'm not convinced that the standard memcache backend won't work. Needs testing.
 
 ### Special Indexing
 
@@ -56,7 +107,7 @@ Status: 0% - needs to be done
 
 This currently handles transforming field data ready for the datastore, but also converting non-abstract model inheritance to poly models and a bunch of other stuff. We should break this logic up so that can use the same logic for updates as inserts (updates might only use a subset of fields).
 
-Status: 0% - needs to be done, probably needs a whiteboard discussion
+Status: 20% - needs to be done, probably needs a whiteboard discussion. I've broken some of this into get_prepared_db_value.
 
 ### Fix up deploy, remote, etc. commands
 
