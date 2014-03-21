@@ -96,8 +96,11 @@ class Command(BaseRunserverCommand):
                 "--storage_path",
                 data_root(),
                 "--admin_port",
-                str(int(self.port) + 1)
+                str(int(self.port) + 1),
+                "--automatic_restart",
+                "0",
             ]
+
 
         process = Popen(
             command,
