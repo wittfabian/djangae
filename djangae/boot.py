@@ -14,7 +14,7 @@ def setup_datastore_stubs():
 
     datastore = datastore_sqlite_stub.DatastoreSqliteStub(
         "dev~" + app_id,
-        os.path.join(data_root(), "datastore"),
+        os.path.join(data_root(), "datastore.db"),
         require_indexes=False,
         trusted=False,
         root_path=find_project_root(),
