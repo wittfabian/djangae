@@ -134,6 +134,14 @@ class EdgeCaseTests(TestCase):
         user = User.objects.get(username__iexact="a")
         self.assertEqual("A", user.username)
 
+    def test_ordering(self):
+        users = User.objects.all().order_by("username")
+
+        self.assertEqual(["A", "B", "C", "D", "E"], [x.username for x in users])
+
+        users = User.objects.all().order_by("-username")
+
+        self.assertEqual(["A", "B", "C", "D", "E"][::-1], [x.username for x in users])
 
 class BlobstoreFileUploadHandlerTest(TestCase):
     boundary = "===============7417945581544019063=="
