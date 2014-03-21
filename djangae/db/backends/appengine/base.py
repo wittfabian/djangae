@@ -121,18 +121,47 @@ class Connection(object):
     def close(self):
         pass
 
+
+class MockInstance(object):
+    """
+        This creates a mock instance for use when passing a datastore entity
+        into get_prepared_db_value. This is used when performing updates to prevent a complete
+        conversion to a Django instance before writing back the entity
+    """
+
+    def __init__(self, field, value, is_adding=False):
+        class State:
+            adding = is_adding
+
+        self._state = State()
+        self.field = field
+        self.value = value
+
+    def __getattr__(self, attr):
+        if attr == self.field.attname:
+            return self.value
+        return super(MockInstance, self).__getattr__(attr)
+
+
+def get_prepared_db_value(connection, instance, field, raw=False):
+    value = getattr(instance, field.attname) if raw else field.pre_save(instance, instance._state.adding)
+
+    value = field.get_db_prep_save(
+        value,
+        connection = connection
+    )
+
+    value = connection.ops.value_for_db(value, field)
+
+    return value
+
 def django_instance_to_entity(connection, model, fields, raw, instance):
     uses_inheritance = False
     inheritance_root = model
     db_table = model._meta.db_table
 
     def value_from_instance(_instance, _field):
-        value = getattr(_instance, _field.attname) if raw else _field.pre_save(_instance, _instance._state.adding)
-
-        value = _field.get_db_prep_save(
-            value,
-            connection = connection
-        )
+        value = get_prepared_db_value(connection, _instance, _field, raw)
 
         if (not _field.null and not _field.primary_key) and value is None:
             raise IntegrityError("You can't set %s (a non-nullable "
@@ -141,8 +170,6 @@ def django_instance_to_entity(connection, model, fields, raw, instance):
         is_primary_key = False
         if _field.primary_key and _field.model == inheritance_root:
             is_primary_key = True
-
-        value = connection.ops.value_for_db(value, _field)
 
         return value, is_primary_key
 
@@ -440,10 +467,12 @@ class DatabaseOperations(BaseDatabaseOperations):
         return value
 
     def value_to_db_date(self, value):
+        value = datetime.datetime.combine(value, datetime.time())
         return value
 
     def value_to_db_time(self, value):
         value = make_timezone_naive(value)
+        value = datetime.datetime.combine(datetime.datetime.fromtimestamp(0), value)
         return value
 
     def value_to_db_decimal(self, value, max_digits, decimal_places):
@@ -462,10 +491,8 @@ class DatabaseOperations(BaseDatabaseOperations):
     def value_from_db_date(self, value):
         if isinstance(value, long):
             #App Engine Query's don't return datetime fields (unlike Get) I HAVE NO IDEA WHY, APP ENGINE SUCKS MONKEY BALLS
-            value = datetime.datetime.fromtimestamp(float(value) / 1000000.0).date()
+            value = datetime.datetime.fromtimestamp(float(value) / 1000000.0)
 
-        if value is not None and settings.USE_TZ and timezone.is_naive(value):
-            value = value.replace(tzinfo=timezone.utc)
         return value.date()
 
     def value_from_db_time(self, value):
