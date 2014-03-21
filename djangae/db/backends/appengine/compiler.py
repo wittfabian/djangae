@@ -18,15 +18,33 @@ except ImportError:
     class DateTimeCompiler(object):
         pass
 
-from .base import django_instance_to_entity
+from .base import django_instance_to_entity, NotSupportedError
 from .commands import InsertCommand, SelectCommand, UpdateCommand
 
 from google.appengine.api import datastore
+
+def validate_query_is_possible(query):
+    """
+        Need to check the following:
+
+        - The query only has one inequality filter
+        - The query does no joins
+        - The query ordering is compatible with the filters
+    """
+
+    #Check for joins
+    if query.count_active_tables() > 1:
+        raise NotSupportedError("""
+            The appengine database connector does not support JOINs. The requested join map follows\n
+            %s
+        """ % query.join_map)
 
 class SQLCompiler(compiler.SQLCompiler):
     query_class = Query
 
     def as_sql(self):
+
+        validate_query_is_possible(self.query)
 
         queried_fields = []
         for x in self.query.select:
@@ -47,16 +65,18 @@ class SQLCompiler(compiler.SQLCompiler):
                 if self.query.aggregates[None].col == "*":
                     is_count = True
                 else:
-                    raise RuntimeError("Counting anything other than '*' is not supported")
+                    raise NotSupportedError("Counting anything other than '*' is not supported")
             else:
-                raise RuntimeError("Unsupported aggregate query")
+                raise NotSupportedError("Unsupported aggregate query")
+
 
         select = SelectCommand(
             self.connection,
             self.query.model,
             queried_fields,
             where=self.query.where,
-            is_count=is_count
+            is_count=is_count,
+            ordering=self.query.order_by
         )
 
         #print(where)
