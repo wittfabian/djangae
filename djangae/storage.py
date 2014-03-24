@@ -1,5 +1,5 @@
 import mimetypes
-import os
+import re
 import urlparse
 
 try:
@@ -157,20 +157,49 @@ class BlobstoreFileUploadHandler(FileUploadHandler):
     def __init__(self, request=None):
         super(BlobstoreFileUploadHandler, self).__init__(request)
         self.blobkey = None
+        self.data = StringIO()
+        self.boundary = None
 
-    def new_file(self, field_name, file_name, content_type, content_length, charset=None):
-        result = super(BlobstoreFileUploadHandler, self).new_file(field_name, file_name, content_type, content_length, charset)
+    def new_file(self, field_name, file_name, content_type, content_length, charset=None, content_type_extra=None):
+        """
+            We can kill a lot of this hackery in Django 1.7 when content_type_extra is actually passed in!
+        """
+        self.data.seek(0) #Rewind
+        data = self.data.read()
 
-        ct_header = self.request.META.get("content-type")
-        if not ct_header or "blob-key" not in ct_header:
-            return result
+        if self.boundary:
+            parts = data.split(self.boundary)
 
-        parts = [ [ y.strip("'").strip('"').strip() for y in x.split("=", 1) ] for x in ct_header.split(";") if len(x.split("=", 1)) == 2]
-        self.blobkey = dict(parts).get("blob-key")
+            for part in parts:
+                match = re.search('blob-key="(?P<blob_key>\S+)"', part)
+                blob_key = match.groupdict().get('blob_key') if match else None
+
+                if not blob_key:
+                    continue
+
+                #OK, we have a blob key, but is it the one for the field?
+                match = re.search('name="(?P<field_name>\S+)"', part)
+                name = match.groupdict().get('field_name') if match else None
+                if name != field_name:
+                    #Nope, not for this field
+                    continue
+
+                self.blobkey = blob_key
 
         if self.blobkey:
             self.blobkey = BlobKey(self.blobkey)
             raise StopFutureHandlers()
+        else:
+            return super(BlobstoreFileUploadHandler, self).new_file(field_name, file_name, content_type, content_length, charset)
+
+    def handle_raw_input(self, input_data, META, content_length, boundary, encoding):
+        """
+            App Engine, for some reason, allows seeking back the wsgi.input. However, FakePayload during testing (correctly) does not
+            because that's what the WSGI spec says. However, to make this work we need to abuse the seeking (at least till Django 1.7)
+        """
+        self.boundary = boundary
+        self.data = StringIO(input_data.body if hasattr(input_data, "body") else input_data.read()) #Create a string IO object
+        return None #Pass back to Django
 
     def receive_data_chunk(self, raw_data, start):
         """
