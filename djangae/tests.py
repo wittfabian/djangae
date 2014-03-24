@@ -178,11 +178,15 @@ class BlobstoreFileUploadHandlerTest(TestCase):
 
     def test_non_existing_files_do_not_get_created(self):
         file_field_name = 'field-file'
+        length = len(self._create_wsgi_input().read())
+        self.uploader.handle_raw_input(self.request.META['wsgi.input'], self.request.META, length, self.boundary, "utf-8")
         self.assertRaises(StopFutureHandlers, self.uploader.new_file, file_field_name, 'file_name', None, None)
         self.assertRaises(EntityNotFoundError, self.uploader.file_complete, None)
 
     def test_blob_key_creation(self):
         file_field_name = 'field-file'
+        length = len(self._create_wsgi_input().read())
+        self.uploader.handle_raw_input(self.request.META['wsgi.input'], self.request.META, length, self.boundary, "utf-8")
         self.assertRaises(
             StopFutureHandlers,
             self.uploader.new_file, file_field_name, 'file_name', None, None
