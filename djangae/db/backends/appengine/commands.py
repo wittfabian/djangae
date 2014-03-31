@@ -4,6 +4,7 @@ import warnings
 
 from google.appengine.api import datastore
 from google.appengine.api.datastore_types import Key
+from google.appengine.ext import db
 
 from django.core.cache import cache
 
@@ -107,6 +108,11 @@ class SelectCommand(object):
             if isinstance(child, tuple):
                 constraint, op, annotation, value = child
 
+                if isinstance(value, (list, tuple)):
+                    value = [ self.connection.ops.prep_lookup_value(self.model, x, constraint.field) for x in value]
+                else:
+                    value = self.connection.ops.prep_lookup_value(self.model, value, constraint.field)
+
                 #Disable projection if it's not supported
                 if self.projection and constraint.col in self.projection:
                     if op in ("exact", "in", "isnull"):
@@ -168,28 +174,8 @@ class SelectCommand(object):
         logging.info("Select query: {0}, {1}".format(self.model.__name__, self.where))
 
         for column, op, value in self.where:
-            def clean_pk_value(_value):
-                if isinstance(_value, basestring):
-                    _value = _value[:500]
-                    left = _value[500:]
-                    if left:
-                        warnings.warn("Truncating primary key"
-                            " that is over 500 characters. THIS IS AN ERROR IN YOUR PROGRAM.",
-                            RuntimeWarning
-                        )
-                    _value = Key.from_path(inheritance_root._meta.db_table, _value)
-                else:
-                    _value = Key.from_path(inheritance_root._meta.db_table, _value)
-
-                return _value
-
             if column == self.pk_col:
                 column = "__key__"
-
-                if isinstance(value, (list, tuple)):
-                    value = [ clean_pk_value(x) for x in value]
-                else:
-                    value = clean_pk_value(value)
 
             final_op = OPERATORS_MAP.get(op)
             if final_op is None:
@@ -315,9 +301,52 @@ class FlushCommand(object):
         cache.clear()
 
 class InsertCommand(object):
-    def __init__(self, model, entities):
-        self.entities = entities
+    def __init__(self, connection, model, objs, fields, raw):
+        from .base import django_instance_to_entity, get_datastore_kind
+
+        self.has_pk = any([x.primary_key for x in fields])
+        self.entities = []
+        self.included_keys = []
         self.model = model
+
+        for obj in objs:
+            if self.has_pk:
+                self.included_keys.append(Key.from_path(get_datastore_kind(model), obj.pk))
+
+            self.entities.append(
+                django_instance_to_entity(connection, model, fields, raw, obj)
+            )
+
+    def execute(self):
+        from .base import IntegrityError
+
+        if self.has_pk:
+            results = []
+            #We are inserting, but we specified an ID, we need to check for existence before we Put()
+            for key, ent in zip(self.included_keys, self.entities):
+                @db.transactional
+                def txn():
+                    try:
+                        existing = datastore.Get(key)
+
+                        #Djangae's polymodel/inheritence support stores a class attribute containing all of the parents
+                        #of the model. Parent classes share the same table as subclasses and so this will incorrectly throw
+                        #on the write of the subclass after the parent has been written. So we check here.
+                        # If the new entity has a class attribute AND the fields of the existing model are a subset of the
+                        # subclass then we assume that we are using inheritence here and don't throw. It's a little ugly...
+                        existing_is_parent = ent.get('class') and set(existing.keys()).issubset(ent.keys())
+                        if not existing_is_parent:
+                            raise IntegrityError("Tried to INSERT with existing key")
+                    except db.EntityNotFoundError:
+                        pass
+
+                    results.append(datastore.Put(ent))
+
+                txn()
+
+            return results
+        else:
+            return datastore.Put(self.entities)
 
 class DeleteCommand(object):
     def __init__(self, connection, model, where):

@@ -88,13 +88,7 @@ class SQLInsertCompiler(compiler.SQLInsertCompiler, SQLCompiler):
         super(SQLInsertCompiler, self).__init__(*args, **kwargs)
 
     def as_sql(self):
-        entities = [
-            django_instance_to_entity(self.connection, self.query.model, self.query.fields, self.query.raw, x)
-            for x in self.query.objs
-        ]
-
-        return [ (InsertCommand(self.query.model, entities), []) ]
-
+        return [ (InsertCommand(self.connection, self.query.model, self.query.objs, self.query.fields, self.query.raw), []) ]
 
 class SQLDeleteCompiler(compiler.SQLDeleteCompiler, SQLCompiler):
 
