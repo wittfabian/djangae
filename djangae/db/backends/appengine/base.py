@@ -1,5 +1,6 @@
 import warnings
 import datetime
+import decimal
 
 from django.db.backends import (
     BaseDatabaseOperations,
@@ -19,10 +20,11 @@ except ImportError:
 
 from django.conf import settings
 from django.utils import timezone
+from django.db import IntegrityError
 from django.db.backends.creation import BaseDatabaseCreation
 from google.appengine.ext.db import metadata
 from google.appengine.api import datastore
-from google.appengine.api.datastore_types import Blob, Text
+from google.appengine.api.datastore_types import Blob, Text, Key
 from django.db.models.sql.constants import GET_ITERATOR_CHUNK_SIZE
 from django.db.backends.util import format_number
 from django.core.cache import cache
@@ -42,7 +44,7 @@ from .commands import (
 class DatabaseError(Exception):
     pass
 
-class IntegrityError(DatabaseError):
+class IntegrityError(IntegrityError, DatabaseError):
     pass
 
 class NotSupportedError(DatabaseError):
@@ -94,7 +96,7 @@ def get_uniques_from_model(model):
 def generate_unique_key(model, fields_and_values):
     fields_and_values = sorted(fields_and_values, key=lambda x: x[0]) #Sort by field name
 
-    key = '%s.%s|' % (model._meta.app_label, model._meta.db_table)
+    key = '%s.%s|' % (model._meta.app_label, get_datastore_kind(model))
     key += '|'.join(['%s:%s' % (field, value) for field, value in fields_and_values])
     return key
 
@@ -103,6 +105,15 @@ def get_entity_from_cache(key):
 #    if entity:
 #        logging.error("Got entity from cache with key %s", key)
     return entity
+
+def get_datastore_kind(model):
+    db_table = model._meta.db_table
+
+    for parent in model._meta.parents.keys():
+        if not parent._meta.parents and not parent._meta.abstract:
+            db_table = parent._meta.db_table
+            break
+    return db_table
 
 class Connection(object):
     """ Dummy connection class """
@@ -158,7 +169,7 @@ def get_prepared_db_value(connection, instance, field, raw=False):
 def django_instance_to_entity(connection, model, fields, raw, instance):
     uses_inheritance = False
     inheritance_root = model
-    db_table = model._meta.db_table
+    db_table = get_datastore_kind(model)
 
     def value_from_instance(_instance, _field):
         value = get_prepared_db_value(connection, _instance, _field, raw)
@@ -181,7 +192,6 @@ def django_instance_to_entity(connection, model, fields, raw, instance):
         for parent in model._meta.get_parent_list():
             if not parent._meta.parents:
                 #If this is the top parent, override the db_table
-                db_table = parent._meta.db_table
                 inheritance_root = parent
 
             classes.append(parent._meta.db_table)
@@ -266,8 +276,7 @@ class Cursor(object):
             self.rowcount = sql.execute()
         elif isinstance(sql, InsertCommand):
             self.connection.queries.append(sql)
-
-            self.returned_ids = datastore.Put(sql.entities)
+            self.returned_ids = sql.execute()
 
             #Now cache them, temporarily to help avoid consistency errors
             for key, entity in zip(self.returned_ids, sql.entities):
@@ -439,6 +448,34 @@ class DatabaseOperations(BaseDatabaseOperations):
     def sql_flush(self, style, tables, seqs, allow_cascade=False):
         return [ FlushCommand(table) for table in tables ]
 
+    def prep_lookup_key(self, model, value, field):
+        if isinstance(value, basestring):
+            value = value[:500]
+            left = value[500:]
+            if left:
+                warnings.warn("Truncating primary key"
+                    " that is over 500 characters. THIS IS AN ERROR IN YOUR PROGRAM.",
+                    RuntimeWarning
+                )
+            value = Key.from_path(get_datastore_kind(model), value)
+        else:
+            value = Key.from_path(get_datastore_kind(model), value)
+
+        return value
+
+    def prep_lookup_decimal(self, model, value, field):
+        return self.value_to_db_decimal(value, field.max_digits, field.decimal_places)
+
+    def prep_lookup_value(self, model, value, field):
+        if field.primary_key:
+            return self.prep_lookup_key(model, value, field)
+
+        db_type = self.connection.creation.db_type(field)
+        if db_type == 'decimal':
+            return self.prep_lookup_decimal(model, value, field)
+
+        return value
+
     def value_for_db(self, value, field):
         if value is None:
             return None
@@ -453,6 +490,14 @@ class DatabaseOperations(BaseDatabaseOperations):
         elif db_type == 'bytes':
             # Store BlobField, DictField and EmbeddedModelField values as Blobs.
             value = Blob(value)
+        elif db_type == 'date':
+            value = self.value_to_db_date(value)
+        elif db_type == 'datetime':
+            value = self.value_to_db_datetime(value)
+        elif db_type == 'time':
+            value = self.value_to_db_time(value)
+        elif db_type == 'decimal':
+            value = self.value_to_db_decimal(value, field.max_digits, field.decimal_places)
 
         return value
 
@@ -467,16 +512,20 @@ class DatabaseOperations(BaseDatabaseOperations):
         return value
 
     def value_to_db_date(self, value):
-        value = datetime.datetime.combine(value, datetime.time())
+        if value is not None:
+            value = datetime.datetime.combine(value, datetime.time())
         return value
 
     def value_to_db_time(self, value):
-        value = make_timezone_naive(value)
-        value = datetime.datetime.combine(datetime.datetime.fromtimestamp(0), value)
+        if value is not None:
+            value = make_timezone_naive(value)
+            value = datetime.datetime.combine(datetime.datetime.fromtimestamp(0), value)
         return value
 
     def value_to_db_decimal(self, value, max_digits, decimal_places):
-        return decimal_to_string(value, max_digits, decimal_places)
+        if isinstance(value, decimal.Decimal):
+            return decimal_to_string(value, max_digits, decimal_places)
+        return value
 
     ##Unlike value_to_db, these are not overridden or standard Django, it's just nice to have symmetry
     def value_from_db_datetime(self, value):
@@ -505,6 +554,8 @@ class DatabaseOperations(BaseDatabaseOperations):
         return value.time()
 
     def value_from_db_decimal(self, value):
+        if value:
+            value = decimal.Decimal(value)
         return value
 
 class DatabaseClient(BaseDatabaseClient):
