@@ -1,6 +1,7 @@
 import logging
 import yaml
 import os
+import datetime
 
 _special_indexes = {}
 
@@ -64,7 +65,7 @@ def add_special_index(model_class, field_name, index_type):
 
     _special_indexes.setdefault(
         _get_table_from_model(model_class), {}
-    ).setdefault(field_name, []).append(index_type)
+    ).setdefault(field_name, []).append(str(index_type))
 
     write_special_indexes()
 
@@ -91,6 +92,54 @@ class IExactIndexer(Indexer):
     def indexed_column_name(self, field_column):
         return "_idx_iexact_{0}".format(field_column)
 
+class DayIndexer(Indexer):
+    def validate_can_be_indexed(self, value):
+        return isinstance(value, (datetime.datetime, datetime.date))
+
+    def prep_value_for_database(self, value):
+        if value:
+            return value.day
+        return None
+
+    def prep_value_for_query(self, value):
+        return value
+
+    def indexed_column_name(self, field_column):
+        return "_idx_day_{0}".format(field_column)
+
+class YearIndexer(Indexer):
+    def validate_can_be_indexed(self, value):
+        return isinstance(value, (datetime.datetime, datetime.date))
+
+    def prep_value_for_database(self, value):
+        if value:
+            return value.year
+        return None
+
+    def prep_value_for_query(self, value):
+        return value
+
+    def indexed_column_name(self, field_column):
+        return "_idx_year_{0}".format(field_column)
+
+class MonthIndexer(Indexer):
+    def validate_can_be_indexed(self, value):
+        return isinstance(value, (datetime.datetime, datetime.date))
+
+    def prep_value_for_database(self, value):
+        if value:
+            return value.month
+        return None
+
+    def prep_value_for_query(self, value):
+        return value
+
+    def indexed_column_name(self, field_column):
+        return "_idx_month_{0}".format(field_column)
+
 REQUIRES_SPECIAL_INDEXES = {
     "iexact": IExactIndexer(),
+    "day" : DayIndexer(),
+    "month" : MonthIndexer(),
+    "year": YearIndexer()
 }
