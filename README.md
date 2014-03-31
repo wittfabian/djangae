@@ -23,6 +23,64 @@ The intention is to basically do what djangoappengine has done up to now, but wi
 
 ### Bug Fixing
 
+Figure out why ordering isn't always applied correctly. Should be an easy one. One test where this fails is:
+
+    ======================================================================
+    FAIL: test_foreignkeys_which_use_to_field (testapp.django_model_tests.model_forms.tests.OldFormForXTests)
+    ----------------------------------------------------------------------
+    Traceback (most recent call last):
+      File "/home/lukebens/Potato/Djangae-testapp/testapp/django_model_tests/model_forms/tests.py", line 1481, in test_foreignkeys_which_use_to_field
+        (22, 'Pear')))
+    AssertionError: Tuples differ: ((u'', u'---------'), (22L, 'P... != ((u'', u'---------'), (86, u'A...
+
+    First differing element 1:
+    (22L, 'Pear')
+    (86, u'Apple')
+
+    - ((u'', u'---------'), (22L, 'Pear'), (86L, 'Apple'), (87L, 'Core'))
+    + ((u'', u'---------'), (86, u'Apple'), (87, u'Core'), (22, u'Pear'))
+
+
+Detect and manipulate queries that use Django model inheritance to just query the base class table as all data is stored there. Don't forget to filter on `class`.
+
+This should fix errors like this one:
+
+    ======================================================================
+    ERROR: test_inherited_unique (testapp.django_model_tests.model_forms.tests.UniqueTest)
+    ----------------------------------------------------------------------
+    Traceback (most recent call last):
+      File "/home/lukebens/Potato/Djangae-testapp/testapp/django_model_tests/model_forms/tests.py", line 448, in test_inherited_unique
+        self.assertFalse(form.is_valid())
+      File "/home/lukebens/Potato/Djangae-testapp/google_appengine/lib/django-1.5/django/forms/forms.py", line 126, in is_valid
+        return self.is_bound and not bool(self.errors)
+      File "/home/lukebens/Potato/Djangae-testapp/google_appengine/lib/django-1.5/django/forms/forms.py", line 117, in _get_errors
+        self.full_clean()
+      File "/home/lukebens/Potato/Djangae-testapp/google_appengine/lib/django-1.5/django/forms/forms.py", line 274, in full_clean
+        self._post_clean()
+      File "/home/lukebens/Potato/Djangae-testapp/google_appengine/lib/django-1.5/django/forms/models.py", line 344, in _post_clean
+        self.validate_unique()
+      File "/home/lukebens/Potato/Djangae-testapp/google_appengine/lib/django-1.5/django/forms/models.py", line 353, in validate_unique
+        self.instance.validate_unique(exclude=exclude)
+      File "/home/lukebens/Potato/Djangae-testapp/google_appengine/lib/django-1.5/django/db/models/base.py", line 731, in validate_unique
+        errors = self._perform_unique_checks(unique_checks)
+      File "/home/lukebens/Potato/Djangae-testapp/google_appengine/lib/django-1.5/django/db/models/base.py", line 826, in _perform_unique_checks
+        if qs.exists():
+      File "/home/lukebens/Potato/Djangae-testapp/google_appengine/lib/django-1.5/django/db/models/query.py", line 610, in exists
+        return self.query.has_results(using=self.db)
+      File "/home/lukebens/Potato/Djangae-testapp/google_appengine/lib/django-1.5/django/db/models/sql/query.py", line 447, in has_results
+        return bool(compiler.execute_sql(SINGLE))
+      File "/home/lukebens/Potato/Djangae-testapp/google_appengine/lib/django-1.5/django/db/models/sql/compiler.py", line 830, in execute_sql
+        sql, params = self.as_sql()
+      File "/home/lukebens/Potato/Djangae-testapp/djangae/db/backends/appengine/compiler.py", line 47, in as_sql
+        validate_query_is_possible(self.query)
+      File "/home/lukebens/Potato/Djangae-testapp/djangae/db/backends/appengine/compiler.py", line 40, in validate_query_is_possible
+        """ % query.join_map)
+    NotSupportedError:
+                The appengine database connector does not support JOINs. The requested join map follows
+
+                {(None, u'model_forms_derivedbook', None, None): (u'model_forms_derivedbook',), (u'model_forms_derivedbook', u'model_forms_book', u'book_ptr_id', u'id'): (u'model_forms_book',)}
+
+
 Implement the FK Null Fix from dbindexer (which manipulates the query in the case a join is used for isnull). Should fix the following failure:
 
     ======================================================================
