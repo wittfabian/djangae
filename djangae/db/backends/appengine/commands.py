@@ -54,6 +54,7 @@ class SelectCommand(object):
         self.all_filters = []
         self.results = None
         self.ordering = ordering
+        self.query_can_never_return_results = False
 
         if not self.queried_fields:
             self.queried_fields = [ x.column for x in model._meta.fields ]
@@ -107,7 +108,6 @@ class SelectCommand(object):
         for child in where.children:
             if isinstance(child, tuple):
                 constraint, op, annotation, value = child
-
                 if isinstance(value, (list, tuple)):
                     value = [ self.connection.ops.prep_lookup_value(self.model, x, constraint.field) for x in value]
                 else:
@@ -120,6 +120,7 @@ class SelectCommand(object):
                         #equality filter on one of the columns, then we
                         #can't project
                         self.projection = None
+
 
                 if negated:
                     if op in ("exact", "in") and constraint.field.primary_key:
@@ -136,20 +137,31 @@ class SelectCommand(object):
                     else:
                         raise RuntimeError("Unsupported negated lookup: " + op)
                 else:
-                    if op in ("exact", "in") and constraint.field.primary_key:
-                        if isinstance(value, (list, tuple)):
-                            self.included_pks.extend(list(value))
-                        else:
-                            self.included_pks.append(value)
+                    if constraint.field.primary_key:
+                        if (value is None and op == "exact") or op == "isnull":
+                            #If we are looking for a primary key that is None, then we always
+                            #just return nothing
+                            self.query_can_never_return_results = True
+
+                        elif op in ("exact", "in"):
+                            if isinstance(value, (list, tuple)):
+                                self.included_pks.extend(list(value))
+                            else:
+                                self.included_pks.append(value)
                     #else: FIXME when included_pks is handled, we can put the
                     #next section in an else block
                     col = constraint.col
                     result.append((col, op, value))
             else:
                 result.extend(self.parse_where_and_check_projection(child, negated))
+
         return result
 
     def execute(self):
+        if self.query_can_never_return_results:
+            self.results = []
+            return
+
         combined_filters = []
 
         inheritance_root = self.model
@@ -329,11 +341,11 @@ class InsertCommand(object):
                     try:
                         existing = datastore.Get(key)
 
-                        #Djangae's polymodel/inheritence support stores a class attribute containing all of the parents
+                        #Djangae's polymodel/inheritance support stores a class attribute containing all of the parents
                         #of the model. Parent classes share the same table as subclasses and so this will incorrectly throw
                         #on the write of the subclass after the parent has been written. So we check here.
                         # If the new entity has a class attribute AND the fields of the existing model are a subset of the
-                        # subclass then we assume that we are using inheritence here and don't throw. It's a little ugly...
+                        # subclass then we assume that we are using inheritance here and don't throw. It's a little ugly...
                         existing_is_parent = ent.get('class') and set(existing.keys()).issubset(ent.keys())
                         if not existing_is_parent:
                             raise IntegrityError("Tried to INSERT with existing key")
