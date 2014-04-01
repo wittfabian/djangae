@@ -69,6 +69,11 @@ class SQLCompiler(compiler.SQLCompiler):
             else:
                 raise NotSupportedError("Unsupported aggregate query")
 
+        opts = self.query.get_meta()
+        if not self.query.default_ordering:
+            ordering = self.query.order_by
+        else:
+            ordering = self.query.order_by or opts.ordering
 
         select = SelectCommand(
             self.connection,
@@ -76,7 +81,7 @@ class SQLCompiler(compiler.SQLCompiler):
             queried_fields,
             where=self.query.where,
             is_count=is_count,
-            ordering=self.query.order_by
+            ordering=ordering
         )
 
         #print(where)

@@ -37,9 +37,11 @@ def get_field_from_column(model, column):
     return None
 
 class SelectCommand(object):
-    def __init__(self, connection, model, queried_fields, where, is_count=False, ordering=[], projection_enabled=True):
+    def __init__(self, connection, model, queried_fields, where, is_count=False, ordering=None, projection_enabled=True):
+        ordering = ordering or []
+
         assert isinstance(is_count, bool)
-        assert isinstance(ordering, list)
+        assert isinstance(ordering, (list, tuple))
         assert isinstance(projection_enabled, bool)
 
         self.connection = connection
@@ -215,12 +217,13 @@ class SelectCommand(object):
             else:
                 query["%s %s" % (column, final_op)] = value
 
-        ##Apply any ordering
         if self.ordering:
             ordering = [
                 (x.lstrip("-"), datastore.Query.DESCENDING if x.startswith("-") else datastore.Query.ASCENDING)
                 for x in self.ordering
             ]
+
+            print ordering
             query.Order(*ordering)
 
         if combined_filters:
