@@ -29,42 +29,53 @@ OPERATORS_MAP = {
     'iexact': None
 }
 
+from django.utils.functional import memoize
+
 def get_field_from_column(model, column):
-    #FIXME: memoize this!
+    #FIXME: memoize this
     for field in model._meta.fields:
         if field.column == column:
             return field
     return None
 
 class SelectCommand(object):
-    def __init__(self, connection, model, queried_fields, where, is_count=False, ordering=None, projection_enabled=True, extra_select=None):
-        ordering = ordering or []
-        extra_select = extra_select or {}
+    def __init__(self, connection, query, keys_only=False, all_fields=False):
+        opts = query.get_meta()
+        if not query.default_ordering:
+            self.ordering = query.order_by
+        else:
+            self.ordering = query.order_by or opts.ordering
 
-        assert isinstance(is_count, bool)
-        assert isinstance(ordering, (list, tuple))
-        assert isinstance(projection_enabled, bool)
+        self.queried_fields = []
+        if keys_only:
+            self.queried_fields = [ opts.pk.column ]
+        elif not all_fields:
+            for x in query.select:
+                if isinstance(x, tuple):
+                    #Django < 1.6 compatibility
+                    self.queried_fields.append(x[1])
+                else:
+                    self.queried_fields.append(x.col[1])
+
+        if not self.queried_fields:
+            self.queried_fields = [ x.column for x in opts.fields ]
 
         self.connection = connection
-        self.pk_col = model._meta.pk.column
-        self.model = model
-        self.queried_fields = queried_fields
-        self.is_count = is_count
+        self.pk_col = opts.pk.column
+        self.model = query.model
+        self.is_count = query.aggregates
         self.keys_only = False #FIXME: This should be used where possible
         self.included_pks = []
         self.excluded_pks = []
         self.has_inequality_filter = False
         self.all_filters = []
         self.results = None
-        self.ordering = ordering
         self.query_can_never_return_results = False
-        self.extra_select = extra_select
-
-        if not self.queried_fields:
-            self.queried_fields = [ x.column for x in model._meta.fields ]
+        self.extra_select = query.extra_select
 
         projection_fields = []
-        if projection_enabled:
+
+        if not all_fields:
             for field in self.queried_fields:
                 #We don't include the primary key in projection queries...
                 if field == self.pk_col:
@@ -72,7 +83,9 @@ class SelectCommand(object):
 
                 #Text and byte fields aren't indexed, so we can't do a
                 #projection query
-                f = get_field_from_column(model, field)
+                f = get_field_from_column(self.model, field)
+                if not f:
+                    import ipdb; ipdb.set_trace()
                 assert f #If this happens, we have a cross-table select going on! #FIXME
                 db_type = f.db_type(connection)
 
@@ -83,10 +96,10 @@ class SelectCommand(object):
                 projection_fields.append(field)
 
         self.projection = list(set(projection_fields)) or None
-        if model._meta.parents:
+        if opts.parents:
             self.projection = None
 
-        self.where = self.parse_where_and_check_projection(where)
+        self.where = self.parse_where_and_check_projection(query.where)
 
         try:
             #If the PK was queried, we switch it in our queried
@@ -370,8 +383,8 @@ class InsertCommand(object):
             return datastore.Put(self.entities)
 
 class DeleteCommand(object):
-    def __init__(self, connection, model, where):
-        self.select = SelectCommand(connection, model, [model._meta.pk.column], where=where, is_count=False)
+    def __init__(self, connection, query):
+        self.select = SelectCommand(connection, query, keys_only=True)
 
     def execute(self):
         self.select.execute()
@@ -379,10 +392,10 @@ class DeleteCommand(object):
         #FIXME: Remove from the cache
 
 class UpdateCommand(object):
-    def __init__(self, connection, model, values, where):
-        self.model = model
-        self.select = SelectCommand(connection, model, [], where=where, is_count=False, projection_enabled=False)
-        self.values = values
+    def __init__(self, connection, query):
+        self.model = query.model
+        self.select = SelectCommand(connection, query, all_fields=True)
+        self.values = query.values
         self.connection = connection
 
     def execute(self):
