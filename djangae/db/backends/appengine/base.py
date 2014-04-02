@@ -39,6 +39,7 @@ from .commands import (
     InsertCommand,
     FlushCommand,
     UpdateCommand,
+    DeleteCommand,
     get_field_from_column
 )
 
@@ -274,6 +275,8 @@ class Cursor(object):
         elif isinstance(sql, FlushCommand):
             sql.execute()
         elif isinstance(sql, UpdateCommand):
+            self.rowcount = sql.execute()
+        elif isinstance(sql, DeleteCommand):
             self.rowcount = sql.execute()
         elif isinstance(sql, InsertCommand):
             self.connection.queries.append(sql)
