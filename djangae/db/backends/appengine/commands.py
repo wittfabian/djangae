@@ -37,8 +37,9 @@ def get_field_from_column(model, column):
     return None
 
 class SelectCommand(object):
-    def __init__(self, connection, model, queried_fields, where, is_count=False, ordering=None, projection_enabled=True):
+    def __init__(self, connection, model, queried_fields, where, is_count=False, ordering=None, projection_enabled=True, extra_select=None):
         ordering = ordering or []
+        extra_select = extra_select or {}
 
         assert isinstance(is_count, bool)
         assert isinstance(ordering, (list, tuple))
@@ -57,6 +58,7 @@ class SelectCommand(object):
         self.results = None
         self.ordering = ordering
         self.query_can_never_return_results = False
+        self.extra_select = extra_select
 
         if not self.queried_fields:
             self.queried_fields = [ x.column for x in model._meta.fields ]
@@ -217,14 +219,16 @@ class SelectCommand(object):
             else:
                 query["%s %s" % (column, final_op)] = value
 
-        if self.ordering:
-            ordering = [
-                (x.lstrip("-"), datastore.Query.DESCENDING if x.startswith("-") else datastore.Query.ASCENDING)
-                for x in self.ordering
-            ]
 
-            print ordering
-            query.Order(*ordering)
+        ordering = []
+        for order in self.ordering:
+            direction = datastore.Query.DESCENDING if order.startswith("-") else datastore.Query.ASCENDING
+            order = order.lstrip("-")
+            if order == self.model._meta.pk.column:
+                order = "__key__"
+            ordering.append((order, direction))
+
+
 
         if combined_filters:
             queries = [ query ]
@@ -245,7 +249,9 @@ class SelectCommand(object):
                             new_queries.append(new_query)
                 queries = new_queries
 
-            query = datastore.MultiQuery(queries, [])
+            query = datastore.MultiQuery(queries, ordering)
+        else:
+            query.Order(*ordering)
 
         #print query
         self.query = query
