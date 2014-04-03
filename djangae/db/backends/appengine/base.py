@@ -52,6 +52,9 @@ class IntegrityError(IntegrityError, DatabaseError):
 class NotSupportedError(DatabaseError):
     pass
 
+class CouldBeSupportedError(DatabaseError):
+    pass
+
 DEFAULT_CACHE_TIMEOUT = 10
 
 def cache_entity(model, entity):
