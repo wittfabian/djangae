@@ -19,7 +19,7 @@ except ImportError:
         pass
 
 from .base import django_instance_to_entity, NotSupportedError
-from .commands import InsertCommand, SelectCommand, UpdateCommand
+from .commands import InsertCommand, SelectCommand, UpdateCommand, DeleteCommand
 
 from google.appengine.api import datastore
 
@@ -39,6 +39,13 @@ def validate_query_is_possible(query):
             %s
         """ % query.join_map)
 
+    if query.aggregates:
+        if query.aggregates.keys() == [ None ]:
+            if query.aggregates[None].col != "*":
+                raise NotSupportedError("Counting anything other than '*' is not supported")
+        else:
+            raise NotSupportedError("Unsupported aggregate query")
+                
 class SQLCompiler(compiler.SQLCompiler):
     query_class = Query
 
@@ -46,42 +53,15 @@ class SQLCompiler(compiler.SQLCompiler):
 
         validate_query_is_possible(self.query)
 
-        queried_fields = []
-        for x in self.query.select:
-            if isinstance(x, tuple):
-                #Django < 1.6 compatibility
-                queried_fields.append(x[1])
-            else:
-                queried_fields.append(x.col[1])
 
         #where = self.query.where.as_sql(
         #    qn=self.quote_name_unless_alias,
         #    connection=self.connection
         #)
 
-        is_count = False
-        if self.query.aggregates:
-            if self.query.aggregates.keys() == [ None ]:
-                if self.query.aggregates[None].col == "*":
-                    is_count = True
-                else:
-                    raise NotSupportedError("Counting anything other than '*' is not supported")
-            else:
-                raise NotSupportedError("Unsupported aggregate query")
-
-        opts = self.query.get_meta()
-        if not self.query.default_ordering:
-            ordering = self.query.order_by
-        else:
-            ordering = self.query.order_by or opts.ordering
-
         select = SelectCommand(
             self.connection,
-            self.query.model,
-            queried_fields,
-            where=self.query.where,
-            is_count=is_count,
-            ordering=ordering
+            self.query
         )
 
         #print(where)
@@ -96,18 +76,8 @@ class SQLInsertCompiler(compiler.SQLInsertCompiler, SQLCompiler):
         return [ (InsertCommand(self.connection, self.query.model, self.query.objs, self.query.fields, self.query.raw), []) ]
 
 class SQLDeleteCompiler(compiler.SQLDeleteCompiler, SQLCompiler):
-
-    def execute_sql(self, *args, **kwargs):
-        result, params = SQLCompiler.as_sql(self)
-
-        #Override the selected fields so we force a keys_only
-        #query
-        result.keys_only = True
-        result.projection = None
-        result.execute()
-
-        datastore.Delete(result.results)
-
+    def as_sql(self):
+        return (DeleteCommand(self.connection, self.query), [])
 
 class SQLUpdateCompiler(compiler.SQLUpdateCompiler, SQLCompiler):
 
@@ -115,7 +85,7 @@ class SQLUpdateCompiler(compiler.SQLUpdateCompiler, SQLCompiler):
         super(SQLUpdateCompiler, self).__init__(*args, **kwargs)
 
     def as_sql(self):
-        return (UpdateCommand(self.connection, self.query.model, self.query.values, where=self.query.where), [])
+        return (UpdateCommand(self.connection, self.query), [])
 
 
 
