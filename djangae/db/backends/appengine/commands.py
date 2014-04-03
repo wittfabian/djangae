@@ -1,6 +1,7 @@
 import logging
 import itertools
 import warnings
+import json
 
 from google.appengine.api import datastore
 from google.appengine.api.datastore_types import Key
@@ -10,7 +11,16 @@ from django.core.cache import cache
 
 from django.db.models.sql.where import AND
 from djangae.indexing import special_indexes_for_column, REQUIRES_SPECIAL_INDEXES, add_special_index
+from django.db.models.sql.datastructures import EmptyResultSet
 
+from django import dispatch
+
+entity_pre_update = dispatch.Signal(providing_args=["sender", "entity"])
+entity_post_update = dispatch.Signal(providing_args=["sender", "entity"])
+entity_post_insert = dispatch.Signal(providing_args=["sender", "entity"])
+entity_deleted = dispatch.Signal(providing_args=["sender", "entity"])
+get_pre_execute = dispatch.Signal(providing_args=["sender", "key"])
+query_pre_execute = dispatch.Signal(providing_args=["sender", "query", "aggregate"])
 
 OPERATORS_MAP = {
     'exact': '=',
@@ -29,40 +39,54 @@ OPERATORS_MAP = {
     'iexact': None
 }
 
+from django.utils.functional import memoize
+
 def get_field_from_column(model, column):
-    #FIXME: memoize this!
+    #FIXME: memoize this
     for field in model._meta.fields:
         if field.column == column:
             return field
     return None
 
 class SelectCommand(object):
-    def __init__(self, connection, model, queried_fields, where, is_count=False, ordering=None, projection_enabled=True):
-        ordering = ordering or []
+    def __init__(self, connection, query, keys_only=False, all_fields=False):
+        self.original_query = query
+        
+        opts = query.get_meta()
+        if not query.default_ordering:
+            self.ordering = query.order_by
+        else:
+            self.ordering = query.order_by or opts.ordering
 
-        assert isinstance(is_count, bool)
-        assert isinstance(ordering, (list, tuple))
-        assert isinstance(projection_enabled, bool)
+        self.queried_fields = []
+        if keys_only:
+            self.queried_fields = [ opts.pk.column ]
+        elif not all_fields:
+            for x in query.select:
+                if isinstance(x, tuple):
+                    #Django < 1.6 compatibility
+                    self.queried_fields.append(x[1])
+                else:
+                    self.queried_fields.append(x.col[1])
+
+        if not self.queried_fields:
+            self.queried_fields = [ x.column for x in opts.fields ]
 
         self.connection = connection
-        self.pk_col = model._meta.pk.column
-        self.model = model
-        self.queried_fields = queried_fields
-        self.is_count = is_count
+        self.pk_col = opts.pk.column
+        self.model = query.model
+        self.is_count = query.aggregates
         self.keys_only = False #FIXME: This should be used where possible
         self.included_pks = []
         self.excluded_pks = []
         self.has_inequality_filter = False
         self.all_filters = []
         self.results = None
-        self.ordering = ordering
-        self.query_can_never_return_results = False
-
-        if not self.queried_fields:
-            self.queried_fields = [ x.column for x in model._meta.fields ]
+        self.extra_select = query.extra_select
 
         projection_fields = []
-        if projection_enabled:
+
+        if not all_fields:
             for field in self.queried_fields:
                 #We don't include the primary key in projection queries...
                 if field == self.pk_col:
@@ -70,7 +94,9 @@ class SelectCommand(object):
 
                 #Text and byte fields aren't indexed, so we can't do a
                 #projection query
-                f = get_field_from_column(model, field)
+                f = get_field_from_column(self.model, field)
+                if not f:
+                    import ipdb; ipdb.set_trace()
                 assert f #If this happens, we have a cross-table select going on! #FIXME
                 db_type = f.db_type(connection)
 
@@ -81,10 +107,10 @@ class SelectCommand(object):
                 projection_fields.append(field)
 
         self.projection = list(set(projection_fields)) or None
-        if model._meta.parents:
+        if opts.parents:
             self.projection = None
 
-        self.where = self.parse_where_and_check_projection(where)
+        self.where = self.parse_where_and_check_projection(query.where)
 
         try:
             #If the PK was queried, we switch it in our queried
@@ -143,7 +169,7 @@ class SelectCommand(object):
                         if (value is None and op == "exact") or op == "isnull":
                             #If we are looking for a primary key that is None, then we always
                             #just return nothing
-                            self.query_can_never_return_results = True
+                            raise EmptyResult()
 
                         elif op in ("exact", "in"):
                             if isinstance(value, (list, tuple)):
@@ -160,10 +186,6 @@ class SelectCommand(object):
         return result
 
     def execute(self):
-        if self.query_can_never_return_results:
-            self.results = []
-            return
-
         combined_filters = []
 
         inheritance_root = self.model
@@ -217,14 +239,15 @@ class SelectCommand(object):
             else:
                 query["%s %s" % (column, final_op)] = value
 
-        if self.ordering:
-            ordering = [
-                (x.lstrip("-"), datastore.Query.DESCENDING if x.startswith("-") else datastore.Query.ASCENDING)
-                for x in self.ordering
-            ]
 
-            print ordering
-            query.Order(*ordering)
+        ordering = []
+        for order in self.ordering:
+            direction = datastore.Query.DESCENDING if order.startswith("-") else datastore.Query.ASCENDING
+            order = order.lstrip("-")
+            if order == self.model._meta.pk.column:
+                order = "__key__"
+            ordering.append((order, direction))
+
 
         if combined_filters:
             queries = [ query ]
@@ -245,7 +268,9 @@ class SelectCommand(object):
                             new_queries.append(new_query)
                 queries = new_queries
 
-            query = datastore.MultiQuery(queries, [])
+            query = datastore.MultiQuery(queries, ordering)
+        else:
+            query.Order(*ordering)
 
         #print query
         self.query = query
@@ -254,44 +279,47 @@ class SelectCommand(object):
         self.aggregate_type = "count" if self.is_count else None
         self._do_fetch()
 
+    def _log(self):
+        from .base import get_datastore_kind
+        
+        templ = """
+            SELECT {0} FROM {1} WHERE {2}
+        """
+
+        select = ", ".join(self.projection) if self.projection else "*"
+        if self.aggregate_type:
+            select = "COUNT(*)"
+
+        where = str(self.query)
+
+        final = templ.format(
+            select,
+            get_datastore_kind(self.model),
+            where
+        ).strip()
+
+        from django.db.backends.mysql.compiler import SQLCompiler
+        tmp = SQLCompiler(self.original_query, self.connection, None)
+        try:
+            sql, params = tmp.as_sql()
+            print(sql % params)
+        except:
+            print("Unable to print MySQL equivalent - empty query")
+        print(final)
+
     def _do_fetch(self):
         assert not self.results
 
-        if isinstance(self.query, datastore.MultiQuery):
-            self.results = self._run_query(aggregate_type=self.aggregate_type)
-            self.query_done = True
-        else:
-            #Try and get the entity from the cache, this is to work around HRD issues
-            #and boost performance!
-            entity_from_cache = None
-            if self.all_filters and self.model:
-                #Get all the exact filters
-                exact_filters = [ x for x in self.all_filters if x[1] == "=" ]
-                lookup = { x[0]:x[2] for x in exact_filters }
-
-                unique_combinations = get_uniques_from_model(self.model)
-                for fields in unique_combinations:
-                    final_key = []
-                    for field in fields:
-                        if field in lookup:
-                            final_key.append((field, lookup[field]))
-                            continue
-                        else:
-                            break
-                    else:
-                        #We've found a unique combination!
-                        unique_key = generate_unique_key(self.model, final_key)
-                        entity_from_cache = get_entity_from_cache(unique_key)
-
-            if entity_from_cache is None:
-                self.results = self._run_query(aggregate_type=self.aggregate_type)
-            else:
-                self.results = [ entity_from_cache ]
+        self.results = self._run_query(aggregate_type=self.aggregate_type)
+        self.query_done = True
 
     def _run_query(self, limit=None, start=None, aggregate_type=None):
+        #self._log()
+        query_pre_execute.send(sender=self.model, query=self.query, aggregate=self.aggregate_type)
+            
         if aggregate_type is None:
             return self.query.Run(limit=limit, start=start)
-        elif self.aggregate_type == "count":
+        elif self.aggregate_type == "count":            
             return self.query.Count(limit=limit, start=start)
         else:
             raise RuntimeError("Unsupported query type")
@@ -364,8 +392,8 @@ class InsertCommand(object):
             return datastore.Put(self.entities)
 
 class DeleteCommand(object):
-    def __init__(self, connection, model, where):
-        self.select = SelectCommand(connection, model, [model._meta.pk.column], where=where, is_count=False)
+    def __init__(self, connection, query):
+        self.select = SelectCommand(connection, query, keys_only=True)
 
     def execute(self):
         self.select.execute()
@@ -373,10 +401,10 @@ class DeleteCommand(object):
         #FIXME: Remove from the cache
 
 class UpdateCommand(object):
-    def __init__(self, connection, model, values, where):
-        self.model = model
-        self.select = SelectCommand(connection, model, [], where=where, is_count=False, projection_enabled=False)
-        self.values = values
+    def __init__(self, connection, query):
+        self.model = query.model
+        self.select = SelectCommand(connection, query, all_fields=True)
+        self.values = query.values
         self.connection = connection
 
     def execute(self):
