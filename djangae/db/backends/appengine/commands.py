@@ -51,7 +51,7 @@ def get_field_from_column(model, column):
 class SelectCommand(object):
     def __init__(self, connection, query, keys_only=False, all_fields=False):
         self.original_query = query
-        
+
         opts = query.get_meta()
         if not query.default_ordering:
             self.ordering = query.order_by
@@ -169,7 +169,7 @@ class SelectCommand(object):
                         if (value is None and op == "exact") or op == "isnull":
                             #If we are looking for a primary key that is None, then we always
                             #just return nothing
-                            raise EmptyResult()
+                            raise EmptyResultSet()
 
                         elif op in ("exact", "in"):
                             if isinstance(value, (list, tuple)):
@@ -281,7 +281,7 @@ class SelectCommand(object):
 
     def _log(self):
         from .base import get_datastore_kind
-        
+
         templ = """
             SELECT {0} FROM {1} WHERE {2}
         """
@@ -316,10 +316,10 @@ class SelectCommand(object):
     def _run_query(self, limit=None, start=None, aggregate_type=None):
         #self._log()
         query_pre_execute.send(sender=self.model, query=self.query, aggregate=self.aggregate_type)
-            
+
         if aggregate_type is None:
             return self.query.Run(limit=limit, start=start)
-        elif self.aggregate_type == "count":            
+        elif self.aggregate_type == "count":
             return self.query.Count(limit=limit, start=start)
         else:
             raise RuntimeError("Unsupported query type")
@@ -369,19 +369,13 @@ class InsertCommand(object):
             for key, ent in zip(self.included_keys, self.entities):
                 @db.transactional
                 def txn():
-                    try:
-                        existing = datastore.Get(key)
+                    existing = datastore.Query(keys_only=True)
+                    existing.Ancestor(key)
+                    existing["__key__"] = key
+                    res = existing.Count()
 
-                        #Djangae's polymodel/inheritance support stores a class attribute containing all of the parents
-                        #of the model. Parent classes share the same table as subclasses and so this will incorrectly throw
-                        #on the write of the subclass after the parent has been written. So we check here.
-                        # If the new entity has a class attribute AND the fields of the existing model are a subset of the
-                        # subclass then we assume that we are using inheritance here and don't throw. It's a little ugly...
-                        existing_is_parent = ent.get('class') and set(existing.keys()).issubset(ent.keys())
-                        if not existing_is_parent:
-                            raise IntegrityError("Tried to INSERT with existing key")
-                    except db.EntityNotFoundError:
-                        pass
+                    if res:
+                        raise IntegrityError("Tried to INSERT with existing key")
 
                     results.append(datastore.Put(ent))
 
