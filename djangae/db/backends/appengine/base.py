@@ -1,6 +1,7 @@
 import warnings
 import datetime
 import decimal
+import sys
 
 from django.db.backends import (
     BaseDatabaseOperations,
@@ -38,6 +39,7 @@ from .commands import (
     InsertCommand,
     FlushCommand,
     UpdateCommand,
+    DeleteCommand,
     get_field_from_column
 )
 
@@ -274,6 +276,8 @@ class Cursor(object):
             sql.execute()
         elif isinstance(sql, UpdateCommand):
             self.rowcount = sql.execute()
+        elif isinstance(sql, DeleteCommand):
+            self.rowcount = sql.execute()
         elif isinstance(sql, InsertCommand):
             self.connection.queries.append(sql)
             self.returned_ids = sql.execute()
@@ -446,6 +450,11 @@ class DatabaseOperations(BaseDatabaseOperations):
         return name
 
     def sql_flush(self, style, tables, seqs, allow_cascade=False):
+        from django.conf import settings
+        if getattr(settings, "COMPLETE_FLUSH_WHILE_TESTING", False):
+            if "test" in sys.argv:
+                tables = metadata.get_kinds()
+
         return [ FlushCommand(table) for table in tables ]
 
     def prep_lookup_key(self, model, value, field):
