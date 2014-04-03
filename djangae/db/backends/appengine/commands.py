@@ -1,6 +1,7 @@
 import logging
 import itertools
 import warnings
+import json
 
 from google.appengine.api import datastore
 from google.appengine.api.datastore_types import Key
@@ -10,7 +11,16 @@ from django.core.cache import cache
 
 from django.db.models.sql.where import AND
 from djangae.indexing import special_indexes_for_column, REQUIRES_SPECIAL_INDEXES, add_special_index
+from django.db.models.sql.datastructures import EmptyResultSet
 
+from django import dispatch
+
+entity_pre_update = dispatch.Signal(providing_args=["sender", "entity"])
+entity_post_update = dispatch.Signal(providing_args=["sender", "entity"])
+entity_post_insert = dispatch.Signal(providing_args=["sender", "entity"])
+entity_deleted = dispatch.Signal(providing_args=["sender", "entity"])
+get_pre_execute = dispatch.Signal(providing_args=["sender", "key"])
+query_pre_execute = dispatch.Signal(providing_args=["sender", "query", "aggregate"])
 
 OPERATORS_MAP = {
     'exact': '=',
@@ -40,6 +50,8 @@ def get_field_from_column(model, column):
 
 class SelectCommand(object):
     def __init__(self, connection, query, keys_only=False, all_fields=False):
+        self.original_query = query
+        
         opts = query.get_meta()
         if not query.default_ordering:
             self.ordering = query.order_by
@@ -70,7 +82,6 @@ class SelectCommand(object):
         self.has_inequality_filter = False
         self.all_filters = []
         self.results = None
-        self.query_can_never_return_results = False
         self.extra_select = query.extra_select
 
         projection_fields = []
@@ -158,7 +169,7 @@ class SelectCommand(object):
                         if (value is None and op == "exact") or op == "isnull":
                             #If we are looking for a primary key that is None, then we always
                             #just return nothing
-                            self.query_can_never_return_results = True
+                            raise EmptyResult()
 
                         elif op in ("exact", "in"):
                             if isinstance(value, (list, tuple)):
@@ -175,10 +186,6 @@ class SelectCommand(object):
         return result
 
     def execute(self):
-        if self.query_can_never_return_results:
-            self.results = []
-            return
-
         combined_filters = []
 
         inheritance_root = self.model
@@ -242,7 +249,6 @@ class SelectCommand(object):
             ordering.append((order, direction))
 
 
-
         if combined_filters:
             queries = [ query ]
             for column, op, value in combined_filters:
@@ -273,44 +279,47 @@ class SelectCommand(object):
         self.aggregate_type = "count" if self.is_count else None
         self._do_fetch()
 
+    def _log(self):
+        from .base import get_datastore_kind
+        
+        templ = """
+            SELECT {0} FROM {1} WHERE {2}
+        """
+
+        select = ", ".join(self.projection) if self.projection else "*"
+        if self.aggregate_type:
+            select = "COUNT(*)"
+
+        where = str(self.query)
+
+        final = templ.format(
+            select,
+            get_datastore_kind(self.model),
+            where
+        ).strip()
+
+        from django.db.backends.mysql.compiler import SQLCompiler
+        tmp = SQLCompiler(self.original_query, self.connection, None)
+        try:
+            sql, params = tmp.as_sql()
+            print(sql % params)
+        except:
+            print("Unable to print MySQL equivalent - empty query")
+        print(final)
+
     def _do_fetch(self):
         assert not self.results
 
-        if isinstance(self.query, datastore.MultiQuery):
-            self.results = self._run_query(aggregate_type=self.aggregate_type)
-            self.query_done = True
-        else:
-            #Try and get the entity from the cache, this is to work around HRD issues
-            #and boost performance!
-            entity_from_cache = None
-            if self.all_filters and self.model:
-                #Get all the exact filters
-                exact_filters = [ x for x in self.all_filters if x[1] == "=" ]
-                lookup = { x[0]:x[2] for x in exact_filters }
-
-                unique_combinations = get_uniques_from_model(self.model)
-                for fields in unique_combinations:
-                    final_key = []
-                    for field in fields:
-                        if field in lookup:
-                            final_key.append((field, lookup[field]))
-                            continue
-                        else:
-                            break
-                    else:
-                        #We've found a unique combination!
-                        unique_key = generate_unique_key(self.model, final_key)
-                        entity_from_cache = get_entity_from_cache(unique_key)
-
-            if entity_from_cache is None:
-                self.results = self._run_query(aggregate_type=self.aggregate_type)
-            else:
-                self.results = [ entity_from_cache ]
+        self.results = self._run_query(aggregate_type=self.aggregate_type)
+        self.query_done = True
 
     def _run_query(self, limit=None, start=None, aggregate_type=None):
+        #self._log()
+        query_pre_execute.send(sender=self.model, query=self.query, aggregate=self.aggregate_type)
+            
         if aggregate_type is None:
             return self.query.Run(limit=limit, start=start)
-        elif self.aggregate_type == "count":
+        elif self.aggregate_type == "count":            
             return self.query.Count(limit=limit, start=start)
         else:
             raise RuntimeError("Unsupported query type")
