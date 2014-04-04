@@ -17,29 +17,12 @@ The intention is to basically do what djangoappengine has done up to now, but wi
 
  * Environment/path setup - The SDK is detected, sys.path is configured, everything happens in the WSGI middleware
  * Custom runserver command - This wraps dev_appserver to provide a seamless experience, works with Djangos autoreload (something that djangoappengine couldn't manage)
- * Connector is mostly implemented, many contrib tests are passing
+ * Connector is mostly implemented, many contrib tests are passing, also many of django's model tests
+ * A seamless replacement for dbindexer is built in, a file called djangaeidx.yaml will be generated automatically when you use __iexact queries or the like
 
 ## TODO
 
 ### Bug Fixing
-
-Figure out why ordering isn't always applied correctly. Should be an easy one. One test where this fails is:
-
-    ======================================================================
-    FAIL: test_foreignkeys_which_use_to_field (testapp.django_model_tests.model_forms.tests.OldFormForXTests)
-    ----------------------------------------------------------------------
-    Traceback (most recent call last):
-      File "/home/lukebens/Potato/Djangae-testapp/testapp/django_model_tests/model_forms/tests.py", line 1481, in test_foreignkeys_which_use_to_field
-        (22, 'Pear')))
-    AssertionError: Tuples differ: ((u'', u'---------'), (22L, 'P... != ((u'', u'---------'), (86, u'A...
-
-    First differing element 1:
-    (22L, 'Pear')
-    (86, u'Apple')
-
-    - ((u'', u'---------'), (22L, 'Pear'), (86L, 'Apple'), (87L, 'Core'))
-    + ((u'', u'---------'), (86, u'Apple'), (87, u'Core'), (22, u'Pear'))
-
 
 Detect and manipulate queries that use Django model inheritance to just query the base class table as all data is stored there. Don't forget to filter on `class`.
 
@@ -81,37 +64,11 @@ This should fix errors like this one:
                 {(None, u'model_forms_derivedbook', None, None): (u'model_forms_derivedbook',), (u'model_forms_derivedbook', u'model_forms_book', u'book_ptr_id', u'id'): (u'model_forms_book',)}
 
 
-Implement the FK Null Fix from dbindexer (which manipulates the query in the case a join is used for isnull). Should fix the following failure:
 
-    ======================================================================
-    ERROR: test_session_save_on_500 (django.contrib.sessions.tests.SessionMiddlewareTests)
-    ----------------------------------------------------------------------
-    Traceback (most recent call last):
-      File "/home/lukebens/Potato/Djangae-testapp/google_appengine/lib/django-1.5/django/contrib/sessions/tests.py", line 548, in test_session_save_on_500
-        self.assertNotIn('hello', request.session.load())
-      File "/home/lukebens/Potato/Djangae-testapp/google_appengine/lib/django-1.5/django/contrib/sessions/backends/db.py", line 18, in load
-        expire_date__gt=timezone.now()
-      File "/home/lukebens/Potato/Djangae-testapp/google_appengine/lib/django-1.5/django/db/models/manager.py", line 143, in get
-        return self.get_query_set().get(*args, **kwargs)
-      File "/home/lukebens/Potato/Djangae-testapp/google_appengine/lib/django-1.5/django/db/models/query.py", line 398, in get
-        num = len(clone)
-      File "/home/lukebens/Potato/Djangae-testapp/google_appengine/lib/django-1.5/django/db/models/query.py", line 106, in __len__
-        self._result_cache = list(self.iterator())
-      File "/home/lukebens/Potato/Djangae-testapp/google_appengine/lib/django-1.5/django/db/models/query.py", line 317, in iterator
-        for row in compiler.results_iter():
-      File "/home/lukebens/Potato/Djangae-testapp/google_appengine/lib/django-1.5/django/db/models/sql/compiler.py", line 775, in results_iter
-        for rows in self.execute_sql(MULTI):
-      File "/home/lukebens/Potato/Djangae-testapp/google_appengine/lib/django-1.5/django/db/models/sql/compiler.py", line 840, in execute_sql
-        cursor.execute(sql, params)
-      File "/home/lukebens/Potato/Djangae-testapp/djangae/db/backends/appengine/base.py", line 262, in execute
-        self.rowcount = self.last_select_command.execute() or -1
-      File "/home/lukebens/Potato/Djangae-testapp/djangae/db/backends/appengine/commands.py", line 214, in execute
-        query["%s =" % column] = None
-      File "/home/lukebens/Potato/Djangae-testapp/google_appengine/google/appengine/api/datastore.py", line 1759, in __setitem__
-        match = self._CheckFilter(filter, value)
-      File "/home/lukebens/Potato/Djangae-testapp/google_appengine/google/appengine/api/datastore.py", line 1898, in _CheckFilter
-        (datastore_types.KEY_SPECIAL_PROPERTY, value, typename(value)))
-    BadFilterError: invalid filter: __key__ filter value must be a Key; received None (a NoneType).
+
+Implement the FK Null Fix from dbindexer (which manipulates the query in the case a join is used for isnull).
+
+
 
 The following test also started failing, we need to investigate to find the failing query and fix up Djangae
 
@@ -131,6 +88,10 @@ This is a duplication of django.contrib.auth which we should fix up to remove th
 ### Memcache backend
 
 I think we need a memcache backend. Take a look at djappengine on GitHub, perhaps we could just use the one from there. Although I'm not convinced that the standard memcache backend won't work. Needs testing.
+
+### extra() selects
+
+It should be possible to support extra selects, this is not yet implemented and throws a CouldBeSupportedError
 
 ### Special Indexing
 
