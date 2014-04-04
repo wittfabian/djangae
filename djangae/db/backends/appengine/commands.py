@@ -248,7 +248,6 @@ class SelectCommand(object):
                 order = "__key__"
             ordering.append((order, direction))
 
-
         if combined_filters:
             queries = [ query ]
             for column, op, value in combined_filters:
