@@ -345,20 +345,9 @@ class Cursor(object):
                 key = entity.key()
                 self.returned_ids.append(key)
                 result.append(key.id_or_name())
-            else:
-                value = entity.get(col)
+            else:                                
                 field = get_field_from_column(self.last_select_command.model, col)
-
-                type = field.get_internal_type()
-                if type == "DateTimeField":
-                    value = self.connection.ops.value_from_db_datetime(value)
-                elif type == "DateField":
-                    value = self.connection.ops.value_from_db_date(value)
-                elif type == "TimeField":
-                    value = self.connection.ops.value_from_db_time(value)
-                elif type == "DecimalField":
-                    value = self.connection.ops.value_from_db_decimal(value)
-
+                value = self.connection.ops.convert_values(entity.get(col), field)
                 result.append(value)
 
         return result
@@ -451,6 +440,25 @@ class DatabaseOperations(BaseDatabaseOperations):
 
     def quote_name(self, name):
         return name
+
+    def convert_values(self, value, field):
+        """ Called when returning values from the datastore"""
+        
+        value = super(DatabaseOperations, self).convert_values(value, field)
+        
+        db_type = self.connection.creation.db_type(field)
+        if db_type == 'string' and isinstance(value, str):
+            value = value.decode("utf-8")
+        elif db_type == "datetime":
+            value = self.connection.ops.value_from_db_datetime(value)
+        elif db_type == "date":
+            value = self.connection.ops.value_from_db_date(value)
+        elif db_type == "time":
+            value = self.connection.ops.value_from_db_time(value)
+        elif db_type == "decimal":
+            value = self.connection.ops.value_from_db_decimal(value)
+            
+        return value
 
     def sql_flush(self, style, tables, seqs, allow_cascade=False):
         from django.conf import settings
