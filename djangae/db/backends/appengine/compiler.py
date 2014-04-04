@@ -18,7 +18,7 @@ except ImportError:
     class DateTimeCompiler(object):
         pass
 
-from .base import django_instance_to_entity, NotSupportedError
+from .base import django_instance_to_entity, NotSupportedError, CouldBeSupportedError
 from .commands import InsertCommand, SelectCommand, UpdateCommand, DeleteCommand
 
 from google.appengine.api import datastore
@@ -45,6 +45,11 @@ def validate_query_is_possible(query):
                 raise NotSupportedError("Counting anything other than '*' is not supported")
         else:
             raise NotSupportedError("Unsupported aggregate query")
+
+    #This is a hack! Django < 1.7 sets an extra_select of a = 1 in has_results. In 1.7 this has
+    #been moved to the compiler.
+    if query.extra_select and query.extra_select != {'a': (u'1', [])}:
+        raise CouldBeSupportedError("The appengine connector currently doesn't support extra_select, it can be implemented though")
                 
 class SQLCompiler(compiler.SQLCompiler):
     query_class = Query
