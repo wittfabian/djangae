@@ -284,19 +284,6 @@ class Cursor(object):
         elif isinstance(sql, InsertCommand):
             self.connection.queries.append(sql)
             self.returned_ids = sql.execute()
-
-            #Now cache them, temporarily to help avoid consistency errors
-            for key, entity in zip(self.returned_ids, sql.entities):
-                pk_column = sql.model._meta.pk.column
-
-                #If there are parent models, search the parents for the
-                #first primary key which isn't a relation field
-                for parent in sql.model._meta.parents.keys():
-                    if not parent._meta.pk.rel:
-                        pk_column = parent._meta.pk.column
-
-                entity[pk_column] = key.id_or_name()
-                cache_entity(sql.model, entity)
         else:
             import pdb;pdb.set_trace()
             raise RuntimeError("Can't execute traditional SQL: '%s'", sql)
@@ -329,16 +316,14 @@ class Cursor(object):
                 #Handle aggregate (e.g. count)
                 return (self.last_select_command.results, )
             else:
-                entity = self.last_select_command.results.next()
+                entity = self.last_select_command.next_result()
         except StopIteration:
             entity = None
 
         if entity is None:
             return None
 
-        if delete_flag:
-            uncache_entity(self.last_select_command.model, entity)
-
+        ## FIXME: Move this to SelectCommand.next_result()
         result = []
         for col in self.last_select_command.queried_fields:
             if col == "__key__":
@@ -348,6 +333,12 @@ class Cursor(object):
             else:                                
                 field = get_field_from_column(self.last_select_command.model, col)
                 value = self.connection.ops.convert_values(entity.get(col), field)
+
+                #dates() queries need to have their values manipulated before returning
+                #so we do that here if necessary!
+                if col in self.last_select_command.field_conversions:
+                    value = self.last_select_command.field_conversions[col](value)
+
                 result.append(value)
 
         return result
@@ -367,11 +358,6 @@ class Cursor(object):
             i += 1
 
         return result
-
-    def delete(self):
-        #Passing the delete_flag will uncache the entities
-        self.fetchmany(GET_ITERATOR_CHUNK_SIZE, delete_flag=True)
-        datastore.Delete(self.returned_ids)
 
     @property
     def lastrowid(self):
@@ -549,7 +535,7 @@ class DatabaseOperations(BaseDatabaseOperations):
 
     ##Unlike value_to_db, these are not overridden or standard Django, it's just nice to have symmetry
     def value_from_db_datetime(self, value):
-        if isinstance(value, long):
+        if isinstance(value, (int, long)):
             #App Engine Query's don't return datetime fields (unlike Get) I HAVE NO IDEA WHY, APP ENGINE SUCKS MONKEY BALLS
             value = datetime.datetime.fromtimestamp(float(value) / 1000000.0)
 
@@ -558,14 +544,14 @@ class DatabaseOperations(BaseDatabaseOperations):
         return value
 
     def value_from_db_date(self, value):
-        if isinstance(value, long):
+        if isinstance(value, (int, long)):
             #App Engine Query's don't return datetime fields (unlike Get) I HAVE NO IDEA WHY, APP ENGINE SUCKS MONKEY BALLS
             value = datetime.datetime.fromtimestamp(float(value) / 1000000.0)
 
         return value.date()
 
     def value_from_db_time(self, value):
-        if isinstance(value, long):
+        if isinstance(value, (int, long)):
             #App Engine Query's don't return datetime fields (unlike Get) I HAVE NO IDEA WHY, APP ENGINE SUCKS MONKEY BALLS
             value = datetime.datetime.fromtimestamp(float(value) / 1000000.0).time()
 

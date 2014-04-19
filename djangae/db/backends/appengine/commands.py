@@ -2,6 +2,7 @@ import logging
 import itertools
 import warnings
 import json
+from datetime import datetime, date
 
 from google.appengine.api import datastore
 from google.appengine.api.datastore_types import Key
@@ -48,6 +49,15 @@ def get_field_from_column(model, column):
             return field
     return None
 
+def field_conv_year_only(value):
+    return datetime(value.year, 1, 1, 0, 0)
+
+def field_conv_month_only(value):
+    return datetime(value.year, value.month, 1, 0, 0)
+
+def field_conv_day_only(value):
+    return datetime(value.year, value.month, value.day, 0, 0)
+
 class SelectCommand(object):
     def __init__(self, connection, query, keys_only=False, all_fields=False):
         self.original_query = query
@@ -58,7 +68,11 @@ class SelectCommand(object):
         else:
             self.ordering = query.order_by or opts.ordering
 
+        self.distinct_values = set()
+        self.distinct_on_field = None
+        self.field_conversions = {}
         self.queried_fields = []
+
         if keys_only:
             self.queried_fields = [ opts.pk.column ]
         elif not all_fields:
@@ -68,6 +82,33 @@ class SelectCommand(object):
                     self.queried_fields.append(x[1])
                 else:
                     self.queried_fields.append(x.col[1])
+
+                    if x.lookup_type == 'year':
+                        assert self.distinct_on_field is None
+                        self.distinct_on_field = x.col[1]
+                        self.field_conversions[x.col[1]] = field_conv_year_only
+                    elif x.lookup_type == 'month':
+                        assert self.distinct_on_field is None
+                        self.distinct_on_field = x.col[1]
+                        self.field_conversions[x.col[1]] = field_conv_month_only
+                    elif x.lookup_type == 'day':
+                        assert self.distinct_on_field is None
+                        self.distinct_on_field = x.col[1]
+                        self.field_conversions[x.col[1]] = field_conv_day_only
+                    else:
+                        from .base import NotSupportedError
+                        raise NotSupportedError("Unhandled lookup type: {0}".format(x.lookup_type))
+
+
+        #Projection queries don't return results unless all projected fields are
+        #indexed on the model. This means if you add a field, and all fields on the model
+        #are projectable, you will never get any results until you've resaved all of them.
+
+        #Because it's not possible to detect this situation, we only try a projection query if a
+        #subset of fields was specified (e.g. values_list('bananas')) which makes the behaviour a
+        #bit more predictable. It would be nice at some point to add some kind of force_projection()
+        #thing on a queryset that would do this whenever possible, but that's for the future, maybe.
+        try_projection = bool(self.queried_fields)
 
         if not self.queried_fields:
             self.queried_fields = [ x.column for x in opts.fields ]
@@ -86,7 +127,7 @@ class SelectCommand(object):
 
         projection_fields = []
 
-        if not all_fields:
+        if try_projection:
             for field in self.queried_fields:
                 #We don't include the primary key in projection queries...
                 if field == self.pk_col:
@@ -242,8 +283,13 @@ class SelectCommand(object):
 
         ordering = []
         for order in self.ordering:
-            direction = datastore.Query.DESCENDING if order.startswith("-") else datastore.Query.ASCENDING
-            order = order.lstrip("-")
+            if isinstance(order, int):
+                direction = datastore.Query.ASCENDING if order == 1 else datastore.Query.DESCENDING
+                order = self.queried_fields[0]
+            else:
+                direction = datastore.Query.DESCENDING if order.startswith("-") else datastore.Query.ASCENDING
+                order = order.lstrip("-")
+
             if order == self.model._meta.pk.column:
                 order = "__key__"
             ordering.append((order, direction))
@@ -322,6 +368,17 @@ class SelectCommand(object):
             return self.query.Count(limit=limit, start=start)
         else:
             raise RuntimeError("Unsupported query type")
+
+    def next_result(self):
+        while True:
+            x = self.results.next()
+
+            if self.distinct_on_field:
+                if x[self.distinct_on_field] in self.distinct_values:
+                    continue
+                else:
+                    self.distinct_values.add(x[self.distinct_on_field])
+            return x
 
 class FlushCommand(object):
     """
