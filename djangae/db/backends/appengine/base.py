@@ -330,7 +330,7 @@ class Cursor(object):
                 key = entity.key()
                 self.returned_ids.append(key)
                 result.append(key.id_or_name())
-            else:                                
+            else:
                 field = get_field_from_column(self.last_select_command.model, col)
                 value = self.connection.ops.convert_values(entity.get(col), field)
 
@@ -429,9 +429,9 @@ class DatabaseOperations(BaseDatabaseOperations):
 
     def convert_values(self, value, field):
         """ Called when returning values from the datastore"""
-        
+
         value = super(DatabaseOperations, self).convert_values(value, field)
-        
+
         db_type = self.connection.creation.db_type(field)
         if db_type == 'string' and isinstance(value, str):
             value = value.decode("utf-8")
@@ -443,7 +443,7 @@ class DatabaseOperations(BaseDatabaseOperations):
             value = self.connection.ops.value_from_db_time(value)
         elif db_type == "decimal":
             value = self.connection.ops.value_from_db_decimal(value)
-            
+
         return value
 
     def sql_flush(self, style, tables, seqs, allow_cascade=False):
@@ -624,7 +624,7 @@ class DatabaseCreation(BaseDatabaseCreation):
         return []
 
     def _create_test_db(self, verbosity, autoclobber):
-
+        from google.appengine.datastore import datastore_stub_util
         # Testbed exists in memory
         test_database_name = ':memory:'
 
@@ -637,7 +637,7 @@ class DatabaseCreation(BaseDatabaseCreation):
         self.testbed.init_capability_stub()
         self.testbed.init_channel_stub()
 
-        self.testbed.init_datastore_v3_stub()
+        self.testbed.init_datastore_v3_stub(datastore_stub_util.PseudoRandomHRConsistencyPolicy(probability=0))
         self.testbed.init_files_stub()
         # FIXME! dependencies PIL
         # self.testbed.init_images_stub()
