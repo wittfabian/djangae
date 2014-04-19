@@ -37,7 +37,7 @@ OPERATORS_MAP = {
     'range': None,
     'year': None,
     'gt_and_lt': None, #Special case inequality combined filter
-    'iexact': None
+    'iexact': None,
 }
 
 from django.utils.functional import memoize
@@ -275,6 +275,14 @@ class SelectCommand(object):
                         combined_filters.append((column, op, value))
                     elif op == "isnull":
                         query["%s =" % column] = None
+                    elif op == "startswith":
+                        #You can emulate starts with by adding the last unicode char
+                        #to the value, then doing <=. Genius.
+                        query["%s >=" % column] = value
+                        if isinstance(value, str):
+                            value = value.decode("utf-8")
+                        value += u'\ufffd'
+                        query["%s <=" % column] = value
                     else:
                         raise NotImplementedError("Unimplemented operator {0}".format(op))
             else:
