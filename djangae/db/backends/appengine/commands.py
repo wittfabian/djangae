@@ -207,7 +207,7 @@ class SelectCommand(object):
                         raise RuntimeError("Unsupported negated lookup: " + op)
                 else:
                     if constraint.field.primary_key:
-                        if (value is None and op == "exact") or op == "isnull":
+                        if (value is None and op == "exact") or (op == "isnull" and value):
                             #If we are looking for a primary key that is None, then we always
                             #just return nothing
                             raise EmptyResultSet()
@@ -217,13 +217,18 @@ class SelectCommand(object):
                                 self.included_pks.extend(list(value))
                             else:
                                 self.included_pks.append(value)
-                    #else: FIXME when included_pks is handled, we can put the
-                    #next section in an else block
-                    col = constraint.col
-                    result.append((col, op, value))
+                        else:
+                            col = constraint.col
+                            result.append((col, op, value))
+                    else:
+                        col = constraint.col
+                        result.append((col, op, value))
             else:
                 result.extend(self.parse_where_and_check_projection(child, negated))
 
+        if self.included_pks and result:
+            from .base import CouldBeSupportedError
+            raise CouldBeSupportedError("We don't currently apply extra filters to the results of a Get([included_pks]) we need to do this")
         return result
 
     def execute(self):
@@ -371,7 +376,10 @@ class SelectCommand(object):
         query_pre_execute.send(sender=self.model, query=self.query, aggregate=self.aggregate_type)
 
         if aggregate_type is None:
-            return self.query.Run(limit=limit, start=start)
+            if self.included_pks:
+                return iter(datastore.Get(self.included_pks))
+            else:
+                return self.query.Run(limit=limit, start=start)
         elif self.aggregate_type == "count":
             return self.query.Count(limit=limit, start=start)
         else:
@@ -439,6 +447,8 @@ class InsertCommand(object):
                     res = existing.Count()
 
                     if res:
+                        #FIXME: For now this raises (correctly) when using model inheritance
+                        #We need to make model inheritance not insert the base, only the subclass
                         raise IntegrityError("Tried to INSERT with existing key")
 
                     results.append(datastore.Put(ent))
