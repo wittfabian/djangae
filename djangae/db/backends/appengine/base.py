@@ -22,7 +22,6 @@ except ImportError:
     class BaseDatabaseSchemaEditor(object):
         pass
 from django.db.backends.creation import BaseDatabaseCreation
-from django.db.backends.util import format_number
 from django.db import IntegrityError
 from django.utils import timezone
 from google.appengine.api import datastore
@@ -31,6 +30,10 @@ from google.appengine.ext.db import metadata
 from google.appengine.ext import testbed
 
 #DJANGAE
+from djangae.db.utils import (
+    decimal_to_string,
+    make_timezone_naive,
+)
 from djangae.indexing import load_special_indexes, special_indexes_for_column, REQUIRES_SPECIAL_INDEXES
 from .commands import (
     SelectCommand,
@@ -377,47 +380,6 @@ class Database(object):
     NotSupportedError = NotSupportedError
     InterfaceError = DatabaseError
 
-def make_timezone_naive(value):
-    if value is None:
-        return None
-
-    if timezone.is_aware(value):
-        if settings.USE_TZ:
-            value = value.astimezone(timezone.utc).replace(tzinfo=None)
-        else:
-            raise ValueError("Djangae backend does not support timezone-aware datetimes when USE_TZ is False.")
-    return value
-
-def decimal_to_string(value, max_digits=16, decimal_places=0):
-    """
-    Converts decimal to a unicode string for storage / lookup by nonrel
-    databases that don't support decimals natively.
-
-    This is an extension to `django.db.backends.util.format_number`
-    that preserves order -- if one decimal is less than another, their
-    string representations should compare the same (as strings).
-
-    TODO: Can't this be done using string.format()?
-          Not in Python 2.5, str.format is backported to 2.6 only.
-    """
-
-    # Handle sign separately.
-    if value.is_signed():
-        sign = u'-'
-        value = abs(value)
-    else:
-        sign = u''
-
-    # Let Django quantize and cast to a string.
-    value = format_number(value, max_digits, decimal_places)
-
-    # Pad with zeroes to a constant width.
-    n = value.find('.')
-    if n < 0:
-        n = len(value)
-    if n < max_digits - decimal_places:
-        value = u'0' * (max_digits - decimal_places - n) + value
-    return sign + value
 
 class DatabaseOperations(BaseDatabaseOperations):
     compiler_module = "djangae.db.backends.appengine.compiler"
