@@ -166,6 +166,9 @@ class SelectCommand(object):
             pass
 
     def parse_where_and_check_projection(self, where, negated=False):
+        """ recursively parse the where tree and return a list of tuples of
+            (column, match_type, value), e.g. ('name', 'exact', 'John').
+        """
         result = []
 
         if where.negated:
@@ -236,8 +239,9 @@ class SelectCommand(object):
 
         inheritance_root = self.model
 
+        #Support poly models, i.e. non-abstract parent models. This is done by storing all
+        #fields for both the parent model and its child models on the parent table.
         concrete_parents = [ x for x in self.model._meta.parents if not x._meta.abstract]
-
         if concrete_parents:
             for parent in self.model._meta.get_parent_list():
                 if not parent._meta.parents:
