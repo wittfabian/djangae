@@ -137,7 +137,7 @@ class SelectCommand(object):
                 #projection query
                 f = get_field_from_column(self.model, field)
                 if not f:
-                    import ipdb; ipdb.set_trace()
+                    raise NotImplementedError("Attemping a cross-table select. Maybe? #FIXME")
                 assert f #If this happens, we have a cross-table select going on! #FIXME
                 db_type = f.db_type(connection)
 
