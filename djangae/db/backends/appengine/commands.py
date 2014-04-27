@@ -113,7 +113,6 @@ class SelectCommand(object):
                         self.distinct_on_field = x.col[1]
                         self.field_conversions[x.col[1]] = field_conv_day_only
                     else:
-                        from .base import NotSupportedError
                         raise NotSupportedError("Unhandled lookup type: {0}".format(x.lookup_type))
 
 
@@ -253,7 +252,6 @@ class SelectCommand(object):
         return result
 
     def execute(self):
-
         if not self.included_pks:
             self.gae_query = self._build_gae_query()
         self.results = None
