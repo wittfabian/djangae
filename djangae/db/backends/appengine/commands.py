@@ -13,6 +13,7 @@ from google.appengine.api.datastore_types import Key
 from google.appengine.ext import db
 
 #DJANGAE
+from djangae.db.exceptions import NotSupportedError, CouldBeSupportedError
 from djangae.db.utils import normalise_field_value
 from djangae.indexing import special_indexes_for_column, REQUIRES_SPECIAL_INDEXES, add_special_index
 
@@ -140,7 +141,10 @@ class SelectCommand(object):
         self.all_filters = []
         self.results = None
         self.extra_select = query.extra_select
-        self.query = None
+        self.gae_query = None
+
+        self._set_db_table()
+        self._validate_query_is_possible(query)
 
         projection_fields = []
 
@@ -250,9 +254,8 @@ class SelectCommand(object):
 
     def execute(self):
 
-        self._set_db_table()
         if not self.included_pks:
-            self.query = self._build_gae_query()
+            self.gae_query = self._build_gae_query()
         self.results = None
         self.query_done = False
         self.aggregate_type = "count" if self.is_count else None
@@ -269,7 +272,7 @@ class SelectCommand(object):
         if self.aggregate_type:
             select = "COUNT(*)"
 
-        where = str(self.query)
+        where = str(self.gae_query)
 
         final = templ.format(
             select,
@@ -300,6 +303,37 @@ class SelectCommand(object):
                     inheritance_root = parent
         self.db_table = inheritance_root._meta.db_table
         self.have_concrete_parent_models = bool(concrete_parents)
+
+    def _validate_query_is_possible(self, query):
+        """ Given the *django* query, check the following:
+            - The query only has one inequality filter
+            - The query does no joins
+            - The query ordering is compatible with the filters
+        """
+        #Check for joins
+        if query.count_active_tables() > 1:
+            if self.have_concrete_parent_models:
+                raise CouldBeSupportedError(
+                    "Querying for a poly model. This could be supported in some cases, i.e. when "
+                    "it's a simple query. If it's a poly model with JOINs in the filters then we "
+                    "can't support it."
+                )
+            raise NotSupportedError("""
+                The appengine database connector does not support JOINs. The requested join map follows\n
+                %s
+            """ % query.join_map)
+
+        if query.aggregates:
+            if query.aggregates.keys() == [ None ]:
+                if query.aggregates[None].col != "*":
+                    raise NotSupportedError("Counting anything other than '*' is not supported")
+            else:
+                raise NotSupportedError("Unsupported aggregate query")
+
+        #This is a hack! Django < 1.7 sets an extra_select of a = 1 in has_results. In 1.7 this has
+        #been moved to the compiler.
+        if query.extra_select and query.extra_select != {'a': (u'1', [])}:
+            raise CouldBeSupportedError("The appengine connector currently doesn't support extra_select, it can be implemented though")
 
     def _build_gae_query(self):
         """ Build and return the Datstore Query object. """
@@ -397,7 +431,7 @@ class SelectCommand(object):
         self.query_done = True
 
     def _run_query(self, limit=None, start=None, aggregate_type=None):
-        query_pre_execute.send(sender=self.model, query=self.query, aggregate=self.aggregate_type)
+        query_pre_execute.send(sender=self.model, query=self.gae_query, aggregate=self.aggregate_type)
 
         if aggregate_type is None:
             if self.included_pks:
@@ -406,9 +440,9 @@ class SelectCommand(object):
                     results = iter([x for x in results if self._matches_filters(x, self.where)])
                 return results
             else:
-                return self.query.Run(limit=limit, start=start)
+                return self.gae_query.Run(limit=limit, start=start)
         elif self.aggregate_type == "count":
-            return self.query.Count(limit=limit, start=start)
+            return self.gae_query.Count(limit=limit, start=start)
         else:
             raise RuntimeError("Unsupported query type")
 
