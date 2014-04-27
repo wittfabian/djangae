@@ -58,6 +58,22 @@ def field_conv_month_only(value):
 def field_conv_day_only(value):
     return datetime(value.year, value.month, value.day, 0, 0)
 
+
+FILTER_CMP_FUNCTION_MAP = {
+    'exact': lambda a, b: a == b,
+    'iexact': lambda a, b: a.lower() == b.lower(),
+    'gt': lambda a, b: a > b,
+    'lt': lambda a, b: a < b,
+    'gte': lambda a, b: a >= b,
+    'lte': lambda a, b: a <= b,
+    'isnull': lambda a, b: (b and (a is None)) or (a is not None),
+    'in': lambda a, b: a in b,
+    'startswith': lambda a, b: a.startswith(b),
+    'range': lambda a, b: b[0] < a < b[1], #I'm assuming that b is a tuple
+    'year': lambda a, b: field_conv_year_only(a) == b,
+}
+
+
 class SelectCommand(object):
     def __init__(self, connection, query, keys_only=False, all_fields=False):
         self.original_query = query
@@ -124,6 +140,7 @@ class SelectCommand(object):
         self.all_filters = []
         self.results = None
         self.extra_select = query.extra_select
+        self.query = None
 
         projection_fields = []
 
@@ -229,15 +246,13 @@ class SelectCommand(object):
             else:
                 result.extend(self.parse_where_and_check_projection(child, negated))
 
-        if self.included_pks and result:
-            from .base import CouldBeSupportedError
-            raise CouldBeSupportedError("We don't currently apply extra filters to the results of a Get([included_pks]) we need to do this")
         return result
 
     def execute(self):
 
         self._set_db_table()
-        self.query = self._build_gae_query()
+        if not self.included_pks:
+            self.query = self._build_gae_query()
         self.results = None
         self.query_done = False
         self.aggregate_type = "count" if self.is_count else None
@@ -387,13 +402,27 @@ class SelectCommand(object):
 
         if aggregate_type is None:
             if self.included_pks:
-                return iter(datastore.Get(self.included_pks))
+                results = iter(datastore.Get(self.included_pks))
+                if self.where: #if we have a list of PKs but also with other filters
+                    results = iter([x for x in results if self._matches_filters(x, self.where)])
+                return results
             else:
                 return self.query.Run(limit=limit, start=start)
         elif self.aggregate_type == "count":
             return self.query.Count(limit=limit, start=start)
         else:
             raise RuntimeError("Unsupported query type")
+
+    def _matches_filters(self, result, where_filters):
+        for column, match_type, match_val in where_filters:
+            result_val = result[column]
+            try:
+                cmp_func = FILTER_CMP_FUNCTION_MAP[match_type]
+                if not cmp_func(result_val, match_val):
+                    return False
+            except KeyError:
+                raise NotImplementedError("Filter {0} not (yet?) supported".format(match_type))
+        return True
 
     def next_result(self):
         while True:
