@@ -30,6 +30,7 @@ from google.appengine.ext.db import metadata
 from google.appengine.ext import testbed
 
 #DJANGAE
+from djangae.db.exceptions import DatabaseError, NotSupportedError
 from djangae.db.utils import (
     decimal_to_string,
     make_timezone_naive,
@@ -44,17 +45,6 @@ from .commands import (
     get_field_from_column
 )
 
-class DatabaseError(Exception):
-    pass
-
-class IntegrityError(IntegrityError, DatabaseError):
-    pass
-
-class NotSupportedError(DatabaseError):
-    pass
-
-class CouldBeSupportedError(DatabaseError):
-    pass
 
 DEFAULT_CACHE_TIMEOUT = 10
 
