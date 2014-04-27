@@ -235,26 +235,67 @@ class SelectCommand(object):
         return result
 
     def execute(self):
-        combined_filters = []
 
+        self._set_db_table()
+        self.query = self._build_gae_query()
+        self.results = None
+        self.query_done = False
+        self.aggregate_type = "count" if self.is_count else None
+        self._do_fetch()
+
+    def _log(self):
+        from .base import get_datastore_kind
+
+        templ = """
+            SELECT {0} FROM {1} WHERE {2}
+        """
+
+        select = ", ".join(self.projection) if self.projection else "*"
+        if self.aggregate_type:
+            select = "COUNT(*)"
+
+        where = str(self.query)
+
+        final = templ.format(
+            select,
+            get_datastore_kind(self.model),
+            where
+        ).strip()
+
+        from django.db.backends.mysql.compiler import SQLCompiler
+        tmp = SQLCompiler(self.original_query, self.connection, None)
+        try:
+            sql, params = tmp.as_sql()
+            print(sql % params)
+        except:
+            print("Unable to print MySQL equivalent - empty query")
+        print(final)
+
+    def _set_db_table(self):
+        """ Work out which Datstore kind we should actually be querying. This allows for poly
+            models, i.e. non-abstract parent models which are supported by storing all fields for
+            both the parent model and its child models on the parent table.
+        """
         inheritance_root = self.model
-
-        #Support poly models, i.e. non-abstract parent models. This is done by storing all
-        #fields for both the parent model and its child models on the parent table.
         concrete_parents = [ x for x in self.model._meta.parents if not x._meta.abstract]
         if concrete_parents:
             for parent in self.model._meta.get_parent_list():
                 if not parent._meta.parents:
                     #If this is the top parent, override the db_table
                     inheritance_root = parent
+        self.db_table = inheritance_root._meta.db_table
+        self.have_concrete_parent_models = bool(concrete_parents)
 
+    def _build_gae_query(self):
+        """ Build and return the Datstore Query object. """
+        combined_filters = []
         query = datastore.Query(
-            inheritance_root._meta.db_table,
+            self.db_table,
             projection=self.projection
         )
 
         #Only filter on class if we have some non-abstract parents
-        if concrete_parents and not self.model._meta.proxy:
+        if self.have_concrete_parent_models and not self.model._meta.proxy:
             query["class ="] = self.model._meta.db_table
 
         logging.info("Select query: {0}, {1}".format(self.model.__name__, self.where))
@@ -297,7 +338,6 @@ class SelectCommand(object):
             else:
                 query["%s %s" % (column, final_op)] = value
 
-
         ordering = []
         for order in self.ordering:
             if isinstance(order, int):
@@ -333,41 +373,7 @@ class SelectCommand(object):
             query = datastore.MultiQuery(queries, ordering)
         else:
             query.Order(*ordering)
-
-        #print query
-        self.query = query
-        self.results = None
-        self.query_done = False
-        self.aggregate_type = "count" if self.is_count else None
-        self._do_fetch()
-
-    def _log(self):
-        from .base import get_datastore_kind
-
-        templ = """
-            SELECT {0} FROM {1} WHERE {2}
-        """
-
-        select = ", ".join(self.projection) if self.projection else "*"
-        if self.aggregate_type:
-            select = "COUNT(*)"
-
-        where = str(self.query)
-
-        final = templ.format(
-            select,
-            get_datastore_kind(self.model),
-            where
-        ).strip()
-
-        from django.db.backends.mysql.compiler import SQLCompiler
-        tmp = SQLCompiler(self.original_query, self.connection, None)
-        try:
-            sql, params = tmp.as_sql()
-            print(sql % params)
-        except:
-            print("Unable to print MySQL equivalent - empty query")
-        print(final)
+        return query
 
     def _do_fetch(self):
         assert not self.results
