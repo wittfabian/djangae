@@ -1,8 +1,12 @@
-import warnings
+#STANDARD LIB
 import datetime
 import decimal
 import sys
+import warnings
 
+#LIBRARIES
+from django.conf import settings
+from django.core.cache import cache
 from django.db.backends import (
     BaseDatabaseOperations,
     BaseDatabaseClient,
@@ -11,29 +15,23 @@ from django.db.backends import (
     BaseDatabaseFeatures,
     BaseDatabaseValidation
 )
-
 try:
     from django.db.backends.schema import BaseDatabaseSchemaEditor
 except ImportError:
     #Django < 1.6 doesn't have BaseDatabaseSchemaEditor
     class BaseDatabaseSchemaEditor(object):
         pass
-
-from django.conf import settings
-from django.utils import timezone
-from django.db import IntegrityError
 from django.db.backends.creation import BaseDatabaseCreation
-from google.appengine.ext.db import metadata
+from django.db.backends.util import format_number
+from django.db import IntegrityError
+from django.utils import timezone
 from google.appengine.api import datastore
 from google.appengine.api.datastore_types import Blob, Text, Key
-from django.db.models.sql.constants import GET_ITERATOR_CHUNK_SIZE
-from django.db.backends.util import format_number
-from django.core.cache import cache
-
-from djangae.indexing import load_special_indexes, special_indexes_for_column, REQUIRES_SPECIAL_INDEXES
-
+from google.appengine.ext.db import metadata
 from google.appengine.ext import testbed
 
+#DJANGAE
+from djangae.indexing import load_special_indexes, special_indexes_for_column, REQUIRES_SPECIAL_INDEXES
 from .commands import (
     SelectCommand,
     InsertCommand,
