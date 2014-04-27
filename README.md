@@ -64,6 +64,9 @@ This should fix errors like this one:
                 {(None, u'model_forms_derivedbook', None, None): (u'model_forms_derivedbook',), (u'model_forms_derivedbook', u'model_forms_book', u'book_ptr_id', u'id'): (u'model_forms_book',)}
 
 
+Note that running `testapp.UniqueTest.test_inherited_unique` on its own passes, but when running the whole test case (specifically when `test_abstract_inherited_unique` and `test_abstract_inherited_unique_together` are run as well) that first test then fails. If you put PDB into django/db/models/base.py circa line 826 in `_perform_unique_checks` then you will see that when the test is run on its own `qs.query.count_active_tables()` returns 1, but when the test is run with the those other 2 tests as well then `qs.query.count_active_tables()` returns 2 and hence the `CouldBeSupported` error is raised.
+I think that the error is being correctly raised, but the question is what those other tests are doing which is causing the query to change! It's as if something to do with calling `DerivedBook.objects.create` is causing something to "fix" the tables used in query.
+Note that if you call `django.db.backends.mysql.compiler.SQLCompiler(qs, django.db.connection, None).as_sql()` on the query set at that PDB point, then that also triggers the error.  So it's as if those other 2 tests are causing code similar to that (but not actually that) to be run somewhere.
 
 
 Implement the FK Null Fix from dbindexer (which manipulates the query in the case a join is used for isnull).
