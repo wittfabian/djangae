@@ -1,20 +1,19 @@
-import logging
+#STANDARD LIB
+from datetime import datetime
 import itertools
-import warnings
-import json
-from datetime import datetime, date
+import logging
 
+#LIBRARIES
+from django.core.cache import cache
+from django.db.models.sql.datastructures import EmptyResultSet
+from django.db.models.sql.where import AND
+from django import dispatch
 from google.appengine.api import datastore
 from google.appengine.api.datastore_types import Key
 from google.appengine.ext import db
 
-from django.core.cache import cache
-
-from django.db.models.sql.where import AND
 from djangae.indexing import special_indexes_for_column, REQUIRES_SPECIAL_INDEXES, add_special_index
-from django.db.models.sql.datastructures import EmptyResultSet
 
-from django import dispatch
 
 entity_pre_update = dispatch.Signal(providing_args=["sender", "entity"])
 entity_post_update = dispatch.Signal(providing_args=["sender", "entity"])
@@ -40,7 +39,6 @@ OPERATORS_MAP = {
     'iexact': None,
 }
 
-from django.utils.functional import memoize
 
 def get_field_from_column(model, column):
     #FIXME: memoize this
