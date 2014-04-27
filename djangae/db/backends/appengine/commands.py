@@ -12,6 +12,8 @@ from google.appengine.api import datastore
 from google.appengine.api.datastore_types import Key
 from google.appengine.ext import db
 
+#DJANGAE
+from djangae.db.utils import normalise_field_value
 from djangae.indexing import special_indexes_for_column, REQUIRES_SPECIAL_INDEXES, add_special_index
 
 
@@ -286,7 +288,7 @@ class SelectCommand(object):
 
     def _set_db_table(self):
         """ Work out which Datstore kind we should actually be querying. This allows for poly
-            models, i.e. non-abstract parent models which are supported by storing all fields for
+            models, i.e. non-abstract parent models which we support by storing all fields for
             both the parent model and its child models on the parent table.
         """
         inheritance_root = self.model
@@ -395,7 +397,6 @@ class SelectCommand(object):
         self.query_done = True
 
     def _run_query(self, limit=None, start=None, aggregate_type=None):
-        #self._log()
         query_pre_execute.send(sender=self.model, query=self.query, aggregate=self.aggregate_type)
 
         if aggregate_type is None:
@@ -412,8 +413,12 @@ class SelectCommand(object):
             raise RuntimeError("Unsupported query type")
 
     def _matches_filters(self, result, where_filters):
+        if result is None:
+            return False
         for column, match_type, match_val in where_filters:
             result_val = result[column]
+            result_val = normalise_field_value(result_val)
+            match_val = normalise_field_value(match_val)
             try:
                 cmp_func = FILTER_CMP_FUNCTION_MAP[match_type]
                 if not cmp_func(result_val, match_val):
