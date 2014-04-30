@@ -51,13 +51,25 @@ def get_field_from_column(model, column):
     return None
 
 def field_conv_year_only(value):
+    value = ensure_datetime(value)
     return datetime(value.year, 1, 1, 0, 0)
 
 def field_conv_month_only(value):
+    value = ensure_datetime(value)
     return datetime(value.year, value.month, 1, 0, 0)
 
 def field_conv_day_only(value):
+    value = ensure_datetime(value)
     return datetime(value.year, value.month, value.day, 0, 0)
+
+def ensure_datetime(value):
+    """ Painfully, sometimes the Datastore returns dates as datetime objects, and sometimes
+        it returns them as unix timestamps in microseconds!!
+    """
+    if isinstance(value, long):
+        return datetime.fromtimestamp(value / 1000000)
+    return value
+
 
 
 FILTER_CMP_FUNCTION_MAP = {
@@ -87,7 +99,7 @@ class SelectCommand(object):
 
         self.distinct_values = set()
         self.distinct_on_field = None
-        self.field_conversions = {}
+        self.distinct_field_convertor = None
         self.queried_fields = []
 
         if keys_only:
@@ -103,15 +115,15 @@ class SelectCommand(object):
                     if x.lookup_type == 'year':
                         assert self.distinct_on_field is None
                         self.distinct_on_field = x.col[1]
-                        self.field_conversions[x.col[1]] = field_conv_year_only
+                        self.distinct_field_convertor = field_conv_year_only
                     elif x.lookup_type == 'month':
                         assert self.distinct_on_field is None
                         self.distinct_on_field = x.col[1]
-                        self.field_conversions[x.col[1]] = field_conv_month_only
+                        self.distinct_field_convertor = field_conv_month_only
                     elif x.lookup_type == 'day':
                         assert self.distinct_on_field is None
                         self.distinct_on_field = x.col[1]
-                        self.field_conversions[x.col[1]] = field_conv_day_only
+                        self.distinct_field_convertor = field_conv_day_only
                     else:
                         raise NotSupportedError("Unhandled lookup type: {0}".format(x.lookup_type))
 
@@ -194,8 +206,8 @@ class SelectCommand(object):
         if where.negated:
             negated = not negated
 
-        if not negated and where.connector != AND:
-            raise DatabaseError("Only AND filters are supported")
+        if negated and where.connector != AND:
+            raise DatabaseError("Only AND filters are supported for negated queries")
 
         for child in where.children:
             if isinstance(child, tuple):
@@ -463,11 +475,18 @@ class SelectCommand(object):
         while True:
             x = self.results.next()
 
-            if self.distinct_on_field:
-                if x[self.distinct_on_field] in self.distinct_values:
+            if self.distinct_on_field: #values for distinct queries
+                value = x[self.distinct_on_field]
+                value = self.distinct_field_convertor(value)
+                if value in self.distinct_values:
                     continue
                 else:
-                    self.distinct_values.add(x[self.distinct_on_field])
+                    self.distinct_values.add(value)
+                    # Insert modified value into entity before returning the entity. This is dirty,
+                    # but Cursor.fetchone (which calls this) wants the entity ID and yet also wants
+                    # the correct value for this field. The alternative would be to call
+                    # self.distinct_field_convertor again in Cursor.fetchone, but that's wasteful.
+                    x[self.distinct_on_field] = value
             return x
 
 class FlushCommand(object):
