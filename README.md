@@ -84,6 +84,9 @@ The following test also started failing, we need to investigate to find the fail
     AssertionError: 0 != 1
 
 
+Make `MyModel.objects.filter(pk=1) | MyModel.objects.filter(pk=2)` correctly return an empty result.  Currently results in `DataBaseError`.
+
+
 ### djangae.contrib.auth
 
 This is a duplication of django.contrib.auth which we should fix up to remove the ManyToMany fields (using ListFields). We should make the minimal changes, but also add an additional authentication backend that uses App Engine's users API
