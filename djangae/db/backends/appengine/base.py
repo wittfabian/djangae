@@ -308,7 +308,7 @@ class Cursor(object):
                 return (self.last_select_command.results, )
             else:
                 entity = self.last_select_command.next_result()
-        except StopIteration:
+        except StopIteration: #FIXME: does this ever get raised?  Where from?
             entity = None
 
         if entity is None:
@@ -324,12 +324,6 @@ class Cursor(object):
             else:
                 field = get_field_from_column(self.last_select_command.model, col)
                 value = self.connection.ops.convert_values(entity.get(col), field)
-
-                #dates() queries need to have their values manipulated before returning
-                #so we do that here if necessary!
-                if col in self.last_select_command.field_conversions:
-                    value = self.last_select_command.field_conversions[col](value)
-
                 result.append(value)
 
         return result
