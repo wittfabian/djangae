@@ -137,9 +137,31 @@ class MonthIndexer(Indexer):
     def indexed_column_name(self, field_column):
         return "_idx_month_{0}".format(field_column)
 
+class WeekDayIndexer(Indexer):
+    def validate_can_be_indexed(self, value):
+        return isinstance(value, (datetime.datetime, datetime.date))
+
+    def prep_value_for_database(self, value):
+        if value:
+            zero_based_weekday = value.weekday()
+            if zero_based_weekday == 6: #Sunday
+                return 1 #Django treats the week as starting at Sunday, but 1 based
+            else:
+                return zero_based_weekday + 2
+
+        return None
+
+    def prep_value_for_query(self, value):
+        return value
+
+    def indexed_column_name(self, field_column):
+        return "_idx_week_day_{0}".format(field_column)
+
+
 REQUIRES_SPECIAL_INDEXES = {
     "iexact": IExactIndexer(),
     "day" : DayIndexer(),
     "month" : MonthIndexer(),
-    "year": YearIndexer()
+    "year": YearIndexer(),
+    "week_day": WeekDayIndexer()
 }
