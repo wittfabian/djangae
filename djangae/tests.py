@@ -1,3 +1,5 @@
+import datetime
+
 from cStringIO import StringIO
 from django.core.files.uploadhandler import StopFutureHandlers
 from django.test import TestCase, RequestFactory
@@ -11,6 +13,7 @@ from google.appengine.api.datastore_errors import EntityNotFoundError
 class User(models.Model):
     username = models.CharField(max_length=32)
     email = models.EmailField()
+    last_login = models.DateField()
 
     def __unicode__(self):
         return self.username
@@ -41,11 +44,11 @@ class EdgeCaseTests(TestCase):
     def setUp(self):
         add_special_index(User, "username", "iexact")
 
-        User.objects.create(username="A", email="test@example.com")
-        User.objects.create(username="B", email="test@example.com")
-        User.objects.create(username="C", email="test2@example.com")
-        User.objects.create(username="D", email="test3@example.com")
-        User.objects.create(username="E", email="test3@example.com")
+        User.objects.create(username="A", email="test@example.com", last_login=datetime.datetime.now().date())
+        User.objects.create(username="B", email="test@example.com", last_login=datetime.datetime.now().date())
+        User.objects.create(username="C", email="test2@example.com", last_login=datetime.datetime.now().date())
+        User.objects.create(username="D", email="test3@example.com", last_login=datetime.datetime.now().date())
+        User.objects.create(username="E", email="test3@example.com", last_login=datetime.datetime.now().date())
 
     def test_multi_table_inheritance(self):
         parent = MultiTableParent.objects.create(parent_field="parent1")
@@ -143,6 +146,35 @@ class EdgeCaseTests(TestCase):
 
         self.assertEqual(["A", "B", "C", "D", "E"][::-1], [x.username for x in users])
 
+    def test_dates_query(self):
+        User.objects.create(username="Z", email="z@example.com", last_login=datetime.date(2013, 4, 5))
+
+        last_a_login = User.objects.get(username="A").last_login
+
+        dates = User.objects.dates('last_login', 'year')
+        self.assertItemsEqual(
+            [datetime.datetime(2013, 1, 1, 0, 0), datetime.datetime(last_a_login.year, 1, 1, 0, 0)],
+            dates
+        )
+
+        dates = User.objects.dates('last_login', 'month')
+        self.assertItemsEqual(
+            [datetime.datetime(2013, 4, 1, 0, 0), datetime.datetime(last_a_login.year, last_a_login.month, 1, 0, 0)],
+            dates
+        )
+
+        dates = User.objects.dates('last_login', 'day')
+        self.assertItemsEqual(
+            [datetime.datetime(2013, 4, 5, 0, 0), datetime.datetime.combine(last_a_login, datetime.datetime.min.time())],
+            dates
+        )
+
+        dates = User.objects.dates('last_login', 'day', order='DESC')
+        self.assertItemsEqual(
+            [datetime.datetime.combine(last_a_login, datetime.datetime.min.time()), datetime.datetime(2013, 4, 5, 0, 0)],
+            dates
+        )
+        
 class BlobstoreFileUploadHandlerTest(TestCase):
     boundary = "===============7417945581544019063=="
 
