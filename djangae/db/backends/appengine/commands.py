@@ -1,19 +1,22 @@
-import logging
+#STANDARD LIB
+from datetime import datetime
 import itertools
-import warnings
-import json
+import logging
 
+#LIBRARIES
+from django.core.cache import cache
+from django.db.models.sql.datastructures import EmptyResultSet
+from django.db.models.sql.where import AND
+from django import dispatch
 from google.appengine.api import datastore
 from google.appengine.api.datastore_types import Key
 from google.appengine.ext import db
 
-from django.core.cache import cache
-
-from django.db.models.sql.where import AND
+#DJANGAE
+from djangae.db.exceptions import NotSupportedError, CouldBeSupportedError
+from djangae.db.utils import normalise_field_value
 from djangae.indexing import special_indexes_for_column, REQUIRES_SPECIAL_INDEXES, add_special_index
-from django.db.models.sql.datastructures import EmptyResultSet
 
-from django import dispatch
 
 entity_pre_update = dispatch.Signal(providing_args=["sender", "entity"])
 entity_post_update = dispatch.Signal(providing_args=["sender", "entity"])
@@ -36,10 +39,9 @@ OPERATORS_MAP = {
     'range': None,
     'year': None,
     'gt_and_lt': None, #Special case inequality combined filter
-    'iexact': None
+    'iexact': None,
 }
 
-from django.utils.functional import memoize
 
 def get_field_from_column(model, column):
     #FIXME: memoize this
@@ -47,6 +49,43 @@ def get_field_from_column(model, column):
         if field.column == column:
             return field
     return None
+
+def field_conv_year_only(value):
+    value = ensure_datetime(value)
+    return datetime(value.year, 1, 1, 0, 0)
+
+def field_conv_month_only(value):
+    value = ensure_datetime(value)
+    return datetime(value.year, value.month, 1, 0, 0)
+
+def field_conv_day_only(value):
+    value = ensure_datetime(value)
+    return datetime(value.year, value.month, value.day, 0, 0)
+
+def ensure_datetime(value):
+    """ Painfully, sometimes the Datastore returns dates as datetime objects, and sometimes
+        it returns them as unix timestamps in microseconds!!
+    """
+    if isinstance(value, long):
+        return datetime.fromtimestamp(value / 1000000)
+    return value
+
+
+
+FILTER_CMP_FUNCTION_MAP = {
+    'exact': lambda a, b: a == b,
+    'iexact': lambda a, b: a.lower() == b.lower(),
+    'gt': lambda a, b: a > b,
+    'lt': lambda a, b: a < b,
+    'gte': lambda a, b: a >= b,
+    'lte': lambda a, b: a <= b,
+    'isnull': lambda a, b: (b and (a is None)) or (a is not None),
+    'in': lambda a, b: a in b,
+    'startswith': lambda a, b: a.startswith(b),
+    'range': lambda a, b: b[0] < a < b[1], #I'm assuming that b is a tuple
+    'year': lambda a, b: field_conv_year_only(a) == b,
+}
+
 
 class SelectCommand(object):
     def __init__(self, connection, query, keys_only=False, all_fields=False):
@@ -58,7 +97,11 @@ class SelectCommand(object):
         else:
             self.ordering = query.order_by or opts.ordering
 
+        self.distinct_values = set()
+        self.distinct_on_field = None
+        self.distinct_field_convertor = None
         self.queried_fields = []
+
         if keys_only:
             self.queried_fields = [ opts.pk.column ]
         elif not all_fields:
@@ -68,6 +111,32 @@ class SelectCommand(object):
                     self.queried_fields.append(x[1])
                 else:
                     self.queried_fields.append(x.col[1])
+
+                    if x.lookup_type == 'year':
+                        assert self.distinct_on_field is None
+                        self.distinct_on_field = x.col[1]
+                        self.distinct_field_convertor = field_conv_year_only
+                    elif x.lookup_type == 'month':
+                        assert self.distinct_on_field is None
+                        self.distinct_on_field = x.col[1]
+                        self.distinct_field_convertor = field_conv_month_only
+                    elif x.lookup_type == 'day':
+                        assert self.distinct_on_field is None
+                        self.distinct_on_field = x.col[1]
+                        self.distinct_field_convertor = field_conv_day_only
+                    else:
+                        raise NotSupportedError("Unhandled lookup type: {0}".format(x.lookup_type))
+
+
+        #Projection queries don't return results unless all projected fields are
+        #indexed on the model. This means if you add a field, and all fields on the model
+        #are projectable, you will never get any results until you've resaved all of them.
+
+        #Because it's not possible to detect this situation, we only try a projection query if a
+        #subset of fields was specified (e.g. values_list('bananas')) which makes the behaviour a
+        #bit more predictable. It would be nice at some point to add some kind of force_projection()
+        #thing on a queryset that would do this whenever possible, but that's for the future, maybe.
+        try_projection = bool(self.queried_fields)
 
         if not self.queried_fields:
             self.queried_fields = [ x.column for x in opts.fields ]
@@ -83,10 +152,14 @@ class SelectCommand(object):
         self.all_filters = []
         self.results = None
         self.extra_select = query.extra_select
+        self.gae_query = None
+
+        self._set_db_table()
+        self._validate_query_is_possible(query)
 
         projection_fields = []
 
-        if not all_fields:
+        if try_projection:
             for field in self.queried_fields:
                 #We don't include the primary key in projection queries...
                 if field == self.pk_col:
@@ -96,7 +169,7 @@ class SelectCommand(object):
                 #projection query
                 f = get_field_from_column(self.model, field)
                 if not f:
-                    import ipdb; ipdb.set_trace()
+                    raise NotImplementedError("Attemping a cross-table select. Maybe? #FIXME")
                 assert f #If this happens, we have a cross-table select going on! #FIXME
                 db_type = f.db_type(connection)
 
@@ -125,13 +198,16 @@ class SelectCommand(object):
             pass
 
     def parse_where_and_check_projection(self, where, negated=False):
+        """ recursively parse the where tree and return a list of tuples of
+            (column, match_type, value), e.g. ('name', 'exact', 'John').
+        """
         result = []
 
         if where.negated:
             negated = not negated
 
-        if not negated and where.connector != AND:
-            raise DatabaseError("Only AND filters are supported")
+        if negated and where.connector != AND:
+            raise DatabaseError("Only AND filters are supported for negated queries")
 
         for child in where.children:
             if isinstance(child, tuple):
@@ -166,7 +242,7 @@ class SelectCommand(object):
                         raise RuntimeError("Unsupported negated lookup: " + op)
                 else:
                     if constraint.field.primary_key:
-                        if (value is None and op == "exact") or op == "isnull":
+                        if (value is None and op == "exact") or (op == "isnull" and value):
                             #If we are looking for a primary key that is None, then we always
                             #just return nothing
                             raise EmptyResultSet()
@@ -176,35 +252,109 @@ class SelectCommand(object):
                                 self.included_pks.extend(list(value))
                             else:
                                 self.included_pks.append(value)
-                    #else: FIXME when included_pks is handled, we can put the
-                    #next section in an else block
-                    col = constraint.col
-                    result.append((col, op, value))
+                        else:
+                            col = constraint.col
+                            result.append((col, op, value))
+                    else:
+                        col = constraint.col
+                        result.append((col, op, value))
             else:
                 result.extend(self.parse_where_and_check_projection(child, negated))
 
         return result
 
     def execute(self):
-        combined_filters = []
+        if not self.included_pks:
+            self.gae_query = self._build_gae_query()
+        self.results = None
+        self.query_done = False
+        self.aggregate_type = "count" if self.is_count else None
+        self._do_fetch()
 
+    def _log(self):
+        from .base import get_datastore_kind
+
+        templ = """
+            SELECT {0} FROM {1} WHERE {2}
+        """
+
+        select = ", ".join(self.projection) if self.projection else "*"
+        if self.aggregate_type:
+            select = "COUNT(*)"
+
+        where = str(self.gae_query)
+
+        final = templ.format(
+            select,
+            get_datastore_kind(self.model),
+            where
+        ).strip()
+
+        from django.db.backends.mysql.compiler import SQLCompiler
+        tmp = SQLCompiler(self.original_query, self.connection, None)
+        try:
+            sql, params = tmp.as_sql()
+            print(sql % params)
+        except:
+            print("Unable to print MySQL equivalent - empty query")
+        print(final)
+
+    def _set_db_table(self):
+        """ Work out which Datstore kind we should actually be querying. This allows for poly
+            models, i.e. non-abstract parent models which we support by storing all fields for
+            both the parent model and its child models on the parent table.
+        """
         inheritance_root = self.model
-
         concrete_parents = [ x for x in self.model._meta.parents if not x._meta.abstract]
-
         if concrete_parents:
             for parent in self.model._meta.get_parent_list():
                 if not parent._meta.parents:
                     #If this is the top parent, override the db_table
                     inheritance_root = parent
+        self.db_table = inheritance_root._meta.db_table
+        self.have_concrete_parent_models = bool(concrete_parents)
 
+    def _validate_query_is_possible(self, query):
+        """ Given the *django* query, check the following:
+            - The query only has one inequality filter
+            - The query does no joins
+            - The query ordering is compatible with the filters
+        """
+        #Check for joins
+        if query.count_active_tables() > 1:
+            if self.have_concrete_parent_models:
+                raise CouldBeSupportedError(
+                    "Querying for a poly model. This could be supported in some cases, i.e. when "
+                    "it's a simple query. If it's a poly model with JOINs in the filters then we "
+                    "can't support it."
+                )
+            raise NotSupportedError("""
+                The appengine database connector does not support JOINs. The requested join map follows\n
+                %s
+            """ % query.join_map)
+
+        if query.aggregates:
+            if query.aggregates.keys() == [ None ]:
+                if query.aggregates[None].col != "*":
+                    raise NotSupportedError("Counting anything other than '*' is not supported")
+            else:
+                raise NotSupportedError("Unsupported aggregate query")
+
+        #This is a hack! Django < 1.7 sets an extra_select of a = 1 in has_results. In 1.7 this has
+        #been moved to the compiler.
+        if query.extra_select and query.extra_select != {'a': (u'1', [])}:
+            raise CouldBeSupportedError("The appengine connector currently doesn't support extra_select, it can be implemented though")
+
+    def _build_gae_query(self):
+        """ Build and return the Datstore Query object. """
+        combined_filters = []
         query = datastore.Query(
-            inheritance_root._meta.db_table,
+            self.db_table,
             projection=self.projection
         )
 
         #Only filter on class if we have some non-abstract parents
-        if concrete_parents and not self.model._meta.proxy:
+        if self.have_concrete_parent_models and not self.model._meta.proxy:
             query["class ="] = self.model._meta.db_table
 
         logging.info("Select query: {0}, {1}".format(self.model.__name__, self.where))
@@ -234,16 +384,28 @@ class SelectCommand(object):
                         combined_filters.append((column, op, value))
                     elif op == "isnull":
                         query["%s =" % column] = None
+                    elif op == "startswith":
+                        #You can emulate starts with by adding the last unicode char
+                        #to the value, then doing <=. Genius.
+                        query["%s >=" % column] = value
+                        if isinstance(value, str):
+                            value = value.decode("utf-8")
+                        value += u'\ufffd'
+                        query["%s <=" % column] = value
                     else:
                         raise NotImplementedError("Unimplemented operator {0}".format(op))
             else:
                 query["%s %s" % (column, final_op)] = value
 
-
         ordering = []
         for order in self.ordering:
-            direction = datastore.Query.DESCENDING if order.startswith("-") else datastore.Query.ASCENDING
-            order = order.lstrip("-")
+            if isinstance(order, int):
+                direction = datastore.Query.ASCENDING if order == 1 else datastore.Query.DESCENDING
+                order = self.queried_fields[0]
+            else:
+                direction = datastore.Query.DESCENDING if order.startswith("-") else datastore.Query.ASCENDING
+                order = order.lstrip("-")
+
             if order == self.model._meta.pk.column:
                 order = "__key__"
             ordering.append((order, direction))
@@ -270,41 +432,7 @@ class SelectCommand(object):
             query = datastore.MultiQuery(queries, ordering)
         else:
             query.Order(*ordering)
-
-        #print query
-        self.query = query
-        self.results = None
-        self.query_done = False
-        self.aggregate_type = "count" if self.is_count else None
-        self._do_fetch()
-
-    def _log(self):
-        from .base import get_datastore_kind
-
-        templ = """
-            SELECT {0} FROM {1} WHERE {2}
-        """
-
-        select = ", ".join(self.projection) if self.projection else "*"
-        if self.aggregate_type:
-            select = "COUNT(*)"
-
-        where = str(self.query)
-
-        final = templ.format(
-            select,
-            get_datastore_kind(self.model),
-            where
-        ).strip()
-
-        from django.db.backends.mysql.compiler import SQLCompiler
-        tmp = SQLCompiler(self.original_query, self.connection, None)
-        try:
-            sql, params = tmp.as_sql()
-            print(sql % params)
-        except:
-            print("Unable to print MySQL equivalent - empty query")
-        print(final)
+        return query
 
     def _do_fetch(self):
         assert not self.results
@@ -313,15 +441,53 @@ class SelectCommand(object):
         self.query_done = True
 
     def _run_query(self, limit=None, start=None, aggregate_type=None):
-        #self._log()
-        query_pre_execute.send(sender=self.model, query=self.query, aggregate=self.aggregate_type)
+        query_pre_execute.send(sender=self.model, query=self.gae_query, aggregate=self.aggregate_type)
 
         if aggregate_type is None:
-            return self.query.Run(limit=limit, start=start)
+            if self.included_pks:
+                results = iter(datastore.Get(self.included_pks))
+                if self.where: #if we have a list of PKs but also with other filters
+                    results = iter([x for x in results if self._matches_filters(x, self.where)])
+                return results
+            else:
+                return self.gae_query.Run(limit=limit, start=start)
         elif self.aggregate_type == "count":
-            return self.query.Count(limit=limit, start=start)
+            return self.gae_query.Count(limit=limit, start=start)
         else:
             raise RuntimeError("Unsupported query type")
+
+    def _matches_filters(self, result, where_filters):
+        if result is None:
+            return False
+        for column, match_type, match_val in where_filters:
+            result_val = result[column]
+            result_val = normalise_field_value(result_val)
+            match_val = normalise_field_value(match_val)
+            try:
+                cmp_func = FILTER_CMP_FUNCTION_MAP[match_type]
+                if not cmp_func(result_val, match_val):
+                    return False
+            except KeyError:
+                raise NotImplementedError("Filter {0} not (yet?) supported".format(match_type))
+        return True
+
+    def next_result(self):
+        while True:
+            x = self.results.next()
+
+            if self.distinct_on_field: #values for distinct queries
+                value = x[self.distinct_on_field]
+                value = self.distinct_field_convertor(value)
+                if value in self.distinct_values:
+                    continue
+                else:
+                    self.distinct_values.add(value)
+                    # Insert modified value into entity before returning the entity. This is dirty,
+                    # but Cursor.fetchone (which calls this) wants the entity ID and yet also wants
+                    # the correct value for this field. The alternative would be to call
+                    # self.distinct_field_convertor again in Cursor.fetchone, but that's wasteful.
+                    x[self.distinct_on_field] = value
+            return x
 
 class FlushCommand(object):
     """
@@ -374,6 +540,8 @@ class InsertCommand(object):
                     res = existing.Count()
 
                     if res:
+                        #FIXME: For now this raises (correctly) when using model inheritance
+                        #We need to make model inheritance not insert the base, only the subclass
                         raise IntegrityError("Tried to INSERT with existing key")
 
                     results.append(datastore.Put(ent))
