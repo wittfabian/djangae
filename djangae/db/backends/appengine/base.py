@@ -1,8 +1,12 @@
-import warnings
+#STANDARD LIB
 import datetime
 import decimal
 import sys
+import warnings
 
+#LIBRARIES
+from django.conf import settings
+from django.core.cache import cache
 from django.db.backends import (
     BaseDatabaseOperations,
     BaseDatabaseClient,
@@ -11,29 +15,27 @@ from django.db.backends import (
     BaseDatabaseFeatures,
     BaseDatabaseValidation
 )
-
 try:
     from django.db.backends.schema import BaseDatabaseSchemaEditor
 except ImportError:
     #Django < 1.6 doesn't have BaseDatabaseSchemaEditor
     class BaseDatabaseSchemaEditor(object):
         pass
-
-from django.conf import settings
-from django.utils import timezone
-from django.db import IntegrityError
 from django.db.backends.creation import BaseDatabaseCreation
-from google.appengine.ext.db import metadata
+from django.db import IntegrityError
+from django.utils import timezone
 from google.appengine.api import datastore
 from google.appengine.api.datastore_types import Blob, Text, Key
-from django.db.models.sql.constants import GET_ITERATOR_CHUNK_SIZE
-from django.db.backends.util import format_number
-from django.core.cache import cache
-
-from djangae.indexing import load_special_indexes, special_indexes_for_column, REQUIRES_SPECIAL_INDEXES
-
+from google.appengine.ext.db import metadata
 from google.appengine.ext import testbed
 
+#DJANGAE
+from djangae.db.exceptions import DatabaseError, NotSupportedError
+from djangae.db.utils import (
+    decimal_to_string,
+    make_timezone_naive,
+)
+from djangae.indexing import load_special_indexes, special_indexes_for_column, REQUIRES_SPECIAL_INDEXES
 from .commands import (
     SelectCommand,
     InsertCommand,
@@ -43,17 +45,6 @@ from .commands import (
     get_field_from_column
 )
 
-class DatabaseError(Exception):
-    pass
-
-class IntegrityError(IntegrityError, DatabaseError):
-    pass
-
-class NotSupportedError(DatabaseError):
-    pass
-
-class CouldBeSupportedError(DatabaseError):
-    pass
 
 DEFAULT_CACHE_TIMEOUT = 10
 
@@ -284,19 +275,6 @@ class Cursor(object):
         elif isinstance(sql, InsertCommand):
             self.connection.queries.append(sql)
             self.returned_ids = sql.execute()
-
-            #Now cache them, temporarily to help avoid consistency errors
-            for key, entity in zip(self.returned_ids, sql.entities):
-                pk_column = sql.model._meta.pk.column
-
-                #If there are parent models, search the parents for the
-                #first primary key which isn't a relation field
-                for parent in sql.model._meta.parents.keys():
-                    if not parent._meta.pk.rel:
-                        pk_column = parent._meta.pk.column
-
-                entity[pk_column] = key.id_or_name()
-                cache_entity(sql.model, entity)
         else:
             import pdb;pdb.set_trace()
             raise RuntimeError("Can't execute traditional SQL: '%s'", sql)
@@ -329,23 +307,21 @@ class Cursor(object):
                 #Handle aggregate (e.g. count)
                 return (self.last_select_command.results, )
             else:
-                entity = self.last_select_command.results.next()
-        except StopIteration:
+                entity = self.last_select_command.next_result()
+        except StopIteration: #FIXME: does this ever get raised?  Where from?
             entity = None
 
         if entity is None:
             return None
 
-        if delete_flag:
-            uncache_entity(self.last_select_command.model, entity)
-
+        ## FIXME: Move this to SelectCommand.next_result()
         result = []
         for col in self.last_select_command.queried_fields:
             if col == "__key__":
                 key = entity.key()
                 self.returned_ids.append(key)
                 result.append(key.id_or_name())
-            else:                                
+            else:
                 field = get_field_from_column(self.last_select_command.model, col)
                 value = self.connection.ops.convert_values(entity.get(col), field)
                 result.append(value)
@@ -368,11 +344,6 @@ class Cursor(object):
 
         return result
 
-    def delete(self):
-        #Passing the delete_flag will uncache the entities
-        self.fetchmany(GET_ITERATOR_CHUNK_SIZE, delete_flag=True)
-        datastore.Delete(self.returned_ids)
-
     @property
     def lastrowid(self):
         return self.returned_ids[-1].id_or_name()
@@ -393,47 +364,6 @@ class Database(object):
     NotSupportedError = NotSupportedError
     InterfaceError = DatabaseError
 
-def make_timezone_naive(value):
-    if value is None:
-        return None
-
-    if timezone.is_aware(value):
-        if settings.USE_TZ:
-            value = value.astimezone(timezone.utc).replace(tzinfo=None)
-        else:
-            raise ValueError("Djangae backend does not support timezone-aware datetimes when USE_TZ is False.")
-    return value
-
-def decimal_to_string(value, max_digits=16, decimal_places=0):
-    """
-    Converts decimal to a unicode string for storage / lookup by nonrel
-    databases that don't support decimals natively.
-
-    This is an extension to `django.db.backends.util.format_number`
-    that preserves order -- if one decimal is less than another, their
-    string representations should compare the same (as strings).
-
-    TODO: Can't this be done using string.format()?
-          Not in Python 2.5, str.format is backported to 2.6 only.
-    """
-
-    # Handle sign separately.
-    if value.is_signed():
-        sign = u'-'
-        value = abs(value)
-    else:
-        sign = u''
-
-    # Let Django quantize and cast to a string.
-    value = format_number(value, max_digits, decimal_places)
-
-    # Pad with zeroes to a constant width.
-    n = value.find('.')
-    if n < 0:
-        n = len(value)
-    if n < max_digits - decimal_places:
-        value = u'0' * (max_digits - decimal_places - n) + value
-    return sign + value
 
 class DatabaseOperations(BaseDatabaseOperations):
     compiler_module = "djangae.db.backends.appengine.compiler"
@@ -443,9 +373,9 @@ class DatabaseOperations(BaseDatabaseOperations):
 
     def convert_values(self, value, field):
         """ Called when returning values from the datastore"""
-        
+
         value = super(DatabaseOperations, self).convert_values(value, field)
-        
+
         db_type = self.connection.creation.db_type(field)
         if db_type == 'string' and isinstance(value, str):
             value = value.decode("utf-8")
@@ -457,7 +387,7 @@ class DatabaseOperations(BaseDatabaseOperations):
             value = self.connection.ops.value_from_db_time(value)
         elif db_type == "decimal":
             value = self.connection.ops.value_from_db_decimal(value)
-            
+
         return value
 
     def sql_flush(self, style, tables, seqs, allow_cascade=False):
@@ -549,7 +479,7 @@ class DatabaseOperations(BaseDatabaseOperations):
 
     ##Unlike value_to_db, these are not overridden or standard Django, it's just nice to have symmetry
     def value_from_db_datetime(self, value):
-        if isinstance(value, long):
+        if isinstance(value, (int, long)):
             #App Engine Query's don't return datetime fields (unlike Get) I HAVE NO IDEA WHY, APP ENGINE SUCKS MONKEY BALLS
             value = datetime.datetime.fromtimestamp(float(value) / 1000000.0)
 
@@ -558,14 +488,14 @@ class DatabaseOperations(BaseDatabaseOperations):
         return value
 
     def value_from_db_date(self, value):
-        if isinstance(value, long):
+        if isinstance(value, (int, long)):
             #App Engine Query's don't return datetime fields (unlike Get) I HAVE NO IDEA WHY, APP ENGINE SUCKS MONKEY BALLS
             value = datetime.datetime.fromtimestamp(float(value) / 1000000.0)
 
         return value.date()
 
     def value_from_db_time(self, value):
-        if isinstance(value, long):
+        if isinstance(value, (int, long)):
             #App Engine Query's don't return datetime fields (unlike Get) I HAVE NO IDEA WHY, APP ENGINE SUCKS MONKEY BALLS
             value = datetime.datetime.fromtimestamp(float(value) / 1000000.0).time()
 
@@ -638,7 +568,7 @@ class DatabaseCreation(BaseDatabaseCreation):
         return []
 
     def _create_test_db(self, verbosity, autoclobber):
-
+        from google.appengine.datastore import datastore_stub_util
         # Testbed exists in memory
         test_database_name = ':memory:'
 
@@ -651,7 +581,7 @@ class DatabaseCreation(BaseDatabaseCreation):
         self.testbed.init_capability_stub()
         self.testbed.init_channel_stub()
 
-        self.testbed.init_datastore_v3_stub()
+        self.testbed.init_datastore_v3_stub(datastore_stub_util.PseudoRandomHRConsistencyPolicy(probability=0))
         self.testbed.init_files_stub()
         # FIXME! dependencies PIL
         # self.testbed.init_images_stub()
