@@ -5,6 +5,8 @@ import logging
 
 #LIBRARIES
 from django.core.cache import cache
+from django.db.backends.mysql.compiler import SQLCompiler
+from django.db import IntegrityError
 from django.db.models.sql.datastructures import EmptyResultSet
 from django.db.models.sql.where import AND
 from django import dispatch
@@ -13,8 +15,15 @@ from google.appengine.api.datastore_types import Key
 from google.appengine.ext import db
 
 #DJANGAE
+from djangae.db.caching import cache_entity
 from djangae.db.exceptions import NotSupportedError, CouldBeSupportedError
-from djangae.db.utils import normalise_field_value
+from djangae.db.utils import (
+    django_instance_to_entity,
+    get_datastore_kind,
+    get_prepared_db_value,
+    MockInstance,
+    normalise_field_value,
+)
 from djangae.indexing import special_indexes_for_column, REQUIRES_SPECIAL_INDEXES, add_special_index
 
 
@@ -272,8 +281,6 @@ class SelectCommand(object):
         self._do_fetch()
 
     def _log(self):
-        from .base import get_datastore_kind
-
         templ = """
             SELECT {0} FROM {1} WHERE {2}
         """
@@ -290,7 +297,6 @@ class SelectCommand(object):
             where
         ).strip()
 
-        from django.db.backends.mysql.compiler import SQLCompiler
         tmp = SQLCompiler(self.original_query, self.connection, None)
         try:
             sql, params = tmp.as_sql()
@@ -510,8 +516,6 @@ class FlushCommand(object):
 
 class InsertCommand(object):
     def __init__(self, connection, model, objs, fields, raw):
-        from .base import django_instance_to_entity, get_datastore_kind
-
         self.has_pk = any([x.primary_key for x in fields])
         self.entities = []
         self.included_keys = []
@@ -525,9 +529,8 @@ class InsertCommand(object):
                 django_instance_to_entity(connection, model, fields, raw, obj)
             )
 
-    def execute(self):
-        from .base import IntegrityError
 
+    def execute(self):
         if self.has_pk:
             results = []
             #We are inserting, but we specified an ID, we need to check for existence before we Put()
@@ -569,9 +572,6 @@ class UpdateCommand(object):
         self.connection = connection
 
     def execute(self):
-        from .base import get_prepared_db_value, MockInstance
-        from .base import cache_entity
-
         self.select.execute()
 
         results = self.select.results
