@@ -1,6 +1,8 @@
 from django.core.management.commands.shell import Command as DjangoCommand
 from django.conf import settings
 
+import os
+
 class Command(DjangoCommand):
     
     def __init__(self, *args, **kwargs):
@@ -12,21 +14,24 @@ class Command(DjangoCommand):
         from google.appengine.ext.remote_api import remote_api_stub
         from google.appengine.tools import appengine_rpc
         import getpass
+        from djangae.boot import find_project_root
 
         def auth_func():
             return (raw_input('Google Account Login:'), getpass.getpass('Password:'))
 
-        app_id = settings.APP_ID
+        app_yaml = open(os.path.join(find_project_root(), 'app.yaml')).read()
 
-        self.stdout.write("Opening Remote API connection to {0}...\n\n".format(app_id))
+        app_id = app_yaml.split("application:")[1].lstrip().split()[0]
+
+        self.stdout.write("Opening Remote API connection to {0}...\n".format(app_id))
         
         remote_api_stub.ConfigureRemoteApi(None,
             '/_ah/remote_api', 
             auth_func, 
-            servername='chargrizzle-app.appspot.com', 
+            servername='{0}.appspot.com'.format(app_id), 
             secure=True,
         )
 
-        self.stdout.write("...Connection established...have a nice day :)\n\n".format(app_id))
+        self.stdout.write("...Connection established...have a nice day :)\n".format(app_id))
 
         super(Command, self).handle_noargs(**options)
