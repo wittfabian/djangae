@@ -524,29 +524,31 @@ class InsertCommand(object):
         for obj in objs:
             if self.has_pk:
                 self.included_keys.append(Key.from_path(get_datastore_kind(model), obj.pk))
+            else:
+                #We zip() self.entities and self.included_keys in execute(), so they should be the same legnth
+                self.included_keys.append(None)
 
             self.entities.append(
                 django_instance_to_entity(connection, model, fields, raw, obj)
             )
 
-
     def execute(self):
         if self.has_pk:
             results = []
             #We are inserting, but we specified an ID, we need to check for existence before we Put()
+            #FIXME/TODO: if we have many pks, then surely a multi datastore.Get would be faster than this loop, no?
             for key, ent in zip(self.included_keys, self.entities):
                 @db.transactional
                 def txn():
-                    existing = datastore.Query(keys_only=True)
-                    existing.Ancestor(key)
-                    existing["__key__"] = key
-                    res = existing.Count()
-
-                    if res:
-                        #FIXME: For now this raises (correctly) when using model inheritance
-                        #We need to make model inheritance not insert the base, only the subclass
-                        raise IntegrityError("Tried to INSERT with existing key")
-
+                    if key is not None:
+                        existing = datastore.Query(keys_only=True)
+                        existing.Ancestor(key)
+                        existing["__key__"] = key
+                        res = existing.Count()
+                        if res:
+                            #FIXME: For now this raises (correctly) when using model inheritance
+                            #We need to make model inheritance not insert the base, only the subclass
+                            raise IntegrityError("Tried to INSERT with existing key")
                     results.append(datastore.Put(ent))
 
                 txn()
