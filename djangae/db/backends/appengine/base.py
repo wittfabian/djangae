@@ -128,6 +128,11 @@ class Cursor(object):
 
         ## FIXME: Move this to SelectCommand.next_result()
         result = []
+
+        # If there is extra_select prepend values to the results list
+        for col, query in self.last_select_command.extra_select.items():
+            result.append(entity.get(col))
+
         for col in self.last_select_command.queried_fields:
             if col == "__key__":
                 key = entity.key()
