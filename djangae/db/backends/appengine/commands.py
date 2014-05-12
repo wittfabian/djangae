@@ -51,6 +51,14 @@ OPERATORS_MAP = {
     'iexact': None,
 }
 
+REVERSE_OP_MAP = {
+    '=':'exact',
+    '>':'gt',
+    '>=':'gte',
+    '<':'lt',
+    '<=':'lte',
+}
+
 
 def get_field_from_column(model, column):
     #FIXME: memoize this
@@ -348,7 +356,8 @@ class SelectCommand(object):
 
         #This is a hack! Django < 1.7 sets an extra_select of a = 1 in has_results. In 1.7 this has
         #been moved to the compiler.
-        if query.extra_select and query.extra_select != {'a': (u'1', [])}:
+        if query.extra_select and query.extra_select == {'a': (u'1', [])}:
+            ### Silly appengine
             raise CouldBeSupportedError("The appengine connector currently doesn't support extra_select, it can be implemented though")
 
     def _build_gae_query(self):
@@ -447,6 +456,7 @@ class SelectCommand(object):
         self.query_done = True
 
     def _run_query(self, limit=None, start=None, aggregate_type=None):
+
         query_pre_execute.send(sender=self.model, query=self.gae_query, aggregate=self.aggregate_type)
 
         if aggregate_type is None:
@@ -454,13 +464,49 @@ class SelectCommand(object):
                 results = iter(datastore.Get(self.included_pks))
                 if self.where: #if we have a list of PKs but also with other filters
                     results = iter([x for x in results if self._matches_filters(x, self.where)])
-                return results
             else:
-                return self.gae_query.Run(limit=limit, start=start)
+                results = self.gae_query.Run(limit=limit, start=start)
         elif self.aggregate_type == "count":
             return self.gae_query.Count(limit=limit, start=start)
         else:
             raise RuntimeError("Unsupported query type")
+
+        assert results
+
+        if self.extra_select:
+
+            for attr, query in self.extra_select.iteritems():
+                tokens = query[0].split()
+                length = len(tokens)
+
+                if length == 3:
+                    op = REVERSE_OP_MAP.get(tokens[1])
+
+                    if not op:
+                        raise RuntimeError("Unsupported extra_select operation {0}".format(tokens[1]))
+
+                    fun = FILTER_CMP_FUNCTION_MAP[op]
+
+                    def lazyAs(results, fun, attr, token_a, token_b):
+                        for result in results:
+                            result[attr] = fun(result.get(token_a), token_b)
+                            yield result
+
+                    results = lazyAs(results, fun, attr, tokens[0], tokens[2])
+
+                elif length == 1:
+
+                    def lazyAssign(results, attr, value):
+                        for result in results:
+                            result[attr] = value
+                            yield result
+
+                    results = lazyassign(results, attr, tokens[0])
+
+                else:
+                    raise RuntimeError("Unsupported extra_select")
+                    
+        return results
 
     def _matches_filters(self, result, where_filters):
         if result is None:
@@ -541,7 +587,6 @@ class InsertCommand(object):
                     existing.Ancestor(key)
                     existing["__key__"] = key
                     res = existing.Count()
-
                     if res:
                         #FIXME: For now this raises (correctly) when using model inheritance
                         #We need to make model inheritance not insert the base, only the subclass
