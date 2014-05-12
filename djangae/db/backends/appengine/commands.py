@@ -474,17 +474,14 @@ class SelectCommand(object):
         assert results
 
         if self.extra_select:
-
+            # Construct the extra_select into the results set, this is then sorted with fetchone()
             for attr, query in self.extra_select.iteritems():
                 tokens = query[0].split()
                 length = len(tokens)
-
                 if length == 3:
                     op = REVERSE_OP_MAP.get(tokens[1])
-
                     if not op:
                         raise RuntimeError("Unsupported extra_select operation {0}".format(tokens[1]))
-
                     fun = FILTER_CMP_FUNCTION_MAP[op]
 
                     def lazyAs(results, fun, attr, token_a, token_b):
@@ -495,17 +492,15 @@ class SelectCommand(object):
                     results = lazyAs(results, fun, attr, tokens[0], tokens[2])
 
                 elif length == 1:
-
+                    
                     def lazyAssign(results, attr, value):
                         for result in results:
                             result[attr] = value
                             yield result
 
                     results = lazyassign(results, attr, tokens[0])
-
                 else:
-                    raise RuntimeError("Unsupported extra_select")
-                    
+                    raise RuntimeError("Unsupported extra_select") 
         return results
 
     def _matches_filters(self, result, where_filters):
