@@ -23,7 +23,7 @@ except ImportError:
 from django.db.backends.creation import BaseDatabaseCreation
 from django.db import IntegrityError
 from django.utils import timezone
-from google.appengine.api.datastore_types import Blob, Text, Key
+from google.appengine.api.datastore_types import Blob, Text
 from google.appengine.ext.db import metadata
 from google.appengine.ext import testbed
 
@@ -32,7 +32,7 @@ from djangae.db.exceptions import DatabaseError, NotSupportedError
 from djangae.db.utils import (
     decimal_to_string,
     make_timezone_naive,
-    get_datastore_kind,
+    get_datastore_key,
 )
 from djangae.indexing import load_special_indexes
 from .commands import (
@@ -219,9 +219,9 @@ class DatabaseOperations(BaseDatabaseOperations):
                     " that is over 500 characters. THIS IS AN ERROR IN YOUR PROGRAM.",
                     RuntimeWarning
                 )
-            value = Key.from_path(get_datastore_kind(model), value)
+            value = get_datastore_key(model, value)
         else:
-            value = Key.from_path(get_datastore_kind(model), value)
+            value = get_datastore_key(model, value)
 
         return value
 
