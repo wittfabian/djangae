@@ -11,13 +11,14 @@ from django.db.models.sql.datastructures import EmptyResultSet
 from django.db.models.sql.where import AND
 from django import dispatch
 from google.appengine.api import datastore
-from google.appengine.api.datastore_types import Key
 from google.appengine.ext import db
 
 #DJANGAE
 from djangae.db.caching import cache_entity
 from djangae.db.exceptions import NotSupportedError, CouldBeSupportedError
 from djangae.db.utils import (
+    get_concrete_parent_models,
+    get_datastore_key,
     django_instance_to_entity,
     get_datastore_kind,
     get_prepared_db_value,
@@ -311,14 +312,14 @@ class SelectCommand(object):
             both the parent model and its child models on the parent table.
         """
         inheritance_root = self.model
-        concrete_parents = [ x for x in self.model._meta.parents if not x._meta.abstract]
-        if concrete_parents:
-            for parent in self.model._meta.get_parent_list():
-                if not parent._meta.parents:
-                    #If this is the top parent, override the db_table
-                    inheritance_root = parent
+        # concrete_parents = [x for x in self.model._meta.get_parent_list() if not x._meta.abstract]
+        # if concrete_parents:
+        #     for parent in concrete_parents:
+        #         if not parent._meta.parents:
+        #             #If this is the top parent, override the db_table
+        #             inheritance_root = parent
         self.db_table = inheritance_root._meta.db_table
-        self.have_concrete_parent_models = bool(concrete_parents)
+        # self.have_concrete_parent_models = bool(concrete_parents)
 
     def _validate_query_is_possible(self, query):
         """ Given the *django* query, check the following:
@@ -328,7 +329,9 @@ class SelectCommand(object):
         """
         #Check for joins
         if query.count_active_tables() > 1:
-            if self.have_concrete_parent_models:
+            concrete_parents = get_concrete_parent_models(self.model)
+            if concrete_parents:
+                import pdb; pdb.set_trace()
                 raise CouldBeSupportedError(
                     "Querying for a poly model. This could be supported in some cases, i.e. when "
                     "it's a simple query. If it's a poly model with JOINs in the filters then we "
@@ -360,8 +363,8 @@ class SelectCommand(object):
         )
 
         #Only filter on class if we have some non-abstract parents
-        if self.have_concrete_parent_models and not self.model._meta.proxy:
-            query["class ="] = self.model._meta.db_table
+        # if self.have_concrete_parent_models and not self.model._meta.proxy:
+        #     query["class ="] = self.model._meta.db_table
 
         logging.info("Select query: {0}, {1}".format(self.model.__name__, self.where))
 
@@ -523,30 +526,32 @@ class InsertCommand(object):
 
         for obj in objs:
             if self.has_pk:
-                self.included_keys.append(Key.from_path(get_datastore_kind(model), obj.pk))
+                self.included_keys.append(get_datastore_key(model, obj.pk))
+            else:
+                #We zip() self.entities and self.included_keys in execute(), so they should be the same legnth
+                self.included_keys.append(None)
 
             self.entities.append(
                 django_instance_to_entity(connection, model, fields, raw, obj)
             )
 
-
     def execute(self):
         if self.has_pk:
             results = []
             #We are inserting, but we specified an ID, we need to check for existence before we Put()
+            #FIXME/TODO: if we have many pks, then surely a multi datastore.Get would be faster than this loop, no?
             for key, ent in zip(self.included_keys, self.entities):
                 @db.transactional
                 def txn():
-                    existing = datastore.Query(keys_only=True)
-                    existing.Ancestor(key)
-                    existing["__key__"] = key
-                    res = existing.Count()
-
-                    if res:
-                        #FIXME: For now this raises (correctly) when using model inheritance
-                        #We need to make model inheritance not insert the base, only the subclass
-                        raise IntegrityError("Tried to INSERT with existing key")
-
+                    if key is not None:
+                        existing = datastore.Query(keys_only=True)
+                        existing.Ancestor(key)
+                        existing["__key__"] = key
+                        res = existing.Count()
+                        if res:
+                            #FIXME: For now this raises (correctly) when using model inheritance
+                            #We need to make model inheritance not insert the base, only the subclass
+                            raise IntegrityError("Tried to INSERT with existing key")
                     results.append(datastore.Put(ent))
 
                 txn()
