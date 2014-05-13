@@ -11,6 +11,7 @@ from django.db.models.sql.datastructures import EmptyResultSet
 from django.db.models.sql.where import AND
 from django import dispatch
 from google.appengine.api import datastore
+from google.appengine.api.datastore_types import Key
 from google.appengine.ext import db
 
 #DJANGAE
@@ -50,6 +51,14 @@ OPERATORS_MAP = {
     'year': None,
     'gt_and_lt': None, #Special case inequality combined filter
     'iexact': None,
+}
+
+REVERSE_OP_MAP = {
+    '=':'exact',
+    '>':'gt',
+    '>=':'gte',
+    '<':'lt',
+    '<=':'lte',
 }
 
 
@@ -349,11 +358,6 @@ class SelectCommand(object):
             else:
                 raise NotSupportedError("Unsupported aggregate query")
 
-        #This is a hack! Django < 1.7 sets an extra_select of a = 1 in has_results. In 1.7 this has
-        #been moved to the compiler.
-        if query.extra_select and query.extra_select != {'a': (u'1', [])}:
-            raise CouldBeSupportedError("The appengine connector currently doesn't support extra_select, it can be implemented though")
-
     def _build_gae_query(self):
         """ Build and return the Datstore Query object. """
         combined_filters = []
@@ -457,13 +461,48 @@ class SelectCommand(object):
                 results = iter(datastore.Get(self.included_pks))
                 if self.where: #if we have a list of PKs but also with other filters
                     results = iter([x for x in results if self._matches_filters(x, self.where)])
-                return results
             else:
-                return self.gae_query.Run(limit=limit, start=start)
+                results = self.gae_query.Run(limit=limit, start=start)
         elif self.aggregate_type == "count":
             return self.gae_query.Count(limit=limit, start=start)
         else:
             raise RuntimeError("Unsupported query type")
+
+        if self.extra_select:
+            # Construct the extra_select into the results set, this is then sorted with fetchone()
+            for attr, query in self.extra_select.iteritems():
+                tokens = query[0].split()
+                length = len(tokens)
+                if length == 3:
+                    op = REVERSE_OP_MAP.get(tokens[1])
+                    if not op:
+                        raise RuntimeError("Unsupported extra_select operation {0}".format(tokens[1]))
+                    fun = FILTER_CMP_FUNCTION_MAP[op]
+
+                    def lazyAs(results, fun, attr, token_a, token_b):
+                        for result in results:
+                            if result is None:
+                                yield result
+
+                            result[attr] = fun(result.get(token_a), token_b)
+                            yield result
+
+                    results = lazyAs(results, fun, attr, tokens[0], tokens[2])
+
+                elif length == 1:
+
+                    def lazyAssign(results, attr, value):
+                        for result in results:
+                            if result is None:
+                                yield result
+
+                            result[attr] = value
+                            yield result
+
+                    results = lazyAssign(results, attr, tokens[0])
+                else:
+                    raise RuntimeError("Unsupported extra_select")
+        return results
 
     def _matches_filters(self, result, where_filters):
         if result is None:
@@ -534,6 +573,7 @@ class InsertCommand(object):
             self.entities.append(
                 django_instance_to_entity(connection, model, fields, raw, obj)
             )
+
 
     def execute(self):
         if self.has_pk:
