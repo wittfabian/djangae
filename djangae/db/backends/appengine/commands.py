@@ -354,12 +354,6 @@ class SelectCommand(object):
             else:
                 raise NotSupportedError("Unsupported aggregate query")
 
-        #This is a hack! Django < 1.7 sets an extra_select of a = 1 in has_results. In 1.7 this has
-        #been moved to the compiler.
-        if query.extra_select and query.extra_select == {'a': (u'1', [])}:
-            ### Silly appengine
-            raise CouldBeSupportedError("The appengine connector currently doesn't support extra_select, it can be implemented though")
-
     def _build_gae_query(self):
         """ Build and return the Datstore Query object. """
         combined_filters = []
@@ -486,21 +480,27 @@ class SelectCommand(object):
 
                     def lazyAs(results, fun, attr, token_a, token_b):
                         for result in results:
+                            if result is None:
+                                yield result
+
                             result[attr] = fun(result.get(token_a), token_b)
                             yield result
 
                     results = lazyAs(results, fun, attr, tokens[0], tokens[2])
 
                 elif length == 1:
-                    
+
                     def lazyAssign(results, attr, value):
                         for result in results:
+                            if result is None:
+                                yield result
+
                             result[attr] = value
                             yield result
 
-                    results = lazyassign(results, attr, tokens[0])
+                    results = lazyAssign(results, attr, tokens[0])
                 else:
-                    raise RuntimeError("Unsupported extra_select") 
+                    raise RuntimeError("Unsupported extra_select")
         return results
 
     def _matches_filters(self, result, where_filters):
