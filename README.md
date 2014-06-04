@@ -20,6 +20,37 @@ The intention is to basically do what djangoappengine has done up to now, but wi
  * Connector is mostly implemented, many contrib tests are passing, also many of django's model tests
  * A seamless replacement for dbindexer is built in, a file called djangaeidx.yaml will be generated automatically when you use __iexact queries or the like
 
+
+# HOW DO I USE THIS THING?!?!
+
+ * Shove the Djangae folder in the root of your project, either by symlink or directly - or .. whatever
+ * Add djangae to INSTALLED_APPS
+ * At the top of your settings, insert the following line: `from djangae.settings_base import *` - this sets up some default settings
+ * Make your manage.py look something like this:
+
+ ```
+ if __name__ == "__main__":
+    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "myapp.settings")
+
+    from djangae.boot import setup_paths
+    setup_paths()
+
+    from django.core.management import execute_from_command_line
+
+    execute_from_command_line(sys.argv)
+ ```
+
+ * Use the Djangae WSGI handler in your wsgi.py, something like
+
+ ```
+    from django.core.wsgi import get_wsgi_application
+    from djangae.wsgi import DjangaeApplication
+
+    application = DjangaeApplication(get_wsgi_application())
+ ```
+ * Add the following to your URL handler: url(r'^_ah/', include('djangae.urls')),
+
+
 ## TODO
 
 ### Bug Fixing
