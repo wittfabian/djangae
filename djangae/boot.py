@@ -108,6 +108,15 @@ def setup_built_in_library_paths():
     django_folder = "django-" + str(django_version)
     sys.path.insert(1, os.path.join(os.environ['APP_ENGINE_SDK'], "lib", django_folder))
 
+def setup_additional_libs_path():
+    project_root = find_project_root()
+
+    ADDITIONAL_FOLDERS = [ "lib", "libs", "libraries" ]
+
+    for folder in ADDITIONAL_FOLDERS:
+        path = os.path.join(project_root, folder)
+        if os.path.exists(path):
+            sys.path.insert(1, path)
 
 def datastore_available():
     from google.appengine.api import apiproxy_stub_map
@@ -121,6 +130,8 @@ def in_testing():
 
 def setup_paths():
     if not appengine_on_path():
+        setup_additional_libs_path() #Add any folders in the project root that may contain extra libraries
+
         for k in [k for k in sys.modules if k.startswith('google')]:
             del sys.modules[k]
 
