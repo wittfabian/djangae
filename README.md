@@ -48,7 +48,7 @@ The intention is to basically do what djangoappengine has done up to now, but wi
 
     application = DjangaeApplication(get_wsgi_application())
  ```
- * Add the following to your URL handler: url(r'^_ah/', include('djangae.urls')),
+ * Add the following to your URL handler: `url(r'^_ah/', include('djangae.urls'))`,
 
 
 ## TODO
