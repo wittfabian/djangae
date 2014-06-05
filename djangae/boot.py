@@ -115,7 +115,7 @@ def setup_additional_libs_path():
 
     for folder in ADDITIONAL_FOLDERS:
         path = os.path.join(project_root, folder)
-        if os.path.exists(path):
+        if os.path.exists(path) and path not in sys.path:
             sys.path.insert(1, path)
 
 def datastore_available():
@@ -130,8 +130,6 @@ def in_testing():
 
 def setup_paths():
     if not appengine_on_path():
-        setup_additional_libs_path() #Add any folders in the project root that may contain extra libraries
-
         for k in [k for k in sys.modules if k.startswith('google')]:
             del sys.modules[k]
 
@@ -147,3 +145,4 @@ def setup_paths():
 
         #Configure App Engine's built in libraries
         setup_built_in_library_paths()
+    setup_additional_libs_path() #Add any folders in the project root that may contain extra libraries

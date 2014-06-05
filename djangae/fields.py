@@ -247,6 +247,9 @@ class ListField(IterableField):
                             "not of type %r." % type(self.ordering))
         super(ListField, self).__init__(*args, **kwargs)
 
+    def get_internal_type(self):
+        return 'ListField'
+
     def pre_save(self, model_instance, add):
         value = super(ListField, self).pre_save(model_instance, add)
 
@@ -260,6 +263,8 @@ class ListField(IterableField):
         return list
 
 class SetField(IterableField):
+    def get_internal_type(self):
+        return 'SetField'
 
     @property
     def _iterable_type(self):
@@ -271,3 +276,21 @@ class SetField(IterableField):
         serializing sets.
         """
         return str(list(self._get_val_from_obj(obj)))
+
+
+class DictField(IterableField):
+    def get_internal_type(self):
+        return 'DictField'
+
+    @property
+    def _iterable_type(self):
+        return dict
+
+    def _map(self, function, iterable, *args, **kwargs):
+        return self._type((key, function(value, *args, **kwargs))
+                          for key, value in iterable.iteritems())
+
+    def validate(self, values, model_instance):
+        if not isinstance(values, dict):
+            raise ValidationError("Value is of type %r. Should be a dict." %
+                                  type(values))
