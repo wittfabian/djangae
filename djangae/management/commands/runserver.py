@@ -1,5 +1,4 @@
 import os
-import sys
 import time
 from optparse import make_option
 
@@ -31,6 +30,8 @@ class Command(BaseRunserverCommand):
     )
 
     def inner_run(self, *args, **options):
+        import sys
+
         shutdown_message = options.get('shutdown_message', '')
         use_old_dev_appserver = options.get('use_old_dev_appserver')
         quit_command = 'CTRL-BREAK' if sys.platform == 'win32' else 'CONTROL-C'
@@ -126,4 +127,6 @@ class Command(BaseRunserverCommand):
             if shutdown_message:
                 sys.stdout.write(shutdown_message)
 
-        sys.exit(process.returncode)
+        #Some weird race condition crazy sometimes makes this None...
+        if sys:
+            sys.exit(process.returncode)
