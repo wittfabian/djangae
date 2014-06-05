@@ -1,6 +1,8 @@
 from django.conf.urls import patterns, url
 
+from djangae.views import warmup, deferred
+
 urlpatterns = patterns('djangae.views',
-    url(r'^warmup$', 'djangae.views.warmup'),
-    url(r'^queue/deferred/?$', 'djangae.views.deferred')
+    url(r'^warmup$', warmup),
+    url(r'^queue/deferred/?$', deferred)
 )
