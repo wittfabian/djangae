@@ -146,7 +146,6 @@ class User(AbstractBaseUser, PermissionsMixin):
     class Meta:
         verbose_name = _('user')
         verbose_name_plural = _('users')
-        abstract = True
         app_label = "djangae"
 
     def get_absolute_url(self):
