@@ -56,15 +56,14 @@ def application_id():
         result = None
 
     if not result:
-        from google.appengine.tools import dev_appserver
-        appconfig = dev_appserver.LoadAppConfig(
-            find_project_root(), {},
-            default_partition='dev'
-        )[0]
+        #Apparently we aren't running live, probably inside a management command
+        from google.appengine.api import appinfo
 
-        os.environ['APPLICATION_ID'] = appconfig.application
+        info = appinfo.LoadSingleAppInfo(open(os.path.join(find_project_root(), "app.yaml")))
+
+        result = "dev~" + info.application
+        os.environ['APPLICATION_ID'] = result
         result = app_identity.get_application_id()
-
 
     return result
 
@@ -108,13 +107,23 @@ def setup_built_in_library_paths():
     django_folder = "django-" + str(django_version)
     sys.path.insert(1, os.path.join(os.environ['APP_ENGINE_SDK'], "lib", django_folder))
 
+def setup_additional_libs_path():
+    project_root = find_project_root()
+
+    ADDITIONAL_FOLDERS = [ "lib", "libs", "libraries" ]
+
+    for folder in ADDITIONAL_FOLDERS:
+        path = os.path.join(project_root, folder)
+        if os.path.exists(path) and path not in sys.path:
+            sys.path.insert(1, path)
+
+def on_production():
+    return 'SERVER_SOFTWARE' in os.environ and not os.environ['SERVER_SOFTWARE'].startswith("Development")
+
 
 def datastore_available():
     from google.appengine.api import apiproxy_stub_map
     return bool(apiproxy_stub_map.apiproxy.GetStub('datastore_v3'))
-
-def on_production():
-    return 'SERVER_SOFTWARE' in os.environ and not os.environ['SERVER_SOFTWARE'].startswith("Development")
 
 def in_testing():
     return "test" in sys.argv
@@ -136,3 +145,5 @@ def setup_paths():
 
         #Configure App Engine's built in libraries
         setup_built_in_library_paths()
+
+    setup_additional_libs_path() #Add any folders in the project root that may contain extra libraries
