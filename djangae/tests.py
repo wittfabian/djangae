@@ -9,7 +9,7 @@ from djangae.indexing import add_special_index
 
 from .storage import BlobstoreFileUploadHandler
 from google.appengine.api.datastore_errors import EntityNotFoundError
-from djangae.db.exceptions import IntegrityError
+from django.db import IntegrityError
 
 class User(models.Model):
     username = models.CharField(max_length=32)
@@ -122,11 +122,11 @@ class EdgeCaseTests(TestCase):
         self.assertFalse(count)
 
     def test_insert_with_existing_key(self):
-        user = User.objects.create(id=1, username="test1")
+        user = User.objects.create(id=1, username="test1", last_login=datetime.datetime.now().date())
         self.assertEqual(1, user.pk)
 
         with self.assertRaises(IntegrityError):
-            User.objects.create(id=1, username="test2")
+            User.objects.create(id=1, username="test2", last_login=datetime.datetime.now().date())
 
     def test_select_related(self):
         """ select_related should be a no-op... for now """
