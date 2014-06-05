@@ -6,6 +6,7 @@ from django.utils.translation import ugettext_lazy as _
 from django.core.exceptions import ValidationError
 from django import forms
 from django.db.models.fields.subclassing import Creator
+from django.utils.text import capfirst
 
 class _FakeModel(object):
     """
