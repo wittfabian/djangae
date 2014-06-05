@@ -118,12 +118,13 @@ def setup_additional_libs_path():
         if os.path.exists(path) and path not in sys.path:
             sys.path.insert(1, path)
 
+def on_production():
+    return 'SERVER_SOFTWARE' in os.environ and not os.environ['SERVER_SOFTWARE'].startswith("Development")
+
+
 def datastore_available():
     from google.appengine.api import apiproxy_stub_map
     return bool(apiproxy_stub_map.apiproxy.GetStub('datastore_v3'))
-
-def on_production():
-    return 'SERVER_SOFTWARE' in os.environ and not os.environ['SERVER_SOFTWARE'].startswith("Development")
 
 def in_testing():
     return "test" in sys.argv
@@ -145,4 +146,5 @@ def setup_paths():
 
         #Configure App Engine's built in libraries
         setup_built_in_library_paths()
+
     setup_additional_libs_path() #Add any folders in the project root that may contain extra libraries
