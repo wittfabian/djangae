@@ -5,3 +5,9 @@ FILE_UPLOAD_HANDLERS = (
     'djangae.storage.BlobstoreFileUploadHandler',
     'django.core.files.uploadhandler.MemoryFileUploadHandler',
 )
+
+DATABASES = {
+    'default': {
+        'ENGINE': 'djangae.db.backends.appengine'
+    }
+}
