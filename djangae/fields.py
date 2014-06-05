@@ -143,7 +143,7 @@ class IterableField(models.Field):
         if value is None:
             return self._iterable_type([])
 
-        return self._map(lambda item: self.item_field.pre_save(_FakeModel(self.item_field, item), add), value)
+        return self._map(lambda item: self.item_field_type.pre_save(_FakeModel(self.item_field_type, item), add), value)
 
     def get_db_prep_save(self, value, connection):
         """
@@ -152,7 +152,7 @@ class IterableField(models.Field):
         if value is None:
             return self._iterable_type([])
 
-        return self._map(self.item_field.get_db_prep_save, value,
+        return self._map(self.item_field_type.get_db_prep_save, value,
                          connection=connection)
 
     def get_db_prep_lookup(self, lookup_type, value, connection,
@@ -167,7 +167,7 @@ class IterableField(models.Field):
         if hasattr(value, 'as_lookup_value'):
             value = value.as_lookup_value(self, lookup_type, connection)
 
-        return self.item_field.get_db_prep_lookup(
+        return self.item_field_type.get_db_prep_lookup(
             lookup_type, value, connection=connection, prepared=prepared)
 
     def get_prep_lookup(self, lookup_type, value):

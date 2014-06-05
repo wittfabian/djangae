@@ -56,15 +56,14 @@ def application_id():
         result = None
 
     if not result:
-        from google.appengine.tools import dev_appserver
-        appconfig = dev_appserver.LoadAppConfig(
-            find_project_root(), {},
-            default_partition='dev'
-        )[0]
+        #Apparently we aren't running live, probably inside a management command
+        from google.appengine.api import appinfo
 
-        os.environ['APPLICATION_ID'] = appconfig.application
+        info = appinfo.LoadSingleAppInfo(open(os.path.join(find_project_root(), "app.yaml")))
+
+        result = "dev~" + info.application
+        os.environ['APPLICATION_ID'] = result
         result = app_identity.get_application_id()
-
 
     return result
 
