@@ -9,6 +9,7 @@ from djangae.indexing import add_special_index
 
 from .storage import BlobstoreFileUploadHandler
 from google.appengine.api.datastore_errors import EntityNotFoundError
+from djangae.db.exceptions import IntegrityError
 
 class User(models.Model):
     username = models.CharField(max_length=32)
@@ -120,6 +121,13 @@ class EdgeCaseTests(TestCase):
 
         self.assertFalse(count)
 
+    def test_insert_with_existing_key(self):
+        user = User.objects.create(id=1, username="test1")
+        self.assertEqual(1, user.pk)
+
+        with self.assertRaises(IntegrityError):
+            User.objects.create(id=1, username="test2")
+
     def test_select_related(self):
         """ select_related should be a no-op... for now """
         user = User.objects.get(username="A")
@@ -174,7 +182,7 @@ class EdgeCaseTests(TestCase):
             [datetime.datetime.combine(last_a_login, datetime.datetime.min.time()), datetime.datetime(2013, 4, 5, 0, 0)],
             dates
         )
-        
+
 class BlobstoreFileUploadHandlerTest(TestCase):
     boundary = "===============7417945581544019063=="
 
