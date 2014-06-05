@@ -4,9 +4,10 @@
 from django.db import models
 from django.utils.translation import ugettext_lazy as _
 from django.core.exceptions import ValidationError
-from django import forms
 from django.db.models.fields.subclassing import Creator
 from django.utils.text import capfirst
+from django import forms
+from djangae.forms.fields import TrueOrNullFormField, IterableFieldModelChoiceFormField, ListFormField
 
 class _FakeModel(object):
     """
@@ -32,12 +33,6 @@ class RawField(models.Field):
         get the same internal type, rather than their own class name.
         """
         return 'RawField'
-
-class TrueOrNullFormField(forms.Field):
-    def clean(self, value):
-        if value:
-            return True
-        return None
 
 class TrueOrNullField(models.NullBooleanField):
     """A Field only storing `Null` or `True` values.
