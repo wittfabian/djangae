@@ -149,8 +149,10 @@ class IterableField(models.Field):
         """
         Applies get_db_prep_save of item_field on value items.
         """
-        if value is None:
-            return self._iterable_type([])
+
+        #If the value is an empty iterable, store None
+        if value == self._iterable_type([]):
+            return None
 
         return self._map(self.item_field_type.get_db_prep_save, value,
                          connection=connection)
