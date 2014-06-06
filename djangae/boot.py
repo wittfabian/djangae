@@ -128,6 +128,22 @@ def datastore_available():
 def in_testing():
     return "test" in sys.argv
 
+def monkey_patch_unsupported_tests():
+    from unittest import skip
+
+    unsupported_tests = [
+        'django.contrib.auth.tests.context_processors.AuthContextProcessorTests.test_perms_attrs'
+    ]
+
+    for test in unsupported_tests:
+        module, klass, meth = test.rsplit(".", 2)
+        __import__(module)
+        mod = sys.modules[module]
+        test_func = getattr(getattr(mod, klass), meth)
+
+        klass = getattr(mod, klass)
+        setattr(klass, meth, skip(test_func))
+
 def setup_paths():
     if not appengine_on_path():
         for k in [k for k in sys.modules if k.startswith('google')]:
@@ -147,3 +163,6 @@ def setup_paths():
         setup_built_in_library_paths()
 
     setup_additional_libs_path() #Add any folders in the project root that may contain extra libraries
+
+    if in_testing():
+        monkey_patch_unsupported_tests()
