@@ -26,7 +26,7 @@ from djangae.db.utils import (
     normalise_field_value,
 )
 from djangae.indexing import special_indexes_for_column, REQUIRES_SPECIAL_INDEXES, add_special_index
-from djangae.boot import on_production
+from djangae.boot import on_production, in_testing
 
 DJANGAE_LOG = logging.getLogger("djangae")
 
@@ -133,7 +133,7 @@ class SelectCommand(object):
         if self.ordering:
             ordering = [ x for x in self.ordering if "__" not in x ]
             if len(ordering) < len(self.ordering):
-                if not on_production():
+                if not on_production() and not in_testing():
                     diff = set(self.ordering) - set(ordering)
                     log_once(DJANGAE_LOG.warning, "The following orderings were ignored as cross-table orderings are not supported on the datastore: %s", diff)
                 self.ordering = ordering
