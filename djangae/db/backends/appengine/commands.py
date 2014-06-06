@@ -11,7 +11,6 @@ from django.db.models.sql.datastructures import EmptyResultSet
 from django.db.models.sql.where import AND
 from django import dispatch
 from google.appengine.api import datastore
-from google.appengine.api.datastore_types import Key
 from google.appengine.ext import db
 
 #DJANGAE
@@ -27,7 +26,9 @@ from djangae.db.utils import (
     normalise_field_value,
 )
 from djangae.indexing import special_indexes_for_column, REQUIRES_SPECIAL_INDEXES, add_special_index
+from djangae.boot import on_production
 
+DJANGAE_LOG = logging.getLogger("djangae")
 
 entity_pre_update = dispatch.Signal(providing_args=["sender", "entity"])
 entity_post_update = dispatch.Signal(providing_args=["sender", "entity"])
@@ -106,6 +107,19 @@ FILTER_CMP_FUNCTION_MAP = {
 }
 
 
+def log_once(logging_call, text, args):
+    """
+        Only logs one instance of the combination of text and arguments to the passed
+        logging function
+    """
+    identifier = "%s:%s" % (text, args)
+    if identifier in log_once.logged:
+        return
+    logging_call(text % args)
+
+log_once.logged = set()
+
+
 class SelectCommand(object):
     def __init__(self, connection, query, keys_only=False, all_fields=False):
         self.original_query = query
@@ -115,6 +129,14 @@ class SelectCommand(object):
             self.ordering = query.order_by
         else:
             self.ordering = query.order_by or opts.ordering
+
+        if self.ordering:
+            ordering = [ x for x in self.ordering if "__" not in x ]
+            if len(ordering) < len(self.ordering):
+                if not on_production():
+                    diff = set(self.ordering) - set(ordering)
+                    log_once(DJANGAE_LOG.warning, "The following orderings were ignored as cross-table orderings are not supported on the datastore: %s", diff)
+                self.ordering = ordering
 
         self.distinct_values = set()
         self.distinct_on_field = None
