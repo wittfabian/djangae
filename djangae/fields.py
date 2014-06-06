@@ -90,7 +90,7 @@ class IterableField(models.Field):
 
         default = kwargs.get("default", [])
 
-        if default and not callable(default):
+        if default is not None and not callable(default):
             kwargs["default"] = lambda: self._iterable_type(default)
 
         if callable(item_field_type):
@@ -184,6 +184,7 @@ class IterableField(models.Field):
         if not self.editable:
             # Skip validation for non-editable fields
             return
+
         # Validate choices
         if self.choices:
             valid_values = []
