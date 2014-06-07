@@ -98,11 +98,23 @@ def setup_built_in_library_paths():
     from dev_appserver import fix_sys_path
     fix_sys_path()
 
-    django_version = 1.5 #FIXME: Read this from app.yaml, and throw if not supported
+    from google.appengine.api import appinfo
 
-    if django_version != 1.4:
-        #Remove default django
-        sys.path = [ x for x in sys.path if "django-1.4" not in x ]
+    info = appinfo.LoadSingleAppInfo(open(os.path.join(find_project_root(), "app.yaml")))
+
+    try:
+        version_from_app_yaml = [ x.version for x in info.libraries if x.name == 'django' ][0]
+    except IndexError:
+        version_from_app_yaml = 'latest'
+
+    latest_non_deprecated = appinfo._NAME_TO_SUPPORTED_LIBRARY['django'].non_deprecated_versions[-1]
+    django_version = float(latest_non_deprecated if version_from_app_yaml == 'latest' else version_from_app_yaml)
+
+    if django_version < 1.5:
+        raise RuntimeError("Djangae only supports Django 1.5+")
+
+    #Remove default django
+    sys.path = [ x for x in sys.path if "django-1.4" not in x ]
 
     django_folder = "django-" + str(django_version)
     sys.path.insert(1, os.path.join(os.environ['APP_ENGINE_SDK'], "lib", django_folder))
