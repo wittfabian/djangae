@@ -129,20 +129,34 @@ def in_testing():
     return "test" in sys.argv
 
 def monkey_patch_unsupported_tests():
-    from unittest import skip
+    if "DJANGAE_TESTS_SKIPPED" in os.environ:
+        return
 
     unsupported_tests = [
-        'django.contrib.auth.tests.context_processors.AuthContextProcessorTests.test_perms_attrs'
+        #These auth tests override the AUTH_USER_MODEL setting, which then uses M2M joins
+        'django.contrib.auth.tests.auth_backends.CustomPermissionsUserModelBackendTest.test_custom_perms',
+        'django.contrib.auth.tests.auth_backends.CustomPermissionsUserModelBackendTest.test_get_all_superuser_permissions',
+        'django.contrib.auth.tests.auth_backends.CustomPermissionsUserModelBackendTest.test_has_no_object_perm',
+        'django.contrib.auth.tests.auth_backends.CustomPermissionsUserModelBackendTest.test_has_perm',
+        'django.contrib.auth.tests.auth_backends.ExtensionUserModelBackendTest.test_custom_perms',
+        'django.contrib.auth.tests.auth_backends.ExtensionUserModelBackendTest.test_has_perm',
+        'django.contrib.auth.tests.auth_backends.ExtensionUserModelBackendTest.test_get_all_superuser_permissions',
+        'django.contrib.auth.tests.auth_backends.ExtensionUserModelBackendTest.test_has_no_object_perm'
     ]
 
-    for test in unsupported_tests:
-        module, klass, meth = test.rsplit(".", 2)
-        __import__(module)
-        mod = sys.modules[module]
-        test_func = getattr(getattr(mod, klass), meth)
+    from unittest import skip
 
-        klass = getattr(mod, klass)
-        setattr(klass, meth, skip(test_func))
+    for test in unsupported_tests:
+        module_path, klass_name, method_name = test.rsplit(".", 2)
+        __import__(module_path, klass_name)
+
+        module = sys.modules[module_path]
+        klass = getattr(module, klass_name)
+        method = getattr(klass, method_name)
+
+        setattr(klass, method_name, skip("Not supported by Djangae")(method))
+
+    os.environ["DJANGAE_TESTS_SKIPPED"] = "1"
 
 def setup_paths():
     if not appengine_on_path():
