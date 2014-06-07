@@ -26,6 +26,7 @@ from django.utils import timezone
 from google.appengine.api.datastore_types import Blob, Text
 from google.appengine.ext.db import metadata
 from google.appengine.ext import testbed
+from google.appengine.api.datastore import Key
 
 #DJANGAE
 from djangae.db.exceptions import DatabaseError, NotSupportedError
@@ -135,7 +136,7 @@ class Cursor(object):
 
         for col in self.last_select_command.queried_fields:
             if col == "__key__":
-                key = entity.key()
+                key = entity if isinstance(entity, Key) else entity.key()
                 self.returned_ids.append(key)
                 result.append(key.id_or_name())
             else:
