@@ -506,22 +506,45 @@ class SelectCommand(object):
                         raise RuntimeError("Unsupported extra_select operation {0}".format(tokens[1]))
                     fun = FILTER_CMP_FUNCTION_MAP[op]
 
-                    def lazyAs(results, fun, attr, token_a, token_b):
+                    def lazyEval(results, attr, fun, token_a, token_b):
+                        """ Wraps a list or a generator, applys comparision function
+                        token_a is an attribute on the result, the lhs. token_b is the rhs
+                        attr is the target attribute to store the result
+                        """
                         for result in results:
                             if result is None:
                                 yield result
 
-                            result[attr] = fun(result.get(token_a), token_b)
+                            lhs = result.get(token_a)
+                            lhs_type = type(lhs)
+                            rhs = lhs_type(token_b)
+                            if type(rhs) == str:
+                                rhs = rhs[1:-1] # Strip quotes
+
+                            result[attr] = fun(lhs, rhs)
                             yield result
 
-                    results = lazyAs(results, fun, attr, tokens[0], tokens[2])
+                    results = lazyEval(results, attr, fun, tokens[0], tokens[2])
 
                 elif length == 1:
 
                     def lazyAssign(results, attr, value):
+                        """ Wraps a list or a generator, applys attribute assignment
+                        """
                         for result in results:
                             if result is None:
                                 yield result
+
+                            # if attr == 'dashed-value':
+                            #     import pdb; pdb.set_trace()
+
+                            if type(value) == (unicode or str):
+                                if value[0] in ['"',"'"]: # Just in case
+                                    value = value[1:-1]
+                                try:
+                                    value = int(value)
+                                except ValueError, e:
+                                    pass
 
                             result[attr] = value
                             yield result
