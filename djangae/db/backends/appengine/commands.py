@@ -116,6 +116,7 @@ def log_once(logging_call, text, args):
     if identifier in log_once.logged:
         return
     logging_call(text % args)
+    log_once.logged.add(identifier)
 
 log_once.logged = set()
 
