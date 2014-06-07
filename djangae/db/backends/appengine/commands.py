@@ -11,6 +11,7 @@ from django.db.models.sql.datastructures import EmptyResultSet
 from django.db.models.sql.where import AND
 from django import dispatch
 from google.appengine.api import datastore
+from google.appengine.api.datastore import Query
 from google.appengine.ext import db
 
 #DJANGAE
@@ -384,17 +385,20 @@ class SelectCommand(object):
     def _build_gae_query(self):
         """ Build and return the Datstore Query object. """
         combined_filters = []
-        query = datastore.Query(
+
+        query_kwargs = {}
+
+        if self.keys_only:
+            query_kwargs["keys_only"] = self.keys_only
+        elif self.projection:
+            query_kwargs["projection"] = self.projection
+
+        query = Query(
             self.db_table,
-            projection=self.projection
+            **query_kwargs
         )
 
-        #Only filter on class if we have some non-abstract parents
-        # if self.have_concrete_parent_models and not self.model._meta.proxy:
-        #     query["class ="] = self.model._meta.db_table
-
-        logging.info("Select query: {0}, {1}".format(self.model.__name__, self.where))
-
+        DJANGAE_LOG.debug("Select query: {0}, {1}".format(self.model.__name__, self.where))
         for column, op, value in self.where:
             if column == self.pk_col:
                 column = "__key__"
@@ -466,7 +470,7 @@ class SelectCommand(object):
                 queries = new_queries
 
             query = datastore.MultiQuery(queries, ordering)
-        else:
+        elif ordering:
             query.Order(*ordering)
         return query
 
