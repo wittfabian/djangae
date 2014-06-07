@@ -133,7 +133,7 @@ class SelectCommand(object):
             self.ordering = query.order_by or opts.ordering
 
         if self.ordering:
-            ordering = [ x for x in self.ordering if "__" not in x ]
+            ordering = [ x for x in self.ordering if not (isinstance(x, basestring) and "__" in x) ]
             if len(ordering) < len(self.ordering):
                 if not on_production() and not in_testing():
                     diff = set(self.ordering) - set(ordering)
