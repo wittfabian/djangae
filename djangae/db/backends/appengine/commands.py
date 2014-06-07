@@ -639,43 +639,31 @@ class DeleteCommand(object):
 class UpdateCommand(object):
     def __init__(self, connection, query):
         self.model = query.model
-        self.select = SelectCommand(connection, query, all_fields=True)
+        self.select = SelectCommand(connection, query, keys_only=True)
         self.values = query.values
         self.connection = connection
+
+    @db.transactional
+    def _update_entity(self, key):
+        result = datastore.Get(key)
+
+        for field, param, value in self.values:
+            result[field.column] = get_prepared_db_value(self.connection, MockInstance(field, value), field)
+
+            #Add special indexed fields
+            for index in special_indexes_for_column(self.model, field.column):
+                indexer = REQUIRES_SPECIAL_INDEXES[index]
+                result[indexer.indexed_column_name(field.column)] = indexer.prep_value_for_database(value)
+
+        datastore.Put(result)
 
     def execute(self):
         self.select.execute()
 
         results = self.select.results
-        entities = []
         i = 0
-        for result in results:
+        for key in results:
+            self._update_entity(key)
             i += 1
-            for field, param, value in self.values:
-                result[field.column] = get_prepared_db_value(self.connection, MockInstance(field, value), field)
-
-                #Add special indexed fields
-                for index in special_indexes_for_column(self.model, field.column):
-                    indexer = REQUIRES_SPECIAL_INDEXES[index]
-                    result[indexer.indexed_column_name(field.column)] = indexer.prep_value_for_database(value)
-
-            entities.append(result)
-
-        returned_ids = datastore.Put(entities)
-
-        model = self.select.model
-
-        #Now cache them, temporarily to help avoid consistency errors
-        for key, entity in itertools.izip(returned_ids, entities):
-            pk_column = model._meta.pk.column
-
-            #If there are parent models, search the parents for the
-            #first primary key which isn't a relation field
-            for parent in model._meta.parents.keys():
-                if not parent._meta.pk.rel:
-                    pk_column = parent._meta.pk.column
-
-            entity[pk_column] = key.id_or_name()
-            cache_entity(model, entity)
 
         return i
