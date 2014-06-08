@@ -16,13 +16,14 @@ from google.appengine.ext import db
 #DJANGAE
 from djangae.db.exceptions import NotSupportedError, CouldBeSupportedError
 from djangae.db.utils import (
-    get_concrete_parent_models,
     get_datastore_key,
     django_instance_to_entity,
     get_datastore_kind,
     get_prepared_db_value,
     MockInstance,
     normalise_field_value,
+    get_top_concrete_parent,
+    has_concrete_parents
 )
 from djangae.indexing import special_indexes_for_column, REQUIRES_SPECIAL_INDEXES, add_special_index
 from djangae.boot import on_production, in_testing
@@ -238,6 +239,7 @@ class SelectCommand(object):
         except ValueError:
             pass
 
+
     def parse_where_and_check_projection(self, where, negated=False):
         """ recursively parse the where tree and return a list of tuples of
             (column, match_type, value), e.g. ('name', 'exact', 'John').
@@ -342,15 +344,8 @@ class SelectCommand(object):
             models, i.e. non-abstract parent models which we support by storing all fields for
             both the parent model and its child models on the parent table.
         """
-        inheritance_root = self.model
-        # concrete_parents = [x for x in self.model._meta.get_parent_list() if not x._meta.abstract]
-        # if concrete_parents:
-        #     for parent in concrete_parents:
-        #         if not parent._meta.parents:
-        #             #If this is the top parent, override the db_table
-        #             inheritance_root = parent
+        inheritance_root = get_top_concrete_parent(self.model)
         self.db_table = inheritance_root._meta.db_table
-        # self.have_concrete_parent_models = bool(concrete_parents)
 
     def _validate_query_is_possible(self, query):
         """ Given the *django* query, check the following:
@@ -360,14 +355,6 @@ class SelectCommand(object):
         """
         #Check for joins
         if query.count_active_tables() > 1:
-            concrete_parents = get_concrete_parent_models(self.model)
-            if concrete_parents:
-                import pdb; pdb.set_trace()
-                raise CouldBeSupportedError(
-                    "Querying for a poly model. This could be supported in some cases, i.e. when "
-                    "it's a simple query. If it's a poly model with JOINs in the filters then we "
-                    "can't support it."
-                )
             raise NotSupportedError("""
                 The appengine database connector does not support JOINs. The requested join map follows\n
                 %s
@@ -395,6 +382,9 @@ class SelectCommand(object):
             self.db_table,
             **query_kwargs
         )
+
+        if has_concrete_parents(self.model):
+            query["class ="] = self.model._meta.db_table
 
         DJANGAE_LOG.debug("Select query: {0}, {1}".format(self.model.__name__, self.where))
         for column, op, value in self.where:
@@ -624,7 +614,7 @@ class InsertCommand(object):
 
 
     def execute(self):
-        if self.has_pk:
+        if self.has_pk and not has_concrete_parents(self.model):
             results = []
             #We are inserting, but we specified an ID, we need to check for existence before we Put()
             #FIXME/TODO: if we have many pks, then surely a multi datastore.Get would be faster than this loop, no?
