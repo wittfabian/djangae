@@ -1,6 +1,5 @@
 #STANDARD LIB
 from datetime import datetime
-import itertools
 import logging
 
 #LIBRARIES
@@ -15,7 +14,6 @@ from google.appengine.api.datastore import Query
 from google.appengine.ext import db
 
 #DJANGAE
-from djangae.db.caching import cache_entity
 from djangae.db.exceptions import NotSupportedError, CouldBeSupportedError
 from djangae.db.utils import (
     get_concrete_parent_models,
@@ -250,7 +248,7 @@ class SelectCommand(object):
             negated = not negated
 
         if negated and where.connector != AND:
-            raise DatabaseError("Only AND filters are supported for negated queries")
+            raise NotSupportedError("Only AND filters are supported for negated queries")
 
         for child in where.children:
             if isinstance(child, tuple):
@@ -543,7 +541,7 @@ class SelectCommand(object):
                                     value = value[1:-1]
                                 try:
                                     value = int(value)
-                                except ValueError, e:
+                                except ValueError:
                                     pass
 
                             result[attr] = value
