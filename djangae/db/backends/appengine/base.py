@@ -209,7 +209,6 @@ class DatabaseOperations(BaseDatabaseOperations):
         return value
 
     def sql_flush(self, style, tables, seqs, allow_cascade=False):
-        from django.conf import settings
         if getattr(settings, "COMPLETE_FLUSH_WHILE_TESTING", False):
             if "test" in sys.argv:
                 tables = metadata.get_kinds()
