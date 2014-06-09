@@ -383,7 +383,7 @@ class SelectCommand(object):
             **query_kwargs
         )
 
-        if has_concrete_parents(self.model):
+        if has_concrete_parents(self.model) and not self.model._meta.proxy:
             query["class ="] = self.model._meta.db_table
 
         DJANGAE_LOG.debug("Select query: {0}, {1}".format(self.model.__name__, self.where))
