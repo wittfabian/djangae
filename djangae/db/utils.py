@@ -93,7 +93,7 @@ def get_prepared_db_value(connection, instance, field, raw=False):
 def get_concrete_parents(model):
     #FIXME: This assumes get_parent_list returns things in the right order. That might not be true!
     parents = model._meta.get_parent_list()
-    return [ x for x in [ model ] + list(parents) ]
+    return [ x for x in [ model ] + list(parents) if not x._meta.abstract and not x._meta.proxy ]
 
 def get_top_concrete_parent(model):
     return get_concrete_parents(model)[-1]
