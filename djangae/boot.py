@@ -2,6 +2,9 @@ import logging
 import os
 import sys
 
+from django.conf import settings
+
+
 def setup_datastore_stubs():
     if "test" in sys.argv:
         return
@@ -144,17 +147,20 @@ def monkey_patch_unsupported_tests():
     if "DJANGAE_TESTS_SKIPPED" in os.environ:
         return
 
-    unsupported_tests = [
-        #These auth tests override the AUTH_USER_MODEL setting, which then uses M2M joins
-        'django.contrib.auth.tests.auth_backends.CustomPermissionsUserModelBackendTest.test_custom_perms',
-        'django.contrib.auth.tests.auth_backends.CustomPermissionsUserModelBackendTest.test_get_all_superuser_permissions',
-        'django.contrib.auth.tests.auth_backends.CustomPermissionsUserModelBackendTest.test_has_no_object_perm',
-        'django.contrib.auth.tests.auth_backends.CustomPermissionsUserModelBackendTest.test_has_perm',
-        'django.contrib.auth.tests.auth_backends.ExtensionUserModelBackendTest.test_custom_perms',
-        'django.contrib.auth.tests.auth_backends.ExtensionUserModelBackendTest.test_has_perm',
-        'django.contrib.auth.tests.auth_backends.ExtensionUserModelBackendTest.test_get_all_superuser_permissions',
-        'django.contrib.auth.tests.auth_backends.ExtensionUserModelBackendTest.test_has_no_object_perm'
-    ]
+    unsupported_tests = []
+
+    if 'django.contrib.auth' in settings.INSTALLED_APPS:
+        unsupported_tests.extend([
+            #These auth tests override the AUTH_USER_MODEL setting, which then uses M2M joins
+            'django.contrib.auth.tests.auth_backends.CustomPermissionsUserModelBackendTest.test_custom_perms',
+            'django.contrib.auth.tests.auth_backends.CustomPermissionsUserModelBackendTest.test_get_all_superuser_permissions',
+            'django.contrib.auth.tests.auth_backends.CustomPermissionsUserModelBackendTest.test_has_no_object_perm',
+            'django.contrib.auth.tests.auth_backends.CustomPermissionsUserModelBackendTest.test_has_perm',
+            'django.contrib.auth.tests.auth_backends.ExtensionUserModelBackendTest.test_custom_perms',
+            'django.contrib.auth.tests.auth_backends.ExtensionUserModelBackendTest.test_has_perm',
+            'django.contrib.auth.tests.auth_backends.ExtensionUserModelBackendTest.test_get_all_superuser_permissions',
+            'django.contrib.auth.tests.auth_backends.ExtensionUserModelBackendTest.test_has_no_object_perm'
+        ])
 
     from unittest import skip
 
@@ -163,10 +169,10 @@ def monkey_patch_unsupported_tests():
         __import__(module_path, klass_name)
 
         module = sys.modules[module_path]
-        klass = getattr(module, klass_name)
-        method = getattr(klass, method_name)
-
-        setattr(klass, method_name, skip("Not supported by Djangae")(method))
+        if hasattr(module, klass_name):
+            klass = getattr(module, klass_name)
+            method = getattr(klass, method_name)
+            setattr(klass, method_name, skip("Not supported by Djangae")(method))
 
     os.environ["DJANGAE_TESTS_SKIPPED"] = "1"
 
