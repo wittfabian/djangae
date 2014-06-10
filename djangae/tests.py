@@ -141,6 +141,26 @@ class EdgeCaseTests(TestCase):
         perms = list(Permission.objects.all().values_list("user__username", "perm"))
         self.assertEqual("A", perms[0][0])
 
+    def test_values_list_on_pk_does_keys_only_query(self):
+        from google.appengine.api.datastore import Query
+
+        def replacement_init(*args, **kwargs):
+            replacement_init.called_args = args
+            replacement_init.called_kwargs = kwargs
+
+        replacement_init.called_args = None
+        replacement_init.called_kwargs = None
+
+        try:
+            original_init = Query.__init__
+            Query.__init__ = replacement_init
+            list(User.objects.all().values_list('pk', flat=True))
+        finally:
+            Query.__init__ = original_init
+
+        self.assertTrue(replacement_init.called_kwargs.get('keys_only'))
+        self.assertEqual(5, len(User.objects.all().values_list('pk')))
+
     def test_iexact(self):
         user = User.objects.get(username__iexact="a")
         self.assertEqual("A", user.username)

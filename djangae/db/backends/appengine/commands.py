@@ -1,6 +1,5 @@
 #STANDARD LIB
 from datetime import datetime
-import itertools
 import logging
 
 #LIBRARIES
@@ -11,23 +10,25 @@ from django.db.models.sql.datastructures import EmptyResultSet
 from django.db.models.sql.where import AND
 from django import dispatch
 from google.appengine.api import datastore
-from google.appengine.api.datastore_types import Key
+from google.appengine.api.datastore import Query
 from google.appengine.ext import db
 
 #DJANGAE
-from djangae.db.caching import cache_entity
 from djangae.db.exceptions import NotSupportedError, CouldBeSupportedError
 from djangae.db.utils import (
-    get_concrete_parent_models,
     get_datastore_key,
     django_instance_to_entity,
     get_datastore_kind,
     get_prepared_db_value,
     MockInstance,
     normalise_field_value,
+    get_top_concrete_parent,
+    has_concrete_parents
 )
 from djangae.indexing import special_indexes_for_column, REQUIRES_SPECIAL_INDEXES, add_special_index
+from djangae.boot import on_production, in_testing
 
+DJANGAE_LOG = logging.getLogger("djangae")
 
 entity_pre_update = dispatch.Signal(providing_args=["sender", "entity"])
 entity_post_update = dispatch.Signal(providing_args=["sender", "entity"])
@@ -106,6 +107,20 @@ FILTER_CMP_FUNCTION_MAP = {
 }
 
 
+def log_once(logging_call, text, args):
+    """
+        Only logs one instance of the combination of text and arguments to the passed
+        logging function
+    """
+    identifier = "%s:%s" % (text, args)
+    if identifier in log_once.logged:
+        return
+    logging_call(text % args)
+    log_once.logged.add(identifier)
+
+log_once.logged = set()
+
+
 class SelectCommand(object):
     def __init__(self, connection, query, keys_only=False, all_fields=False):
         self.original_query = query
@@ -115,6 +130,14 @@ class SelectCommand(object):
             self.ordering = query.order_by
         else:
             self.ordering = query.order_by or opts.ordering
+
+        if self.ordering:
+            ordering = [ x for x in self.ordering if not (isinstance(x, basestring) and "__" in x) ]
+            if len(ordering) < len(self.ordering):
+                if not on_production() and not in_testing():
+                    diff = set(self.ordering) - set(ordering)
+                    log_once(DJANGAE_LOG.warning, "The following orderings were ignored as cross-table orderings are not supported on the datastore: %s", diff)
+                self.ordering = ordering
 
         self.distinct_values = set()
         self.distinct_on_field = None
@@ -216,6 +239,7 @@ class SelectCommand(object):
         except ValueError:
             pass
 
+
     def parse_where_and_check_projection(self, where, negated=False):
         """ recursively parse the where tree and return a list of tuples of
             (column, match_type, value), e.g. ('name', 'exact', 'John').
@@ -226,7 +250,7 @@ class SelectCommand(object):
             negated = not negated
 
         if negated and where.connector != AND:
-            raise DatabaseError("Only AND filters are supported for negated queries")
+            raise NotSupportedError("Only AND filters are supported for negated queries")
 
         for child in where.children:
             if isinstance(child, tuple):
@@ -320,15 +344,8 @@ class SelectCommand(object):
             models, i.e. non-abstract parent models which we support by storing all fields for
             both the parent model and its child models on the parent table.
         """
-        inheritance_root = self.model
-        # concrete_parents = [x for x in self.model._meta.get_parent_list() if not x._meta.abstract]
-        # if concrete_parents:
-        #     for parent in concrete_parents:
-        #         if not parent._meta.parents:
-        #             #If this is the top parent, override the db_table
-        #             inheritance_root = parent
+        inheritance_root = get_top_concrete_parent(self.model)
         self.db_table = inheritance_root._meta.db_table
-        # self.have_concrete_parent_models = bool(concrete_parents)
 
     def _validate_query_is_possible(self, query):
         """ Given the *django* query, check the following:
@@ -338,14 +355,6 @@ class SelectCommand(object):
         """
         #Check for joins
         if query.count_active_tables() > 1:
-            concrete_parents = get_concrete_parent_models(self.model)
-            if concrete_parents:
-                import pdb; pdb.set_trace()
-                raise CouldBeSupportedError(
-                    "Querying for a poly model. This could be supported in some cases, i.e. when "
-                    "it's a simple query. If it's a poly model with JOINs in the filters then we "
-                    "can't support it."
-                )
             raise NotSupportedError("""
                 The appengine database connector does not support JOINs. The requested join map follows\n
                 %s
@@ -361,17 +370,23 @@ class SelectCommand(object):
     def _build_gae_query(self):
         """ Build and return the Datstore Query object. """
         combined_filters = []
-        query = datastore.Query(
+
+        query_kwargs = {}
+
+        if self.keys_only:
+            query_kwargs["keys_only"] = self.keys_only
+        elif self.projection:
+            query_kwargs["projection"] = self.projection
+
+        query = Query(
             self.db_table,
-            projection=self.projection
+            **query_kwargs
         )
 
-        #Only filter on class if we have some non-abstract parents
-        # if self.have_concrete_parent_models and not self.model._meta.proxy:
-        #     query["class ="] = self.model._meta.db_table
+        if has_concrete_parents(self.model) and not self.model._meta.proxy:
+            query["class ="] = self.model._meta.db_table
 
-        logging.info("Select query: {0}, {1}".format(self.model.__name__, self.where))
-
+        DJANGAE_LOG.debug("Select query: {0}, {1}".format(self.model.__name__, self.where))
         for column, op, value in self.where:
             if column == self.pk_col:
                 column = "__key__"
@@ -443,7 +458,7 @@ class SelectCommand(object):
                 queries = new_queries
 
             query = datastore.MultiQuery(queries, ordering)
-        else:
+        elif ordering:
             query.Order(*ordering)
         return query
 
@@ -479,22 +494,45 @@ class SelectCommand(object):
                         raise RuntimeError("Unsupported extra_select operation {0}".format(tokens[1]))
                     fun = FILTER_CMP_FUNCTION_MAP[op]
 
-                    def lazyAs(results, fun, attr, token_a, token_b):
+                    def lazyEval(results, attr, fun, token_a, token_b):
+                        """ Wraps a list or a generator, applys comparision function
+                        token_a is an attribute on the result, the lhs. token_b is the rhs
+                        attr is the target attribute to store the result
+                        """
                         for result in results:
                             if result is None:
                                 yield result
 
-                            result[attr] = fun(result.get(token_a), token_b)
+                            lhs = result.get(token_a)
+                            lhs_type = type(lhs)
+                            rhs = lhs_type(token_b)
+                            if type(rhs) == str:
+                                rhs = rhs[1:-1] # Strip quotes
+
+                            result[attr] = fun(lhs, rhs)
                             yield result
 
-                    results = lazyAs(results, fun, attr, tokens[0], tokens[2])
+                    results = lazyEval(results, attr, fun, tokens[0], tokens[2])
 
                 elif length == 1:
 
                     def lazyAssign(results, attr, value):
+                        """ Wraps a list or a generator, applys attribute assignment
+                        """
                         for result in results:
                             if result is None:
                                 yield result
+
+                            # if attr == 'dashed-value':
+                            #     import pdb; pdb.set_trace()
+
+                            if type(value) == (unicode or str):
+                                if value[0] in ['"',"'"]: # Just in case
+                                    value = value[1:-1]
+                                try:
+                                    value = int(value)
+                                except ValueError:
+                                    pass
 
                             result[attr] = value
                             yield result
@@ -576,7 +614,7 @@ class InsertCommand(object):
 
 
     def execute(self):
-        if self.has_pk:
+        if self.has_pk and not has_concrete_parents(self.model):
             results = []
             #We are inserting, but we specified an ID, we need to check for existence before we Put()
             #FIXME/TODO: if we have many pks, then surely a multi datastore.Get would be faster than this loop, no?
@@ -612,43 +650,31 @@ class DeleteCommand(object):
 class UpdateCommand(object):
     def __init__(self, connection, query):
         self.model = query.model
-        self.select = SelectCommand(connection, query, all_fields=True)
+        self.select = SelectCommand(connection, query, keys_only=True)
         self.values = query.values
         self.connection = connection
+
+    @db.transactional
+    def _update_entity(self, key):
+        result = datastore.Get(key)
+
+        for field, param, value in self.values:
+            result[field.column] = get_prepared_db_value(self.connection, MockInstance(field, value), field)
+
+            #Add special indexed fields
+            for index in special_indexes_for_column(self.model, field.column):
+                indexer = REQUIRES_SPECIAL_INDEXES[index]
+                result[indexer.indexed_column_name(field.column)] = indexer.prep_value_for_database(value)
+
+        datastore.Put(result)
 
     def execute(self):
         self.select.execute()
 
         results = self.select.results
-        entities = []
         i = 0
-        for result in results:
+        for key in results:
+            self._update_entity(key)
             i += 1
-            for field, param, value in self.values:
-                result[field.column] = get_prepared_db_value(self.connection, MockInstance(field, value), field)
-
-                #Add special indexed fields
-                for index in special_indexes_for_column(self.model, field.column):
-                    indexer = REQUIRES_SPECIAL_INDEXES[index]
-                    result[indexer.indexed_column_name(field.column)] = indexer.prep_value_for_database(value)
-
-            entities.append(result)
-
-        returned_ids = datastore.Put(entities)
-
-        model = self.select.model
-
-        #Now cache them, temporarily to help avoid consistency errors
-        for key, entity in itertools.izip(returned_ids, entities):
-            pk_column = model._meta.pk.column
-
-            #If there are parent models, search the parents for the
-            #first primary key which isn't a relation field
-            for parent in model._meta.parents.keys():
-                if not parent._meta.pk.rel:
-                    pk_column = parent._meta.pk.column
-
-            entity[pk_column] = key.id_or_name()
-            cache_entity(model, entity)
 
         return i

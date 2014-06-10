@@ -2,6 +2,9 @@ import logging
 import os
 import sys
 
+from django.conf import settings
+
+
 def setup_datastore_stubs():
     if "test" in sys.argv:
         return
@@ -98,11 +101,23 @@ def setup_built_in_library_paths():
     from dev_appserver import fix_sys_path
     fix_sys_path()
 
-    django_version = 1.5 #FIXME: Read this from app.yaml, and throw if not supported
+    from google.appengine.api import appinfo
 
-    if django_version != 1.4:
-        #Remove default django
-        sys.path = [ x for x in sys.path if "django-1.4" not in x ]
+    info = appinfo.LoadSingleAppInfo(open(os.path.join(find_project_root(), "app.yaml")))
+
+    try:
+        version_from_app_yaml = [ x.version for x in info.libraries if x.name == 'django' ][0]
+    except IndexError:
+        version_from_app_yaml = 'latest'
+
+    latest_non_deprecated = appinfo._NAME_TO_SUPPORTED_LIBRARY['django'].non_deprecated_versions[-1]
+    django_version = float(latest_non_deprecated if version_from_app_yaml == 'latest' else version_from_app_yaml)
+
+    if django_version < 1.5:
+        raise RuntimeError("Djangae only supports Django 1.5+")
+
+    #Remove default django
+    sys.path = [ x for x in sys.path if "django-1.4" not in x ]
 
     django_folder = "django-" + str(django_version)
     sys.path.insert(1, os.path.join(os.environ['APP_ENGINE_SDK'], "lib", django_folder))
@@ -128,6 +143,39 @@ def datastore_available():
 def in_testing():
     return "test" in sys.argv
 
+def monkey_patch_unsupported_tests():
+    if "DJANGAE_TESTS_SKIPPED" in os.environ:
+        return
+
+    unsupported_tests = []
+
+    if 'django.contrib.auth' in settings.INSTALLED_APPS:
+        unsupported_tests.extend([
+            #These auth tests override the AUTH_USER_MODEL setting, which then uses M2M joins
+            'django.contrib.auth.tests.auth_backends.CustomPermissionsUserModelBackendTest.test_custom_perms',
+            'django.contrib.auth.tests.auth_backends.CustomPermissionsUserModelBackendTest.test_get_all_superuser_permissions',
+            'django.contrib.auth.tests.auth_backends.CustomPermissionsUserModelBackendTest.test_has_no_object_perm',
+            'django.contrib.auth.tests.auth_backends.CustomPermissionsUserModelBackendTest.test_has_perm',
+            'django.contrib.auth.tests.auth_backends.ExtensionUserModelBackendTest.test_custom_perms',
+            'django.contrib.auth.tests.auth_backends.ExtensionUserModelBackendTest.test_has_perm',
+            'django.contrib.auth.tests.auth_backends.ExtensionUserModelBackendTest.test_get_all_superuser_permissions',
+            'django.contrib.auth.tests.auth_backends.ExtensionUserModelBackendTest.test_has_no_object_perm'
+        ])
+
+    from unittest import skip
+
+    for test in unsupported_tests:
+        module_path, klass_name, method_name = test.rsplit(".", 2)
+        __import__(module_path, klass_name)
+
+        module = sys.modules[module_path]
+        if hasattr(module, klass_name):
+            klass = getattr(module, klass_name)
+            method = getattr(klass, method_name)
+            setattr(klass, method_name, skip("Not supported by Djangae")(method))
+
+    os.environ["DJANGAE_TESTS_SKIPPED"] = "1"
+
 def setup_paths():
     if not appengine_on_path():
         for k in [k for k in sys.modules if k.startswith('google')]:
@@ -147,3 +195,6 @@ def setup_paths():
         setup_built_in_library_paths()
 
     setup_additional_libs_path() #Add any folders in the project root that may contain extra libraries
+
+    if in_testing():
+        monkey_patch_unsupported_tests()
