@@ -2,9 +2,6 @@ import logging
 import os
 import sys
 
-from django.conf import settings
-
-
 def setup_datastore_stubs():
     if "test" in sys.argv:
         return
@@ -146,6 +143,8 @@ def in_testing():
 def monkey_patch_unsupported_tests():
     if "DJANGAE_TESTS_SKIPPED" in os.environ:
         return
+
+    from django.conf import settings
 
     unsupported_tests = []
 
