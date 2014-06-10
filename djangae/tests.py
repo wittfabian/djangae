@@ -45,8 +45,8 @@ class EdgeCaseTests(TestCase):
     def setUp(self):
         add_special_index(User, "username", "iexact")
 
-        User.objects.create(username="A", email="test@example.com", last_login=datetime.datetime.now().date())
-        User.objects.create(username="B", email="test@example.com", last_login=datetime.datetime.now().date())
+        self.u1 = User.objects.create(username="A", email="test@example.com", last_login=datetime.datetime.now().date())
+        self.u2 = User.objects.create(username="B", email="test@example.com", last_login=datetime.datetime.now().date())
         User.objects.create(username="C", email="test2@example.com", last_login=datetime.datetime.now().date())
         User.objects.create(username="D", email="test3@example.com", last_login=datetime.datetime.now().date())
         User.objects.create(username="E", email="test3@example.com", last_login=datetime.datetime.now().date())
@@ -64,6 +64,10 @@ class EdgeCaseTests(TestCase):
 
         self.assertEqual(1, MultiTableChildTwo.objects.count())
         self.assertEqual(child2, MultiTableChildTwo.objects.get())
+
+    def test_anding_pks(self):
+        results = User.objects.filter(id__exact=self.u1.pk).filter(id__exact=self.u2.pk)
+        self.assertEqual(list(results), [])
 
     def test_unusual_queries(self):
         results = User.objects.all()
