@@ -51,6 +51,16 @@ The intention is to basically do what djangoappengine has done up to now, but wi
  * Add the following to your URL handler: `url(r'^_ah/', include('djangae.urls'))`
 
 
+## djangae.contrib.auth
+
+This includes a custom user model, auth backend and middleware that makes django.contrib.auth work on the datastore.
+
+To use, do the following:
+
+ - At the bottom of your settings.py add: from djangae.contrib.auth.settings import * (this sets up the auth backend, login url and custom user model)
+ - Replace 'django.contrib.auth.middleware.AuthenticationMiddleware' with 'djangae.contrib.auth.middleware.AuthenticationMiddleware'
+ - Add 'djangae.contrib.auth' to INSTALLED_APPS probably after 'django.contrib.auth'
+
 ## TODO
 
 ### Bug Fixing
@@ -60,9 +70,6 @@ Implement the FK Null Fix from dbindexer (which manipulates the query in the cas
 
 Make `MyModel.objects.filter(pk=1) | MyModel.objects.filter(pk=2)` correctly return an empty result.  Currently returns both!
 
-### djangae.contrib.auth
-
-This includes a custom user model that makes django.contrib.auth work.
 
 ### Memcache backend
 
