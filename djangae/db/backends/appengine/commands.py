@@ -602,7 +602,8 @@ class InsertCommand(object):
         if self.has_pk:
             results = []
             #We are inserting, but we specified an ID, we need to check for existence before we Put()
-            #FIXME/TODO: if we have many pks, then surely a multi datastore.Get would be faster than this loop, no?
+            #We do it in a loop so each check/put is transactional - because it's an ancestor query it shouldn't
+            #cost any entity groups
             for key, ent in zip(self.included_keys, self.entities):
                 @db.transactional
                 def txn():
