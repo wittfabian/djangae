@@ -90,7 +90,7 @@ class IterableField(models.Field):
 
         default = kwargs.get("default", [])
 
-        if default and not callable(default):
+        if default is not None and not callable(default):
             kwargs["default"] = lambda: self._iterable_type(default)
 
         if callable(item_field_type):
@@ -149,8 +149,10 @@ class IterableField(models.Field):
         """
         Applies get_db_prep_save of item_field on value items.
         """
-        if value is None:
-            return self._iterable_type([])
+
+        #If the value is an empty iterable, store None
+        if value == self._iterable_type([]):
+            return None
 
         return self._map(self.item_field_type.get_db_prep_save, value,
                          connection=connection)
@@ -182,6 +184,7 @@ class IterableField(models.Field):
         if not self.editable:
             # Skip validation for non-editable fields
             return
+
         # Validate choices
         if self.choices:
             valid_values = []
