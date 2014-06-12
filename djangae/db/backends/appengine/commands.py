@@ -14,7 +14,7 @@ from google.appengine.api.datastore import Query
 from google.appengine.ext import db
 
 #DJANGAE
-from djangae.db.exceptions import NotSupportedError, CouldBeSupportedError
+from djangae.db.exceptions import NotSupportedError
 from djangae.db.utils import (
     get_datastore_key,
     django_instance_to_entity,
@@ -633,20 +633,33 @@ class InsertCommand(object):
                             raise IntegrityError("Tried to INSERT with existing key")
                     results.append(datastore.Put(ent))
 
+                    entity_post_insert.send(sender=self.model, entity=ent)
+
                 txn()
 
             return results
         else:
-            return datastore.Put(self.entities)
+            results = datastore.Put(self.entities)
+
+            for ent in self.entities:
+                entity_post_insert.send(sender=self.model, entity=ent)
+
+            return results
 
 class DeleteCommand(object):
     def __init__(self, connection, query):
-        self.select = SelectCommand(connection, query, keys_only=True)
+        self.select = SelectCommand(connection, query)
 
     def execute(self):
         self.select.execute()
-        datastore.Delete(self.select.results)
-        #FIXME: Remove from the cache
+
+        #This is a little bit more inefficient than just doing a keys_only query and
+        #sending it to delete, but I think this is the sacrifice to make for the unique caching layer
+        keys = []
+        for entity in self.select.results:
+            keys.append(entity.key())
+            entity_deleted.send(sender=self.select.model, entity=entity)
+        datastore.Delete(keys)
 
 class UpdateCommand(object):
     def __init__(self, connection, query):
@@ -667,12 +680,15 @@ class UpdateCommand(object):
                 indexer = REQUIRES_SPECIAL_INDEXES[index]
                 result[indexer.indexed_column_name(field.column)] = indexer.prep_value_for_database(value)
 
+        entity_pre_update.send(sender=self.model, entity=result)
         datastore.Put(result)
+        entity_post_update.send(sender=self.model, entity=result)
 
     def execute(self):
         self.select.execute()
 
         results = self.select.results
+
         i = 0
         for key in results:
             self._update_entity(key)
