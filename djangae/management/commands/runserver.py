@@ -99,7 +99,7 @@ class Command(BaseRunserverCommand):
                 "--admin_port",
                 str(int(self.port) + 1),
                 "--automatic_restart",
-                "0",
+                "False",
                 "--allow_skipped_files"
             ]
 
