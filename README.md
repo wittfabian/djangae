@@ -51,84 +51,30 @@ The intention is to basically do what djangoappengine has done up to now, but wi
  * Add the following to your URL handler: `url(r'^_ah/', include('djangae.urls'))`
 
 
+## djangae.contrib.auth
+
+This includes a custom user model, auth backend and middleware that makes django.contrib.auth work on the datastore.
+
+To use, do the following:
+
+ - At the bottom of your settings.py add: from djangae.contrib.auth.settings import * (this sets up the auth backend, login url and custom user model)
+ - Replace 'django.contrib.auth.middleware.AuthenticationMiddleware' with 'djangae.contrib.auth.middleware.AuthenticationMiddleware'
+ - Add 'djangae.contrib.auth' to INSTALLED_APPS probably after 'django.contrib.auth'
+
 ## TODO
 
 ### Bug Fixing
 
-Detect and manipulate queries that use Django model inheritance to just query the base class table as all data is stored there. Don't forget to filter on `class`.
-
-This should fix errors like this one:
-
-    ======================================================================
-    ERROR: test_inherited_unique (testapp.django_model_tests.model_forms.tests.UniqueTest)
-    ----------------------------------------------------------------------
-    Traceback (most recent call last):
-      File "/home/lukebens/Potato/Djangae-testapp/testapp/django_model_tests/model_forms/tests.py", line 448, in test_inherited_unique
-        self.assertFalse(form.is_valid())
-      File "/home/lukebens/Potato/Djangae-testapp/google_appengine/lib/django-1.5/django/forms/forms.py", line 126, in is_valid
-        return self.is_bound and not bool(self.errors)
-      File "/home/lukebens/Potato/Djangae-testapp/google_appengine/lib/django-1.5/django/forms/forms.py", line 117, in _get_errors
-        self.full_clean()
-      File "/home/lukebens/Potato/Djangae-testapp/google_appengine/lib/django-1.5/django/forms/forms.py", line 274, in full_clean
-        self._post_clean()
-      File "/home/lukebens/Potato/Djangae-testapp/google_appengine/lib/django-1.5/django/forms/models.py", line 344, in _post_clean
-        self.validate_unique()
-      File "/home/lukebens/Potato/Djangae-testapp/google_appengine/lib/django-1.5/django/forms/models.py", line 353, in validate_unique
-        self.instance.validate_unique(exclude=exclude)
-      File "/home/lukebens/Potato/Djangae-testapp/google_appengine/lib/django-1.5/django/db/models/base.py", line 731, in validate_unique
-        errors = self._perform_unique_checks(unique_checks)
-      File "/home/lukebens/Potato/Djangae-testapp/google_appengine/lib/django-1.5/django/db/models/base.py", line 826, in _perform_unique_checks
-        if qs.exists():
-      File "/home/lukebens/Potato/Djangae-testapp/google_appengine/lib/django-1.5/django/db/models/query.py", line 610, in exists
-        return self.query.has_results(using=self.db)
-      File "/home/lukebens/Potato/Djangae-testapp/google_appengine/lib/django-1.5/django/db/models/sql/query.py", line 447, in has_results
-        return bool(compiler.execute_sql(SINGLE))
-      File "/home/lukebens/Potato/Djangae-testapp/google_appengine/lib/django-1.5/django/db/models/sql/compiler.py", line 830, in execute_sql
-        sql, params = self.as_sql()
-      File "/home/lukebens/Potato/Djangae-testapp/djangae/db/backends/appengine/compiler.py", line 47, in as_sql
-        validate_query_is_possible(self.query)
-      File "/home/lukebens/Potato/Djangae-testapp/djangae/db/backends/appengine/compiler.py", line 40, in validate_query_is_possible
-        """ % query.join_map)
-    NotSupportedError:
-                The appengine database connector does not support JOINs. The requested join map follows
-
-                {(None, u'model_forms_derivedbook', None, None): (u'model_forms_derivedbook',), (u'model_forms_derivedbook', u'model_forms_book', u'book_ptr_id', u'id'): (u'model_forms_book',)}
-
-
-Note that running `testapp.UniqueTest.test_inherited_unique` on its own passes, but when running the whole test case (specifically when `test_abstract_inherited_unique` and `test_abstract_inherited_unique_together` are run as well) that first test then fails. If you put PDB into django/db/models/base.py circa line 826 in `_perform_unique_checks` then you will see that when the test is run on its own `qs.query.count_active_tables()` returns 1, but when the test is run with the those other 2 tests as well then `qs.query.count_active_tables()` returns 2 and hence the `CouldBeSupported` error is raised.
-I think that the error is being correctly raised, but the question is what those other tests are doing which is causing the query to change! It's as if something to do with calling `DerivedBook.objects.create` is causing something to "fix" the tables used in query.
-Note that if you call `django.db.backends.mysql.compiler.SQLCompiler(qs, django.db.connection, None).as_sql()` on the query set at that PDB point, then that also triggers the error.  So it's as if those other 2 tests are causing code similar to that (but not actually that) to be run somewhere.
-
-
 Implement the FK Null Fix from dbindexer (which manipulates the query in the case a join is used for isnull).
 
 
+Make `MyModel.objects.filter(pk=1) | MyModel.objects.filter(pk=2)` correctly return an empty result.  Currently returns both!
 
-The following test also started failing, we need to investigate to find the failing query and fix up Djangae
-
-    ======================================================================
-    FAIL: test_formset_instance (django.contrib.formtools.tests.wizard.forms.FormTests)
-    ----------------------------------------------------------------------
-    Traceback (most recent call last):
-      File "/home/lukebens/Potato/Djangae-testapp/google_appengine/lib/django-1.5/django/contrib/formtools/tests/wizard/forms.py", line 192, in test_formset_instance
-        self.assertEqual(instance.get_form().initial_form_count(), 1)
-    AssertionError: 0 != 1
-
-
-Make `MyModel.objects.filter(pk=1) | MyModel.objects.filter(pk=2)` correctly return an empty result.  Currently results in `DataBaseError`.
-
-
-### djangae.contrib.auth
-
-This is a duplication of django.contrib.auth which we should fix up to remove the ManyToMany fields (using ListFields). We should make the minimal changes, but also add an additional authentication backend that uses App Engine's users API
 
 ### Memcache backend
 
 I think we need a memcache backend. Take a look at djappengine on GitHub, perhaps we could just use the one from there. Although I'm not convinced that the standard memcache backend won't work. Needs testing.
 
-### extra() selects
-
-It should be possible to support extra selects, this is not yet implemented and throws a CouldBeSupportedError
 
 ### Special Indexing
 

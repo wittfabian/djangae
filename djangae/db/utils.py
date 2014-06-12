@@ -90,10 +90,21 @@ def get_prepared_db_value(connection, instance, field, raw=False):
 
     return value
 
+def get_concrete_parents(model):
+    #FIXME: This assumes get_parent_list returns things in the right order. That might not be true!
+    parents = model._meta.get_parent_list()
+    return [ x for x in [ model ] + list(parents) if not x._meta.abstract and not x._meta.proxy ]
+
+def get_top_concrete_parent(model):
+    return get_concrete_parents(model)[-1]
+
+def has_concrete_parents(model):
+    return get_concrete_parents(model) != [ model ]
+
 def django_instance_to_entity(connection, model, fields, raw, instance):
     # uses_inheritance = False
-    inheritance_root = model
-    db_table = get_datastore_kind(model)
+    inheritance_root = get_top_concrete_parent(model)
+    db_table = get_datastore_kind(inheritance_root)
 
     def value_from_instance(_instance, _field):
         value = get_prepared_db_value(connection, _instance, _field, raw)
@@ -108,35 +119,15 @@ def django_instance_to_entity(connection, model, fields, raw, instance):
 
         return value, is_primary_key
 
-    # if [ x for x in model._meta.get_parent_list() if not x._meta.abstract]:
-    #     #We can simulate multi-table inheritance by using the same approach as
-    #     #datastore "polymodels". Here we store the classes that form the heirarchy
-    #     #and extend the fields to include those from parent models
-    #     classes = [ model._meta.db_table ]
-    #     for parent in model._meta.get_parent_list():
-    #         if not parent._meta.parents:
-    #             #If this is the top parent, override the db_table
-    #             inheritance_root = parent
 
-    #         classes.append(parent._meta.db_table)
-    #         for field in parent._meta.fields:
-    #             fields.append(field)
+    concrete_classes = get_concrete_parents(model)
+    classes = None
+    if len(concrete_classes) > 1:
+        classes = [ x._meta.db_table for x in concrete_classes ]
 
-    #     uses_inheritance = True
-
-
-    #FIXME: This will only work for two levels of inheritance
-    # for obj in model._meta.get_all_related_objects():
-    #     if model in [ x for x in obj.model._meta.parents if not x._meta.abstract]:
-    #         try:
-    #             related_obj = getattr(instance, obj.var_name)
-    #         except obj.model.DoesNotExist:
-    #             #We don't have a child attached to this field
-    #             #so ignore
-    #             continue
-
-    #         for field in related_obj._meta.fields:
-    #             fields.append(field)
+        for klass in concrete_classes[1:]: #Ignore the current model
+            for field in klass._meta.fields:
+                fields.append(field) #Add any parent fields
 
     field_values = {}
     primary_key = None
@@ -169,17 +160,12 @@ def django_instance_to_entity(connection, model, fields, raw, instance):
             kwargs["name"] = primary_key
         else:
             raise ValueError("Invalid primary key value")
-        #If the model has a concrete parent then we must specify the parent object's Key.
-        #Note that the a concrete parent's pk is always the same.
-        concrete_parents = get_concrete_parent_models(model)
-        if concrete_parents:
-            kwargs["parent"] = Key.from_path(get_datastore_kind(concrete_parents[0]), primary_key)
 
     entity = datastore.Entity(db_table, **kwargs)
     entity.update(field_values)
 
-    # if uses_inheritance:
-    #     entity["class"] = classes
+    if classes:
+        entity["class"] = classes
 
     #print inheritance_root.__name__ if inheritance_root else "None", model.__name__, entity
     return entity
@@ -187,22 +173,10 @@ def django_instance_to_entity(connection, model, fields, raw, instance):
 
 def get_datastore_key(model, pk):
     """ Return a datastore.Key for the given model and primary key.
-        Takes into account the fact that models with a concrete (non-abstract) parent model
-        should include the parent object's key as an datastore ancestor.
     """
-    concrete_parents = get_concrete_parent_models(model)
-    if concrete_parents:
-        #Note that parent objects always share the same pk
-        parent = Key.from_path(get_datastore_kind(concrete_parents[0]), pk)
-    else:
-        parent = None
-    return Key.from_path(get_datastore_kind(model), pk, parent=parent)
 
-
-def get_concrete_parent_models(model):
-    """ Given a Django model class, return a list of non-abstract parent models. """
-    return [x for x in model._meta.get_parent_list() if not x._meta.abstract]
-
+    kind = get_top_concrete_parent(model)._meta.db_table
+    return Key.from_path(kind, pk)
 
 class MockInstance(object):
     """
