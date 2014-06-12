@@ -1,6 +1,7 @@
 from djangae.contrib.auth.models import User
+from django.contrib.auth.backends import ModelBackend
 
-class AppEngineUserAPI(object):
+class AppEngineUserAPI(ModelBackend):
     """
         A custom Django authentication backend, which lets us authenticate against the Google
         users API
