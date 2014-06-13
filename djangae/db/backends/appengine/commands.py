@@ -506,9 +506,8 @@ class SelectCommand(object):
                             lhs = result.get(token_a)
                             lhs_type = type(lhs)
                             rhs = lhs_type(token_b)
-                            if type(rhs) == str:
-                                rhs = rhs[1:-1] # Strip quotes
-
+                            if isinstance(rhs, basestring):
+                                rhs = rhs.strip("'").strip('"') # Strip quotes
                             result[attr] = fun(lhs, rhs)
                             yield result
 
