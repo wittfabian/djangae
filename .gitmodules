@@ -1,3 +1,0 @@
-[submodule "djangae/contrib/centaur"]
-	path = djangae/contrib/centaur
-	url = https://github.com/lukebpotato/centaur.git
