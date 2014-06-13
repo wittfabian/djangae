@@ -26,10 +26,11 @@ from django.utils.translation import ugettext_lazy as _
 @python_2_unicode_compatible
 class Group(models.Model):
     """
-        This is a clone of django.contrib.auth.Group, but nonrelationalized
+        This is a clone of django.contrib.auth.Group, but nonrelationalized. Doesn't user Permission but directly
+        uses the permission names
     """
     name = models.CharField(_('name'), max_length=80, unique=True)
-    permissions = ListField(models.ForeignKey(Permission),
+    permissions = ListField(models.CharField(max_length=500),
         verbose_name=_('permissions'), blank=True)
 
     objects = GroupManager()
@@ -37,6 +38,7 @@ class Group(models.Model):
     class Meta:
         verbose_name = _('group')
         verbose_name_plural = _('groups')
+        app_label = "djangae"
 
     def __str__(self):
         return self.name
