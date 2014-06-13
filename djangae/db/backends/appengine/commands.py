@@ -456,13 +456,13 @@ class SelectCommand(object):
                 for query in queries:
                     if op == "in":
                         for val in value:
-                            new_query = datastore.Query(self.model._meta.db_table)
+                            new_query = datastore.Query(self.db_table)
                             new_query.update(query)
                             new_query["%s =" % column] = val
                             new_queries.append(new_query)
                     elif op == "gt_and_lt":
                         for tmp_op in ("<", ">"):
-                            new_query = datastore.Query(self.model._meta.db_table)
+                            new_query = datastore.Query(self.db_table)
                             new_query.update(query)
                             new_query["%s %s" % (column, tmp_op)] = value
                             new_queries.append(new_query)
@@ -471,7 +471,7 @@ class SelectCommand(object):
             query = datastore.MultiQuery(queries, ordering)
 
         elif self.exact_pk:
-            qry = datastore.Query()
+            qry = datastore.Query(self.db_table)
             qry.update(query)
             qry.Ancestor(self.exact_pk)
             qry["__key__ ="] = self.exact_pk
@@ -481,9 +481,10 @@ class SelectCommand(object):
             queries = []
             num_queries = 0
             for pk in self.included_pks:
-                qry = datastore.Query()
+                qry = datastore.Query(self.db_table)
                 qry.update(query)
                 qry.Ancestor(pk)
+                qry["__key__ ="] = pk
                 queries.append(qry)
                 num_queries += 1
 
@@ -566,21 +567,6 @@ class SelectCommand(object):
                 else:
                     raise RuntimeError("Unsupported extra_select")
         return results
-
-    def _matches_filters(self, result, where_filters):
-        if result is None:
-            return False
-        for column, match_type, match_val in where_filters:
-            result_val = result[column]
-            result_val = normalise_field_value(result_val)
-            match_val = normalise_field_value(match_val)
-            try:
-                cmp_func = FILTER_CMP_FUNCTION_MAP[match_type]
-                if not cmp_func(result_val, match_val):
-                    return False
-            except KeyError:
-                raise NotImplementedError("Filter {0} not (yet?) supported".format(match_type))
-        return True
 
     def next_result(self):
         while True:
