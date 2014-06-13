@@ -188,8 +188,11 @@ class SelectCommand(object):
         self.model = query.model
         self.is_count = query.aggregates
         self.keys_only = False #FIXME: This should be used where possible
+
+        self.exact_pk = None
         self.included_pks = []
-        self.excluded_pks = []
+        self.excluded_pks = set()
+
         self.has_inequality_filter = False
         self.all_filters = []
         self.results = None
@@ -271,7 +274,10 @@ class SelectCommand(object):
 
                 if negated:
                     if op in ("exact", "in") and constraint.field.primary_key:
-                        self.excluded_pks.append(value)
+                        if isinstance(value, (list, tuple)):
+                            self.excluded_pks.update(set(value))
+                        else:
+                            self.excluded_pks.add(value)
                     #else: FIXME when excluded_pks is handled, we can put the
                     #next section in an else block
                     if op == "exact":
@@ -282,7 +288,7 @@ class SelectCommand(object):
                         result.append((col, "gt_and_lt", value))
                         self.has_inequality_filter = True
                     else:
-                        raise RuntimeError("Unsupported negated lookup: " + op)
+                        raise NotSupportedError("Unsupported negated lookup: " + op)
                 else:
                     if constraint.field.primary_key:
                         if (value is None and op == "exact") or (op == "isnull" and value):
@@ -290,11 +296,16 @@ class SelectCommand(object):
                             #just return nothing
                             raise EmptyResultSet()
 
-                        elif op in ("exact", "in"):
+                        elif op == "exact":
+                            if self.exact_pk and self.exact_pk != value:
+                                raise EmptyResultSet() #We're trying to filter on two different pks?
+                            else:
+                                self.exact_pk = value
+                        elif op == "in":
                             if isinstance(value, (list, tuple)):
                                 self.included_pks.extend(list(value))
                             else:
-                                self.included_pks.append(value)
+                                raise ValueError("In query requires a list, found {}".format(value.__class__))
                         else:
                             col = constraint.col
                             result.append((col, op, value))
@@ -307,8 +318,8 @@ class SelectCommand(object):
         return result
 
     def execute(self):
-        if not self.included_pks:
-            self.gae_query = self._build_gae_query()
+        #if not self.included_pks:
+        self.gae_query = self._build_gae_query()
         self.results = None
         self.query_done = False
         self.aggregate_type = "count" if self.is_count else None
@@ -458,6 +469,25 @@ class SelectCommand(object):
                 queries = new_queries
 
             query = datastore.MultiQuery(queries, ordering)
+
+        elif self.exact_pk:
+            qry = datastore.Query()
+            qry.update(query)
+            qry.Ancestor(self.exact_pk)
+            qry["__key__ ="] = self.exact_pk
+            query = qry
+
+        elif self.included_pks:
+            queries = []
+            num_queries = 0
+            for pk in self.included_pks:
+                qry = datastore.Query()
+                qry.update(query)
+                qry.Ancestor(pk)
+                queries.append(qry)
+                num_queries += 1
+
+                query = datastore.MultiQuery(queries, ordering)
         elif ordering:
             query.Order(*ordering)
         return query
@@ -472,12 +502,7 @@ class SelectCommand(object):
         query_pre_execute.send(sender=self.model, query=self.gae_query, aggregate=self.aggregate_type)
 
         if aggregate_type is None:
-            if self.included_pks:
-                results = iter(datastore.Get(self.included_pks))
-                if self.where: #if we have a list of PKs but also with other filters
-                    results = iter([x for x in results if self._matches_filters(x, self.where)])
-            else:
-                results = self.gae_query.Run(limit=limit, start=start)
+            results = self.gae_query.Run(limit=limit, start=start)
         elif self.aggregate_type == "count":
             return self.gae_query.Count(limit=limit, start=start)
         else:
@@ -560,6 +585,12 @@ class SelectCommand(object):
     def next_result(self):
         while True:
             x = self.results.next()
+
+            if isinstance(x, datastore.Key):
+                if x in self.excluded_pks:
+                    continue
+            elif x.key() in self.excluded_pks:
+                continue
 
             if self.distinct_on_field: #values for distinct queries
                 value = x[self.distinct_on_field]
