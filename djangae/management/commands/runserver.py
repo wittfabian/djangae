@@ -18,12 +18,6 @@ class Command(BaseRunserverCommand):
     will be deployed to.
     """
 
-    def __init__(self, *args, **kwargs):
-        from djangae.boot import setup_paths
-        setup_paths()
-
-        super(Command, self).__init__(*args, **kwargs)
-
     option_list = BaseRunserverCommand.option_list + (
         make_option('--old', '-o', action='store_true', dest='use_old_dev_appserver',
             default=False, help='Tells GAE to use the old dev_appserver.'),
@@ -36,8 +30,7 @@ class Command(BaseRunserverCommand):
         use_old_dev_appserver = options.get('use_old_dev_appserver')
         quit_command = 'CTRL-BREAK' if sys.platform == 'win32' else 'CONTROL-C'
 
-        from djangae.boot import setup_paths, find_project_root, data_root
-        setup_paths()
+        from djangae.boot import find_project_root, data_root
 
         from django.conf import settings
         from django.utils import translation

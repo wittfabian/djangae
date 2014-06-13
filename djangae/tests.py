@@ -10,6 +10,7 @@ from djangae.indexing import add_special_index
 from .storage import BlobstoreFileUploadHandler
 from google.appengine.api.datastore_errors import EntityNotFoundError
 from django.db import IntegrityError
+from djangae.db.exceptions import NotSupportedError
 
 class User(models.Model):
     username = models.CharField(max_length=32)
@@ -52,6 +53,7 @@ class EdgeCaseTests(TestCase):
         User.objects.create(username="E", email="test3@example.com", last_login=datetime.datetime.now().date())
 
     def test_multi_table_inheritance(self):
+
         parent = MultiTableParent.objects.create(parent_field="parent1")
         child1 = MultiTableChildOne.objects.create(parent_field="child1", child_one_field="child1")
         child2 = MultiTableChildTwo.objects.create(parent_field="child2", child_two_field="child2")
@@ -94,6 +96,27 @@ class EdgeCaseTests(TestCase):
 
         results = User.objects.filter(username="A", email="test@example.com")
         self.assertEqual(1, len(results))
+
+        results = User.objects.filter(username__in=["A", "B"]).filter(username__in=["A", "B"])
+        self.assertEqual(2, len(results))
+        self.assertItemsEqual(["A", "B"], [x.username for x in results])
+
+        results = User.objects.filter(username__in=["A", "B"]).filter(username__in=["A"])
+        self.assertEqual(1, len(results))
+        self.assertItemsEqual(["A"], [x.username for x in results])
+
+        results = User.objects.filter(pk__in=[self.u1.pk, self.u2.pk]).filter(username__in=["A"])
+        self.assertEqual(1, len(results))
+        self.assertItemsEqual(["A"], [x.username for x in results])
+
+        results = User.objects.filter(username__in=["A"]).filter(pk__in=[self.u1.pk, self.u2.pk])
+        self.assertEqual(1, len(results))
+        self.assertItemsEqual(["A"], [x.username for x in results])
+
+        #Negated in not supported   
+        with self.assertRaises(NotSupportedError):
+            list(User.objects.all().exclude(username__in=["A"]))
+
 
     def test_counts(self):
         self.assertEqual(5, User.objects.count())
