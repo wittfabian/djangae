@@ -9,7 +9,7 @@ def _unique_combinations(model):
 
     return [ sorted(x) for x in unique_names ]
 
-def unique_identifiers_from_instance(instance):
+def unique_identifiers_from_entity(model, entity):
     """
         Given an instance, this function returns a list of identifiers that represent
         unique field/value combinations.
@@ -22,17 +22,22 @@ def unique_identifiers_from_instance(instance):
         'TextField'
     }
 
-    unique_combinations = _unique_combinations(instance.__class__)
+    unique_combinations = _unique_combinations(model)
+
+    meta = model._meta
 
     identifiers = []
     for combination in unique_combinations:
         identifier = []
         for field_name in combination:
-            field = instance._meta.get_field(field_name)
+            field = meta.get_field(field_name)
             if field.get_internal_type() in UNSUPPORTED_DB_TYPES:
                 raise TypeError("Unique support for {} is not yet implemented".format(field.get_internal_type()))
 
-            value = field.value_from_object(instance)
+            if field.primary_key:
+                value = entity.key().id_or_name()
+            else:
+                value = getattr(entity, field.column, None) #Get the value from the entity
 
             #AppEngine max key length is 500 chars, so if the value is a string we hexdigest it to reduce the length
             #otherwise we str() it as it's probably an int or bool or something.
