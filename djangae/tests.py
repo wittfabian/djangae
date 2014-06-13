@@ -10,7 +10,7 @@ from djangae.indexing import add_special_index
 from .storage import BlobstoreFileUploadHandler
 from google.appengine.api.datastore_errors import EntityNotFoundError
 from django.db import IntegrityError
-from db.exceptions import NotSupportedError
+from djangae.db.exceptions import NotSupportedError
 
 class User(models.Model):
     username = models.CharField(max_length=32)
