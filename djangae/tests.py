@@ -127,6 +127,13 @@ class EdgeCaseTests(TestCase):
         self.assertEqual(4, len(results))
         self.assertEqual(not any([x.is_a for x in results]), True)
 
+        # Up for debate
+        # results = User.objects.all().extra(select={'truthy': 'TRUE'})
+        # self.assertEqual(all([x.truthy for x in results]), True)
+
+        results = User.objects.all().extra(select={'truthy': True})
+        self.assertEqual(all([x.truthy for x in results]), True)
+
 
     def test_counts(self):
         self.assertEqual(5, User.objects.count())

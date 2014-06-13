@@ -521,18 +521,18 @@ class SelectCommand(object):
                         for result in results:
                             if result is None:
                                 yield result
-
-                            # if attr == 'dashed-value':
-                            #     import pdb; pdb.set_trace()
-
-                            if type(value) == (unicode or str):
-                                if value[0] in ['"',"'"]: # Just in case
-                                    value = value[1:-1]
+                            if isinstance(value, basestring):
+                                value = value.strip("'").strip('"')
+                                # Horrible SQL type to python conversion attempt
                                 try:
                                     value = int(value)
                                 except ValueError:
                                     pass
-
+                                # Up for debate
+                                # if value == "TRUE":
+                                #     value = True
+                                # elif value == "FALSE":
+                                #     value = False
                             result[attr] = value
                             yield result
 
