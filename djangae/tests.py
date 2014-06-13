@@ -113,10 +113,20 @@ class EdgeCaseTests(TestCase):
         self.assertEqual(1, len(results))
         self.assertItemsEqual(["A"], [x.username for x in results])
 
-        #Negated in not supported   
+        #Negated in not supported
         with self.assertRaises(NotSupportedError):
             list(User.objects.all().exclude(username__in=["A"]))
 
+
+    def test_or_queryset(self):
+        """
+            This constructs an OR query, this is currently broken in the parse_where_and_check_projection
+            function. WE MUST FIX THIS!
+        """
+        q1 = User.objects.filter(username="A")
+        q2 = User.objects.filter(username="B")
+
+        self.assertItemsEqual([self.u1, self.u2], list(q1 | q2))
 
     def test_extra_select(self):
         results = User.objects.filter(username='A').extra(select={'is_a': "username = 'A'"})
