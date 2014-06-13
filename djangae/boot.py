@@ -33,15 +33,20 @@ def setup_datastore_stubs():
     )
 
 def find_project_root():
-    """
-        Go through the path, and look for manage.py
-    """
-    for path in sys.path:
-        abs_path = os.path.join(os.path.abspath(path), "manage.py")
-        if os.path.exists(abs_path):
-            return os.path.dirname(abs_path)
+    """Traverse the filesystem upwards and return the directory containing app.yaml"""
+    path = os.path.dirname(os.path.abspath(__file__))
 
-    raise RuntimeError("Unable to locate manage.py on sys.path")
+    while True:
+        if os.path.exists(os.path.join(path, "app.yaml")):
+            return path
+        else:
+            parent = os.path.dirname(path)
+            if parent == path:  # Filesystem root
+                break
+            else:
+                path = parent
+
+    raise RuntimeError("Unable to locate app.yaml")
 
 def data_root():
     path = os.path.join(find_project_root(), ".gaedata")
