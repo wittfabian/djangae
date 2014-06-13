@@ -118,6 +118,16 @@ class EdgeCaseTests(TestCase):
             list(User.objects.all().exclude(username__in=["A"]))
 
 
+    def test_extra_select(self):
+        results = User.objects.filter(username='A').extra(select={'is_a': "username = 'A'"})
+        self.assertEqual(1, len(results))
+        self.assertItemsEqual([True], [x.is_a for x in results])
+
+        results = User.objects.all().exclude(username='A').extra(select={'is_a': "username = 'A'"})
+        self.assertEqual(4, len(results))
+        self.assertEqual(not any([x.is_a for x in results]), True)
+
+
     def test_counts(self):
         self.assertEqual(5, User.objects.count())
         self.assertEqual(2, User.objects.filter(email="test3@example.com").count())
