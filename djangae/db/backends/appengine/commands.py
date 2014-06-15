@@ -1,6 +1,7 @@
 #STANDARD LIB
 from datetime import datetime
 import logging
+import copy
 
 #LIBRARIES
 from django.core.cache import cache
@@ -27,6 +28,7 @@ from djangae.db.utils import (
 )
 from djangae.indexing import special_indexes_for_column, REQUIRES_SPECIAL_INDEXES, add_special_index
 from djangae.boot import on_production, in_testing
+from djangae.db import constraints, utils
 
 DJANGAE_LOG = logging.getLogger("djangae")
 
@@ -639,14 +641,10 @@ class InsertCommand(object):
                 @db.transactional
                 def txn():
                     if key is not None:
-                        existing = datastore.Query(keys_only=True)
-                        existing.Ancestor(key)
-                        existing["__key__"] = key
-                        res = existing.Count()
-                        if res:
-                            #FIXME: For now this raises (correctly) when using model inheritance
-                            #We need to make model inheritance not insert the base, only the subclass
+                        if utils.key_exists(key):
                             raise IntegrityError("Tried to INSERT with existing key")
+
+                    constraints.acquire(self.model, ent)
                     results.append(datastore.Put(ent))
 
                     entity_post_insert.send(sender=self.model, entity=ent)
@@ -655,9 +653,11 @@ class InsertCommand(object):
 
             return results
         else:
+            markers = constraints.acquire_bulk(self.model, self.entities)
             results = datastore.Put(self.entities)
 
-            for ent in self.entities:
+            for ent, m in zip(self.entities, markers):
+                constraints.update_instance_on_markers(ent, m)
                 entity_post_insert.send(sender=self.model, entity=ent)
 
             return results
@@ -674,6 +674,7 @@ class DeleteCommand(object):
         keys = []
         for entity in self.select.results:
             keys.append(entity.key())
+            constraints.release(self.select.model, entity)
             entity_deleted.send(sender=self.select.model, entity=entity)
         datastore.Delete(keys)
 
@@ -687,6 +688,7 @@ class UpdateCommand(object):
     @db.transactional
     def _update_entity(self, key):
         result = datastore.Get(key)
+        original = copy.deepcopy(result)
 
         for field, param, value in self.values:
             result[field.column] = get_prepared_db_value(self.connection, MockInstance(field, value), field)
@@ -697,6 +699,7 @@ class UpdateCommand(object):
                 result[indexer.indexed_column_name(field.column)] = indexer.prep_value_for_database(value)
 
         entity_pre_update.send(sender=self.model, entity=result)
+        constraints.update_markers(self.model, original, result)
         datastore.Put(result)
         entity_post_update.send(sender=self.model, entity=result)
 

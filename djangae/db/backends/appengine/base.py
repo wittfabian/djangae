@@ -398,7 +398,11 @@ class DatabaseCreation(BaseDatabaseCreation):
         self.testbed.init_capability_stub()
         self.testbed.init_channel_stub()
 
-        self.testbed.init_datastore_v3_stub(datastore_stub_util.PseudoRandomHRConsistencyPolicy(probability=0))
+        self.testbed.init_datastore_v3_stub(
+            use_sqlite=True,
+            auto_id_policy=testbed.AUTO_ID_POLICY_SCATTERED,
+            consistency_policy=datastore_stub_util.PseudoRandomHRConsistencyPolicy(probability=1)
+        )
         self.testbed.init_files_stub()
         # FIXME! dependencies PIL
         # self.testbed.init_images_stub()
