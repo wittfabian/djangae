@@ -22,7 +22,6 @@ from djangae.db.utils import (
     get_datastore_kind,
     get_prepared_db_value,
     MockInstance,
-    normalise_field_value,
     get_top_concrete_parent,
     has_concrete_parents
 )
