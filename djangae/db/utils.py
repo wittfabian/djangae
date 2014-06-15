@@ -202,4 +202,4 @@ class MockInstance(object):
 def key_exists(key):
     qry = Query(keys_only=True)
     qry.Ancestor(key)
-    return qry.exists()
+    return qry.Count(limit=1) > 0
