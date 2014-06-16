@@ -70,7 +70,7 @@ def update_markers(model, old_entity, new_entity):
     to_acquire = new_ids - old_ids
 
     #Acquire first, because if that fails then we don't want to alter what's already there
-    new_markers = acquire_identifiers(to_acquire)
+    new_markers = acquire_identifiers(to_acquire, new_entity.key())
 
     #Now we release the ones we don't want anymore
     release_identifiers(to_release)
@@ -104,8 +104,13 @@ def acquire(model, entity):
     return acquire_identifiers(identifiers, entity.key())
 
 def release_identifiers(identifiers):
-    keys = [ Key.from_path(UniqueMarker.kind(), x) for x in identifiers ]
-    Delete(keys)
+
+    @db.non_transactional
+    def delete():
+        keys = [ Key.from_path(UniqueMarker.kind(), x) for x in identifiers ]
+        Delete(keys)
+
+    delete()
     DJANGAE_LOG.debug("Deleted markers with identifiers: %s", identifiers)
 
 def release(model, entity):
