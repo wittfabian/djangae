@@ -9,7 +9,7 @@ from django.db.backends.util import format_number
 from django.db import IntegrityError
 from django.utils import timezone
 from google.appengine.api import datastore
-from google.appengine.api.datastore import Key
+from google.appengine.api.datastore import Key, Query
 
 #DJANGAE
 from djangae.indexing import special_indexes_for_column, REQUIRES_SPECIAL_INDEXES
@@ -197,3 +197,9 @@ class MockInstance(object):
         if attr == self.field.attname:
             return self.value
         return super(MockInstance, self).__getattr__(attr)
+
+
+def key_exists(key):
+    qry = Query(keys_only=True)
+    qry.Ancestor(key)
+    return qry.Count(limit=1) > 0

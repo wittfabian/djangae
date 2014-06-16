@@ -10,6 +10,7 @@ from djangae.indexing import add_special_index
 from .storage import BlobstoreFileUploadHandler
 from google.appengine.api.datastore_errors import EntityNotFoundError
 from django.db import IntegrityError
+from djangae.db.exceptions import NotSupportedError
 
 class User(models.Model):
     username = models.CharField(max_length=32)
@@ -45,13 +46,14 @@ class EdgeCaseTests(TestCase):
     def setUp(self):
         add_special_index(User, "username", "iexact")
 
-        User.objects.create(username="A", email="test@example.com", last_login=datetime.datetime.now().date())
-        User.objects.create(username="B", email="test@example.com", last_login=datetime.datetime.now().date())
+        self.u1 = User.objects.create(username="A", email="test@example.com", last_login=datetime.datetime.now().date())
+        self.u2 = User.objects.create(username="B", email="test@example.com", last_login=datetime.datetime.now().date())
         User.objects.create(username="C", email="test2@example.com", last_login=datetime.datetime.now().date())
         User.objects.create(username="D", email="test3@example.com", last_login=datetime.datetime.now().date())
         User.objects.create(username="E", email="test3@example.com", last_login=datetime.datetime.now().date())
 
     def test_multi_table_inheritance(self):
+
         parent = MultiTableParent.objects.create(parent_field="parent1")
         child1 = MultiTableChildOne.objects.create(parent_field="child1", child_one_field="child1")
         child2 = MultiTableChildTwo.objects.create(parent_field="child2", child_two_field="child2")
@@ -64,6 +66,10 @@ class EdgeCaseTests(TestCase):
 
         self.assertEqual(1, MultiTableChildTwo.objects.count())
         self.assertEqual(child2, MultiTableChildTwo.objects.get())
+
+    def test_anding_pks(self):
+        results = User.objects.filter(id__exact=self.u1.pk).filter(id__exact=self.u2.pk)
+        self.assertEqual(list(results), [])
 
     def test_unusual_queries(self):
         results = User.objects.all()
@@ -90,6 +96,54 @@ class EdgeCaseTests(TestCase):
 
         results = User.objects.filter(username="A", email="test@example.com")
         self.assertEqual(1, len(results))
+
+        results = User.objects.filter(username__in=["A", "B"]).filter(username__in=["A", "B"])
+        self.assertEqual(2, len(results))
+        self.assertItemsEqual(["A", "B"], [x.username for x in results])
+
+        results = User.objects.filter(username__in=["A", "B"]).filter(username__in=["A"])
+        self.assertEqual(1, len(results))
+        self.assertItemsEqual(["A"], [x.username for x in results])
+
+        results = User.objects.filter(pk__in=[self.u1.pk, self.u2.pk]).filter(username__in=["A"])
+        self.assertEqual(1, len(results))
+        self.assertItemsEqual(["A"], [x.username for x in results])
+
+        results = User.objects.filter(username__in=["A"]).filter(pk__in=[self.u1.pk, self.u2.pk])
+        self.assertEqual(1, len(results))
+        self.assertItemsEqual(["A"], [x.username for x in results])
+
+        #Negated in not supported
+        with self.assertRaises(NotSupportedError):
+            list(User.objects.all().exclude(username__in=["A"]))
+
+
+    def test_or_queryset(self):
+        """
+            This constructs an OR query, this is currently broken in the parse_where_and_check_projection
+            function. WE MUST FIX THIS!
+        """
+        q1 = User.objects.filter(username="A")
+        q2 = User.objects.filter(username="B")
+
+        self.assertItemsEqual([self.u1, self.u2], list(q1 | q2))
+
+    def test_extra_select(self):
+        results = User.objects.filter(username='A').extra(select={'is_a': "username = 'A'"})
+        self.assertEqual(1, len(results))
+        self.assertItemsEqual([True], [x.is_a for x in results])
+
+        results = User.objects.all().exclude(username='A').extra(select={'is_a': "username = 'A'"})
+        self.assertEqual(4, len(results))
+        self.assertEqual(not any([x.is_a for x in results]), True)
+
+        # Up for debate
+        # results = User.objects.all().extra(select={'truthy': 'TRUE'})
+        # self.assertEqual(all([x.truthy for x in results]), True)
+
+        results = User.objects.all().extra(select={'truthy': True})
+        self.assertEqual(all([x.truthy for x in results]), True)
+
 
     def test_counts(self):
         self.assertEqual(5, User.objects.count())
