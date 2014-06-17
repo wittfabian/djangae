@@ -23,7 +23,19 @@ The intention is to basically do what djangoappengine has done up to now, but wi
 
 # HOW DO I USE THIS THING?!?!
 
- * Shove the Djangae folder in the root of your project, either by symlink or directly - or .. whatever
+ * Put the djangae folder somewhere, you'll need to manipulate the path to find it. The recommended method of doing this is to create
+ a file in the root of the project called fix_path.py which contains something like the following (assuming djangae is in the lib folder):
+
+
+    import os
+    import sys
+
+    def boot():
+        sys.path.insert(0, os.path.abspath("lib"))
+
+        from djangae.boot import configure
+        configure(True) #Configures datastore stubs and 3rd party libs
+
  * Add djangae to INSTALLED_APPS
  * At the top of your settings, insert the following line: `from djangae.settings_base import *` - this sets up some default settings
  * Make your manage.py look something like this:
@@ -32,8 +44,8 @@ The intention is to basically do what djangoappengine has done up to now, but wi
  if __name__ == "__main__":
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "myapp.settings")
 
-    from djangae.boot import setup_paths
-    setup_paths()
+    from fix_path import boot
+    boot()
 
     from django.core.management import execute_from_command_line
 
@@ -44,6 +56,11 @@ The intention is to basically do what djangoappengine has done up to now, but wi
 
  ```
     from django.core.wsgi import get_wsgi_application
+
+    #Setup your custom paths
+    from fix_path import boot
+    boot()
+
     from djangae.wsgi import DjangaeApplication
 
     application = DjangaeApplication(get_wsgi_application())
