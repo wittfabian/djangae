@@ -26,15 +26,16 @@ The intention is to basically do what djangoappengine has done up to now, but wi
  * Put the djangae folder somewhere, you'll need to manipulate the path to find it. The recommended method of doing this is to create
  a file in the root of the project called fix_path.py which contains something like the following (assuming djangae is in the lib folder):
 
+```
+ import os
+ import sys
 
-    import os
-    import sys
+ def boot():
+     sys.path.insert(0, os.path.abspath("lib"))
 
-    def boot():
-        sys.path.insert(0, os.path.abspath("lib"))
-
-        from djangae.boot import configure
-        configure(True) #Configures datastore stubs and 3rd party libs
+     from djangae.boot import configure
+     configure(True) #Configures datastore stubs and 3rd party libs
+```
 
  * Add djangae to INSTALLED_APPS
  * At the top of your settings, insert the following line: `from djangae.settings_base import *` - this sets up some default settings
