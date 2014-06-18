@@ -6,6 +6,7 @@ Contributions welcome, please get stuck in!
 
 ### Bug Fixing
 
+* Make `.filter(pk__in=[1,2,3])` use a multi `datastore.Get`, rather than a `datastore.Query`.  Currently it uses `Query` which means that it's slower than it needs to be and it is limited to 30 values.
 * Implement the FK Null Fix from dbindexer (which manipulates the query in the case a join is used for isnull).
 * Make `MyModel.objects.filter(pk=1) | MyModel.objects.filter(pk=2)` correctly return an empty result.  Currently returns both!
 * Run `manage.py test djangae` to find other things that need doing.

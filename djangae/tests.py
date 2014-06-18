@@ -1,5 +1,6 @@
 from cStringIO import StringIO
 import datetime
+from string import letters
 
 # LIBRARIES
 from django.core.files.uploadhandler import StopFutureHandlers
@@ -257,6 +258,24 @@ class EdgeCaseTests(TestCase):
             [datetime.datetime.combine(last_a_login, datetime.datetime.min.time()), datetime.datetime(2013, 4, 5, 0, 0)],
             dates
         )
+
+    def test_in_query(self):
+        """ Test that the __in filter works, and that it cannot be used with more than 30 values,
+            unless it's used on the PK field.
+        """
+        # Check that a basic __in query works
+        results = list(User.objects.filter(username__in=['A', 'B']))
+        self.assertItemsEqual(results, [self.u1.pk, self.u2.pk])
+        # Check that it also works on PKs
+        results = list(User.objects.filter(pk__in=[self.u1.pk, self.u2.pk]))
+        self.assertItemsEqual(results, [self.u1.pk, self.u2.pk])
+        # Check that using more than 30 items in an __in query not on the pk causes death
+        query = User.objects.filter(username__in=list([x for x in letters[:31]]))
+        # This currently rasies an error from App Engine, should we raise our own?
+        self.assertRaises(Exception, list, query)
+        # Check that it's ok with PKs though
+        query = User.objects.filter(pk__in=list(xrange(1, 32)))
+        list(query)
 
 class BlobstoreFileUploadHandlerTest(TestCase):
     boundary = "===============7417945581544019063=="
