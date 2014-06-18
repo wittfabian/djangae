@@ -3,6 +3,9 @@
 
 Contributions welcome, please get stuck in!
 
+### General
+
+* Move `on_production()` to be a boolean in general_settings.py, rather than a function which has to be called each time.  This may be slightly tricky as `os.environ` is not necessarily available when settings is first imported, but it's nothing that `lazy()` can't fix :-).
 
 ### Bug Fixing
 
