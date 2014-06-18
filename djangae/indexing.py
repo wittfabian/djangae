@@ -59,8 +59,10 @@ def add_special_index(model_class, field_name, index_type):
         return
 
     if on_production() or (in_testing() and not getattr(settings, "GENERATE_SPECIAL_INDEXES_DURING_TESTING", False)):
-        raise RuntimeError("There is a missing index in your djangaeidx.yaml - \n\n{0}:\n\t{1}: [{2}]".format(
-            _get_table_from_model(model_class), field_name, index_type)
+        raise RuntimeError(
+            "There is a missing index in your djangaeidx.yaml - \n\n{0}:\n\t{1}: [{2}]".format(
+                _get_table_from_model(model_class), field_name, index_type
+            )
         )
 
     _special_indexes.setdefault(
