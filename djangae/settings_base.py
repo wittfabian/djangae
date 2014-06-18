@@ -11,3 +11,5 @@ DATABASES = {
         'ENGINE': 'djangae.db.backends.appengine'
     }
 }
+
+GENERATE_SPECIAL_INDEXES_DURING_TESTING = False
