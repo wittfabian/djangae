@@ -5,6 +5,7 @@ from string import letters
 # LIBRARIES
 from django.core.files.uploadhandler import StopFutureHandlers
 from django.db import IntegrityError, models
+from django.db.models.query import Q
 from django.test import TestCase, RequestFactory
 from google.appengine.api.datastore_errors import EntityNotFoundError
 
@@ -129,6 +130,11 @@ class EdgeCaseTests(TestCase):
         q2 = User.objects.filter(username="B")
 
         self.assertItemsEqual([self.u1, self.u2], list(q1 | q2))
+
+    def test_or_q_objects(self):
+        """ Test use of Q objects in filters. """
+        query = User.objects.filter(Q(username="A") | Q(username="B"))
+        self.assertItemsEqual([self.u1, self.u2], list(query))
 
     def test_extra_select(self):
         results = User.objects.filter(username='A').extra(select={'is_a': "username = 'A'"})
