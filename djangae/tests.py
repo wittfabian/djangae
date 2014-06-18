@@ -1,16 +1,17 @@
+from cStringIO import StringIO
 import datetime
 
-from cStringIO import StringIO
+# LIBRARIES
 from django.core.files.uploadhandler import StopFutureHandlers
+from django.db import IntegrityError, models
 from django.test import TestCase, RequestFactory
-from django.db import models
-
-from djangae.indexing import add_special_index
-
-from .storage import BlobstoreFileUploadHandler
 from google.appengine.api.datastore_errors import EntityNotFoundError
-from django.db import IntegrityError
+
+# DJANGAE
 from djangae.db.exceptions import NotSupportedError
+from djangae.indexing import add_special_index
+from .storage import BlobstoreFileUploadHandler
+
 
 class User(models.Model):
     username = models.CharField(max_length=32)
