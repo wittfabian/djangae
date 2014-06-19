@@ -30,7 +30,7 @@ class Command(BaseRunserverCommand):
         use_old_dev_appserver = options.get('use_old_dev_appserver')
         quit_command = 'CTRL-BREAK' if sys.platform == 'win32' else 'CONTROL-C'
 
-        from djangae.boot import find_project_root, data_root
+        from djangae.utils import find_project_root, data_root
 
         from django.conf import settings
         from django.utils import translation

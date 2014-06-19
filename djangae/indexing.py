@@ -6,7 +6,7 @@ import datetime
 _special_indexes = {}
 
 def _get_index_file():
-    from djangae.boot import find_project_root
+    from djangae.utils import find_project_root
     index_file = os.path.join(find_project_root(), "djangaeidx.yaml")
 
     return index_file
@@ -50,7 +50,7 @@ def write_special_indexes():
         stream.write(yaml.dump(_special_indexes))
 
 def add_special_index(model_class, field_name, index_type):
-    from djangae.boot import on_production, in_testing
+    from djangae.utils import on_production, in_testing
     from django.conf import settings
 
     load_special_indexes()

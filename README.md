@@ -1,4 +1,3 @@
-
 # Djangae
 
 The sexiest way to run Django on Google App Engine.
@@ -48,44 +47,62 @@ When using the Datastore you should bear in mind its capabilities and limitation
 
  * Create up your App Engine project as usual (with app.yaml, etc).
  * Create your django project (with settings.py, wsgi.py, etc and place it inside your App Engine project).
- * Shove the Djangae folder in the root of your project, either by symlink or directly - or .. whatever.
+ * Put the djangae folder somewhere, you'll need to manipulate the path to find it. The recommended method of doing this is to create
+ a file in the root of the project called fix_path.py which contains something like the following (assuming djangae is in the lib folder):
+
+    ```python
+    import os
+    import sys
+
+    def boot():
+        sys.path.insert(0, os.path.abspath("lib"))
+
+        from djangae.boot import configure
+        configure(True) #Configures datastore stubs and 3rd party libs
+    ```
  * Add djangae to `INSTALLED_APPS`.
  * At the top of your settings, insert the following line: `from djangae.settings_base import *` - this sets up some default settings.
  * In app.yaml, add your preferred version of `django` to the `libraries` section, or include the library in your project folder if you'd rather. [Docs](LINK HERE).
  * In app.yaml add the following handlers:
 
- ```
-- url: /_ah/(mapreduce|queue|warmup).*
-  script: YOUR_DJANGO_APP.wsgi.application
-  login: admin
+    ```yml
+    - url: /_ah/(mapreduce|queue|warmup).*
+        script: YOUR_DJANGO_APP.wsgi.application
+        login: admin
 
-- url: /.*
-  script: YOUR_DJANGO_APP.wsgi.application
- ```
+    - url: /.*
+        script: YOUR_DJANGO_APP.wsgi.application
+    ```
 
  * You may also want to add `- ^\.gaedata` to the `skip_files` section in app.yaml, as that's where the local development Datastore data is located.
  * Make your manage.py look something like this:
 
- ```
- if __name__ == "__main__":
-    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "myapp.settings")
+    ```python
+    if __name__ == "__main__":
+        os.environ.setdefault("DJANGO_SETTINGS_MODULE", "myapp.settings")
 
-    from djangae.boot import setup_paths
-    setup_paths()
+        from fix_path import boot
+        boot()
 
-    from django.core.management import execute_from_command_line
+        from django.core.management import execute_from_command_line
 
-    execute_from_command_line(sys.argv)
- ```
+        execute_from_command_line(sys.argv)
+    ```
 
  * Use the Djangae WSGI handler in your wsgi.py, something like
 
- ```
+    ```python
     from django.core.wsgi import get_wsgi_application
+
+    #Setup your custom paths
+    from fix_path import boot
+    boot()
+
     from djangae.wsgi import DjangaeApplication
 
     application = DjangaeApplication(get_wsgi_application())
- ```
+    ```
+
  * Add the following to your URL handler: `url(r'^_ah/', include('djangae.urls'))`
 
 
@@ -108,27 +125,27 @@ Note that the Database backend and settings for the Datastore remain the same wh
 
 Here's an example of how your `DATABASES` might look in settings.py if you're using both Cloud SQL and the Datastore.
 
-```
-from djangae.boot import on_production
+    ```python
+    from djangae.boot import on_production
 
-DATABASES = {
-		'default': {
-            'ENGINE': 'djangae.db.backends.appengine'
+    DATABASES = {
+    		'default': {
+                'ENGINE': 'djangae.db.backends.appengine'
+            }
+    }
+
+    if on_production():
+        DATABASES['sql'] = {
+            'ENGINE': 'django.db.backends.mysql',
+            'HOST': '/cloudsql/YOUR_GOOGLE_CLOUD_PROJECT:YOUR_INSTANCE_NAME',
+            'NAME': 'YOUR_DATABASE_NAME',
+            'USER': 'root',
         }
-}
-
-if on_production():
-    DATABASES['sql'] = {
-        'ENGINE': 'django.db.backends.mysql',
-        'HOST': '/cloudsql/YOUR_GOOGLE_CLOUD_PROJECT:YOUR_INSTANCE_NAME',
-        'NAME': 'YOUR_DATABASE_NAME',
-        'USER': 'root',
-    }
-else:
-    DATABASES['sql'] = {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': 'development.sqlite3'
-    }
-```
+    else:
+        DATABASES['sql'] = {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': 'development.sqlite3'
+        }
+    ```
 
 See the Google documentation for more information on connecting to Cloud SQL [via the MySQL client](https://developers.google.com/cloud-sql/docs/mysql-client) and [from external applications](https://developers.google.com/cloud-sql/docs/external).
