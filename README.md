@@ -23,7 +23,7 @@ Previously, in order to use Django's ORM with the App Engine Datastore, django-n
 Here's the full list of magic:
 
 * Database-level enforcement of `unique` and `unique_together` constraints.
-* A transparent caching layer for queries which return a single result (`.get` or any query filtering on a unique field or unique-together fields). This helps to avoid issues with the Datastore's eventual consistency behaviour [link].
+* A transparent caching layer for queries which return a single result (`.get` or any query filtering on a unique field or unique-together fields). This helps to avoid issues with the [Datastore's eventual consistency behaviour](https://developers.google.com/appengine/docs/python/datastore/structuring_for_strong_consistency_.
 * Automatic creation of additional index fields containing pre-manipulated values, so that queries such as `__iexact` work out of the box.  These index fields are created automatically when you use the queries.  Use `settings.GENERATE_SPECIAL_INDEXES_DURING_TESTING` to control whether that automatic creation happens during tests.
 * Support for queries which weren't possible with djangoappengine, such as OR queries using `Q` objects.
 * A `ListField` which provides a "normal" django model field for storing lists (a feature of the Datastore).
@@ -41,7 +41,7 @@ Due to the limitations of the App Engine Datastore (it being a non-relational da
 
 ### Other Considerations
 
-When using the Datastore you should bear in mind its capabilities and limitations.  While Djangae allows you to run Django on the Datastore, it doesn't turn the Datastore into a non-relational database.  There are things which the datastore is good at (e.g. handling huge bandwidth of reads and writes) and things which it isn't good at (e.g. counting).  Djangae is not a substitute for knowing how to use the Datastore.
+When using the Datastore you should bear in mind its capabilities and limitations.  While Djangae allows you to run Django on the Datastore, it doesn't turn the Datastore into a non-relational database.  There are things which the datastore is good at (e.g. handling huge bandwidth of reads and writes) and things which it isn't good at (e.g. counting).  Djangae is not a substitute for knowing [how to use the Datastore](https://developers.google.com/appengine/docs/python/datastore/).
 
 
 # HOW DO I USE THIS THING?!?!
@@ -131,4 +131,4 @@ else:
     }
 ```
 
-See the Google documentation for more information on [connecting to Cloud SQL](URL_HERE).
+See the Google documentation for more information on connecting to Cloud SQL [via the MySQL client](https://developers.google.com/cloud-sql/docs/mysql-client) and [from external applications](https://developers.google.com/cloud-sql/docs/external).
