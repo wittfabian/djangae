@@ -26,7 +26,7 @@ from djangae.db.utils import (
     has_concrete_parents
 )
 from djangae.indexing import special_indexes_for_column, REQUIRES_SPECIAL_INDEXES, add_special_index
-from djangae.boot import on_production, in_testing
+from djangae.utils import on_production, in_testing
 from djangae.db import constraints, utils
 
 DJANGAE_LOG = logging.getLogger("djangae")

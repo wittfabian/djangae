@@ -1,4 +1,4 @@
-from .boot import setup_paths, on_production
+from djangae.utils import on_production
 
 class DjangaeApplication(object):
     def fix_subprocess_module(self):
@@ -60,8 +60,6 @@ class DjangaeApplication(object):
         if on_production():
             return
 
-        setup_paths()
-
         from google.appengine.tools.devappserver2.python import sandbox
 
         if '_sqlite3' not in sandbox._WHITE_LIST_C_MODULES:
@@ -74,7 +72,6 @@ class DjangaeApplication(object):
 
 
     def __init__(self, application):
-        setup_paths()
         self.wrapped_app = application
 
     def __call__(self, environ, start_response):
