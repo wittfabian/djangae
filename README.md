@@ -62,7 +62,7 @@ When using the Datastore you should bear in mind its capabilities and limitation
     ```
  * Add djangae to `INSTALLED_APPS`.
  * At the top of your settings, insert the following line: `from djangae.settings_base import *` - this sets up some default settings.
- * In app.yaml, add your preferred version of `django` to the `libraries` section, or include the library in your project folder if you'd rather. [Docs](LINK HERE).
+ * In app.yaml, add your preferred version of `django` to the `libraries` section, or include the library in your project folder if you'd rather. [Docs](https://developers.google.com/appengine/docs/python/config/appconfig#Python_app_yaml_Configuring_libraries).
  * In app.yaml add the following handlers:
 
     ```yml
