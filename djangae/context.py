@@ -18,6 +18,9 @@ Example usage:
             execute_from_command_line(sys.argv)
 
 """
+
+# None of this is django-specific. Don't import from django.
+
 import os
 import sys
 import contextlib
@@ -61,10 +64,8 @@ def _nearly_sandbox(ctx_name):
     options = devappserver2.PARSER.parse_args([project_root])
     configuration = application_configuration.ApplicationConfiguration(options.config_paths)
 
-
     # Take dev_appserver paths off sys.path - our app cannot access these
     sys.path = original_path[:]
-
 
     # Enable App Engine libraries without enabling the full sandbox.
     module = configuration.modules[0]
@@ -113,6 +114,9 @@ def _nearly_sandbox(ctx_name):
             finally:
                 sys.ps1 = ps1
 
+        elif ctx_name == 'test':
+            yield
+
         else:
             raise RuntimeError('Unknown context name "{}"'.format(ctx_name))
 
@@ -123,11 +127,22 @@ def _nearly_sandbox(ctx_name):
 
 @contextlib.contextmanager
 def local():
+    """Sets up libraries and services as dev_appserver does"""
     with _nearly_sandbox('local'):
         yield
 
 
 @contextlib.contextmanager
 def remote():
+    """Sets up libraries as dev_appserver does but uses remote APIs"""
     with _nearly_sandbox('remote'):
+        yield
+
+
+@contextlib.contextmanager
+def test():
+    """Sets up libraries as dev_appserver does but does not setup service stubs.
+    Use for test isolation with `testbed`.
+    """
+    with _nearly_sandbox('test'):
         yield
