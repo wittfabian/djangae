@@ -72,46 +72,9 @@ def configure(add_sdk_to_path=False):
 
     os.environ['APP_ENGINE_SDK'] = appengine_path
 
-    monkey_patch_unsupported_tests()
     setup_datastore_stubs()
 
-def monkey_patch_unsupported_tests():
-    if not in_testing():
-        return
 
-    if "DJANGAE_TESTS_SKIPPED" in os.environ:
-        return
-
-    from django.conf import settings
-
-    unsupported_tests = []
-
-    if 'django.contrib.auth' in settings.INSTALLED_APPS:
-        unsupported_tests.extend([
-            #These auth tests override the AUTH_USER_MODEL setting, which then uses M2M joins
-            'django.contrib.auth.tests.auth_backends.CustomPermissionsUserModelBackendTest.test_custom_perms',
-            'django.contrib.auth.tests.auth_backends.CustomPermissionsUserModelBackendTest.test_get_all_superuser_permissions',
-            'django.contrib.auth.tests.auth_backends.CustomPermissionsUserModelBackendTest.test_has_no_object_perm',
-            'django.contrib.auth.tests.auth_backends.CustomPermissionsUserModelBackendTest.test_has_perm',
-            'django.contrib.auth.tests.auth_backends.ExtensionUserModelBackendTest.test_custom_perms',
-            'django.contrib.auth.tests.auth_backends.ExtensionUserModelBackendTest.test_has_perm',
-            'django.contrib.auth.tests.auth_backends.ExtensionUserModelBackendTest.test_get_all_superuser_permissions',
-            'django.contrib.auth.tests.auth_backends.ExtensionUserModelBackendTest.test_has_no_object_perm'
-        ])
-
-    from unittest import skip
-
-    for test in unsupported_tests:
-        module_path, klass_name, method_name = test.rsplit(".", 2)
-        __import__(module_path, klass_name)
-
-        module = sys.modules[module_path]
-        if hasattr(module, klass_name):
-            klass = getattr(module, klass_name)
-            method = getattr(klass, method_name)
-            setattr(klass, method_name, skip("Not supported by Djangae")(method))
-
-    os.environ["DJANGAE_TESTS_SKIPPED"] = "1"
 
 def possible_sdk_locations():
     POSSIBLE_SDK_LOCATIONS = [
