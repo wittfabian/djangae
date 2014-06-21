@@ -77,11 +77,13 @@ def _remote(configuration=None, remote_api_stub=None, **kwargs):
 def _test(**kwargs):
     yield
 
-
+LOCAL = 'local'
+REMOTE = 'remote'
+TEST = 'test'
 SANDBOXES = {
-    'local': _local,
-    'remote': _remote,
-    'test': _test,
+    LOCAL: _local,
+    REMOTE: _remote,
+    TEST: _test,
 }
 
 
