@@ -8,14 +8,14 @@ from django.core.cache import cache
 from django.db.backends.mysql.compiler import SQLCompiler
 from django.db import IntegrityError
 from django.db.models.sql.datastructures import EmptyResultSet
-from django.db.models.sql.where import AND
+from django.db.models.sql.where import AND, OR
 from django import dispatch
 from google.appengine.api import datastore
 from google.appengine.api.datastore import Query
 from google.appengine.ext import db
 
 #DJANGAE
-from djangae.db.exceptions import NotSupportedError
+from djangae.db.exceptions import CouldBeSupportedError, NotSupportedError
 from djangae.db.utils import (
     get_datastore_key,
     django_instance_to_entity,
@@ -255,6 +255,19 @@ class SelectCommand(object):
 
         if negated and where.connector != AND:
             raise NotSupportedError("Only AND filters are supported for negated queries")
+
+        if where.connector == OR:
+            # What we essentially need to do here is this:
+            """
+            queries = []
+            for w in where.children:
+                queries.append(self.parse_where_and_check_projection(w, False))
+            return MultiQuery(queries)
+            """
+            # But that would mean combining _build_gae_query and parse_where_and_check_projection
+            raise CouldBeSupportedError(
+                "Queries with OR could be supported.  See comments above this exception."
+            )
 
         for child in where.children:
             if isinstance(child, tuple):

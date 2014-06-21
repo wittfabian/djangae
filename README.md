@@ -1,27 +1,52 @@
 # Djangae
 
-Djangae (djan-gee) is a Django app that provides tight integration with the Google App Engine API by sticking as close to vanilla Django usage as possible.
+The sexiest way to run Django on Google App Engine.
 
-The intention is to basically do what djangoappengine has done up to now, but with the following differences:
+Djangae (djan-gee) is a Django app that allows you to run Django applications on Google App Engine, including (if you want to) using Django's models with the App Engine Datastore as the underlying database.
 
- * More closely mimic default Django (e.g. make running on App Engine transparent)
- * Implement the whole thing via WSGI middleware
- * Try to avoid importing from internal App Engine code (e.g. dev_appserver.py)
- * Reimplement contrib.auth in a non-rel way
- * Integrate query manipulation like dbindexer into the core
- * Integrate elements of djangotoolbox into the core, including a non-user-nullable ListField where NULL fields return [] to workaround the App Engine datastore not storing empty lists
- * Implement caching where it makes sense to work around HRD issues
+## Features
 
-## Status
+* A WSGI middleware that provides a clean way via which your Django app is plugged into App Engine.
+* A hook to allow App Engine's deferred tasks and mapreduce handlers to run through the same environment.
+* The ability to use use the Datastore as the database for Django's models.  See **The Database Backend** for details.  You can also use App Engine's NDB, or you can use Google Cloud SQL (via the standard django MySQL backend) instead of or along side the Datastore.  Or use all 3!
+* `djangae.contrib.auth` which provides a custom user model, auth backend and middleware that makes django.contrib.auth work on the datastore (i.e. without Many-To-Many relationships).
+* A `runserver` command which fires up the App Engine SDK to serve your app (while still using Django's code reloading).
+* A `remote` command to allow any of your management commands to be run on the remote App Engine Datastore.
+* A `shell` command that correctly sets up the environment/database. (Note, we should support this set up for any custom commands as well, see TODO.md).
 
- * Environment/path setup - The SDK is detected, sys.path is configured, everything happens in the WSGI middleware
- * Custom runserver command - This wraps dev_appserver to provide a seamless experience, works with Djangos autoreload (something that djangoappengine couldn't manage)
- * Connector is mostly implemented, many contrib tests are passing, also many of django's model tests
- * A seamless replacement for dbindexer is built in, a file called djangaeidx.yaml will be generated automatically when you use __iexact queries or the like
+
+## The Database Backend
+
+Previously, in order to use Django's ORM with the App Engine Datastore, django-nonrel was required, along with djangoappengine.  That's now changed.  With Djangae you can use vanilla Django with the Datastore.  Heavily inspired by djangoappengine (thanks Waldemar!) Djangae provides an intelligent database backend that allows vanilla Django to be used, and makes use of many of the Datastore's speed and efficiency features such as projection queries.
+
+Here's the full list of magic:
+
+* Database-level enforcement of `unique` and `unique_together` constraints.
+* A transparent caching layer for queries which return a single result (`.get` or any query filtering on a unique field or unique-together fields). This helps to avoid issues with the [Datastore's eventual consistency behaviour](https://developers.google.com/appengine/docs/python/datastore/structuring_for_strong_consistency_.
+* Automatic creation of additional index fields containing pre-manipulated values, so that queries such as `__iexact` work out of the box.  These index fields are created automatically when you use the queries.  Use `settings.GENERATE_SPECIAL_INDEXES_DURING_TESTING` to control whether that automatic creation happens during tests.
+* Support for queries which weren't possible with djangoappengine, such as OR queries using `Q` objects.
+* A `ListField` which provides a "normal" django model field for storing lists (a feature of the Datastore).
+
+
+### What Can't It Do?
+
+Due to the limitations of the App Engine Datastore (it being a non-relational database for a start), there are some things which you still can't do with the Django ORM when using the djangae backend.  The easiest way to find these out is to just build your app and look out for the `NotSupportedError` exceptions.  But if you don't like surprises, here's a quick list:
+
+* `ManyToManyField` - a non-relational database simply can't do these (or not efficiently).  However, you can probably solve these kind of problems using djangae's `ListField`.  We may even create a many-to-many replacement based on that in the future.
+* `__in` queries with more than 30 values.  This is a limitation of the Datastore.  You can filter for up to 500 values on the primary key field though.
+* More than one in equality filter, i.e. you can't do `.exclude(a=1, b=2)`.  This is a limitation of the Datastore.
+* Transactions.  The Datastore has transactions, but they are not "normal" transactions in the SQL sense.  Transactions should be done using `google.appengine.api.datastore.RunInTransaction`.
+
+
+### Other Considerations
+
+When using the Datastore you should bear in mind its capabilities and limitations.  While Djangae allows you to run Django on the Datastore, it doesn't turn the Datastore into a non-relational database.  There are things which the datastore is good at (e.g. handling huge bandwidth of reads and writes) and things which it isn't good at (e.g. counting).  Djangae is not a substitute for knowing [how to use the Datastore](https://developers.google.com/appengine/docs/python/datastore/).
 
 
 # HOW DO I USE THIS THING?!?!
 
+ * Create up your App Engine project as usual (with app.yaml, etc).
+ * Create your django project (with settings.py, wsgi.py, etc and place it inside your App Engine project).
  * Put the djangae folder somewhere, you'll need to manipulate the path to find it. The recommended method of doing this is to create
  a file in the root of the project called fix_path.py which contains something like the following (assuming djangae is in the lib folder):
 
@@ -35,9 +60,21 @@ The intention is to basically do what djangoappengine has done up to now, but wi
         from djangae.boot import configure
         configure(True) #Configures datastore stubs and 3rd party libs
     ```
+ * Add djangae to `INSTALLED_APPS`.
+ * At the top of your settings, insert the following line: `from djangae.settings_base import *` - this sets up some default settings.
+ * In app.yaml, add your preferred version of `django` to the `libraries` section, or include the library in your project folder if you'd rather. [Docs](https://developers.google.com/appengine/docs/python/config/appconfig#Python_app_yaml_Configuring_libraries).
+ * In app.yaml add the following handlers:
 
- * Add djangae to INSTALLED_APPS
- * At the top of your settings, insert the following line: `from djangae.settings_base import *` - this sets up some default settings
+    ```yml
+    - url: /_ah/(mapreduce|queue|warmup).*
+        script: YOUR_DJANGO_APP.wsgi.application
+        login: admin
+
+    - url: /.*
+        script: YOUR_DJANGO_APP.wsgi.application
+    ```
+
+ * You may also want to add `- ^\.gaedata` to the `skip_files` section in app.yaml, as that's where the local development Datastore data is located.
  * Make your manage.py look something like this:
 
     ```python
@@ -79,78 +116,36 @@ To use, do the following:
  - Replace 'django.contrib.auth.middleware.AuthenticationMiddleware' with 'djangae.contrib.auth.middleware.AuthenticationMiddleware'
  - Add 'djangae.contrib.auth' to INSTALLED_APPS probably after 'django.contrib.auth'
 
-## TODO
 
-### Bug Fixing
+## Using other databases
 
-Implement the FK Null Fix from dbindexer (which manipulates the query in the case a join is used for isnull).
+You can use Google Cloud SQL or sqlite (locally) instead of or along side the Datastore.
 
+Note that the Database backend and settings for the Datastore remain the same whether you're in local development on on App Engine Production, djanagae switches between the SDK and the production datastore appropriately.  However, with Cloud SQL you will need to switch the settings yourself, otherwise you could find yourself developing on your live database!
 
-Make `MyModel.objects.filter(pk=1) | MyModel.objects.filter(pk=2)` correctly return an empty result.  Currently returns both!
+Here's an example of how your `DATABASES` might look in settings.py if you're using both Cloud SQL and the Datastore.
 
+    ```python
+    from djangae.boot import on_production
 
-### Memcache backend
+    DATABASES = {
+    		'default': {
+                'ENGINE': 'djangae.db.backends.appengine'
+            }
+    }
 
-I think we need a memcache backend. Take a look at djappengine on GitHub, perhaps we could just use the one from there. Although I'm not convinced that the standard memcache backend won't work. Needs testing.
+    if on_production():
+        DATABASES['sql'] = {
+            'ENGINE': 'django.db.backends.mysql',
+            'HOST': '/cloudsql/YOUR_GOOGLE_CLOUD_PROJECT:YOUR_INSTANCE_NAME',
+            'NAME': 'YOUR_DATABASE_NAME',
+            'USER': 'root',
+        }
+    else:
+        DATABASES['sql'] = {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': 'development.sqlite3'
+        }
+    ```
 
-
-### Special Indexing
-
-This is what I've termed the old-style dbindexer magic that allow stuff like iexact to work. How it works in Djangae is when you run a query on the dev_appserver (e.g. `username__iexact="bananas"`), an index is added to djangaeidx.yaml (just like index.yaml). From that point onwards every save of the field should create an associated `_idx_***` field storing a transformed version of the value. Special lookups (like iexact) will then use this field.
-
-Status: 90% - the yaml file is generated during tests (although I haven't implemented the dev_appserver sandbox circumvention yet). iexact is implemented.
-
-### Unique Caching
-
-This is implemented hackily and brokenly. We should follow the same logic as NDB here (with the in-context vs memcache layer) but extend it to unique field values. We also need to make sure we follow the same logic with transactions as they do to ensure they work correctly.
-
-Status: 10% - needs a total rewrite, I have an uncommitted file that started stubbing this out. I just need to get around to doing it
-
-### Cross-kind Selects
-
-We should be able to support a select that bridges a single join, on a single model provided the where does not cross models. For example Permission.objects.values_list("user__username", "id"). We can do this while processing the result set by gathering related keys, doing a single datastore Get(keys) and reading the resulting field value. In the above example, after processing the auth_permission results, we can do a Get for the users, and update the result set. This behaviour should be supported (to allow more of Django to work by default) but should log a warning in the Djangae slow query log (see below).
-
-Status: 0% - needs to be done to make the contrib.auth tests pass
-
-### Slow Query Logging
-
-We should have a special log for when Djangae performs an inefficient query, or if an unsupported ordering is requested. This should be displayed in the terminal when running locally, but not on production. We should log in the following situations:
-
- - The user does a cross-kind select (see above) - Info
- - The result set needs to be manipulated in Python to fulfil the query (this isn't necessarily slow, but we should be verbose to the user so they can perhaps better structure their query) - Info
- - An unsupported cross-table ordering is requested. Ideally we would raise an exception in this case, but many models in contrib do this and I'd rather tell the user that their ordering did not apply, than throw an exception and make the whole thing unusable - Warning
- - The query was totally unsupported (e.g. ManyToMany, join etc.) - Error
-
-Status: 0% - needs to be done
-
-### Break up django_instance_to_entity
-
-This currently handles transforming field data ready for the datastore, but also converting non-abstract model inheritance to poly models and a bunch of other stuff. We should break this logic up so that can use the same logic for updates as inserts (updates might only use a subset of fields).
-
-Status: 20% - needs to be done, probably needs a whiteboard discussion. I've broken some of this into get_prepared_db_value.
-
-### Fix up deploy, remote, etc. commands
-
-We need to support remote commands, and deployment. Deploy is implemented but I think it needs some tweaking, remote commands are unimplemented
-
-Status: 40%
-
---- Below this line doesn't stop us using it ---
-
-### Ancestor queries, Expando models etc.
-
-Ancestor queries do exist in our Djangoappengine fork, but the API could do with some improving and it all needs implementing in Djangae. Preferably we could implement this at as high a level as possible.
-
-Status: 0%
-
-### Use Django's Transaction Decorators
-
-I'm not sure how possible this is, we can't advertise supporting transactions (otherwise Django assumes it can roll back an entire table) however, we might be able to support the decorator stuff.
-
-Status: 0%
-
-### Profiling
-
-We need to profile and optimize all parts of the database. My aim is to not only outperform djangoappengine, but also NDB for the same kind of queries. Totally doable (NDB is just a layer on top of Get/Put/Query/MultiQuery the same as djangoappengine and Djangae)
-
-Status: 0%
+See the Google documentation for more information on connecting to Cloud SQL [via the MySQL client](https://developers.google.com/cloud-sql/docs/mysql-client) and [from external applications](https://developers.google.com/cloud-sql/docs/external).
