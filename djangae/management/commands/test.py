@@ -1,4 +1,5 @@
 import sys
+from unittest import skip
 
 from django.core.management.commands import test
 from django.conf import settings
@@ -45,8 +46,6 @@ def _monkey_patch_unsupported_tests():
             'django.contrib.auth.tests.auth_backends.ExtensionUserModelBackendTest.test_get_all_superuser_permissions',
             'django.contrib.auth.tests.auth_backends.ExtensionUserModelBackendTest.test_has_no_object_perm'
         ])
-
-    from unittest import skip
 
     for test in unsupported_tests:
         module_path, klass_name, method_name = test.rsplit(".", 2)

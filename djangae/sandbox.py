@@ -45,9 +45,12 @@ def _local(devappserver2=None, configuration=None, options=None, wsgi_request_in
 
 
 @contextlib.contextmanager
-def _remote(configuration=None, remote_api_stub=None, **kwargs):
+def _remote(configuration=None, remote_api_stub=None, apiproxy_stub_map=None, **kwargs):
+
     def auth_func():
         return raw_input('Google Account Login: '), getpass.getpass('Password: ')
+
+    original_apiproxy = apiproxy_stub_map.apiproxy
 
     if configuration.app_id.startswith('dev~'):
         app_id = configuration.app_id[4:]
@@ -70,6 +73,7 @@ def _remote(configuration=None, remote_api_stub=None, **kwargs):
     try:
         yield
     finally:
+        apiproxy_stub_map.apiproxy = original_apiproxy
         sys.ps1 = ps1
 
 
@@ -138,6 +142,7 @@ def activate(sandbox_name, add_sdk_to_path=False):
     import google.appengine.tools.devappserver2.devappserver2 as devappserver2
     import google.appengine.tools.devappserver2.wsgi_request_info as wsgi_request_info
     import google.appengine.ext.remote_api.remote_api_stub as remote_api_stub
+    import google.appengine.api.apiproxy_stub_map as apiproxy_stub_map
 
     # The argparser is the easiest way to get the default options.
     options = devappserver2.PARSER.parse_args([project_root])
@@ -158,6 +163,7 @@ def activate(sandbox_name, add_sdk_to_path=False):
             options=options,
             wsgi_request_info=wsgi_request_info,
             remote_api_stub=remote_api_stub,
+            apiproxy_stub_map=apiproxy_stub_map,
         )
         with SANDBOXES[sandbox_name](**kwargs):
             yield
