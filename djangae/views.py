@@ -6,7 +6,7 @@ from django.http import HttpResponse
 from django.utils.importlib import import_module
 from django.views.decorators.csrf import csrf_exempt
 
-from djangae.boot import on_production
+from djangae.utils import on_production
 
 def warmup(request):
     """
