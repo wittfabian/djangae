@@ -31,8 +31,8 @@ Here's the full list of magic:
 
 * Database-level enforcement of `unique` and `unique_together` constraints.
 * A transparent caching layer for queries which return a single result (`.get` or any query filtering on a unique field
-  or unique-together fields). This helps to avoid issues with the Datastore's eventual consistency behaviour
-  ([see](https://developers.google.com/appengine/docs/python/datastore/structuring_for_strong_consistency_).
+  or unique-together fields). This helps to avoid Datastore
+  [consistency issues](https://developers.google.com/appengine/docs/python/datastore/structuring_for_strong_consistency_).
 * Automatic creation of additional index fields containing pre-manipulated values, so that queries such as `__iexact`
   work out of the box. These index fields are created automatically when you use the queries.  Use
   `settings.GENERATE_SPECIAL_INDEXES_DURING_TESTING` to control whether that automatic creation happens during tests.
