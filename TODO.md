@@ -80,10 +80,9 @@ for updates as inserts (updates might only use a subset of fields).
 Status: 20% - needs to be done, probably needs a whiteboard discussion. I've broken some of this into
 get_prepared_db_value.
 
-### Fix up deploy, remote, etc. commands
+### Fix up remote commands
 
-We need to support remote commands, and deployment. Deploy is implemented but I think it needs some tweaking, remote
-commands are unimplemented
+We need to support remote commands.
 
 Status: 40%
 
