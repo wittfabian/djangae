@@ -126,11 +126,14 @@ def activate(sandbox_name, add_sdk_to_path=False):
     # what the App Engine script wrappers do.
 
     if add_sdk_to_path:
-        sys.path[0:0] = [_find_sdk_from_path()]
+        try:
+            import wrapper_util  # Already on sys.path
+        except ImportError:
+            sys.path[0:0] = [_find_sdk_from_path()]
+            import wrapper_util
 
     original_path = sys.path[:]
 
-    import wrapper_util
     sdk_path = _find_sdk_from_python_path()
     _PATHS = wrapper_util.Paths(sdk_path)
     sys.path = (_PATHS.script_paths(_SCRIPT_NAME) + _PATHS.scrub_path(_SCRIPT_NAME, sys.path))
