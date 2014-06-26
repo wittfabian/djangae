@@ -20,7 +20,7 @@ def _find_sdk_from_python_path():
 def _find_sdk_from_path():
     # Assumes `script_name` is on your PATH - SDK installers set this up
     which = 'where' if sys.platform == "win32" else 'which'
-    path = subprocess.check_output([which, _SCRIPT_NAME])
+    path = subprocess.check_output([which, _SCRIPT_NAME]).strip()
     sdk_dir = os.path.dirname(os.path.realpath(path))
 
     if os.path.exists(os.path.join(sdk_dir, 'bootstrapping')):
