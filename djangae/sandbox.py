@@ -20,8 +20,21 @@ def _find_sdk_from_python_path():
 def _find_sdk_from_path():
     # Assumes `script_name` is on your PATH - SDK installers set this up
     which = 'where' if sys.platform == "win32" else 'which'
-    path = subprocess.check_output([which, _SCRIPT_NAME])
-    return os.path.dirname(os.path.realpath(path))
+    path = subprocess.check_output([which, _SCRIPT_NAME]).strip()
+    sdk_dir = os.path.dirname(os.path.realpath(path))
+
+    if os.path.exists(os.path.join(sdk_dir, 'bootstrapping')):
+        # Cloud SDK
+        sdk_dir = os.path.abspath(os.path.join(sdk_dir, '..', 'platform', 'google_appengine'))
+        if not os.path.exists(sdk_dir):
+            raise RuntimeError(
+                'The Cloud SDK is on the path, but the app engine SDK dir could not be found'
+            )
+        else:
+            return sdk_dir
+    else:
+        # Regular App Engine SDK
+        return sdk_dir
 
 
 @contextlib.contextmanager
