@@ -131,6 +131,11 @@ def activate(sandbox_name, add_sdk_to_path=False):
         except ImportError:
             sys.path[0:0] = [_find_sdk_from_path()]
             import wrapper_util
+    else:
+        try:
+            import wrapper_util
+        except ImportError:
+            raise RuntimeError("Couldn't find a recent enough Google App Engine SDK, make sure you are using at least 1.9.6")
 
     original_path = sys.path[:]
 
