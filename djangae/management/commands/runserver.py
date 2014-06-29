@@ -31,6 +31,7 @@ class Command(BaseRunserverCommand):
         quit_command = 'CTRL-BREAK' if sys.platform == 'win32' else 'CONTROL-C'
 
         from djangae.utils import find_project_root, data_root
+        from djangae.sandbox import _find_sdk_from_python_path
 
         from django.conf import settings
         from django.utils import translation
@@ -65,7 +66,7 @@ class Command(BaseRunserverCommand):
         translation.activate(settings.LANGUAGE_CODE)
 
         #Will have been set by setup_paths
-        sdk_path = os.environ['APP_ENGINE_SDK']
+        sdk_path = _find_sdk_from_python_path()
 
         if use_old_dev_appserver:
             dev_appserver = os.path.join(sdk_path, "old_dev_appserver.py")
