@@ -27,7 +27,9 @@ class Command(BaseRunserverCommand):
         import sys
 
         shutdown_message = options.get('shutdown_message', '')
-        use_old_dev_appserver = options.get('use_old_dev_appserver')
+
+        #We use the old dev appserver if threading is disabled or --old was passed
+        use_old_dev_appserver = options.get('use_old_dev_appserver') or not options.get("use_threading")
         quit_command = 'CTRL-BREAK' if sys.platform == 'win32' else 'CONTROL-C'
 
         from djangae.utils import find_project_root, data_root
