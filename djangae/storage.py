@@ -1,6 +1,6 @@
 import mimetypes
+import os
 import re
-import urlparse
 
 try:
     from cStringIO import StringIO
@@ -16,11 +16,10 @@ from django.core.files.uploadhandler import FileUploadHandler, \
 from django.core.exceptions import ImproperlyConfigured
 from django.http import HttpResponse
 from django.http.multipartparser import ChunkIter, Parser, LazyStream, FILE
-from django.utils.encoding import smart_str, force_unicode, filepath_to_uri
+from django.utils.encoding import smart_str, force_unicode
 
 from google.appengine.api import files
-from google.appengine.api.images import get_serving_url, NotImageError, \
-    TransformationError, BlobKeyRequiredError
+from google.appengine.api.images import get_serving_url, NotImageError
 from google.appengine.ext.blobstore import BlobInfo, BlobKey, delete, \
     create_upload_url, BLOB_KEY_HEADER, BLOB_RANGE_HEADER, BlobReader
 
@@ -30,7 +29,9 @@ def prepare_upload(request, url, **kwargs):
 
 
 def serve_file(request, file, save_as, content_type, **kwargs):
-    if hasattr(file, 'file') and hasattr(file.file, 'blobstore_info'):
+    if isinstance(file, BlobKey):
+        blobkey = file
+    elif hasattr(file, 'file') and hasattr(file.file, 'blobstore_info'):
         blobkey = file.file.blobstore_info.key()
     elif hasattr(file, 'blobstore_info'):
         blobkey = file.blobstore_info.key()
@@ -45,9 +46,11 @@ def serve_file(request, file, save_as, content_type, **kwargs):
         response[BLOB_RANGE_HEADER] = http_range
     if save_as:
         response['Content-Disposition'] = smart_str(
-            u'attachment; filename=%s' % save_as)
-    if file.size is not None:
-        response['Content-Length'] = file.size
+            u'attachment; filename="%s"' % save_as)
+
+    info = BlobInfo.get(blobkey)
+    if info.size is not None:
+        response['Content-Length'] = info.size
     return response
 
 
@@ -102,8 +105,11 @@ class BlobstoreStorage(Storage):
 
     def url(self, name):
         try:
-            return get_serving_url(self._get_blobinfo(name))
-        except (NotImageError, TransformationError):
+            #return a protocol-less URL, because django can't/won't pass
+            #down an argument saying whether it should be secure or not
+            url = get_serving_url(self._get_blobinfo(name))
+            return re.sub("http://", "//", url)
+        except NotImageError:
             return None
 
     def created_time(self, name):
@@ -121,12 +127,6 @@ class BlobstoreStorage(Storage):
     def _get_blobinfo(self, name):
         return BlobInfo.get(self._get_key(name))
 
-class DevBlobstoreStorage(BlobstoreStorage):
-    def url(self, name):
-        try:
-            return super(DevBlobstoreStorage, self).url(name)
-        except BlobKeyRequiredError:
-            return urlparse.urljoin(settings.MEDIA_URL, filepath_to_uri(name))
 
 class BlobstoreFile(File):
 
@@ -157,8 +157,6 @@ class BlobstoreFileUploadHandler(FileUploadHandler):
     def __init__(self, request=None):
         super(BlobstoreFileUploadHandler, self).__init__(request)
         self.blobkey = None
-        self.data = StringIO()
-        self.boundary = None
 
     def new_file(self, field_name, file_name, content_type, content_length, charset=None, content_type_extra=None):
         """
@@ -167,24 +165,24 @@ class BlobstoreFileUploadHandler(FileUploadHandler):
         self.data.seek(0) #Rewind
         data = self.data.read()
 
-        if self.boundary:
-            parts = data.split(self.boundary)
+        parts = data.split(self.boundary)
 
-            for part in parts:
-                match = re.search('blob-key="(?P<blob_key>\S+)"', part)
-                blob_key = match.groupdict().get('blob_key') if match else None
+        for part in parts:
+            match = re.search('blob-key="?(?P<blob_key>[a-zA-Z0-9_=-]+)', part)
+            blob_key = match.groupdict().get('blob_key') if match else None
 
-                if not blob_key:
-                    continue
+            if not blob_key:
+                continue
 
-                #OK, we have a blob key, but is it the one for the field?
-                match = re.search('name="(?P<field_name>\S+)"', part)
-                name = match.groupdict().get('field_name') if match else None
-                if name != field_name:
-                    #Nope, not for this field
-                    continue
+            #OK, we have a blob key, but is it the one for the field?
+            match = re.search('\sname="?(?P<field_name>[a-zA-Z0-9_]+)', part)
+            name = match.groupdict().get('field_name') if match else None
+            if name != field_name:
+                #Nope, not for this field
+                continue
 
-                self.blobkey = blob_key
+            self.blobkey = blob_key
+            break
 
         if self.blobkey:
             self.blobkey = BlobKey(self.blobkey)
@@ -198,7 +196,7 @@ class BlobstoreFileUploadHandler(FileUploadHandler):
             because that's what the WSGI spec says. However, to make this work we need to abuse the seeking (at least till Django 1.7)
         """
         self.boundary = boundary
-        self.data = StringIO(input_data.body if hasattr(input_data, "body") else input_data.read()) #Create a string IO object
+        self.data = StringIO(input_data.body) #Create a string IO object
         return None #Pass back to Django
 
     def receive_data_chunk(self, raw_data, start):
