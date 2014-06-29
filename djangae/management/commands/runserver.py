@@ -27,6 +27,7 @@ class Command(BaseRunserverCommand):
         import sys
 
         shutdown_message = options.get('shutdown_message', '')
+        do_reload = options.get('use_reloader', True)
 
         #We use the old dev appserver if threading is disabled or --old was passed
         use_old_dev_appserver = options.get('use_old_dev_appserver') or not options.get("use_threading")
@@ -95,7 +96,7 @@ class Command(BaseRunserverCommand):
                 "--admin_port",
                 str(int(self.port) + 1),
                 "--automatic_restart",
-                "False",
+                "True" if do_reload else "False",
                 "--allow_skipped_files"
             ]
 
