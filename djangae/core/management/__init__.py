@@ -1,3 +1,4 @@
+import sys
 import argparse
 
 import djangae.sandbox as sandbox
@@ -10,6 +11,7 @@ def execute_from_command_line(argv=None):
     Note: The '--sandbox' arg must come first. All other args are forwarded to
           Django as normal.
     """
+    argv = argv or sys.argv
     parser = argparse.ArgumentParser(prog='manage.py')
     parser.add_argument(
         '--sandbox', default=sandbox.LOCAL, choices=sandbox.SANDBOXES.keys())
