@@ -81,8 +81,6 @@ class Command(BaseRunserverCommand):
                 "--use_sqlite",
                 "--high_replication",
                 "--allow_skipped_files",
-                "--datastore_path",
-                os.path.join(data_root(), "datastore.db")
             ]
         else:
             dev_appserver = os.path.join(sdk_path, "dev_appserver.py")
@@ -91,8 +89,6 @@ class Command(BaseRunserverCommand):
                 find_project_root(),
                 "--port",
                 self.port,
-                "--storage_path",
-                data_root(),
                 "--admin_port",
                 str(int(self.port) + 1),
                 "--automatic_restart",
