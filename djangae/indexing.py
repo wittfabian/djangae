@@ -4,6 +4,7 @@ import os
 import datetime
 
 _special_indexes = {}
+_last_loaded_time = None
 
 def _get_index_file():
     from djangae.utils import find_project_root
@@ -16,6 +17,7 @@ def _get_table_from_model(model_class):
 
 def load_special_indexes():
     global _special_indexes
+    global _last_loaded_time
 
     index_file = _get_index_file()
 
@@ -24,11 +26,16 @@ def load_special_indexes():
         logging.info("Not loading any special indexes")
         return
 
+    mtime = os.path.getmtime(index_file)
+    if _last_loaded_time and _last_loaded_time == mtime:
+        return
+
     #Load any existing indexes
     with open(index_file, "r") as stream:
         data = yaml.load(stream)
 
     _special_indexes = data
+    _last_loaded_time = mtime
 
     logging.info("Loaded special indexes for {0} models".format(len(_special_indexes)))
 
