@@ -125,6 +125,7 @@ log_once.logged = set()
 class SelectCommand(object):
     def __init__(self, connection, query, keys_only=False, all_fields=False):
         self.original_query = query
+        self.connection = connection
 
         opts = query.get_meta()
         if not query.default_ordering:
@@ -215,7 +216,7 @@ class SelectCommand(object):
                 #projection query
                 f = get_field_from_column(self.model, field)
                 if not f:
-                    raise NotImplementedError("Attemping a cross-table select. Maybe? #FIXME")
+                    raise NotSupportedError("Attemping a cross-table select. Maybe? #FIXME")
                 assert f #If this happens, we have a cross-table select going on! #FIXME
                 db_type = f.db_type(connection)
 
@@ -285,6 +286,8 @@ class SelectCommand(object):
                         #can't project
                         self.projection = None
 
+                if constraint.field.db_type(self.connection) in ("bytes", "text"):
+                    raise NotSupportedError("Text and Blob fields are not indexed by the datastore, so you can't filter on them")
 
                 if negated:
                     if op in ("exact", "in") and constraint.field.primary_key:
@@ -296,7 +299,7 @@ class SelectCommand(object):
                     #next section in an else block
                     if op == "exact":
                         if self.has_inequality_filter:
-                            raise RuntimeError("You can only specify one inequality filter per query")
+                            raise NotSupportedError("You can only specify one inequality filter per query")
 
                         col = constraint.col
                         result.append((col, "gt_and_lt", value))

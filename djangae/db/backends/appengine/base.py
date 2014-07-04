@@ -29,7 +29,7 @@ from google.appengine.ext import testbed
 from google.appengine.api.datastore import Key
 
 #DJANGAE
-from djangae.db.exceptions import DatabaseError, NotSupportedError
+from djangae.db.exceptions import DatabaseError, NotSupportedError, CouldBeSupportedError
 from djangae.db.utils import (
     decimal_to_string,
     make_timezone_naive,
@@ -89,8 +89,7 @@ class Cursor(object):
             self.connection.queries.append(sql)
             self.returned_ids = sql.execute()
         else:
-            import pdb;pdb.set_trace()
-            raise RuntimeError("Can't execute traditional SQL: '%s'", sql)
+            raise CouldBeSupportedError("Can't execute traditional SQL: '%s' (although perhaps we could make GQL work)", sql)
 
     def fix_fk_null(self, query, constraint):
         alias = constraint.alias
