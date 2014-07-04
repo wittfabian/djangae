@@ -127,6 +127,8 @@ class SelectCommand(object):
         self.original_query = query
         self.connection = connection
 
+        self.limits = (query.low_mark, query.high_mark)
+
         opts = query.get_meta()
         if not query.default_ordering:
             self.ordering = query.order_by
@@ -493,7 +495,6 @@ class SelectCommand(object):
             qry.Ancestor(self.exact_pk)
             qry["__key__ ="] = self.exact_pk
             query = qry
-
         elif self.included_pks:
             queries = []
             num_queries = 0
@@ -513,16 +514,21 @@ class SelectCommand(object):
     def _do_fetch(self):
         assert not self.results
 
-        self.results = self._run_query(aggregate_type=self.aggregate_type)
+        self.results = self._run_query(
+            aggregate_type=self.aggregate_type,
+            start=self.limits[0],
+            limit=None if self.limits[1] is None else (self.limits[1] - (self.limits[0] or 0))
+        )
+
         self.query_done = True
 
     def _run_query(self, limit=None, start=None, aggregate_type=None):
         query_pre_execute.send(sender=self.model, query=self.gae_query, aggregate=self.aggregate_type)
 
         if aggregate_type is None:
-            results = self.gae_query.Run(limit=limit, start=start)
+            results = self.gae_query.Run(limit=limit, offset=start)
         elif self.aggregate_type == "count":
-            return self.gae_query.Count(limit=limit, start=start)
+            return self.gae_query.Count(limit=limit, offset=start)
         else:
             raise RuntimeError("Unsupported query type")
 

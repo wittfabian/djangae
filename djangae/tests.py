@@ -271,10 +271,10 @@ class EdgeCaseTests(TestCase):
         """
         # Check that a basic __in query works
         results = list(User.objects.filter(username__in=['A', 'B']))
-        self.assertItemsEqual(results, [self.u1.pk, self.u2.pk])
+        self.assertItemsEqual(results, [self.u1, self.u2])
         # Check that it also works on PKs
         results = list(User.objects.filter(pk__in=[self.u1.pk, self.u2.pk]))
-        self.assertItemsEqual(results, [self.u1.pk, self.u2.pk])
+        self.assertItemsEqual(results, [self.u1, self.u2])
         # Check that using more than 30 items in an __in query not on the pk causes death
         query = User.objects.filter(username__in=list([x for x in letters[:31]]))
         # This currently rasies an error from App Engine, should we raise our own?
