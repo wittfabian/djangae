@@ -1,6 +1,8 @@
 #STANDARD LIB
 from datetime import datetime
 from decimal import Decimal
+from itertools import chain
+
 import warnings
 
 #LIBRARIES
@@ -206,6 +208,10 @@ def key_exists(key):
 
 
 def entity_matches_query(entity, query):
+    """
+        Return True if the entity would potentially be returned by the datastore
+        query
+    """
     OPERATORS = {
         "=": lambda x, y: x == y,
         "<": lambda x, y: x < y,
@@ -219,12 +225,14 @@ def entity_matches_query(entity, query):
         import ipdb; ipdb.set_trace()
 
     for query in queries:
-        comparisons = [ ("kind", "=", "_Query__kind") ] + [ tuple(x.split(" ") + [ x ]) for x in query.keys() ]
+        comparisons = chain([ ("kind", "=", "_Query__kind") ], [ tuple(x.split(" ") + [ x ]) for x in query.keys() ])
         for ent_attr, op, query_attr in comparisons:
             op = OPERATORS[op]
 
             ent_attr = entity.get(ent_attr) or getattr(entity, ent_attr)
             if callable(ent_attr):
+                #entity.kind() is a callable, so we need this to save special casing it in a more
+                #ugly way
                 ent_attr = ent_attr()
 
             if not isinstance(query_attr, (list, tuple)):
@@ -236,12 +244,15 @@ def entity_matches_query(entity, query):
 
             matches = True
             for query_attr in query_attrs:
+                #If any of the values don't match then this query doesn't match
                 if not op(ent_attr, query_attr):
                     matches = False
+                    break
 
             if not matches:
                 break
         else:
+            #If we got through the loop without breaking, then the entity matches
             return True
 
     return False
