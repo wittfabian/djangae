@@ -12,8 +12,10 @@ from google.appengine.api.datastore_errors import EntityNotFoundError
 # DJANGAE
 from djangae.db.exceptions import NotSupportedError
 from djangae.indexing import add_special_index
+from djangae.db.utils import entity_matches_query
 from .storage import BlobstoreFileUploadHandler
 
+from google.appengine.api import datastore
 
 class User(models.Model):
     username = models.CharField(max_length=32)
@@ -43,6 +45,33 @@ class MultiTableChildOne(MultiTableParent):
 
 class MultiTableChildTwo(MultiTableParent):
     child_two_field = models.CharField(max_length=32)
+
+
+class BackendTests(TestCase):
+    def test_entity_matches_query(self):
+        entity = datastore.Entity("test_model")
+        entity["name"] = "Charlie"
+        entity["age"] = 22
+
+        query = datastore.Query("test_model")
+        query["name ="] = "Charlie"
+        self.assertTrue(entity_matches_query(entity, query))
+
+        query["age >="] = 5
+        self.assertTrue(entity_matches_query(entity, query))
+        del query["age >="]
+
+        query["age <"] = 22
+        self.assertFalse(entity_matches_query(entity, query))
+        del query["age <"]
+
+        query["age <="] = 22
+        self.assertTrue(entity_matches_query(entity, query))
+        del query["age <="]
+
+        query["name ="] = "Fred"
+        self.assertFalse(entity_matches_query(entity, query))
+        del query["name ="]
 
 
 class EdgeCaseTests(TestCase):

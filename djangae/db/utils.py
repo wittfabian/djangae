@@ -203,3 +203,45 @@ def key_exists(key):
     qry = Query(keys_only=True)
     qry.Ancestor(key)
     return qry.Count(limit=1) > 0
+
+
+def entity_matches_query(entity, query):
+    OPERATORS = {
+        "=": lambda x, y: x == y,
+        "<": lambda x, y: x < y,
+        ">": lambda x, y: x > y,
+        "<=": lambda x, y: x <= y,
+        ">=": lambda x, y: x >= y
+    }
+
+    queries = [ query ]
+    if isinstance(query, datastore.MultiQuery):
+        import ipdb; ipdb.set_trace()
+
+    for query in queries:
+        comparisons = [ ("kind", "=", "_Query__kind") ] + [ tuple(x.split(" ") + [ x ]) for x in query.keys() ]
+        for ent_attr, op, query_attr in comparisons:
+            op = OPERATORS[op]
+
+            ent_attr = entity.get(ent_attr) or getattr(entity, ent_attr)
+            if callable(ent_attr):
+                ent_attr = ent_attr()
+
+            if not isinstance(query_attr, (list, tuple)):
+                query_attrs = [ query_attr ]
+            else:
+                query_attrs = query_attr
+
+            query_attrs = [ query.get(x) or getattr(query, x) for x in query_attrs ]
+
+            matches = True
+            for query_attr in query_attrs:
+                if not op(ent_attr, query_attr):
+                    matches = False
+
+            if not matches:
+                break
+        else:
+            return True
+
+    return False
