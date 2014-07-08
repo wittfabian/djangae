@@ -15,7 +15,7 @@ from djangae.indexing import add_special_index
 from .storage import BlobstoreFileUploadHandler
 
 
-class User(models.Model):
+class TestUser(models.Model):
     username = models.CharField(max_length=32)
     email = models.EmailField()
     last_login = models.DateField()
@@ -24,7 +24,7 @@ class User(models.Model):
         return self.username
 
 class Permission(models.Model):
-    user = models.ForeignKey(User)
+    user = models.ForeignKey(TestUser)
     perm = models.CharField(max_length=32)
 
     def __unicode__(self):
@@ -47,13 +47,13 @@ class MultiTableChildTwo(MultiTableParent):
 
 class EdgeCaseTests(TestCase):
     def setUp(self):
-        add_special_index(User, "username", "iexact")
+        add_special_index(TestUser, "username", "iexact")
 
-        self.u1 = User.objects.create(username="A", email="test@example.com", last_login=datetime.datetime.now().date())
-        self.u2 = User.objects.create(username="B", email="test@example.com", last_login=datetime.datetime.now().date())
-        User.objects.create(username="C", email="test2@example.com", last_login=datetime.datetime.now().date())
-        User.objects.create(username="D", email="test3@example.com", last_login=datetime.datetime.now().date())
-        User.objects.create(username="E", email="test3@example.com", last_login=datetime.datetime.now().date())
+        self.u1 = TestUser.objects.create(username="A", email="test@example.com", last_login=datetime.datetime.now().date())
+        self.u2 = TestUser.objects.create(username="B", email="test@example.com", last_login=datetime.datetime.now().date())
+        TestUser.objects.create(username="C", email="test2@example.com", last_login=datetime.datetime.now().date())
+        TestUser.objects.create(username="D", email="test3@example.com", last_login=datetime.datetime.now().date())
+        TestUser.objects.create(username="E", email="test3@example.com", last_login=datetime.datetime.now().date())
 
     def test_multi_table_inheritance(self):
 
@@ -71,54 +71,54 @@ class EdgeCaseTests(TestCase):
         self.assertEqual(child2, MultiTableChildTwo.objects.get())
 
     def test_anding_pks(self):
-        results = User.objects.filter(id__exact=self.u1.pk).filter(id__exact=self.u2.pk)
+        results = TestUser.objects.filter(id__exact=self.u1.pk).filter(id__exact=self.u2.pk)
         self.assertEqual(list(results), [])
 
     def test_unusual_queries(self):
-        results = User.objects.all()
+        results = TestUser.objects.all()
         self.assertEqual(5, len(results))
 
-        results = User.objects.filter(username__in=["A", "B"])
+        results = TestUser.objects.filter(username__in=["A", "B"])
         self.assertEqual(2, len(results))
         self.assertItemsEqual(["A", "B"], [x.username for x in results])
 
-        results = User.objects.filter(username__in=["A", "B"]).exclude(username="A")
+        results = TestUser.objects.filter(username__in=["A", "B"]).exclude(username="A")
         self.assertEqual(1, len(results), results)
         self.assertItemsEqual(["B"], [x.username for x in results])
 
-        results = User.objects.filter(username__lt="E")
+        results = TestUser.objects.filter(username__lt="E")
         self.assertEqual(4, len(results))
         self.assertItemsEqual(["A", "B", "C", "D"], [x.username for x in results])
 
-        results = User.objects.filter(username__lte="E")
+        results = TestUser.objects.filter(username__lte="E")
         self.assertEqual(5, len(results))
 
         #Double exclude not supported
         with self.assertRaises(RuntimeError):
-            list(User.objects.exclude(username="E").exclude(username="A"))
+            list(TestUser.objects.exclude(username="E").exclude(username="A"))
 
-        results = User.objects.filter(username="A", email="test@example.com")
+        results = TestUser.objects.filter(username="A", email="test@example.com")
         self.assertEqual(1, len(results))
 
-        results = User.objects.filter(username__in=["A", "B"]).filter(username__in=["A", "B"])
+        results = TestUser.objects.filter(username__in=["A", "B"]).filter(username__in=["A", "B"])
         self.assertEqual(2, len(results))
         self.assertItemsEqual(["A", "B"], [x.username for x in results])
 
-        results = User.objects.filter(username__in=["A", "B"]).filter(username__in=["A"])
+        results = TestUser.objects.filter(username__in=["A", "B"]).filter(username__in=["A"])
         self.assertEqual(1, len(results))
         self.assertItemsEqual(["A"], [x.username for x in results])
 
-        results = User.objects.filter(pk__in=[self.u1.pk, self.u2.pk]).filter(username__in=["A"])
+        results = TestUser.objects.filter(pk__in=[self.u1.pk, self.u2.pk]).filter(username__in=["A"])
         self.assertEqual(1, len(results))
         self.assertItemsEqual(["A"], [x.username for x in results])
 
-        results = User.objects.filter(username__in=["A"]).filter(pk__in=[self.u1.pk, self.u2.pk])
+        results = TestUser.objects.filter(username__in=["A"]).filter(pk__in=[self.u1.pk, self.u2.pk])
         self.assertEqual(1, len(results))
         self.assertItemsEqual(["A"], [x.username for x in results])
 
         #Negated in not supported
         with self.assertRaises(NotSupportedError):
-            list(User.objects.all().exclude(username__in=["A"]))
+            list(TestUser.objects.all().exclude(username__in=["A"]))
 
 
     def test_or_queryset(self):
@@ -126,22 +126,22 @@ class EdgeCaseTests(TestCase):
             This constructs an OR query, this is currently broken in the parse_where_and_check_projection
             function. WE MUST FIX THIS!
         """
-        q1 = User.objects.filter(username="A")
-        q2 = User.objects.filter(username="B")
+        q1 = TestUser.objects.filter(username="A")
+        q2 = TestUser.objects.filter(username="B")
 
         self.assertItemsEqual([self.u1, self.u2], list(q1 | q2))
 
     def test_or_q_objects(self):
         """ Test use of Q objects in filters. """
-        query = User.objects.filter(Q(username="A") | Q(username="B"))
+        query = TestUser.objects.filter(Q(username="A") | Q(username="B"))
         self.assertItemsEqual([self.u1, self.u2], list(query))
 
     def test_extra_select(self):
-        results = User.objects.filter(username='A').extra(select={'is_a': "username = 'A'"})
+        results = TestUser.objects.filter(username='A').extra(select={'is_a': "username = 'A'"})
         self.assertEqual(1, len(results))
         self.assertItemsEqual([True], [x.is_a for x in results])
 
-        results = User.objects.all().exclude(username='A').extra(select={'is_a': "username = 'A'"})
+        results = TestUser.objects.all().exclude(username='A').extra(select={'is_a': "username = 'A'"})
         self.assertEqual(4, len(results))
         self.assertEqual(not any([x.is_a for x in results]), True)
 
@@ -149,56 +149,56 @@ class EdgeCaseTests(TestCase):
         # results = User.objects.all().extra(select={'truthy': 'TRUE'})
         # self.assertEqual(all([x.truthy for x in results]), True)
 
-        results = User.objects.all().extra(select={'truthy': True})
+        results = TestUser.objects.all().extra(select={'truthy': True})
         self.assertEqual(all([x.truthy for x in results]), True)
 
 
     def test_counts(self):
-        self.assertEqual(5, User.objects.count())
-        self.assertEqual(2, User.objects.filter(email="test3@example.com").count())
-        self.assertEqual(3, User.objects.exclude(email="test3@example.com").count())
+        self.assertEqual(5, TestUser.objects.count())
+        self.assertEqual(2, TestUser.objects.filter(email="test3@example.com").count())
+        self.assertEqual(3, TestUser.objects.exclude(email="test3@example.com").count())
         self.assertEqual(1,
-            User.objects.filter(username="A").exclude(email="test3@example.com").count())
+            TestUser.objects.filter(username="A").exclude(email="test3@example.com").count())
 
         with self.assertRaises(RuntimeError):
-            list(User.objects.exclude(username="E").exclude(username="A"))
+            list(TestUser.objects.exclude(username="E").exclude(username="A"))
 
 
     def test_deletion(self):
-        count = User.objects.count()
+        count = TestUser.objects.count()
 
         self.assertTrue(count)
 
-        User.objects.filter(username="A").delete()
+        TestUser.objects.filter(username="A").delete()
 
-        self.assertEqual(count - 1, User.objects.count())
+        self.assertEqual(count - 1, TestUser.objects.count())
 
-        User.objects.filter(username="B").exclude(username="B").delete() #Should do nothing
+        TestUser.objects.filter(username="B").exclude(username="B").delete() #Should do nothing
 
-        self.assertEqual(count - 1, User.objects.count())
+        self.assertEqual(count - 1, TestUser.objects.count())
 
-        User.objects.all().delete()
+        TestUser.objects.all().delete()
 
-        count = User.objects.count()
+        count = TestUser.objects.count()
 
         self.assertFalse(count)
 
     def test_insert_with_existing_key(self):
-        user = User.objects.create(id=1, username="test1", last_login=datetime.datetime.now().date())
+        user = TestUser.objects.create(id=1, username="test1", last_login=datetime.datetime.now().date())
         self.assertEqual(1, user.pk)
 
         with self.assertRaises(IntegrityError):
-            User.objects.create(id=1, username="test2", last_login=datetime.datetime.now().date())
+            TestUser.objects.create(id=1, username="test2", last_login=datetime.datetime.now().date())
 
     def test_select_related(self):
         """ select_related should be a no-op... for now """
-        user = User.objects.get(username="A")
+        user = TestUser.objects.get(username="A")
         perm = Permission.objects.create(user=user, perm="test_perm")
         select_related = [ (p.perm, p.user.username) for p in user.permission_set.select_related() ]
         self.assertEqual(user.username, select_related[0][1])
 
     def test_cross_selects(self):
-        user = User.objects.get(username="A")
+        user = TestUser.objects.get(username="A")
         perm = Permission.objects.create(user=user, perm="test_perm")
         perms = list(Permission.objects.all().values_list("user__username", "perm"))
         self.assertEqual("A", perms[0][0])
@@ -216,50 +216,50 @@ class EdgeCaseTests(TestCase):
         try:
             original_init = Query.__init__
             Query.__init__ = replacement_init
-            list(User.objects.all().values_list('pk', flat=True))
+            list(TestUser.objects.all().values_list('pk', flat=True))
         finally:
             Query.__init__ = original_init
 
         self.assertTrue(replacement_init.called_kwargs.get('keys_only'))
-        self.assertEqual(5, len(User.objects.all().values_list('pk')))
+        self.assertEqual(5, len(TestUser.objects.all().values_list('pk')))
 
     def test_iexact(self):
-        user = User.objects.get(username__iexact="a")
+        user = TestUser.objects.get(username__iexact="a")
         self.assertEqual("A", user.username)
 
     def test_ordering(self):
-        users = User.objects.all().order_by("username")
+        users = TestUser.objects.all().order_by("username")
 
         self.assertEqual(["A", "B", "C", "D", "E"], [x.username for x in users])
 
-        users = User.objects.all().order_by("-username")
+        users = TestUser.objects.all().order_by("-username")
 
         self.assertEqual(["A", "B", "C", "D", "E"][::-1], [x.username for x in users])
 
     def test_dates_query(self):
-        User.objects.create(username="Z", email="z@example.com", last_login=datetime.date(2013, 4, 5))
+        TestUser.objects.create(username="Z", email="z@example.com", last_login=datetime.date(2013, 4, 5))
 
-        last_a_login = User.objects.get(username="A").last_login
+        last_a_login = TestUser.objects.get(username="A").last_login
 
-        dates = User.objects.dates('last_login', 'year')
+        dates = TestUser.objects.dates('last_login', 'year')
         self.assertItemsEqual(
             [datetime.datetime(2013, 1, 1, 0, 0), datetime.datetime(last_a_login.year, 1, 1, 0, 0)],
             dates
         )
 
-        dates = User.objects.dates('last_login', 'month')
+        dates = TestUser.objects.dates('last_login', 'month')
         self.assertItemsEqual(
             [datetime.datetime(2013, 4, 1, 0, 0), datetime.datetime(last_a_login.year, last_a_login.month, 1, 0, 0)],
             dates
         )
 
-        dates = User.objects.dates('last_login', 'day')
+        dates = TestUser.objects.dates('last_login', 'day')
         self.assertItemsEqual(
             [datetime.datetime(2013, 4, 5, 0, 0), datetime.datetime.combine(last_a_login, datetime.datetime.min.time())],
             dates
         )
 
-        dates = User.objects.dates('last_login', 'day', order='DESC')
+        dates = TestUser.objects.dates('last_login', 'day', order='DESC')
         self.assertItemsEqual(
             [datetime.datetime.combine(last_a_login, datetime.datetime.min.time()), datetime.datetime(2013, 4, 5, 0, 0)],
             dates
@@ -270,17 +270,17 @@ class EdgeCaseTests(TestCase):
             unless it's used on the PK field.
         """
         # Check that a basic __in query works
-        results = list(User.objects.filter(username__in=['A', 'B']))
+        results = list(TestUser.objects.filter(username__in=['A', 'B']))
         self.assertItemsEqual(results, [self.u1, self.u2])
         # Check that it also works on PKs
-        results = list(User.objects.filter(pk__in=[self.u1.pk, self.u2.pk]))
+        results = list(TestUser.objects.filter(pk__in=[self.u1.pk, self.u2.pk]))
         self.assertItemsEqual(results, [self.u1, self.u2])
         # Check that using more than 30 items in an __in query not on the pk causes death
-        query = User.objects.filter(username__in=list([x for x in letters[:31]]))
+        query = TestUser.objects.filter(username__in=list([x for x in letters[:31]]))
         # This currently rasies an error from App Engine, should we raise our own?
         self.assertRaises(Exception, list, query)
         # Check that it's ok with PKs though
-        query = User.objects.filter(pk__in=list(xrange(1, 32)))
+        query = TestUser.objects.filter(pk__in=list(xrange(1, 32)))
         list(query)
 
 class BlobstoreFileUploadHandlerTest(TestCase):
