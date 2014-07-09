@@ -15,7 +15,7 @@ from google.appengine.api.datastore import Key, Query
 
 #DJANGAE
 from djangae.indexing import special_indexes_for_column, REQUIRES_SPECIAL_INDEXES
-
+from djangae.db.exceptions import CouldBeSupportedError
 
 def make_timezone_naive(value):
     if value is None:
@@ -206,6 +206,20 @@ def key_exists(key):
     qry.Ancestor(key)
     return qry.Count(limit=1) > 0
 
+def django_ordering_comparison(ordering, lhs, rhs):
+    if not ordering:
+        return -1 #Really doesn't matter
+
+    ASCENDING = 1
+    DESCENDING = 2
+
+    for order, direction in ordering:
+        if direction == ASCENDING and lhs[order] != rhs[order]:
+            return -1 if lhs[order] < rhs[order] else 1
+        elif direction == DESCENDING and lhs[order] != rhs[order]:
+            return 1 if lhs[order] < rhs[order] else -1
+
+    return 0
 
 def entity_matches_query(entity, query):
     """
@@ -222,12 +236,12 @@ def entity_matches_query(entity, query):
 
     queries = [ query ]
     if isinstance(query, datastore.MultiQuery):
-        import ipdb; ipdb.set_trace()
+        raise CouldBeSupportedError("We just need to separate the multiquery into 'queries' then everything should work")
 
     for query in queries:
         comparisons = chain([ ("kind", "=", "_Query__kind") ], [ tuple(x.split(" ") + [ x ]) for x in query.keys() ])
         for ent_attr, op, query_attr in comparisons:
-            op = OPERATORS[op]
+            op = OPERATORS[op] #We want this to throw if there's some op we don't know about
 
             ent_attr = entity.get(ent_attr) or getattr(entity, ent_attr)
             if callable(ent_attr):
@@ -238,18 +252,26 @@ def entity_matches_query(entity, query):
             if not isinstance(query_attr, (list, tuple)):
                 query_attrs = [ query_attr ]
             else:
+                #The query value can be a list of ANDed values
                 query_attrs = query_attr
 
             query_attrs = [ query.get(x) or getattr(query, x) for x in query_attrs ]
 
-            matches = True
-            for query_attr in query_attrs:
+            if not isinstance(ent_attr, (list, tuple)):
+                ent_attr = [ ent_attr ]
+
+            matches = False
+            for query_attr in query_attrs: # [22, 23]
                 #If any of the values don't match then this query doesn't match
-                if not op(ent_attr, query_attr):
+                if not any([ op(attr, query_attr) for attr in ent_attr ]):
                     matches = False
                     break
+            else:
+                #One of the ent_attrs matches the query_attrs
+                matches = True
 
             if not matches:
+                #One of the AND values didn't match
                 break
         else:
             #If we got through the loop without breaking, then the entity matches

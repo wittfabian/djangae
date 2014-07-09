@@ -233,7 +233,7 @@ class DatabaseOperations(BaseDatabaseOperations):
         return self.value_to_db_decimal(value, field.max_digits, field.decimal_places)
 
     def prep_lookup_value(self, model, value, field):
-        if field.primary_key:
+        if field.primary_key and field.model == model:
             return self.prep_lookup_key(model, value, field)
 
         db_type = self.connection.creation.db_type(field)

@@ -2,6 +2,7 @@
 from datetime import datetime
 import logging
 import copy
+from functools import partial
 
 #LIBRARIES
 from django.core.cache import cache
@@ -120,6 +121,24 @@ def log_once(logging_call, text, args):
     log_once.logged.add(identifier)
 
 log_once.logged = set()
+
+
+class QueryByKeys(object):
+    def __init__(self, query, keys, ordering):
+        self.query = query
+        self.keys = keys
+        self.ordering = ordering
+
+    def Run(self, limit, offset):
+        results = sorted(datastore.Get(self.keys), cmp=partial(utils.django_ordering_comparison, self.ordering))
+
+        if offset:
+            results = results[offset:]
+
+        if limit is not None:
+            results = results[:limit]
+
+        return ( x for x in results if utils.entity_matches_query(x, self.query) )
 
 
 class SelectCommand(object):
@@ -292,7 +311,7 @@ class SelectCommand(object):
                     raise NotSupportedError("Text and Blob fields are not indexed by the datastore, so you can't filter on them")
 
                 if negated:
-                    if op in ("exact", "in") and constraint.field.primary_key:
+                    if op in ("exact", "in") and constraint.col == self.pk_col:
                         if isinstance(value, (list, tuple)):
                             self.excluded_pks.update(set(value))
                         else:
@@ -309,7 +328,7 @@ class SelectCommand(object):
                     else:
                         raise NotSupportedError("Unsupported negated lookup: " + op)
                 else:
-                    if constraint.field.primary_key:
+                    if constraint.col == self.pk_col:
                         if (value is None and op == "exact") or (op == "isnull" and value):
                             #If we are looking for a primary key that is None, then we always
                             #just return nothing
@@ -464,7 +483,7 @@ class SelectCommand(object):
                 direction = datastore.Query.DESCENDING if order.startswith("-") else datastore.Query.ASCENDING
                 order = order.lstrip("-")
 
-            if order == self.model._meta.pk.column:
+            if order == self.model._meta.pk.column or order == "pk":
                 order = "__key__"
             ordering.append((order, direction))
 
@@ -496,17 +515,8 @@ class SelectCommand(object):
             qry["__key__ ="] = self.exact_pk
             query = qry
         elif self.included_pks:
-            queries = []
-            num_queries = 0
-            for pk in self.included_pks:
-                qry = datastore.Query(self.db_table)
-                qry.update(query)
-                qry.Ancestor(pk)
-                qry["__key__ ="] = pk
-                queries.append(qry)
-                num_queries += 1
+            query = QueryByKeys(query, self.included_pks, ordering)
 
-                query = datastore.MultiQuery(queries, ordering)
         elif ordering:
             query.Order(*ordering)
         return query
