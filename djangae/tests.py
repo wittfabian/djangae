@@ -7,7 +7,9 @@ from string import letters
 from django.core.files.uploadhandler import StopFutureHandlers
 from django.db import IntegrityError, models
 from django.db.models.query import Q
+from django.forms import ModelForm
 from django.test import TestCase, RequestFactory
+from django.forms.models import modelformset_factory
 from google.appengine.api.datastore_errors import EntityNotFoundError
 
 # DJANGAE
@@ -21,7 +23,8 @@ from google.appengine.api import datastore
 class TestUser(models.Model):
     username = models.CharField(max_length=32)
     email = models.EmailField()
-    last_login = models.DateField()
+    last_login = models.DateField(auto_now_add=True)
+    field2 = models.CharField(max_length=32)
 
     def __unicode__(self):
         return self.username
@@ -78,6 +81,28 @@ class BackendTests(TestCase):
         entity["name"] = [ "Bob", "Fred", "Dave" ]
         self.assertTrue(entity_matches_query(entity, query)) #ListField test
 
+class ModelFormsetTest(TestCase):
+    def test_reproduce_index_error(self):
+        class TestModelForm(ModelForm):
+            class Meta:
+                model = TestUser
+
+        test_model = TestUser.objects.create(username='foo', field2='bar')
+        TestModelFormSet = modelformset_factory(TestUser, form=TestModelForm, extra=0)
+        test_model_formset = TestModelFormSet(queryset=TestUser.objects.filter(pk=test_model.pk))
+
+        data = {
+            'form-INITIAL_FORMS': 0,
+            'form-MAX_NUM_FORMS': 0,
+            'form-TOTAL_FORMS': 0,
+            'form-0-id': test_model.id,
+            'form-0-field1': 'foo_1',
+            'form-0-field2': 'bar_1',
+        }
+        factory = RequestFactory()
+        request = factory.post('/', data=data)
+
+        TestModelFormSet(request.POST, request.FILES)
 
 class EdgeCaseTests(TestCase):
     def setUp(self):
