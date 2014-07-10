@@ -368,7 +368,7 @@ class DatabaseCreation(BaseDatabaseCreation):
     }
 
     def db_type(self, field):
-        return self.data_types[field.__class__.__name__]
+        return self.data_types[field.get_internal_type()]
 
     def __init__(self, *args, **kwargs):
         self.testbed = None
