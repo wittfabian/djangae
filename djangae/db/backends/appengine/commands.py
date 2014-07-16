@@ -130,7 +130,8 @@ class QueryByKeys(object):
         self.ordering = ordering
 
     def Run(self, limit, offset):
-        results = sorted(datastore.Get(self.keys), cmp=partial(utils.django_ordering_comparison, self.ordering))
+
+        results = sorted([x for x in datastore.Get(self.keys) if x], cmp=partial(utils.django_ordering_comparison, self.ordering))
 
         if offset:
             results = results[offset:]
@@ -143,6 +144,7 @@ class QueryByKeys(object):
 
 class SelectCommand(object):
     def __init__(self, connection, query, keys_only=False, all_fields=False):
+
         self.original_query = query
         self.connection = connection
 
