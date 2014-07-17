@@ -155,7 +155,6 @@ class EdgeCaseTests(TestCase):
 
         results = TestFruit.objects.filter(name__in=["apple", "banana"]).values_list('pk', 'color')
         self.assertEqual(2, len(results))
-        import pdb; pdb.set_trace()
         self.assertItemsEqual([(self.apple.pk, self.apple.color), (self.banana.pk, self.banana.color)], results)
 
         results = TestUser.objects.all()
