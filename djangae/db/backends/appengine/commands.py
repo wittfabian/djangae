@@ -131,7 +131,7 @@ class QueryByKeys(object):
 
     def Run(self, limit, offset):
 
-        results = sorted([x for x in datastore.Get(self.keys) if x], cmp=partial(utils.django_ordering_comparison, self.ordering))
+        results = sorted((x for x in datastore.Get(self.keys) if x), cmp=partial(utils.django_ordering_comparison, self.ordering))
 
         if offset:
             results = results[offset:]
@@ -555,7 +555,7 @@ class SelectCommand(object):
                         raise RuntimeError("Unsupported extra_select operation {0}".format(tokens[1]))
                     fun = FILTER_CMP_FUNCTION_MAP[op]
 
-                    def lazyEval(results, attr, fun, token_a, token_b):
+                    def lazy_eval(results, attr, fun, token_a, token_b):
                         """ Wraps a list or a generator, applys comparision function
                         token_a is an attribute on the result, the lhs. token_b is the rhs
                         attr is the target attribute to store the result
@@ -572,11 +572,11 @@ class SelectCommand(object):
                             result[attr] = fun(lhs, rhs)
                             yield result
 
-                    results = lazyEval(results, attr, fun, tokens[0], tokens[2])
+                    results = lazy_eval(results, attr, fun, tokens[0], tokens[2])
 
                 elif length == 1:
 
-                    def lazyAssign(results, attr, value):
+                    def lazy_assign(results, attr, value):
                         """ Wraps a list or a generator, applys attribute assignment
                         """
                         for result in results:
@@ -597,7 +597,7 @@ class SelectCommand(object):
                             result[attr] = value
                             yield result
 
-                    results = lazyAssign(results, attr, tokens[0])
+                    results = lazy_assign(results, attr, tokens[0])
                 else:
                     raise RuntimeError("Unsupported extra_select")
         return results
