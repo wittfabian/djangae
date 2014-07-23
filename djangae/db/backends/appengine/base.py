@@ -208,11 +208,15 @@ class DatabaseOperations(BaseDatabaseOperations):
         return value
 
     def sql_flush(self, style, tables, seqs, allow_cascade=False):
-        if getattr(settings, "COMPLETE_FLUSH_WHILE_TESTING", False):
-            if "test" in sys.argv:
-                tables = metadata.get_kinds()
 
-        return [ FlushCommand(table) for table in tables ]
+        creation = self.connection.creation
+        if creation.testbed:
+            creation._destroy_test_db(':memory:', verbosity=1)
+            creation._create_test_db(':memory:', autoclobber=True)
+            return []
+        else:
+            return [ FlushCommand(table) for table in tables ]
+
 
     def prep_lookup_key(self, model, value, field):
         if isinstance(value, basestring):
@@ -423,6 +427,7 @@ class DatabaseCreation(BaseDatabaseCreation):
     def _destroy_test_db(self, name, verbosity):
         if self.testbed:
             self.testbed.deactivate()
+        self.testbed = None
 
 
 class DatabaseIntrospection(BaseDatabaseIntrospection):
