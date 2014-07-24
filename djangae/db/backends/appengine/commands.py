@@ -297,9 +297,9 @@ class SelectCommand(object):
             if isinstance(child, tuple):
                 constraint, op, annotation, value = child
                 if isinstance(value, (list, tuple)):
-                    value = [ self.connection.ops.prep_lookup_value(self.model, x, constraint.field) for x in value]
+                    value = [ self.connection.ops.prep_lookup_value(self.model, x, constraint.field, constraint=constraint) for x in value]
                 else:
-                    value = self.connection.ops.prep_lookup_value(self.model, value, constraint.field)
+                    value = self.connection.ops.prep_lookup_value(self.model, value, constraint.field, constraint=constraint)
 
                 #Disable projection if it's not supported
                 if self.projection and constraint.col in self.projection:

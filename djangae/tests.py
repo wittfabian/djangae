@@ -44,6 +44,11 @@ class Permission(models.Model):
     class Meta:
         ordering = ('user__username', 'perm')
 
+
+class SelfRelatedModel(models.Model):
+    related = models.ForeignKey('self', blank=True, null=True)
+
+
 class MultiTableParent(models.Model):
     parent_field = models.CharField(max_length=32)
 
@@ -373,6 +378,12 @@ class EdgeCaseTests(TestCase):
         # Check that it's ok with PKs though
         query = TestUser.objects.filter(pk__in=list(xrange(1, 32)))
         list(query)
+
+    def test_self_relations(self):
+        obj = SelfRelatedModel.objects.create()
+        obj2 = SelfRelatedModel.objects.create(related=obj)
+        self.assertEqual(list(obj.selfrelatedmodel_set.all()), [obj2])
+
 
 class BlobstoreFileUploadHandlerTest(TestCase):
     boundary = "===============7417945581544019063=="
