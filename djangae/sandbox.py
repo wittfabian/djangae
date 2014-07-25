@@ -177,6 +177,10 @@ def activate(sandbox_name, add_sdk_to_path=False):
     for l in sandbox._enable_libraries(module.normalized_libraries):
         sys.path.insert(0, l)
 
+    # appcfg tries to import ipaddr and fails when called from inside a management command
+    # Might be a bug in the sdk, or something specific might be required in management commands, but this fixes it for now.
+    sys.path.insert(0, os.path.join(sdk_path, "lib", "ipaddr"))
+
     try:
         kwargs = dict(
             devappserver2=devappserver2,
