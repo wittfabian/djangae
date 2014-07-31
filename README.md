@@ -66,7 +66,7 @@ datastore is good at (e.g. handling huge bandwidth of reads and writes) and thin
 [Datastore](https://developers.google.com/appengine/docs/python/datastore/).
 
 
-# How do i use this thing?
+# How do I use this thing?
 
  * Create up your App Engine project as usual (with app.yaml, etc).
  * Create your django project (with settings.py, wsgi.py, etc and place it inside your App Engine project).

@@ -29,6 +29,11 @@ class TestUser(models.Model):
     def __unicode__(self):
         return self.username
 
+
+class TestFruit(models.Model):
+    name = models.CharField(primary_key=True, max_length=32)
+    color = models.CharField(max_length=32)
+
 class Permission(models.Model):
     user = models.ForeignKey(TestUser)
     perm = models.CharField(max_length=32)
@@ -38,6 +43,11 @@ class Permission(models.Model):
 
     class Meta:
         ordering = ('user__username', 'perm')
+
+
+class SelfRelatedModel(models.Model):
+    related = models.ForeignKey('self', blank=True, null=True)
+
 
 class MultiTableParent(models.Model):
     parent_field = models.CharField(max_length=32)
@@ -114,6 +124,10 @@ class EdgeCaseTests(TestCase):
         TestUser.objects.create(username="D", email="test3@example.com", last_login=datetime.datetime.now().date())
         TestUser.objects.create(username="E", email="test3@example.com", last_login=datetime.datetime.now().date())
 
+        self.apple = TestFruit.objects.create(name="apple", color="red")
+        self.banana = TestFruit.objects.create(name="banana", color="yellow")
+
+
     def test_multi_table_inheritance(self):
 
         parent = MultiTableParent.objects.create(parent_field="parent1")
@@ -129,11 +143,25 @@ class EdgeCaseTests(TestCase):
         self.assertEqual(1, MultiTableChildTwo.objects.count())
         self.assertEqual(child2, MultiTableChildTwo.objects.get())
 
+
     def test_anding_pks(self):
         results = TestUser.objects.filter(id__exact=self.u1.pk).filter(id__exact=self.u2.pk)
         self.assertEqual(list(results), [])
 
     def test_unusual_queries(self):
+
+        results = TestFruit.objects.filter(name__in=["apple", "orange"])
+        self.assertEqual(1, len(results))
+        self.assertItemsEqual(["apple"], [x.name for x in results])
+
+        results = TestFruit.objects.filter(name__in=["apple", "banana"])
+        self.assertEqual(2, len(results))
+        self.assertItemsEqual(["apple", "banana"], [x.name for x in results])
+
+        results = TestFruit.objects.filter(name__in=["apple", "banana"]).values_list('pk', 'color')
+        self.assertEqual(2, len(results))
+        self.assertItemsEqual([(self.apple.pk, self.apple.color), (self.banana.pk, self.banana.color)], results)
+
         results = TestUser.objects.all()
         self.assertEqual(5, len(results))
 
@@ -350,6 +378,12 @@ class EdgeCaseTests(TestCase):
         # Check that it's ok with PKs though
         query = TestUser.objects.filter(pk__in=list(xrange(1, 32)))
         list(query)
+
+    def test_self_relations(self):
+        obj = SelfRelatedModel.objects.create()
+        obj2 = SelfRelatedModel.objects.create(related=obj)
+        self.assertEqual(list(obj.selfrelatedmodel_set.all()), [obj2])
+
 
 class BlobstoreFileUploadHandlerTest(TestCase):
     boundary = "===============7417945581544019063=="
