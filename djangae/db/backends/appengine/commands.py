@@ -165,6 +165,7 @@ class SelectCommand(object):
                     log_once(DJANGAE_LOG.warning, "The following orderings were ignored as cross-table orderings are not supported on the datastore: %s", diff)
                 self.ordering = ordering
 
+        self.distinct = query.distinct
         self.distinct_values = set()
         self.distinct_on_field = None
         self.distinct_field_convertor = None
@@ -424,6 +425,9 @@ class SelectCommand(object):
         combined_filters = []
 
         query_kwargs = {}
+
+        if self.distinct:
+            query_kwargs["distinct"] = True
 
         if self.keys_only:
             query_kwargs["keys_only"] = self.keys_only
