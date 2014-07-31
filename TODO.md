@@ -19,7 +19,6 @@ Contributions welcome, please get stuck in!
 * Unique constraints need to support the `unique_for_date` magic that Django does
 * Add support for list fields to unique constraints
 * Unique caching needs implementing to protect against common HRD issues
-* It should be possible to disable unique constraints on a per-model basis
 * Add a Cloud Storage file storage backend to supersede the blobstore one
 * Add a mapreduce handler, and an API for creating and registering mapreduce tasks
 * Add support for Django 1.7
