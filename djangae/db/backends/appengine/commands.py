@@ -659,7 +659,8 @@ class InsertCommand(object):
 
         for obj in objs:
             if self.has_pk:
-                self.included_keys.append(get_datastore_key(model, obj.pk))
+                #FIXME: Apparently if the PK is required, and obj.pk is None here, we need to raise an IntegrityError
+                self.included_keys.append(get_datastore_key(model, obj.pk) if obj.pk else None)
             else:
                 #We zip() self.entities and self.included_keys in execute(), so they should be the same legnth
                 self.included_keys.append(None)
