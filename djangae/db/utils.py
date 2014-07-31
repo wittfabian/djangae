@@ -243,7 +243,7 @@ def entity_matches_query(entity, query):
         for ent_attr, op, query_attr in comparisons:
             op = OPERATORS[op] #We want this to throw if there's some op we don't know about
 
-            ent_attr = entity.get(ent_attr) or getattr(entity, ent_attr)
+            ent_attr = entity.get(ent_attr) or getattr(entity, ent_attr, None)
             if callable(ent_attr):
                 #entity.kind() is a callable, so we need this to save special casing it in a more
                 #ugly way

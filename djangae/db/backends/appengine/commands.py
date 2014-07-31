@@ -3,6 +3,7 @@ from datetime import datetime
 import logging
 import copy
 from functools import partial
+from itertools import chain
 
 #LIBRARIES
 from django.core.cache import cache
@@ -663,7 +664,6 @@ class InsertCommand(object):
                 django_instance_to_entity(connection, model, fields, raw, obj)
             )
 
-
     def execute(self):
         if self.has_pk and not has_concrete_parents(self.model):
             results = []
@@ -677,8 +677,13 @@ class InsertCommand(object):
                         if utils.key_exists(key):
                             raise IntegrityError("Tried to INSERT with existing key")
 
-                    constraints.acquire(self.model, ent)
-                    results.append(datastore.Put(ent))
+                    markers = constraints.acquire(self.model, ent)
+                    try:
+                        results.append(datastore.Put(ent))
+                    except:
+                        #Make sure we delete any created markers before we re-raise
+                        constraints.release_markers(markers)
+                        raise
 
                     entity_post_insert.send(sender=self.model, entity=ent)
 
@@ -687,7 +692,12 @@ class InsertCommand(object):
             return results
         else:
             markers = constraints.acquire_bulk(self.model, self.entities)
-            results = datastore.Put(self.entities)
+            try:
+                results = datastore.Put(self.entities)
+            except:
+                to_delete = chain(*markers)
+                constraints.release_markers(to_delete)
+                raise
 
             for ent, m in zip(self.entities, markers):
                 constraints.update_instance_on_markers(ent, m)
@@ -732,8 +742,20 @@ class UpdateCommand(object):
                 result[indexer.indexed_column_name(field.column)] = indexer.prep_value_for_database(value)
 
         entity_pre_update.send(sender=self.model, entity=result)
-        constraints.update_markers(self.model, original, result)
-        datastore.Put(result)
+
+        to_acquire, to_release = constraints.get_markers_for_update(self.model, original, result)
+
+        #Acquire first, because if that fails then we don't want to alter what's already there
+        constraints.acquire_identifiers(to_acquire, result.key())
+        try:
+            datastore.Put(result)
+        except:
+            constraints.release_identifiers(to_acquire)
+            raise
+        else:
+            #Now we release the ones we don't want anymore
+            constraints.release_identifiers(to_release)
+
         entity_post_update.send(sender=self.model, entity=result)
 
     def execute(self):

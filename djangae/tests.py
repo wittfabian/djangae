@@ -185,11 +185,18 @@ class ConstraintTests(TestCase):
 
         from djangae.db.backends.appengine.commands import datastore as to_patch
 
-        def func(*args, **kwargs):
-            raise Exception()
 
         try:
             original = to_patch.Put
+
+            def func(*args, **kwargs):
+                kind = args[0][0].kind() if isinstance(args[0], list) else args[0].kind()
+
+                if kind == UniqueMarker.kind():
+                    return original(*args, **kwargs)
+
+                raise AssertionError()
+
             to_patch.Put = func
 
             with self.assertRaises(Exception):
@@ -206,15 +213,22 @@ class ConstraintTests(TestCase):
 
     def test_error_on_insert_doesnt_create_markers(self):
         initial_count = datastore.Query(UniqueMarker.kind()).Count()
-        def func(*args, **kwargs):
-            raise Exception()
 
         from djangae.db.backends.appengine.commands import datastore as to_patch
         try:
             original = to_patch.Put
+
+            def func(*args, **kwargs):
+                kind = args[0][0].kind() if isinstance(args[0], list) else args[0].kind()
+
+                if kind == UniqueMarker.kind():
+                    return original(*args, **kwargs)
+
+                raise AssertionError()
+
             to_patch.Put = func
 
-            with self.assertRaises(Exception):
+            with self.assertRaises(AssertionError):
                 ModelWithUniques.objects.create(name="One")
         finally:
             to_patch.Put = original
