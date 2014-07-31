@@ -150,23 +150,84 @@ class ConstraintTests(TestCase):
         expected_marker = "{}|name:{}".format(ModelWithUniques._meta.db_table, hash("Two"))
         self.assertEqual(expected_marker, marker.key().id_or_name())
 
-    def test_insert_creates_markers(self):
-        pass
-
     def test_conflicting_insert_throws_integrity_error(self):
-        pass
+        ModelWithUniques.objects.create(name="One")
+
+        with self.assertRaises(IntegrityError):
+            ModelWithUniques.objects.create(name="One")
 
     def test_conflicting_update_throws_integrity_error(self):
-        pass
+        ModelWithUniques.objects.create(name="One")
+
+        instance = ModelWithUniques.objects.create(name="Two")
+        with self.assertRaises(IntegrityError):
+            instance.name = "One"
+            instance.save()
 
     def test_error_on_update_doesnt_change_markers(self):
-        pass
+        initial_count = datastore.Query(UniqueMarker.kind()).Count()
+
+        instance = ModelWithUniques.objects.create(name="One")
+
+        self.assertEqual(1, datastore.Query(UniqueMarker.kind()).Count() - initial_count)
+
+        qry = datastore.Query(UniqueMarker.kind())
+        qry.Order(("created", datastore.Query.DESCENDING))
+
+        marker = [ x for x in qry.Run()][0]
+        self.assertEqual(datastore.Key(marker["instance"]), datastore.Key.from_path(instance._meta.db_table, instance.pk)) #Make sure we assigned the instance
+
+        expected_marker = "{}|name:{}".format(ModelWithUniques._meta.db_table, hash("One"))
+        self.assertEqual(expected_marker, marker.key().id_or_name())
+
+        instance.name = "Two"
+
+
+        from djangae.db.backends.appengine.commands import datastore as to_patch
+
+        def func(*args, **kwargs):
+            raise Exception()
+
+        try:
+            original = to_patch.Put
+            to_patch.Put = func
+
+            with self.assertRaises(Exception):
+                instance.save()
+        finally:
+            to_patch.Put = original
+
+        self.assertEqual(1, datastore.Query(UniqueMarker.kind()).Count() - initial_count)
+        marker = [ x for x in qry.Run()][0]
+        self.assertEqual(datastore.Key(marker["instance"]), datastore.Key.from_path(instance._meta.db_table, instance.pk)) #Make sure we assigned the instance
+
+        expected_marker = "{}|name:{}".format(ModelWithUniques._meta.db_table, hash("One"))
+        self.assertEqual(expected_marker, marker.key().id_or_name())
 
     def test_error_on_insert_doesnt_create_markers(self):
-        pass
+        initial_count = datastore.Query(UniqueMarker.kind()).Count()
+        def func(*args, **kwargs):
+            raise Exception()
+
+        from djangae.db.backends.appengine.commands import datastore as to_patch
+        try:
+            original = to_patch.Put
+            to_patch.Put = func
+
+            with self.assertRaises(Exception):
+                ModelWithUniques.objects.create(name="One")
+        finally:
+            to_patch.Put = original
+
+        self.assertEqual(0, datastore.Query(UniqueMarker.kind()).Count() - initial_count)
 
     def test_delete_clears_markers(self):
-        pass
+        initial_count = datastore.Query(UniqueMarker.kind()).Count()
+
+        instance = ModelWithUniques.objects.create(name="One")
+        self.assertEqual(1, datastore.Query(UniqueMarker.kind()).Count() - initial_count)
+        instance.delete()
+        self.assertEqual(0, datastore.Query(UniqueMarker.kind()).Count() - initial_count)
 
 class EdgeCaseTests(TestCase):
     def setUp(self):
