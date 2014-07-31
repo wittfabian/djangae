@@ -78,9 +78,19 @@ def update_markers(model, old_entity, new_entity):
     return new_markers
 
 def update_instance_on_markers(entity, markers):
-    for marker in markers:
-        marker.instance = str(entity.key())
+
+    @db.transactional(propagation=TransactionOptions.INDEPENDENT)
+    def update(marker, instance):
+        marker = UniqueMarker.get(marker.key())
+        if not marker:
+            return
+
+        marker.instance = instance
         marker.put()
+
+    instance = str(entity.key())
+    for marker in markers:
+        update(marker, instance)
 
 def acquire_bulk(model, entities):
     markers = []

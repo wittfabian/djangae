@@ -14,6 +14,7 @@ from google.appengine.api.datastore_errors import EntityNotFoundError
 
 # DJANGAE
 from djangae.db.exceptions import NotSupportedError
+from djangae.db.constraints import UniqueMarker
 from djangae.indexing import add_special_index
 from djangae.db.utils import entity_matches_query
 from .storage import BlobstoreFileUploadHandler
@@ -113,6 +114,59 @@ class ModelFormsetTest(TestCase):
         request = factory.post('/', data=data)
 
         TestModelFormSet(request.POST, request.FILES)
+
+
+class ModelWithUniques(models.Model):
+    name = models.CharField(max_length=64, unique=True)
+
+class ConstraintTests(TestCase):
+    """
+        Tests for unique constaint handling
+    """
+
+    def test_update_updates_markers(self):
+        initial_count = datastore.Query(UniqueMarker.kind()).Count()
+
+        instance = ModelWithUniques.objects.create(name="One")
+
+        self.assertEqual(1, datastore.Query(UniqueMarker.kind()).Count() - initial_count)
+
+        qry = datastore.Query(UniqueMarker.kind())
+        qry.Order(("created", datastore.Query.DESCENDING))
+
+        marker = [ x for x in qry.Run()][0]
+        self.assertEqual(datastore.Key(marker["instance"]), datastore.Key.from_path(instance._meta.db_table, instance.pk)) #Make sure we assigned the instance
+
+        expected_marker = "{}|name:{}".format(ModelWithUniques._meta.db_table, hash("One"))
+        self.assertEqual(expected_marker, marker.key().id_or_name())
+
+        instance.name = "Two"
+        instance.save()
+
+        self.assertEqual(1, datastore.Query(UniqueMarker.kind()).Count() - initial_count)
+        marker = [ x for x in qry.Run()][0]
+        self.assertEqual(datastore.Key(marker["instance"]), datastore.Key.from_path(instance._meta.db_table, instance.pk)) #Make sure we assigned the instance
+
+        expected_marker = "{}|name:{}".format(ModelWithUniques._meta.db_table, hash("Two"))
+        self.assertEqual(expected_marker, marker.key().id_or_name())
+
+    def test_insert_creates_markers(self):
+        pass
+
+    def test_conflicting_insert_throws_integrity_error(self):
+        pass
+
+    def test_conflicting_update_throws_integrity_error(self):
+        pass
+
+    def test_error_on_update_doesnt_change_markers(self):
+        pass
+
+    def test_error_on_insert_doesnt_create_markers(self):
+        pass
+
+    def test_delete_clears_markers(self):
+        pass
 
 class EdgeCaseTests(TestCase):
     def setUp(self):
