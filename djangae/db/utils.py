@@ -83,10 +83,13 @@ def get_datastore_kind(model):
 def get_prepared_db_value(connection, instance, field, raw=False):
     value = getattr(instance, field.attname) if raw else field.pre_save(instance, instance._state.adding)
 
-    value = field.get_db_prep_save(
-        value,
-        connection = connection
-    )
+    if hasattr(value, "prepare_database_save"):
+        value = value.prepare_database_save(field)
+    else:
+        value = field.get_db_prep_save(
+            value,
+            connection = connection
+        )
 
     value = connection.ops.value_for_db(value, field)
 
