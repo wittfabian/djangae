@@ -11,13 +11,25 @@ Contributions welcome, please get stuck in!
 
 ### Bug Fixing
 
-* Make `.filter(pk__in=[1,2,3])` use a multi `datastore.Get`, rather than a `datastore.Query`.  Currently it uses
-  `Query` which means that it's slower than it needs to be and it is limited to 30 values.
 * Implement the FK Null Fix from dbindexer (which manipulates the query in the case a join is used for isnull).
 * Make `MyModel.objects.filter(pk=1) | MyModel.objects.filter(pk=2)` correctly return an empty result.
   Currently returns both!
 * Run `manage.py test djangae` to find other things that need doing.
-
+* Unique constraints need to be more robust against Put() failures
+* Unique constraints need to support the `unique_for_date` magic that Django does
+* Add support for list fields to unique constraints
+* Unique caching needs implementing to protect against common HRD issues
+* It should be possible to disable unique constraints on a per-model basis
+* Add a Cloud Storage file storage backend to supersede the blobstore one
+* Add a mapreduce handler, and an API for creating and registering mapreduce tasks
+* Add support for Django 1.7
+* Implement a means to perform ancestor queries through the ORM. Need to think about the API
+* More tests! Especially for unique constraints, unique caching and model inheritence
+* Add a UniqueSupportMixin for models so that form validation works as normal and doesn't just throw on save()
+* Write a lot of documentation on the datastore backend, complete with caveats, limitations, and how queries are translated
+* Implement djangae.db.transaction.atomic which works like Django 1.7's atomic decorator/context manager, but for the datastore, allow for xg, and isolation flags (e.g. independent)
+* Implement an API/Mixin/Custom Field for "expando" models - needs some thought
+* Create a website on GitHub, come up with a release process (maybe)
 
 ### Memcache backend
 
