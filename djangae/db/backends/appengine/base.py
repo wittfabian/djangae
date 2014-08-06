@@ -243,7 +243,7 @@ class DatabaseOperations(BaseDatabaseOperations):
         return self.value_to_db_time(value)
 
     def prep_lookup_value(self, model, value, field, constraint=None):
-        if field.primary_key and field.model == model and (constraint is None or constraint.col == field.column):
+        if field.primary_key and (constraint is None or constraint.col == model._meta.pk.column):
             return self.prep_lookup_key(model, value, field)
 
         db_type = self.connection.creation.db_type(field)
@@ -260,6 +260,8 @@ class DatabaseOperations(BaseDatabaseOperations):
     def value_for_db(self, value, field):
         if value is None:
             return None
+
+        value = field.get_db_prep_save(value, self.connection)
 
         db_type = self.connection.creation.db_type(field)
 
