@@ -152,7 +152,7 @@ def django_instance_to_entity(connection, model, fields, raw, instance):
 
     kwargs = {}
     if primary_key:
-        if isinstance(primary_key, int):
+        if isinstance(primary_key, (int, long)):
             kwargs["id"] = primary_key
         elif isinstance(primary_key, basestring):
             if len(primary_key) >= 500:
