@@ -204,6 +204,10 @@ class QueryNormalizationTests(TestCase):
 class ModelWithUniques(models.Model):
     name = models.CharField(max_length=64, unique=True)
 
+class ModelWithDates(models.Model):
+    start = models.DateField()
+    end = models.DateField()
+
 class ConstraintTests(TestCase):
     """
         Tests for unique constaint handling
@@ -340,6 +344,17 @@ class EdgeCaseTests(TestCase):
 
         self.apple = TestFruit.objects.create(name="apple", color="red")
         self.banana = TestFruit.objects.create(name="banana", color="yellow")
+
+
+    def test_querying_by_date(self):
+        instance1 = ModelWithDates.objects.create(start=datetime.date(2014, 1, 1), end=datetime.date(2014, 1, 20))
+        instance2 = ModelWithDates.objects.create(start=datetime.date(2014, 2, 1), end=datetime.date(2014, 2, 20))
+
+        self.assertEqual(instance1, ModelWithDates.objects.get(start__lt=datetime.date(2014, 1, 2)))
+        self.assertEqual(2, ModelWithDates.objects.filter(start__lt=datetime.date(2015, 1, 1)).count())
+
+        self.assertEqual(instance2, ModelWithDates.objects.get(start__gt=datetime.date(2014, 1, 2)))
+        self.assertEqual(instance2, ModelWithDates.objects.get(start__gte=datetime.date(2014, 2, 1)))
 
 
     def test_multi_table_inheritance(self):

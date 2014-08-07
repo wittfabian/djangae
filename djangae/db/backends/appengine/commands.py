@@ -142,7 +142,7 @@ class QueryByKeys(object):
 
     def Run(self, limit, offset):
 
-        results = sorted((x for x in datastore.Get(self.keys) if x), cmp=partial(utils.django_ordering_comparison, self.ordering))
+        results = sorted((x for x in datastore.Get(self.keys) if x is not None), cmp=partial(utils.django_ordering_comparison, self.ordering))
 
         if offset:
             results = results[offset:]
@@ -308,6 +308,14 @@ class SelectCommand(object):
         for child in where.children:
             if isinstance(child, tuple):
                 constraint, op, annotation, value = child
+                packed, value = constraint.process(op, value, self.connection)
+                alias, column, db_type = packed
+
+                if op not in ("in", "year") and isinstance(value, list):
+                    if len(value[:2]) > 1:
+                        raise ValueError("Only IN queries can lookup on a list of values")
+                    value = value[0]
+
                 if isinstance(value, (list, tuple)):
                     value = [ self.connection.ops.prep_lookup_value(self.model, x, constraint.field, constraint=constraint) for x in value]
                 else:
@@ -353,6 +361,7 @@ class SelectCommand(object):
                                 raise EmptyResultSet() #We're trying to filter on two different pks?
                             else:
                                 self.exact_pk = value
+                                self.included_pks = [ self.exact_pk ]
                         elif op == "in":
                             if isinstance(value, (list, tuple)):
                                 self.included_pks.extend(list(value))
@@ -525,12 +534,6 @@ class SelectCommand(object):
 
             query = datastore.MultiQuery(queries, ordering)
 
-        elif self.exact_pk:
-            qry = datastore.Query(self.db_table)
-            qry.update(query)
-            qry.Ancestor(self.exact_pk)
-            qry["__key__ ="] = self.exact_pk
-            query = qry
         elif self.included_pks:
             query = QueryByKeys(query, self.included_pks, ordering)
 
@@ -685,6 +688,7 @@ class InsertCommand(object):
             #We are inserting, but we specified an ID, we need to check for existence before we Put()
             #We do it in a loop so each check/put is transactional - because it's an ancestor query it shouldn't
             #cost any entity groups
+
             for key, ent in zip(self.included_keys, self.entities):
                 @db.transactional
                 def txn():
