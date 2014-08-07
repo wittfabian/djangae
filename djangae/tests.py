@@ -162,6 +162,18 @@ class QueryNormalizationTests(TestCase):
             Q(username__in=["ruby", "jruby"]) | (Q(username="php") & ~Q(username="perl"))
         )
 
+        # After IN and != explosion, we have...
+        # (AND: (username='python', OR: (username='ruby', username='jruby', AND: (username='php', AND: (username < 'perl', username > 'perl')))))
+
+        # Working backwards,
+        # AND: (username < 'perl', username > 'perl') can't be simplified
+        # AND: (username='php', AND: (username < 'perl', username > 'perl')) can become (OR: (AND: username = 'php', username < 'perl'), (AND: username='php', username > 'perl'))
+        # OR: (username='ruby', username='jruby', (OR: (AND: username = 'php', username < 'perl'), (AND: username='php', username > 'perl')) can't be simplified
+        # (AND: (username='python', OR: (username='ruby', username='jruby', (OR: (AND: username = 'php', username < 'perl'), (AND: username='php', username > 'perl'))
+        # becomes...
+        # (OR: (AND: username='python', username = 'ruby'), (AND: username='python', username='jruby'), (AND: username='python', username='php', username < 'perl') \
+        #      (AND: username='python', username='php', username > 'perl')
+
         expected = [
             [ ("username", "=", "python"), ("username", "=", "ruby") ],
             [ ("username", "=", "python"), ("username", "=", "jruby") ],
