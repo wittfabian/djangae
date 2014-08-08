@@ -23,6 +23,8 @@ from .storage import BlobstoreFileUploadHandler
 
 from google.appengine.api import datastore
 
+
+
 class TestUser(models.Model):
     username = models.CharField(max_length=32)
     email = models.EmailField()
@@ -127,40 +129,55 @@ class QueryNormalizationTests(TestCase):
         [ [(column, operator, value)], [(column, operator, value) ]] <- OR query, of multiple ANDs
     """
 
-    def test_and_queries(self):
-        qs = TestUser.objects.filter(username="test").all()
+    # def test_and_queries(self):
 
-        self.assertEqual([ ("username", "=", "test") ], normalize_query(qs.query.where))
-
-        qs = TestUser.objects.filter(username="test", email="test@example.com")
-
-        expected = [
-            ("username", "=", "test"),
-            ("email", "=", "test@example.com")
-        ]
-        self.assertEqual(expected, normalize_query(qs.query.where))
-
-        qs = TestUser.objects.filter(username="test").exclude(email="test@example.com")
-        expected = [
-            ("username", "=", "test"),
-            ("email", ">", "test@example.com"),
-            ("email", "<", "test@example.com")
-        ]
-        self.assertEqual(expected, normalize_query(qs.query.where))
-
-        qs = TestUser.objects.filter(username__lte="test").exclude(email="test@example.com")
-        expected = [
-            ("username", "<=", "test"),
-            ("email", ">", "test@example.com"),
-            ("email", "<", "test@example.com")
-        ]
-        self.assertEqual(expected, normalize_query(qs.query.where))
+        # qs = TestUser.objects.filter(username="test").all()
+        #
+        # # self.assertEqual([ ("username", "=", "test") ], normalize_query(qs.query.where))
+        #
+        # qs = TestUser.objects.filter(username="test", email="test@example.com")
+        # normal = normalize_query(qs.query.where)
+        #
+        # qs = TestUser.objects.filter(username__in=["test", "let", "weep"])
+        # normal = normalize_query(qs.query.where)
+        # import ipdb; ipdb.set_trace()
+        #
+        # expected = [
+        #     ("username", "=", "test"),
+        #     ("email", "=", "test@example.com")
+        # ]
+        # # self.assertEqual(expected, normalize_query(qs.query.where))
+        #
+        # qs = TestUser.objects.filter(username="test").exclude(email="test@example.com")
+        # normal = normalize_query(qs.query.where)
+        # import ipdb; ipdb.set_trace()
+        # expected = [
+        #     ("username", "=", "test"),
+        #     ("email", ">", "test@example.com"),
+        #     ("email", "<", "test@example.com")
+        # ]
+        #
+        # normal = normalize_query(qs.query.where)
+        # import ipdb; ipdb.set_trace()
+        # # self.assertEqual(expected, normalize_query(qs.query.where))
+        #
+        # qs = TestUser.objects.filter(username__lte="test").exclude(email="test@example.com")
+        # normal = normalize_query(qs.query.where)
+        # import ipdb; ipdb.set_trace()
+        # expected = [
+        #     ("username", "<=", "test"),
+        #     ("email", ">", "test@example.com"),
+        #     ("email", "<", "test@example.com")
+        # ]
+        #
+        #
+        # self.assertEqual(expected, normalize_query(qs.query.where))
 
     def test_or_queries(self):
-        qs = TestUser.objects.filter(
-            username="python",
-            Q(username__in=["ruby", "jruby"]) | (Q(username="php") & ~Q(username="perl"))
-        )
+        # qs = TestUser.objects.filter(
+        #     username="python",
+        #     Q(username__in=["ruby", "jruby"]) | (Q(username="php") & ~Q(username="perl"))
+        # )
 
         # After IN and != explosion, we have...
         # (AND: (username='python', OR: (username='ruby', username='jruby', AND: (username='php', AND: (username < 'perl', username > 'perl')))))
@@ -173,6 +190,9 @@ class QueryNormalizationTests(TestCase):
         # becomes...
         # (OR: (AND: username='python', username = 'ruby'), (AND: username='python', username='jruby'), (AND: username='python', username='php', username < 'perl') \
         #      (AND: username='python', username='php', username > 'perl')
+        #normal = normalize_query(qs.query.where)
+
+        #import ipdb; ipdb.set_trace()
 
         expected = [
             [ ("username", "=", "python"), ("username", "=", "ruby") ],
@@ -181,28 +201,40 @@ class QueryNormalizationTests(TestCase):
             [ ("username", "=", "python"), ("username", "=", "php"), ("username", ">", "perl") ],
         ]
 
-        self.assertEqual(expected, normalize_query(qs.query.where))
+        # self.assertEqual(expected, normalize_query(qs.query.where))
 
-        qs = TestUser.objects.filter(username="test") | TestUser.objects.filter(username="cheese")
+        # qs = TestUser.objects.filter(username="test") | TestUser.objects.filter(username="cheese")
+        #
+        # normal = normalize_query(qs.query.where)
+        #
+        # import ipdb; ipdb.set_trace()
+        # 
+        # expected = [
+        #     [ ("username", "=", "test") ],
+        #     [ ("username", "=", "cheese") ]
+        # ]
+        #
+        # # self.assertEqual(expected, normalize_query(qs.query.where))
+        #
+        # qs = TestUser.objects.filter(pk__in=[1, 2, 3])
+        #
+        # # normal = normalize_query(qs.query.where)
+        # #
+        # # import ipdb; ipdb.set_trace()
+        #
+        # expected = [
+        #     [ ("id", "=", 1) ],
+        #     [ ("id", "=", 2) ],
+        #     [ ("id", "=", 3) ]
+        # ]
 
-        expected = [
-            [ ("username", "=", "test") ],
-            [ ("username", "=", "cheese") ]
-        ]
-
-        self.assertEqual(expected, normalize_query(qs.query.where))
-
-        qs = TestUser.objects.filter(pk__in=[1, 2, 3])
-
-        expected = [
-            [ ("id", "=", 1) ],
-            [ ("id", "=", 2) ],
-            [ ("id", "=", 3) ]
-        ]
-
-        self.assertEqual(expected, normalize_query(qs.query.where))
+        # self.assertEqual(expected, normalize_query(qs.query.where))
 
         qs = TestUser.objects.filter(pk__in=[1, 2, 3]).filter(username="test")
+
+        normal = normalize_query(qs.query.where)
+
+        import ipdb; ipdb.set_trace()
 
         expected = [
             [ ("id", "=", 1), ("username", "=", "test") ],

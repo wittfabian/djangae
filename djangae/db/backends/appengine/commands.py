@@ -123,14 +123,41 @@ def log_once(logging_call, text, args):
 
 log_once.logged = set()
 
+def explode(target):
+    pass
 
-def normalize_query(query_where):
-    output = []
 
+def normalize_query(query_where, negated=False):
     #1. Explode IN queries into an OR tree e.g. (OR, (x = 1), (x = 2))
     #2. Explode != queries into (AND, (x < y), (x > y))
     #3. Convert to disjunctive normal form
+    output = []
+    import ipdb; ipdb.set_trace()
 
+    for child in query_where.children:
+        if hasattr(child, 'children'): # if child is a whereNode -> recurse! Can a Negated whereNode have children?
+            normal = normalize_query(child, negated=query_where.negated)
+            if query_where.connector == 'OR':
+                output.append(normal)
+            else:
+                for x in normal:
+                    output.append(x)
+        else: # Child is a constraint (literal)
+            op = OPERATORS_MAP[child[1]]
+            if op:
+                if op == '=' and negated:
+                    output.append(('<', child[0].col, child[3]))
+                    output.append(('>', child[0].col, child[3]))
+                else:
+                    output.append((op, child[0].col, child[3]))
+            else:
+                op = child[1]
+                if op == 'in':
+                    import ipdb; ipdb.set_trace()
+                    for x in child[3]:
+                        output.append([('=', child[0].col, x)])
+
+    # if query_where.connector == 'OR':
     return output
 
 
