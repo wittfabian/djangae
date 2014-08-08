@@ -1,3 +1,5 @@
+from google.appengine.runtime import request_environment
+
 from djangae.utils import on_production
 
 class DjangaeApplication(object):
@@ -31,6 +33,7 @@ class DjangaeApplication(object):
 
             if "os" in sys.modules:
                 del sys.modules["os"]
+                request_environment.PatchOsEnviron(__import__("os"))
 
         if "select" in dist27.MODULE_OVERRIDES:
             dist27.MODULE_OVERRIDES.remove("select")
