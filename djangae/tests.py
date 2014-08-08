@@ -1,3 +1,4 @@
+import os
 from cStringIO import StringIO
 import datetime
 import unittest
@@ -20,6 +21,7 @@ from djangae.db.utils import entity_matches_query
 from djangae.db.backends.appengine.commands import normalize_query
 
 from .storage import BlobstoreFileUploadHandler
+from .wsgi import DjangaeApplication
 
 from google.appengine.api import datastore
 
@@ -675,3 +677,31 @@ class BlobstoreFileUploadHandlerTest(TestCase):
             self.uploader.new_file, file_field_name, 'file_name', None, None
         )
         self.assertIsNotNone(self.uploader.blobkey)
+
+class ApplicationTests(TestCase):
+    
+    def test_a_thing(self):
+        import webtest
+        
+        def application(environ, start_response):
+            # As we're not going through a thread pool the environ is unset.
+            # Set it up manually here.
+            # TODO: Find a way to get it to be auto-set by webtest
+            from google.appengine.runtime import request_environment
+            request_environment.current_request.environ = environ
+            
+            # Check if the os.environ is the same as what we expect from our
+            # wsgi environ
+            import os
+            self.assertEqual(environ, os.environ)
+            start_response("200 OK", [])
+            return ["OK"]
+        
+        djangae_app = DjangaeApplication(application)
+        test_app = webtest.TestApp(djangae_app)
+        old_environ = os.environ
+        try:
+            test_app.get("/")
+        finally:
+            os.environ = old_environ
+    
