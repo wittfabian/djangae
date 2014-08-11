@@ -60,7 +60,7 @@ a quick list:
 ### Other Considerations
 
 When using the Datastore you should bear in mind its capabilities and limitations. While Djangae allows you to run
-Django on the Datastore, it doesn't turn the Datastore into a non-relational database. There are things which the
+Django on the Datastore, it doesn't turn the Datastore into a relational database. There are things which the
 datastore is good at (e.g. handling huge bandwidth of reads and writes) and things which it isn't good at
 (e.g. counting). Djangae is not a substitute for knowing how to use the
 [Datastore](https://developers.google.com/appengine/docs/python/datastore/).
