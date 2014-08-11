@@ -275,21 +275,3 @@ class SetField(IterableField):
         serializing sets.
         """
         return str(list(self._get_val_from_obj(obj)))
-
-
-class DictField(IterableField):
-    def get_internal_type(self):
-        return 'DictField'
-
-    @property
-    def _iterable_type(self):
-        return dict
-
-    def _map(self, function, iterable, *args, **kwargs):
-        return self._type((key, function(value, *args, **kwargs))
-                          for key, value in iterable.iteritems())
-
-    def validate(self, values, model_instance):
-        if not isinstance(values, dict):
-            raise ValidationError("Value is of type %r. Should be a dict." %
-                                  type(values))
