@@ -73,9 +73,9 @@ class AtomicDecorator(object):
 
     def __exit__(self, *args, **kwargs):
         if len(args) > 1 and isinstance(args[1], Exception):
-            _GetConnection().rollback()
+            _GetConnection().rollback() #If an exception happens, rollback
         else:
-            _GetConnection().commit()
+            _GetConnection().commit() #Otherwise commit
 
         self._finalize()
 
