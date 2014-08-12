@@ -157,6 +157,26 @@ class TransactionTests(TestCase):
         self.assertEqual(0, TestUser.objects.count())
         self.assertEqual(0, TestFruit.objects.count())
 
+    def test_independent_argument(self):
+        """
+            We would get a XG error if the inner transaction was not independent
+        """
+
+        @transaction.atomic
+        def txn1(_username, _fruit):
+            @transaction.atomic(independent=True)
+            def txn2(_fruit):
+                TestFruit.objects.create(name=_fruit, color="pink")
+                raise ValueError()
+
+            TestUser.objects.create(username=_username)
+            txn2(_fruit)
+
+
+        with self.assertRaises(ValueError):
+            txn1("test", "banana")
+
+
 class QueryNormalizationTests(TestCase):
     """
         The normalize_query function takes a Django where tree, and converts it

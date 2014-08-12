@@ -3,31 +3,46 @@ from google.appengine.api.datastore import (
     _GetConnection,
     _PushConnection,
     _PopConnection,
-    _SetConnection
+    _SetConnection,
+    IsInTransaction
 )
+
+from google.appengine.datastore.datastore_rpc import TransactionOptions
 
 class AtomicDecorator(object):
     def __init__(self, *args, **kwargs):
         self.func = None
-        self.conn = None
 
         self.xg = kwargs.get("xg")
         self.independent = kwargs.get("independent")
+        self.parent_conn = None
 
         if len(args) == 1 and callable(args[0]):
             self.func = args[0]
 
     def _begin(self):
         options = CreateTransactionOptions(
-            xg = True if self.xg else False
+            xg = True if self.xg else False,
+            propagation = TransactionOptions.INDEPENDENT if self.independent else None
         )
 
-        self.conn = _GetConnection()
+        if IsInTransaction() and not self.independent:
+            raise RuntimeError("Nested transactions are not supported")
+        elif self.independent:
+            #If we're running an independent transaction, pop the current one
+            self.parent_conn = _PopConnection()
+
+        #Push a new connection, start a new transaction
+        conn = _GetConnection()
         _PushConnection(None)
-        _SetConnection(self.conn.new_transaction(options))
+        _SetConnection(conn.new_transaction(options))
 
     def _finalize(self):
-        _PopConnection()
+        _PopConnection() #Pop the transaction connection
+        if self.parent_conn:
+            #If there was a parent transaction, now put that back
+            _PushConnection(self.parent_conn)
+            self.parent_conn = None
 
     def __call__(self, *args, **kwargs):
         def call_func(*_args, **_kwargs):
@@ -37,7 +52,9 @@ class AtomicDecorator(object):
                 _GetConnection().commit()
                 return result
             except:
-                _GetConnection().rollback()
+                conn = _GetConnection()
+                if conn:
+                    conn.rollback()
                 raise
             finally:
                 self._finalize()
