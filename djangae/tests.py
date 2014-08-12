@@ -19,6 +19,7 @@ from djangae.db.constraints import UniqueMarker
 from djangae.indexing import add_special_index
 from djangae.db.utils import entity_matches_query
 from djangae.db.backends.appengine.commands import normalize_query
+from djangae.db import transaction
 
 from .storage import BlobstoreFileUploadHandler
 from .wsgi import DjangaeApplication
@@ -120,6 +121,42 @@ class ModelFormsetTest(TestCase):
         TestModelFormSet(request.POST, request.FILES)
 
 
+class TransactionTests(TestCase):
+    def test_atomic_decorator(self):
+
+        @transaction.atomic
+        def txn():
+            TestUser.objects.create(username="foo", field2="bar")
+            raise ValueError()
+
+        with self.assertRaises(ValueError):
+            txn()
+
+        self.assertEqual(0, TestUser.objects.count())
+
+    def test_atomic_context_manager(self):
+
+        with self.assertRaises(ValueError):
+            with transaction.atomic():
+                TestUser.objects.create(username="foo", field2="bar")
+                raise ValueError()
+
+        self.assertEqual(0, TestUser.objects.count())
+
+    def test_xg_argument(self):
+
+        @transaction.atomic(xg=True)
+        def txn(_username):
+            TestUser.objects.create(username=_username, field2="bar")
+            TestFruit.objects.create(name="Apple", color="pink")
+            raise ValueError()
+
+        with self.assertRaises(ValueError):
+            txn("foo")
+
+        self.assertEqual(0, TestUser.objects.count())
+        self.assertEqual(0, TestFruit.objects.count())
+
 class QueryNormalizationTests(TestCase):
     """
         The normalize_query function takes a Django where tree, and converts it
@@ -160,7 +197,7 @@ class QueryNormalizationTests(TestCase):
 
     def test_or_queries(self):
         qs = TestUser.objects.filter(
-            username="python",
+            username="python").filter(
             Q(username__in=["ruby", "jruby"]) | (Q(username="php") & ~Q(username="perl"))
         )
 
@@ -679,24 +716,24 @@ class BlobstoreFileUploadHandlerTest(TestCase):
         self.assertIsNotNone(self.uploader.blobkey)
 
 class ApplicationTests(TestCase):
-    
+
     def test_a_thing(self):
         import webtest
-        
+
         def application(environ, start_response):
             # As we're not going through a thread pool the environ is unset.
             # Set it up manually here.
             # TODO: Find a way to get it to be auto-set by webtest
             from google.appengine.runtime import request_environment
             request_environment.current_request.environ = environ
-            
+
             # Check if the os.environ is the same as what we expect from our
             # wsgi environ
             import os
             self.assertEqual(environ, os.environ)
             start_response("200 OK", [])
             return ["OK"]
-        
+
         djangae_app = DjangaeApplication(application)
         test_app = webtest.TestApp(djangae_app)
         old_environ = os.environ
@@ -704,4 +741,3 @@ class ApplicationTests(TestCase):
             test_app.get("/")
         finally:
             os.environ = old_environ
-    
