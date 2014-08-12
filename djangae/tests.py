@@ -26,6 +26,11 @@ from .wsgi import DjangaeApplication
 
 from google.appengine.api import datastore
 
+try:
+    import webtest
+except ImportError:
+    webtest = NotImplemented
+
 class TestUser(models.Model):
     username = models.CharField(max_length=32)
     email = models.EmailField()
@@ -736,10 +741,9 @@ class BlobstoreFileUploadHandlerTest(TestCase):
         self.assertIsNotNone(self.uploader.blobkey)
 
 class ApplicationTests(TestCase):
-
-    def test_a_thing(self):
-        import webtest
-
+    
+    @unittest.skipIf(webtest is NotImplemented, "pip install webtest to run functional tests")
+    def test_environ_is_patched_when_request_processed(self):
         def application(environ, start_response):
             # As we're not going through a thread pool the environ is unset.
             # Set it up manually here.
