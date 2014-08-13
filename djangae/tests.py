@@ -1,3 +1,4 @@
+import os
 from cStringIO import StringIO
 import datetime
 import unittest
@@ -18,12 +19,22 @@ from djangae.db.constraints import UniqueMarker
 from djangae.indexing import add_special_index
 from djangae.db.utils import entity_matches_query
 from djangae.db.backends.appengine.commands import normalize_query
+from djangae.db import transaction
+from djangae.fields import ComputedCharField
 
 from .storage import BlobstoreFileUploadHandler
+from .wsgi import DjangaeApplication
 
 from google.appengine.api import datastore
 
+<<<<<<< .merge_file_sN16Z9
 
+=======
+try:
+    import webtest
+except ImportError:
+    webtest = NotImplemented
+>>>>>>> .merge_file_4utqsU
 
 class TestUser(models.Model):
     username = models.CharField(max_length=32)
@@ -120,6 +131,62 @@ class ModelFormsetTest(TestCase):
         TestModelFormSet(request.POST, request.FILES)
 
 
+class TransactionTests(TestCase):
+    def test_atomic_decorator(self):
+
+        @transaction.atomic
+        def txn():
+            TestUser.objects.create(username="foo", field2="bar")
+            raise ValueError()
+
+        with self.assertRaises(ValueError):
+            txn()
+
+        self.assertEqual(0, TestUser.objects.count())
+
+    def test_atomic_context_manager(self):
+
+        with self.assertRaises(ValueError):
+            with transaction.atomic():
+                TestUser.objects.create(username="foo", field2="bar")
+                raise ValueError()
+
+        self.assertEqual(0, TestUser.objects.count())
+
+    def test_xg_argument(self):
+
+        @transaction.atomic(xg=True)
+        def txn(_username):
+            TestUser.objects.create(username=_username, field2="bar")
+            TestFruit.objects.create(name="Apple", color="pink")
+            raise ValueError()
+
+        with self.assertRaises(ValueError):
+            txn("foo")
+
+        self.assertEqual(0, TestUser.objects.count())
+        self.assertEqual(0, TestFruit.objects.count())
+
+    def test_independent_argument(self):
+        """
+            We would get a XG error if the inner transaction was not independent
+        """
+
+        @transaction.atomic
+        def txn1(_username, _fruit):
+            @transaction.atomic(independent=True)
+            def txn2(_fruit):
+                TestFruit.objects.create(name=_fruit, color="pink")
+                raise ValueError()
+
+            TestUser.objects.create(username=_username)
+            txn2(_fruit)
+
+
+        with self.assertRaises(ValueError):
+            txn1("test", "banana")
+
+
 class QueryNormalizationTests(TestCase):
     """
         The normalize_query function takes a Django where tree, and converts it
@@ -129,56 +196,46 @@ class QueryNormalizationTests(TestCase):
         [ [(column, operator, value)], [(column, operator, value) ]] <- OR query, of multiple ANDs
     """
 
-    # def test_and_queries(self):
+    def test_and_queries(self):
 
-        # qs = TestUser.objects.filter(username="test").all()
-        #
-        # # self.assertEqual([ ("username", "=", "test") ], normalize_query(qs.query.where))
-        #
-        # qs = TestUser.objects.filter(username="test", email="test@example.com")
-        # normal = normalize_query(qs.query.where)
-        #
-        # qs = TestUser.objects.filter(username__in=["test", "let", "weep"])
-        # normal = normalize_query(qs.query.where)
-        # import ipdb; ipdb.set_trace()
-        #
-        # expected = [
-        #     ("username", "=", "test"),
-        #     ("email", "=", "test@example.com")
-        # ]
-        # # self.assertEqual(expected, normalize_query(qs.query.where))
-        #
-        # qs = TestUser.objects.filter(username="test").exclude(email="test@example.com")
-        # normal = normalize_query(qs.query.where)
-        # import ipdb; ipdb.set_trace()
-        # expected = [
-        #     ("username", "=", "test"),
-        #     ("email", ">", "test@example.com"),
-        #     ("email", "<", "test@example.com")
-        # ]
-        #
-        # normal = normalize_query(qs.query.where)
-        # import ipdb; ipdb.set_trace()
-        # # self.assertEqual(expected, normalize_query(qs.query.where))
-        #
-        # qs = TestUser.objects.filter(username__lte="test").exclude(email="test@example.com")
-        # normal = normalize_query(qs.query.where)
-        # import ipdb; ipdb.set_trace()
-        # expected = [
-        #     ("username", "<=", "test"),
-        #     ("email", ">", "test@example.com"),
-        #     ("email", "<", "test@example.com")
-        # ]
-        #
-        #
-        # self.assertEqual(expected, normalize_query(qs.query.where))
+        qs = TestUser.objects.filter(username="test").all()
+
+        self.assertEqual([ ("username", "=", "test") ], normalize_query(qs.query.where))
+
+        qs = TestUser.objects.filter(username="test", email="test@example.com")
+
+        expected = [
+            ("username", "=", "test"),
+            ("email", "=", "test@example.com")
+        ]
+        self.assertEqual(expected, normalize_query(qs.query.where))
+
+        qs = TestUser.objects.filter(username="test").exclude(email="test@example.com")
+
+        expected = [
+            ("username", "=", "test"),
+            ("email", ">", "test@example.com"),
+            ("email", "<", "test@example.com")
+        ]
+
+        self.assertEqual(expected, normalize_query(qs.query.where))
+
+        qs = TestUser.objects.filter(username__lte="test").exclude(email="test@example.com")
+
+        expected = [
+            ("username", "<=", "test"),
+            ("email", ">", "test@example.com"),
+            ("email", "<", "test@example.com")
+        ]
+
+        self.assertEqual(expected, normalize_query(qs.query.where))
 
     def test_or_queries(self):
-        # qs = TestUser.objects.filter(
-        #     username="python",
-        #     Q(username__in=["ruby", "jruby"]) | (Q(username="php") & ~Q(username="perl"))
-        # )
 
+        qs = TestUser.objects.filter(
+            username="python").filter(
+            Q(username__in=["ruby", "jruby"]) | (Q(username="php") & ~Q(username="perl"))
+        )
         # After IN and != explosion, we have...
         # (AND: (username='python', OR: (username='ruby', username='jruby', AND: (username='php', AND: (username < 'perl', username > 'perl')))))
 
@@ -190,9 +247,9 @@ class QueryNormalizationTests(TestCase):
         # becomes...
         # (OR: (AND: username='python', username = 'ruby'), (AND: username='python', username='jruby'), (AND: username='python', username='php', username < 'perl') \
         #      (AND: username='python', username='php', username > 'perl')
-        #normal = normalize_query(qs.query.where)
+        normal = normalize_query(qs.query.where)
 
-        #import ipdb; ipdb.set_trace()
+        import ipdb; ipdb.set_trace()
 
         expected = [
             [ ("username", "=", "python"), ("username", "=", "ruby") ],
@@ -201,40 +258,28 @@ class QueryNormalizationTests(TestCase):
             [ ("username", "=", "python"), ("username", "=", "php"), ("username", ">", "perl") ],
         ]
 
-        # self.assertEqual(expected, normalize_query(qs.query.where))
+        self.assertEqual(expected, normalize_query(qs.query.where))
 
-        # qs = TestUser.objects.filter(username="test") | TestUser.objects.filter(username="cheese")
-        #
-        # normal = normalize_query(qs.query.where)
-        #
-        # import ipdb; ipdb.set_trace()
-        # 
-        # expected = [
-        #     [ ("username", "=", "test") ],
-        #     [ ("username", "=", "cheese") ]
-        # ]
-        #
-        # # self.assertEqual(expected, normalize_query(qs.query.where))
-        #
-        # qs = TestUser.objects.filter(pk__in=[1, 2, 3])
-        #
-        # # normal = normalize_query(qs.query.where)
-        # #
-        # # import ipdb; ipdb.set_trace()
-        #
-        # expected = [
-        #     [ ("id", "=", 1) ],
-        #     [ ("id", "=", 2) ],
-        #     [ ("id", "=", 3) ]
-        # ]
+        qs = TestUser.objects.filter(username="test") | TestUser.objects.filter(username="cheese")
 
-        # self.assertEqual(expected, normalize_query(qs.query.where))
+        expected = [
+            [ ("username", "=", "test") ],
+            [ ("username", "=", "cheese") ]
+        ]
+
+        self.assertEqual(expected, normalize_query(qs.query.where))
+
+        qs = TestUser.objects.filter(pk__in=[1, 2, 3])
+
+        expected = [
+            [ ("id", "=", 1) ],
+            [ ("id", "=", 2) ],
+            [ ("id", "=", 3) ]
+        ]
+
+        self.assertEqual(expected, normalize_query(qs.query.where))
 
         qs = TestUser.objects.filter(pk__in=[1, 2, 3]).filter(username="test")
-
-        normal = normalize_query(qs.query.where)
-
-        import ipdb; ipdb.set_trace()
 
         expected = [
             [ ("id", "=", 1), ("username", "=", "test") ],
@@ -707,3 +752,45 @@ class BlobstoreFileUploadHandlerTest(TestCase):
             self.uploader.new_file, file_field_name, 'file_name', None, None
         )
         self.assertIsNotNone(self.uploader.blobkey)
+
+class ApplicationTests(TestCase):
+
+    @unittest.skipIf(webtest is NotImplemented, "pip install webtest to run functional tests")
+    def test_environ_is_patched_when_request_processed(self):
+        def application(environ, start_response):
+            # As we're not going through a thread pool the environ is unset.
+            # Set it up manually here.
+            # TODO: Find a way to get it to be auto-set by webtest
+            from google.appengine.runtime import request_environment
+            request_environment.current_request.environ = environ
+
+            # Check if the os.environ is the same as what we expect from our
+            # wsgi environ
+            import os
+            self.assertEqual(environ, os.environ)
+            start_response("200 OK", [])
+            return ["OK"]
+
+        djangae_app = DjangaeApplication(application)
+        test_app = webtest.TestApp(djangae_app)
+        old_environ = os.environ
+        try:
+            test_app.get("/")
+        finally:
+            os.environ = old_environ
+
+
+class ComputedFieldModel(models.Model):
+    def computer(self):
+        return "%s_%s" % (self.int_field, self.char_field)
+
+    int_field = models.IntegerField()
+    char_field = models.CharField(max_length=50)
+    test_field = ComputedCharField(computer, max_length=50)
+
+
+class ComputedFieldTests(TestCase):
+    def test_computed_field(self):
+        instance = ComputedFieldModel(int_field=1, char_field="test")
+        instance.save()
+        self.assertEqual(instance.test_field, "1_test")

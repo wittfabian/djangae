@@ -9,6 +9,10 @@ URL = "https://github.com/lukebpotato/djangae"
 LONG_DESCRIPTION = open(os.path.join(os.path.dirname(__file__), 'README.md')).read()
 AUTHOR = 'Luke Benstead'
 
+EXTRAS = {
+    "test": ["webtest"],
+}
+
 setup(
     name=NAME,
     version='0.1',
@@ -20,4 +24,8 @@ setup(
     long_description=LONG_DESCRIPTION,
     keywords=["django", "Google App Engine", "GAE"],
     url=URL,
+    
+    # dependencies
+    extras_require=EXTRAS,
+    tests_require=EXTRAS['test'],
 )
