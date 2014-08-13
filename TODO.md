@@ -26,14 +26,8 @@ Contributions welcome, please get stuck in!
 * More tests! Especially for unique constraints, unique caching and model inheritence
 * Add a UniqueSupportMixin for models so that form validation works as normal and doesn't just throw on save()
 * Write a lot of documentation on the datastore backend, complete with caveats, limitations, and how queries are translated
-* Implement djangae.db.transaction.atomic which works like Django 1.7's atomic decorator/context manager, but for the datastore, allow for xg, and isolation flags (e.g. independent)
 * Implement an API/Mixin/Custom Field for "expando" models - needs some thought
 * Create a website on GitHub, come up with a release process (maybe)
-
-### Memcache backend
-
-I think we need a memcache backend. Take a look at djappengine on GitHub, perhaps we could just use the one from there.
-Although I'm not convinced that the standard memcache backend won't work. Needs testing.
 
 
 ### Special Indexing
@@ -82,34 +76,10 @@ situations:
 
 Status: 0% - needs to be done
 
-### Break up django_instance_to_entity
-
-This currently handles transforming field data ready for the datastore, but also converting non-abstract model
-inheritance to poly models and a bunch of other stuff. We should break this logic up so that can use the same logic
-for updates as inserts (updates might only use a subset of fields).
-
-Status: 20% - needs to be done, probably needs a whiteboard discussion. I've broken some of this into
-get_prepared_db_value.
-
-### Fix up remote commands
-
-We need to support remote commands.
-
-Status: 40%
-
---- Below this line doesn't stop us using it ---
-
 ### Ancestor queries, Expando models etc.
 
 Ancestor queries do exist in our Djangoappengine fork, but the API could do with some improving and it all needs
 implementing in Djangae. Preferably we could implement this at as high a level as possible.
-
-Status: 0%
-
-### Use Django's Transaction Decorators
-
-I'm not sure how possible this is, we can't advertise supporting transactions (otherwise Django assumes it can roll
-back an entire table) however, we might be able to support the decorator stuff.
 
 Status: 0%
 

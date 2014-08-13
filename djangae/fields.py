@@ -277,19 +277,31 @@ class SetField(IterableField):
         return str(list(self._get_val_from_obj(obj)))
 
 
-class DictField(IterableField):
-    def get_internal_type(self):
-        return 'DictField'
+class ComputedFieldMixin(object):
+    def __init__(self, func, *args, **kwargs):
+        self.computer = func
 
-    @property
-    def _iterable_type(self):
-        return dict
+        kwargs["editable"] = False
 
-    def _map(self, function, iterable, *args, **kwargs):
-        return self._type((key, function(value, *args, **kwargs))
-                          for key, value in iterable.iteritems())
+        super(ComputedFieldMixin, self).__init__(*args, **kwargs)
 
-    def validate(self, values, model_instance):
-        if not isinstance(values, dict):
-            raise ValidationError("Value is of type %r. Should be a dict." %
-                                  type(values))
+    def pre_save(self, model_instance, add):
+        value = self.computer(model_instance)
+        setattr(model_instance, self.attname, value)
+        return value
+
+
+class ComputedCharField(ComputedFieldMixin, models.CharField):
+    __metaclass__ = models.SubfieldBase
+
+
+class ComputedIntegerField(ComputedFieldMixin, models.IntegerField):
+    __metaclass__ = models.SubfieldBase
+
+
+class ComputedTextField(ComputedFieldMixin, models.TextField):
+    __metaclass__ = models.SubfieldBase
+
+
+class ComputedPositiveIntegerField(ComputedFieldMixin, models.PositiveIntegerField):
+    __metaclass__ = models.SubfieldBase

@@ -124,6 +124,17 @@ def log_once(logging_call, text, args):
 log_once.logged = set()
 
 
+def normalize_query(query_where):
+    output = []
+
+    #1. Explode IN queries into an OR tree e.g. (OR, (x = 1), (x = 2))
+    #2. Explode != queries into (AND, (x < y), (x > y))
+    #3. Explode startswith into x > y && x < y + u'\ufffd'
+    #4. Convert to disjunctive normal form
+
+    return output
+
+
 class QueryByKeys(object):
     def __init__(self, query, keys, ordering):
         self.query = query
