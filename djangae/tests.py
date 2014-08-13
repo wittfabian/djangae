@@ -20,6 +20,7 @@ from djangae.indexing import add_special_index
 from djangae.db.utils import entity_matches_query
 from djangae.db.backends.appengine.commands import normalize_query
 from djangae.db import transaction
+from djangae.fields import ComputedCharField
 
 from .storage import BlobstoreFileUploadHandler
 from .wsgi import DjangaeApplication
@@ -765,3 +766,19 @@ class ApplicationTests(TestCase):
             test_app.get("/")
         finally:
             os.environ = old_environ
+
+
+class ComputedFieldModel(models.Model):
+    def computer(self):
+        return "%s_%s" % (self.int_field, self.char_field)
+
+    int_field = models.IntegerField()
+    char_field = models.CharField(max_length=50)
+    test_field = ComputedCharField(computer, max_length=50)
+
+
+class ComputedFieldTests(TestCase):
+    def test_computed_field(self):
+        instance = ComputedFieldModel(int_field=1, char_field="test")
+        instance.save()
+        self.assertEqual(instance.test_field, "1_test")
