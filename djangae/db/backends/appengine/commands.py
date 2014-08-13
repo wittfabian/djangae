@@ -3,7 +3,7 @@ from datetime import datetime
 import logging
 import copy
 from functools import partial
-from itertools import chain
+from itertools import chain, product
 
 #LIBRARIES
 from django.core.cache import cache
@@ -127,37 +127,45 @@ def explode(target):
     pass
 
 
+from itertools import product
+
 def normalize_query(query_where, negated=False):
     #1. Explode IN queries into an OR tree e.g. (OR, (x = 1), (x = 2))
     #2. Explode != queries into (AND, (x < y), (x > y))
     #3. Convert to disjunctive normal form
     output = []
-    import ipdb; ipdb.set_trace()
+    connector = query_where.connector
 
     for child in query_where.children:
         if hasattr(child, 'children'): # if child is a whereNode -> recurse! Can a Negated whereNode have children?
             normal = normalize_query(child, negated=query_where.negated)
-            if query_where.connector == 'OR':
-                output.append(normal)
-            else:
-                for x in normal:
-                    output.append(x)
+            for x in normal:
+                output.append(x)
         else: # Child is a constraint (literal)
             op = OPERATORS_MAP[child[1]]
             if op:
                 if op == '=' and negated:
-                    output.append(('<', child[0].col, child[3]))
-                    output.append(('>', child[0].col, child[3]))
+                    output.append((child[0].col, '>', child[3]))
+                    output.append((child[0].col, '<', child[3]))
                 else:
-                    output.append((op, child[0].col, child[3]))
+                    output.append((child[0].col, op, child[3]))
             else:
                 op = child[1]
                 if op == 'in':
-                    import ipdb; ipdb.set_trace()
                     for x in child[3]:
-                        output.append([('=', child[0].col, x)])
-
-    # if query_where.connector == 'OR':
+                        output.append([(child[0].col, '=', x)])
+    if connector == 'AND':
+        # This is where it gets freaky
+        ors = [x for x in output if type(x) == list]
+        ands = [x for x in output if type(x) == tuple]
+        if ors and ands:
+            for _or in ors:
+                for _and in ands:
+                    _or.append(_and)
+            output = ors
+    if connector == 'OR':
+        # My face hurts
+        output = [[_or] for _or in output]
     return output
 
 
