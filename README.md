@@ -52,7 +52,7 @@ a quick list:
   that in the future.
 * `__in` queries with more than 30 values.  This is a limitation of the Datastore.  You can filter for up to 500 values
   on the primary key field though.
-* More than one in equality filter, i.e. you can't do `.exclude(a=1, b=2)`.  This is a limitation of the Datastore.
+* More than one inequality filter, i.e. you can't do `.exclude(a=1, b=2)`.  This is a limitation of the Datastore.
 * Transactions.  The Datastore has transactions, but they are not "normal" transactions in the SQL sense. Transactions
   should be done using `google.appengine.api.datastore.RunInTransaction`.
 
