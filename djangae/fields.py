@@ -281,9 +281,7 @@ class ComputedFieldMixin(object):
     def __init__(self, func, *args, **kwargs):
         self.computer = func
 
-        kwargs["blank"] = True
         kwargs["editable"] = False
-        kwargs["null"] = True
 
         super(ComputedFieldMixin, self).__init__(*args, **kwargs)
 
