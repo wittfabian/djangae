@@ -127,8 +127,6 @@ def explode(target):
     pass
 
 
-from itertools import product, chain
-
 def flatten(listOfLists):
     "Flatten one level of nesting"
     return chain.from_iterable(listOfLists)
@@ -153,7 +151,7 @@ def normalize_query(query_where, negated=False):
     for child in query_where.children:
         if hasattr(child, 'children'):
             output.append(normalize_query(child, negated=query_where.negated))
-        else:
+        else: # This means that the node is a constraint (a literal!!)
             _flatten = False
             op = OPERATORS_MAP[child[1]]
             if op:
@@ -168,54 +166,11 @@ def normalize_query(query_where, negated=False):
                     for x in child[3]:
                         output.append([(child[0].col, '=', x)])
     if _product == True and query_where.connector == 'AND': # If it's an AND node and flatten is called then return the product, which also flattens
-        import ipdb; ipdb.set_trace()
         output = [x for x in special_product(*output)] # special_product and convert DNF to ors
     elif _flatten and query_where.connector != 'OR': # To deal with those stupid dead AND nodes that make everything much more complex
         output = [x for x in flatten(output)]
     if query_where.connector == 'OR' and _product:
         output = [x for x in flatten(output)]
-    return output
-
-
-def normalize_query_old(query_where, negated=False):
-    #1. Explode IN queries into an OR tree e.g. (OR, (x = 1), (x = 2))
-    #2. Explode != queries into (AND, (x < y), (x > y))
-    #3. Explode startswith into x > y && x < y + u'\ufffd'
-    #4. Convert to disjunctive normal form
-
-    output = []
-    connector = query_where.connector
-
-    for child in query_where.children:
-        if hasattr(child, 'children'): # if child is a whereNode -> recurse! Can a Negated whereNode have children?
-            normal = normalize_query(child, negated=query_where.negated)
-            for x in normal:
-                output.append(x)
-        else: # Child is a constraint (literal)
-            op = OPERATORS_MAP[child[1]]
-            if op:
-                if op == '=' and negated:
-                    output.append((child[0].col, '>', child[3]))
-                    output.append((child[0].col, '<', child[3]))
-                else:
-                    output.append((child[0].col, op, child[3]))
-            else:
-                op = child[1]
-                if op == 'in':
-                    for x in child[3]:
-                        output.append([(child[0].col, '=', x)])
-    if connector == 'AND':
-        # This is where it gets freaky
-        ors = [x for x in output if type(x) == list]
-        ands = [x for x in output if type(x) == tuple]
-        if ors and ands:
-            for _or in ors:
-                for _and in ands:
-                    _or.append(_and)
-            output = ors
-    if connector == 'OR':
-        # My face hurts
-        output = [[_or] for _or in output]
     return output
 
 
