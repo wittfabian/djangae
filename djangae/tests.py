@@ -27,14 +27,11 @@ from .wsgi import DjangaeApplication
 
 from google.appengine.api import datastore
 
-<<<<<<< .merge_file_sN16Z9
 
-=======
 try:
     import webtest
 except ImportError:
     webtest = NotImplemented
->>>>>>> .merge_file_4utqsU
 
 class TestUser(models.Model):
     username = models.CharField(max_length=32)
@@ -205,8 +202,7 @@ class QueryNormalizationTests(TestCase):
         qs = TestUser.objects.filter(username="test", email="test@example.com")
 
         expected = [
-            ("username", "=", "test"),
-            ("email", "=", "test@example.com")
+            [("username", "=", "test"),("email", "=", "test@example.com")]
         ]
         self.assertEqual(expected, normalize_query(qs.query.where))
 
@@ -236,6 +232,9 @@ class QueryNormalizationTests(TestCase):
             username="python").filter(
             Q(username__in=["ruby", "jruby"]) | (Q(username="php") & ~Q(username="perl"))
         )
+
+        # qs = TestUser.objects.filter(Q(username="php") & ~Q(username="perl") | Q(username__in=["ruby", "jruby"]))
+
         # After IN and != explosion, we have...
         # (AND: (username='python', OR: (username='ruby', username='jruby', AND: (username='php', AND: (username < 'perl', username > 'perl')))))
 
@@ -247,9 +246,6 @@ class QueryNormalizationTests(TestCase):
         # becomes...
         # (OR: (AND: username='python', username = 'ruby'), (AND: username='python', username='jruby'), (AND: username='python', username='php', username < 'perl') \
         #      (AND: username='python', username='php', username > 'perl')
-        normal = normalize_query(qs.query.where)
-
-        import ipdb; ipdb.set_trace()
 
         expected = [
             [ ("username", "=", "python"), ("username", "=", "ruby") ],
