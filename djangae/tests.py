@@ -11,6 +11,8 @@ from django.db.models.query import Q
 from django.forms import ModelForm
 from django.test import TestCase, RequestFactory
 from django.forms.models import modelformset_factory
+from django.db import connections
+
 from google.appengine.api.datastore_errors import EntityNotFoundError
 
 # DJANGAE
@@ -194,17 +196,18 @@ class QueryNormalizationTests(TestCase):
     """
 
     def test_and_queries(self):
+        connection = connections['default']
 
         qs = TestUser.objects.filter(username="test").all()
 
-        self.assertEqual([ ("username", "=", "test") ], normalize_query(qs.query.where))
+        self.assertEqual([ ("username", "=", "test") ], normalize_query(qs.query.where, connection))
 
         qs = TestUser.objects.filter(username="test", email="test@example.com")
 
         expected = [
             [("username", "=", "test"),("email", "=", "test@example.com")]
         ]
-        self.assertEqual(expected, normalize_query(qs.query.where))
+        self.assertEqual(expected, normalize_query(qs.query.where, connection))
 
         qs = TestUser.objects.filter(username="test").exclude(email="test@example.com")
 
@@ -213,7 +216,7 @@ class QueryNormalizationTests(TestCase):
             [("username", "=", "test"), ("email", "<", "test@example.com")]
         ]
 
-        self.assertEqual(expected, normalize_query(qs.query.where))
+        self.assertEqual(expected, normalize_query(qs.query.where, connection))
 
         qs = TestUser.objects.filter(username__lte="test").exclude(email="test@example.com")
 
@@ -222,9 +225,18 @@ class QueryNormalizationTests(TestCase):
             [("username", "<=", "test"), ("email", "<", "test@example.com")]
         ]
 
-        self.assertEqual(expected, normalize_query(qs.query.where))
+        self.assertEqual(expected, normalize_query(qs.query.where, connection))
+
+        qs = TestUser.objects.filter(username__in=["test", "charlie"]).values_list("username")
+
+        expected = [
+            [("username", "=", "test")],
+            [("username", "=", "charlie")]
+        ]
+        self.assertEqual(expected, normalize_query(qs.query.where, connection))
 
     def test_or_queries(self):
+        connection = connections['default']
 
         qs = TestUser.objects.filter(
             username="python").filter(
@@ -252,7 +264,7 @@ class QueryNormalizationTests(TestCase):
             [ ("username", "=", "python"), ("username", "=", "php"), ("username", ">", "perl") ],
         ]
 
-        self.assertEqual(expected, normalize_query(qs.query.where))
+        self.assertEqual(expected, normalize_query(qs.query.where, connection))
 
         qs = TestUser.objects.filter(username="test") | TestUser.objects.filter(username="cheese")
 
@@ -261,7 +273,7 @@ class QueryNormalizationTests(TestCase):
             [ ("username", "=", "cheese") ]
         ]
 
-        self.assertEqual(expected, normalize_query(qs.query.where))
+        self.assertEqual(expected, normalize_query(qs.query.where, connection))
 
         qs = TestUser.objects.filter(pk__in=[1, 2, 3])
 
@@ -271,7 +283,7 @@ class QueryNormalizationTests(TestCase):
             [ ("id", "=", 3) ]
         ]
 
-        self.assertEqual(expected, normalize_query(qs.query.where))
+        self.assertEqual(expected, normalize_query(qs.query.where, connection))
 
         qs = TestUser.objects.filter(pk__in=[1, 2, 3]).filter(username="test")
 
@@ -281,7 +293,7 @@ class QueryNormalizationTests(TestCase):
             [ ("id", "=", 3), ("username", "=", "test") ]
         ]
 
-        self.assertEqual(expected, normalize_query(qs.query.where))
+        self.assertEqual(expected, normalize_query(qs.query.where, connection))
 
 
 class ModelWithUniques(models.Model):

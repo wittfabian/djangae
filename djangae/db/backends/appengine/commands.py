@@ -141,7 +141,22 @@ def special_product(*args, **kwds):
             prod = [prod[0], tuple(x for x in flatten(prod[1]))]
         yield list(prod)
 
-def normalize_query(query_where, negated=False):
+def parse_constraint(child, connection):
+    #First, unpack the constraint
+    constraint, op, annotation, value = child
+    was_list = isinstance(value, (list, tuple))
+    packed, value = constraint.process(op, value, connection)
+
+    value = [ connection.ops.prep_lookup_value(constraint.field.model, x, constraint.field, constraint=constraint) for x in value]
+
+    if not was_list:
+        value = value[0]
+
+    alias, column, db_type = packed
+    return column, op, value
+
+def normalize_query(query_where, connection, negated=False, columns=None):
+    columns = columns or set()
 
     output = []
     _flatten = True
@@ -149,29 +164,43 @@ def normalize_query(query_where, negated=False):
     if len(query_where.children) == 1: # I hate django WHERE trees
         _product = False
     for child in query_where.children:
+
         if hasattr(child, 'children'):
-            output.append(normalize_query(child, negated=query_where.negated))
+            normalized, new_cols = normalize_query(child, connection, negated=query_where.negated, columns=columns)
+            output.append(normalized)
+            columns = columns.union(new_cols)
+
         else: # This means that the node is a constraint (a literal!!)
+            column, op, value = parse_constraint(child, connection)
+
             _flatten = False
-            op = OPERATORS_MAP[child[1]]
-            if op:
-                if op == '=' and negated:
-                    output.append((child[0].col, '>', child[3]))
-                    output.append((child[0].col, '<', child[3]))
+            final_op = OPERATORS_MAP[op]
+            if final_op:
+                if final_op == '=' and negated:
+                    output.append((column, '>', value))
+                    output.append((column, '<', value))
                 else:
-                    output.append((child[0].col, op, child[3]))
+                    output.append((column, final_op, value))
+
             else:
-                op = child[1]
-                if op == 'in':
-                    for x in child[3]:
-                        output.append([(child[0].col, '=', x)])
+                final_op = op
+                if final_op == 'in':
+                    if not isinstance(value, (list, tuple, set)):
+                        raise ValueError("IN queries must be supplied a list of values")
+
+                    output.extend([ [(column, '=', x)] for x in value ])
+                else:
+                    raise ValueError()
+
+            columns.add(column)
+
     if _product == True and query_where.connector == 'AND': # If it's an AND node and flatten is called then return the product, which also flattens
         output = [x for x in special_product(*output)] # special_product and convert DNF to ors
     elif _flatten and query_where.connector != 'OR': # To deal with those stupid dead AND nodes that make everything much more complex
         output = [x for x in flatten(output)]
     if query_where.connector == 'OR' and _product:
         output = [x for x in flatten(output)]
-    return output
+    return output, columns
 
 
 class QueryByKeys(object):
@@ -305,7 +334,15 @@ class SelectCommand(object):
         if opts.parents:
             self.projection = None
 
-        self.where = self.parse_where_and_check_projection(query.where)
+        #FIXME: RAISE AN ERROR IF WE ARE FILTERING ON A TEXT OR BLOB FIELD
+        #FIXME: RAISE AN ERROR IF WE HAVE TOO MANY INEQUALITY FILTERS
+        self.where, columns = normalize_query(query.where, self.connection)
+
+        #DISABLE PROJECTION IF WE ARE FILTERING ON ONE OF THE PROJECTION_FIELDS
+        for field in self.projection or []:
+            if field in columns:
+                self.projection = None
+                break
 
         try:
             #If the PK was queried, we switch it in our queried
@@ -318,105 +355,6 @@ class SelectCommand(object):
             self.keys_only = len(self.queried_fields) == 1
         except ValueError:
             pass
-
-
-    def parse_where_and_check_projection(self, where, negated=False):
-        """ recursively parse the where tree and return a list of tuples of
-            (column, match_type, value), e.g. ('name', 'exact', 'John').
-        """
-        result = []
-
-        if where.negated:
-            negated = not negated
-
-        if negated and where.connector != AND:
-            raise NotSupportedError("Only AND filters are supported for negated queries")
-
-        if where.connector == OR:
-            # What we essentially need to do here is this:
-            """
-            queries = []
-            for w in where.children:
-                queries.append(self.parse_where_and_check_projection(w, False))
-            return MultiQuery(queries)
-            """
-            # But that would mean combining _build_gae_query and parse_where_and_check_projection
-            raise CouldBeSupportedError(
-                "Queries with OR could be supported.  See comments above this exception."
-            )
-
-        for child in where.children:
-            if isinstance(child, tuple):
-                constraint, op, annotation, value = child
-                packed, value = constraint.process(op, value, self.connection)
-                alias, column, db_type = packed
-
-                if op not in ("in", "year") and isinstance(value, list):
-                    if len(value[:2]) > 1:
-                        raise ValueError("Only IN queries can lookup on a list of values")
-                    value = value[0]
-
-                if isinstance(value, (list, tuple)):
-                    value = [ self.connection.ops.prep_lookup_value(self.model, x, constraint.field, constraint=constraint) for x in value]
-                else:
-                    value = self.connection.ops.prep_lookup_value(self.model, value, constraint.field, constraint=constraint)
-
-                #Disable projection if it's not supported
-                if self.projection and constraint.col in self.projection:
-                    if op in ("exact", "in", "isnull"):
-                        #If we are projecting, but we are doing an
-                        #equality filter on one of the columns, then we
-                        #can't project
-                        self.projection = None
-
-                if constraint.field.db_type(self.connection) in ("bytes", "text"):
-                    raise NotSupportedError("Text and Blob fields are not indexed by the datastore, so you can't filter on them")
-
-                if negated:
-                    if op in ("exact", "in") and constraint.col == self.pk_col:
-                        if isinstance(value, (list, tuple)):
-                            self.excluded_pks.update(set(value))
-                        else:
-                            self.excluded_pks.add(value)
-                    #else: FIXME when excluded_pks is handled, we can put the
-                    #next section in an else block
-                    if op == "exact":
-                        if self.has_inequality_filter:
-                            raise NotSupportedError("You can only specify one inequality filter per query")
-
-                        col = constraint.col
-                        result.append((col, "gt_and_lt", value))
-                        self.has_inequality_filter = True
-                    else:
-                        raise NotSupportedError("Unsupported negated lookup: " + op)
-                else:
-                    if constraint.col == self.pk_col:
-                        if (value is None and op == "exact") or (op == "isnull" and value):
-                            #If we are looking for a primary key that is None, then we always
-                            #just return nothing
-                            raise EmptyResultSet()
-
-                        elif op == "exact":
-                            if self.exact_pk and self.exact_pk != value:
-                                raise EmptyResultSet() #We're trying to filter on two different pks?
-                            else:
-                                self.exact_pk = value
-                                self.included_pks = [ self.exact_pk ]
-                        elif op == "in":
-                            if isinstance(value, (list, tuple)):
-                                self.included_pks.extend(list(value))
-                            else:
-                                raise ValueError("In query requires a list, found {}".format(value.__class__))
-                        else:
-                            col = constraint.col
-                            result.append((col, op, value))
-                    else:
-                        col = constraint.col
-                        result.append((col, op, value))
-            else:
-                result.extend(self.parse_where_and_check_projection(child, negated))
-
-        return result
 
     def execute(self):
         #if not self.included_pks:
@@ -501,7 +439,64 @@ class SelectCommand(object):
         if has_concrete_parents(self.model) and not self.model._meta.proxy:
             query["class ="] = self.model._meta.db_table
 
+
+        ordering = []
+        for order in self.ordering:
+            if isinstance(order, int):
+                direction = datastore.Query.ASCENDING if order == 1 else datastore.Query.DESCENDING
+                order = self.queried_fields[0]
+            else:
+                direction = datastore.Query.DESCENDING if order.startswith("-") else datastore.Query.ASCENDING
+                order = order.lstrip("-")
+
+            if order == self.model._meta.pk.column or order == "pk":
+                order = "__key__"
+            ordering.append((order, direction))
+
+
+        def process_and_branch(query, and_branch):
+            for column, op, value in and_branch:
+                if column == self.pk_col:
+                    column = "__key__"
+
+                if op in REQUIRES_SPECIAL_INDEXES:
+                    add_special_index(self.model, column, op) #Add the index if we can (e.g. on dev_appserver)
+
+                    if op not in special_indexes_for_column(self.model, column):
+                        raise RuntimeError("There is a missing index in your djangaeidx.yaml - \n\n{0}:\n\t{1}: [{2}]".format(
+                            self.model, column, op)
+                        )
+
+                    indexer = REQUIRES_SPECIAL_INDEXES[op]
+                    column = indexer.indexed_column_name(column)
+                    value = indexer.prep_value_for_query(value)
+                    query["%s =" % column] = value
+                else:
+                    query["%s %s" % (column, op)] = value
+
+        print self.where
+        if len(self.where) > 1:
+            queries = [ query ] * len(self.where) #Duplicate the query for all the "OR"s
+
+            for i, and_branch in enumerate(self.where):
+                process_and_branch(queries[i], and_branch)
+
+            if all([ self.pk_col in qry for qry in queries ]): #If all queries have a filter on the PK, we can use a Get
+                self.included_pks = [ qry[self.pk_col] for qry in queries ]
+                query = None
+            else:
+                query = datastore.MultiQuery(queries, ordering)
+        else:
+            if self.where:
+                if isinstance(self.where[0], list):
+                    process_and_branch(query, self.where[0])
+                else:
+                    process_and_branch(query, self.where)
+            query.Order(*ordering)
+
         DJANGAE_LOG.debug("Select query: {0}, {1}".format(self.model.__name__, self.where))
+        return query
+
         for column, op, value in self.where:
             if column == self.pk_col:
                 column = "__key__"
@@ -540,18 +535,7 @@ class SelectCommand(object):
             else:
                 query["%s %s" % (column, final_op)] = value
 
-        ordering = []
-        for order in self.ordering:
-            if isinstance(order, int):
-                direction = datastore.Query.ASCENDING if order == 1 else datastore.Query.DESCENDING
-                order = self.queried_fields[0]
-            else:
-                direction = datastore.Query.DESCENDING if order.startswith("-") else datastore.Query.ASCENDING
-                order = order.lstrip("-")
 
-            if order == self.model._meta.pk.column or order == "pk":
-                order = "__key__"
-            ordering.append((order, direction))
 
         if combined_filters:
             queries = [ query ]

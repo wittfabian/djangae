@@ -32,7 +32,7 @@ def acquire_identifiers(identifiers, entity_key):
             if not marker.instance and (datetime.datetime.utcnow() - marker.created).seconds > 5:
                 marker.delete()
             elif marker.instance and Key(marker.instance) != entity_key and key_exists(Key(marker.instance)):
-                raise IntegrityError()
+                raise IntegrityError("Unable to acquire marker for %s" % identifier)
             else:
                 #The marker is ours anyway
                 return marker
