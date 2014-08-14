@@ -127,9 +127,57 @@ def explode(target):
     pass
 
 
-from itertools import product
+from itertools import product, chain
+
+def flatten(listOfLists):
+    "Flatten one level of nesting"
+    return chain.from_iterable(listOfLists)
+
+def special_product(*args, **kwds):
+    pools = map(tuple, args) * kwds.get('repeat', 1)
+    result = [[]]
+    for pool in pools:
+        result = [x+[y] for x in result for y in pool]
+    for prod in result:
+        if type(prod[0]) == tuple and type(prod[1]) == list:
+            prod = [prod[0], tuple(x for x in flatten(prod[1]))]
+        yield list(prod)
 
 def normalize_query(query_where, negated=False):
+
+    output = []
+    _flatten = True
+    _product = True
+    if len(query_where.children) == 1: # I hate django WHERE trees
+        _product = False
+    for child in query_where.children:
+        if hasattr(child, 'children'):
+            output.append(normalize_query(child, negated=query_where.negated))
+        else:
+            _flatten = False
+            op = OPERATORS_MAP[child[1]]
+            if op:
+                if op == '=' and negated:
+                    output.append((child[0].col, '>', child[3]))
+                    output.append((child[0].col, '<', child[3]))
+                else:
+                    output.append((child[0].col, op, child[3]))
+            else:
+                op = child[1]
+                if op == 'in':
+                    for x in child[3]:
+                        output.append([(child[0].col, '=', x)])
+    if _product == True and query_where.connector == 'AND': # If it's an AND node and flatten is called then return the product, which also flattens
+        import ipdb; ipdb.set_trace()
+        output = [x for x in special_product(*output)] # special_product and convert DNF to ors
+    elif _flatten and query_where.connector != 'OR': # To deal with those stupid dead AND nodes that make everything much more complex
+        output = [x for x in flatten(output)]
+    if query_where.connector == 'OR' and _product:
+        output = [x for x in flatten(output)]
+    return output
+
+
+def normalize_query_old(query_where, negated=False):
     #1. Explode IN queries into an OR tree e.g. (OR, (x = 1), (x = 2))
     #2. Explode != queries into (AND, (x < y), (x > y))
     #3. Explode startswith into x > y && x < y + u'\ufffd'
