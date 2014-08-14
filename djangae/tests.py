@@ -209,9 +209,8 @@ class QueryNormalizationTests(TestCase):
         qs = TestUser.objects.filter(username="test").exclude(email="test@example.com")
 
         expected = [
-            ("username", "=", "test"),
-            ("email", ">", "test@example.com"),
-            ("email", "<", "test@example.com")
+            [("username", "=", "test"), ("email", ">", "test@example.com")],
+            [("username", "=", "test"), ("email", "<", "test@example.com")]
         ]
 
         self.assertEqual(expected, normalize_query(qs.query.where))
@@ -219,9 +218,8 @@ class QueryNormalizationTests(TestCase):
         qs = TestUser.objects.filter(username__lte="test").exclude(email="test@example.com")
 
         expected = [
-            ("username", "<=", "test"),
-            ("email", ">", "test@example.com"),
-            ("email", "<", "test@example.com")
+            [("username", "<=", "test"), ("email", ">", "test@example.com")],
+            [("username", "<=", "test"), ("email", "<", "test@example.com")]
         ]
 
         self.assertEqual(expected, normalize_query(qs.query.where))
