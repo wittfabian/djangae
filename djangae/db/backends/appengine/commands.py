@@ -88,7 +88,7 @@ def ensure_datetime(value):
     """ Painfully, sometimes the Datastore returns dates as datetime objects, and sometimes
         it returns them as unix timestamps in microseconds!!
     """
-    if isinstance(value, long):
+    if isinstance(value, (int, long)):
         return datetime.fromtimestamp(value / 1000000)
     return value
 
@@ -145,17 +145,36 @@ def parse_constraint(child, connection):
     constraint, op, annotation, value = child
     was_list = isinstance(value, (list, tuple))
     packed, value = constraint.process(op, value, connection)
-
-    value = [ connection.ops.prep_lookup_value(constraint.field.model, x, constraint.field, constraint=constraint) for x in value]
-
-    if not was_list:
-        value = value[0]
-
     alias, column, db_type = packed
+
+    if op not in REQUIRES_SPECIAL_INDEXES:
+        #Don't convert if this op requires special indexes, it will be handled there
+        value = [ connection.ops.prep_lookup_value(constraint.field.model, x, constraint.field, constraint=constraint) for x in value]
+        if not was_list:
+            value = value[0]
+    else:
+        if not was_list:
+            value = value[0]
+
+        add_special_index(constraint.field.model, column, op) #Add the index if we can (e.g. on dev_appserver)
+
+        if op not in special_indexes_for_column(constraint.field.model, column):
+            raise RuntimeError("There is a missing index in your djangaeidx.yaml - \n\n{0}:\n\t{1}: [{2}]".format(
+                constraint.field.model, column, op)
+            )
+
+        indexer = REQUIRES_SPECIAL_INDEXES[op]
+        column = indexer.indexed_column_name(column)
+        value = indexer.prep_value_for_query(value)
+        op = "exact" #Perhaps this should be supplied by the indexer?
+
     return column, op, value
 
 def normalize_query(query_where, connection, negated=False, columns=None):
     columns = columns or set()
+
+    if not query_where.children:
+        return [], columns
 
     output = []
     _flatten = True
@@ -176,8 +195,8 @@ def normalize_query(query_where, connection, negated=False, columns=None):
             final_op = OPERATORS_MAP[op]
             if final_op:
                 if final_op == '=' and negated:
-                    output.append((column, '>', value))
-                    output.append((column, '<', value))
+                    output.append([(column, '>', value)])
+                    output.append([(column, '<', value)])
                 else:
                     output.append((column, final_op, value))
 
@@ -231,7 +250,6 @@ class QueryByKeys(object):
             results = results[:limit]
 
         return ( x for x in results if utils.entity_matches_query(x, self.query) )
-
 
 class SelectCommand(object):
     def __init__(self, connection, query, keys_only=False, all_fields=False):
@@ -469,44 +487,32 @@ class SelectCommand(object):
                 if column == self.pk_col:
                     column = "__key__"
 
-                if op in REQUIRES_SPECIAL_INDEXES:
-                    add_special_index(self.model, column, op) #Add the index if we can (e.g. on dev_appserver)
+                query["%s %s" % (column, op)] = value
 
-                    if op not in special_indexes_for_column(self.model, column):
-                        raise RuntimeError("There is a missing index in your djangaeidx.yaml - \n\n{0}:\n\t{1}: [{2}]".format(
-                            self.model, column, op)
-                        )
+        queries = []
 
-                    indexer = REQUIRES_SPECIAL_INDEXES[op]
-                    column = indexer.indexed_column_name(column)
-                    value = indexer.prep_value_for_query(value)
-                    query["%s =" % column] = value
-                else:
-                    query["%s %s" % (column, op)] = value
+        ## FIXME: Once normalize_query always returns a list a lists
+        # we need to do this
+        if self.where and isinstance(self.where[0], tuple):
+            self.where = [ self.where ]
 
-        if len(self.where) > 1:
-            queries = []
-            for and_branch in self.where:
-                #Duplicate the query for all the "OR"s
-                queries.append(Query(query._Query__kind, **query_kwargs))
-                queries[-1].update(query) #Make sure we copy across filters (e.g. class =)
-                process_and_branch(queries[-1], and_branch)
+        if not self.where:
+            queries = [ query ]
 
-            if all([ "__key__ =" in qry for qry in queries ]): #If all queries have a filter on the PK, we can use a Get
-                included_pks = [ qry["__key__ ="] for qry in queries ]
-                query = QueryByKeys(query, included_pks, ordering)
-            else:
-                query = datastore.MultiQuery(queries, ordering)
+        for and_branch in self.where:
+            #Duplicate the query for all the "OR"s
+            queries.append(Query(query._Query__kind, **query_kwargs))
+            queries[-1].update(query) #Make sure we copy across filters (e.g. class =)
+            process_and_branch(queries[-1], and_branch)
+
+        if all([ "__key__ =" in qry for qry in queries ]): #If all queries have a filter on the PK, we can use a Get
+            included_pks = [ qry["__key__ ="] for qry in queries ]
+            query = QueryByKeys(query, included_pks, ordering)
         else:
-            if self.where:
-                if isinstance(self.where[0], list):
-                    process_and_branch(query, self.where[0])
-                else:
-                    process_and_branch(query, self.where)
-
-            if "__key__ =" in query:
-                query = QueryByKeys(query, [ query["__key__ ="] ], ordering)
+            if len(queries) > 1:
+                query = datastore.MultiQuery(queries, ordering)
             else:
+                query = queries[0]
                 query.Order(*ordering)
 
         DJANGAE_LOG.debug("Select query: {0}, {1}".format(self.model.__name__, self.where))

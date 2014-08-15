@@ -225,7 +225,7 @@ class QueryNormalizationTests(TestCase):
         The normalize_query function takes a Django where tree, and converts it
         into a tree of one of the following forms:
 
-        [ (column, operator, value), (column, operator, value) ] <- AND only query
+        [ [(column, operator, value), (column, operator, value) ]] <- AND only query
         [ [(column, operator, value)], [(column, operator, value) ]] <- OR query, of multiple ANDs
     """
 
@@ -234,14 +234,14 @@ class QueryNormalizationTests(TestCase):
 
         qs = TestUser.objects.filter(username="test").all()
 
-        self.assertEqual([ ("username", "=", "test") ], normalize_query(qs.query.where, connection))
+        self.assertEqual([[ ("username", "=", "test") ]], normalize_query(qs.query.where, connection)[0])
 
         qs = TestUser.objects.filter(username="test", email="test@example.com")
 
         expected = [
-            [("username", "=", "test"),("email", "=", "test@example.com")]
+            [[("username", "=", "test"),("email", "=", "test@example.com")]]
         ]
-        self.assertEqual(expected, normalize_query(qs.query.where, connection))
+        self.assertEqual(expected, normalize_query(qs.query.where, connection)[0])
 
         qs = TestUser.objects.filter(username="test").exclude(email="test@example.com")
 
@@ -250,7 +250,7 @@ class QueryNormalizationTests(TestCase):
             [("username", "=", "test"), ("email", "<", "test@example.com")]
         ]
 
-        self.assertEqual(expected, normalize_query(qs.query.where, connection))
+        self.assertEqual(expected, normalize_query(qs.query.where, connection)[0])
 
         qs = TestUser.objects.filter(username__lte="test").exclude(email="test@example.com")
 
@@ -259,7 +259,7 @@ class QueryNormalizationTests(TestCase):
             [("username", "<=", "test"), ("email", "<", "test@example.com")]
         ]
 
-        self.assertEqual(expected, normalize_query(qs.query.where, connection))
+        self.assertEqual(expected, normalize_query(qs.query.where, connection)[0])
 
         qs = TestUser.objects.filter(username__in=["test", "charlie"]).values_list("username")
 
@@ -267,7 +267,7 @@ class QueryNormalizationTests(TestCase):
             [("username", "=", "test")],
             [("username", "=", "charlie")]
         ]
-        self.assertEqual(expected, normalize_query(qs.query.where, connection))
+        self.assertEqual(expected, normalize_query(qs.query.where, connection)[0])
 
     def test_or_queries(self):
         connection = connections['default']
@@ -298,7 +298,7 @@ class QueryNormalizationTests(TestCase):
             [ ("username", "=", "python"), ("username", "=", "php"), ("username", ">", "perl") ],
         ]
 
-        self.assertEqual(expected, normalize_query(qs.query.where, connection))
+        self.assertEqual(expected, normalize_query(qs.query.where, connection)[0])
 
         qs = TestUser.objects.filter(username="test") | TestUser.objects.filter(username="cheese")
 
@@ -307,7 +307,7 @@ class QueryNormalizationTests(TestCase):
             [ ("username", "=", "cheese") ]
         ]
 
-        self.assertEqual(expected, normalize_query(qs.query.where, connection))
+        self.assertEqual(expected, normalize_query(qs.query.where, connection)[0])
 
         qs = TestUser.objects.filter(pk__in=[1, 2, 3])
 
@@ -317,7 +317,7 @@ class QueryNormalizationTests(TestCase):
             [ ("id", "=", 3) ]
         ]
 
-        self.assertEqual(expected, normalize_query(qs.query.where, connection))
+        self.assertEqual(expected, normalize_query(qs.query.where, connection)[0])
 
         qs = TestUser.objects.filter(pk__in=[1, 2, 3]).filter(username="test")
 
@@ -327,7 +327,7 @@ class QueryNormalizationTests(TestCase):
             [ ("id", "=", 3), ("username", "=", "test") ]
         ]
 
-        self.assertEqual(expected, normalize_query(qs.query.where, connection))
+        self.assertEqual(expected, normalize_query(qs.query.where, connection)[0])
 
 
 class ModelWithUniques(models.Model):
