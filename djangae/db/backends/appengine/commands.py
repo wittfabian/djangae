@@ -52,8 +52,6 @@ OPERATORS_MAP = {
     'in': None,
     'startswith': None,
     'range': None,
-    'year': None,
-    'iexact': None,
 }
 
 REVERSE_OP_MAP = {
