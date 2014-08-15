@@ -474,12 +474,13 @@ class SelectCommand(object):
                 else:
                     query["%s %s" % (column, op)] = value
 
-        print self.where
         if len(self.where) > 1:
-            queries = [ query ] * len(self.where) #Duplicate the query for all the "OR"s
-
-            for i, and_branch in enumerate(self.where):
-                process_and_branch(queries[i], and_branch)
+            queries = []
+            for and_branch in self.where:
+                #Duplicate the query for all the "OR"s
+                queries.append(Query(query._Query__kind, **query_kwargs))
+                queries[-1].update(query) #Make sure we copy across filters (e.g. class =)
+                process_and_branch(queries[-1], and_branch)
 
             if all([ self.pk_col in qry for qry in queries ]): #If all queries have a filter on the PK, we can use a Get
                 self.included_pks = [ qry[self.pk_col] for qry in queries ]
