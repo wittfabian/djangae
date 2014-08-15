@@ -53,7 +53,6 @@ OPERATORS_MAP = {
     'startswith': None,
     'range': None,
     'year': None,
-    'gt_and_lt': None, #Special case inequality combined filter
     'iexact': None,
 }
 
@@ -192,12 +191,15 @@ def normalize_query(query_where, connection, negated=False, columns=None):
                 elif final_op == "startswith":
                     #You can emulate starts with by adding the last unicode char
                     #to the value, then doing <=. Genius.
-                    end_value = value
+                    if value.endswith("%"):
+                        value = value[:-1]
+
+                    end_value = value[:]
                     if isinstance(end_value, str):
                         end_value = end_value.decode("utf-8")
                     end_value += u'\ufffd'
-                    output.append((column, '>=', value))
-                    output.append((column, '<=', end_value))
+                    output.append([(column, '>=', value)])
+                    output.append([(column, '<=', end_value)])
                 else:
                     raise ValueError()
 

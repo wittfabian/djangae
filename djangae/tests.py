@@ -121,6 +121,10 @@ class BackendTests(TestCase):
             self.assertEqual(1, get_mock.call_count)
 
         with mock.patch("djangae.db.backends.appengine.commands.datastore.Query.Run", return_value=[]) as query_mock:
+            list(TestUser.objects.all())
+            self.assertEqual(1, query_mock.call_count)
+
+        with mock.patch("djangae.db.backends.appengine.commands.datastore.Query.Run", return_value=[]) as query_mock:
             list(TestUser.objects.filter(username="test"))
             self.assertEqual(1, query_mock.call_count)
 
