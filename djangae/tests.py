@@ -1,4 +1,10 @@
 import os
+
+try:
+    import mock
+except ImportError:
+    raise RuntimeError("You must have mock installed to run the Djangae tests")
+
 from cStringIO import StringIO
 import datetime
 import unittest
@@ -105,6 +111,30 @@ class BackendTests(TestCase):
         #query then it's a match
         entity["name"] = [ "Bob", "Fred", "Dave" ]
         self.assertTrue(entity_matches_query(entity, query)) #ListField test
+
+
+    def test_gae_conversion(self):
+        #A PK IN query should result in a single get by key
+
+        with mock.patch("djangae.db.backends.appengine.commands.datastore.Get", return_value=[]) as get_mock:
+            list(TestUser.objects.filter(pk__in=[1, 2, 3])) #Force the query to run
+            self.assertEqual(1, get_mock.call_count)
+
+        with mock.patch("djangae.db.backends.appengine.commands.datastore.Query.Run", return_value=[]) as query_mock:
+            list(TestUser.objects.filter(username="test"))
+            self.assertEqual(1, query_mock.call_count)
+
+        with mock.patch("djangae.db.backends.appengine.commands.datastore.MultiQuery.Run", return_value=[]) as query_mock:
+            list(TestUser.objects.filter(username__in=["test", "cheese"]))
+            self.assertEqual(1, query_mock.call_count)
+
+        with mock.patch("djangae.db.backends.appengine.commands.datastore.Get", return_value=[]) as get_mock:
+            list(TestUser.objects.filter(pk=1))
+            self.assertEqual(1, get_mock.call_count)
+
+        with mock.patch("djangae.db.backends.appengine.commands.datastore.MultiQuery.Run", return_value=[]) as query_mock:
+            list(TestUser.objects.filter(username__startswith="test"))
+            self.assertEqual(1, query_mock.call_count)
 
 class ModelFormsetTest(TestCase):
     def test_reproduce_index_error(self):

@@ -189,6 +189,15 @@ def normalize_query(query_where, connection, negated=False, columns=None):
                         raise ValueError("IN queries must be supplied a list of values")
 
                     output.extend([ [(column, '=', x)] for x in value ])
+                elif final_op == "startswith":
+                    #You can emulate starts with by adding the last unicode char
+                    #to the value, then doing <=. Genius.
+                    end_value = value
+                    if isinstance(end_value, str):
+                        end_value = end_value.decode("utf-8")
+                    end_value += u'\ufffd'
+                    output.append((column, '>=', value))
+                    output.append((column, '<=', end_value))
                 else:
                     raise ValueError()
 
@@ -296,7 +305,6 @@ class SelectCommand(object):
         self.keys_only = False #FIXME: This should be used where possible
 
         self.exact_pk = None
-        self.included_pks = []
         self.excluded_pks = set()
 
         self.has_inequality_filter = False
@@ -482,9 +490,9 @@ class SelectCommand(object):
                 queries[-1].update(query) #Make sure we copy across filters (e.g. class =)
                 process_and_branch(queries[-1], and_branch)
 
-            if all([ self.pk_col in qry for qry in queries ]): #If all queries have a filter on the PK, we can use a Get
-                self.included_pks = [ qry[self.pk_col] for qry in queries ]
-                query = None
+            if all([ "__key__ =" in qry for qry in queries ]): #If all queries have a filter on the PK, we can use a Get
+                included_pks = [ qry["__key__ ="] for qry in queries ]
+                query = QueryByKeys(query, included_pks, ordering)
             else:
                 query = datastore.MultiQuery(queries, ordering)
         else:
@@ -493,7 +501,11 @@ class SelectCommand(object):
                     process_and_branch(query, self.where[0])
                 else:
                     process_and_branch(query, self.where)
-            query.Order(*ordering)
+
+            if "__key__ =" in query:
+                query = QueryByKeys(query, [ query["__key__ ="] ], ordering)
+            else:
+                query.Order(*ordering)
 
         DJANGAE_LOG.debug("Select query: {0}, {1}".format(self.model.__name__, self.where))
         return query
