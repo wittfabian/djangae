@@ -447,13 +447,10 @@ class SelectCommand(object):
 
     def _build_gae_query(self):
         """ Build and return the Datstore Query object. """
-        combined_filters = []
-
         query_kwargs = {}
 
         if self.distinct:
             query_kwargs["distinct"] = True
-
         if self.keys_only:
             query_kwargs["keys_only"] = self.keys_only
         elif self.projection:
@@ -466,7 +463,6 @@ class SelectCommand(object):
 
         if has_concrete_parents(self.model) and not self.model._meta.proxy:
             query["class ="] = self.model._meta.db_table
-
 
         ordering = []
         for order in self.ordering:
@@ -516,74 +512,6 @@ class SelectCommand(object):
                 query.Order(*ordering)
 
         DJANGAE_LOG.debug("Select query: {0}, {1}".format(self.model.__name__, self.where))
-        return query
-
-        for column, op, value in self.where:
-            if column == self.pk_col:
-                column = "__key__"
-
-            final_op = OPERATORS_MAP.get(op)
-            if final_op is None:
-                if op in REQUIRES_SPECIAL_INDEXES:
-                    add_special_index(self.model, column, op) #Add the index if we can (e.g. on dev_appserver)
-
-                    if op not in special_indexes_for_column(self.model, column):
-                        raise RuntimeError("There is a missing index in your djangaeidx.yaml - \n\n{0}:\n\t{1}: [{2}]".format(
-                            self.model, column, op)
-                        )
-
-                    indexer = REQUIRES_SPECIAL_INDEXES[op]
-                    column = indexer.indexed_column_name(column)
-                    value = indexer.prep_value_for_query(value)
-                    query["%s =" % column] = value
-                else:
-                    if op == "in":
-                        combined_filters.append((column, op, value))
-                    elif op == "gt_and_lt":
-                        combined_filters.append((column, op, value))
-                    elif op == "isnull":
-                        query["%s =" % column] = None
-                    elif op == "startswith":
-                        #You can emulate starts with by adding the last unicode char
-                        #to the value, then doing <=. Genius.
-                        query["%s >=" % column] = value
-                        if isinstance(value, str):
-                            value = value.decode("utf-8")
-                        value += u'\ufffd'
-                        query["%s <=" % column] = value
-                    else:
-                        raise NotImplementedError("Unimplemented operator {0}".format(op))
-            else:
-                query["%s %s" % (column, final_op)] = value
-
-
-
-        if combined_filters:
-            queries = [ query ]
-            for column, op, value in combined_filters:
-                new_queries = []
-                for query in queries:
-                    if op == "in":
-                        for val in value:
-                            new_query = datastore.Query(self.db_table)
-                            new_query.update(query)
-                            new_query["%s =" % column] = val
-                            new_queries.append(new_query)
-                    elif op == "gt_and_lt":
-                        for tmp_op in ("<", ">"):
-                            new_query = datastore.Query(self.db_table)
-                            new_query.update(query)
-                            new_query["%s %s" % (column, tmp_op)] = value
-                            new_queries.append(new_query)
-                queries = new_queries
-
-            query = datastore.MultiQuery(queries, ordering)
-
-        elif self.included_pks:
-            query = QueryByKeys(query, self.included_pks, ordering)
-
-        elif ordering:
-            query.Order(*ordering)
         return query
 
     def _do_fetch(self):
