@@ -29,6 +29,7 @@ from google.appengine.ext import testbed
 from google.appengine.api.datastore import Key
 
 #DJANGAE
+from djangae.utils import find_project_root
 from djangae.db.exceptions import DatabaseError, NotSupportedError, CouldBeSupportedError
 from djangae.db.utils import (
     decimal_to_string,
@@ -425,7 +426,7 @@ class DatabaseCreation(BaseDatabaseCreation):
         self.testbed.init_logservice_stub()
         self.testbed.init_mail_stub()
         self.testbed.init_memcache_stub()
-        self.testbed.init_taskqueue_stub()
+        self.testbed.init_taskqueue_stub(root_path=find_project_root())
         self.testbed.init_urlfetch_stub()
         self.testbed.init_user_stub()
         self.testbed.init_xmpp_stub()
