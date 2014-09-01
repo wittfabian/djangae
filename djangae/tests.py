@@ -6,6 +6,7 @@ from string import letters
 
 # LIBRARIES
 from django.core.files.uploadhandler import StopFutureHandlers
+from django.core.cache import cache
 from django.db import IntegrityError, models
 from django.db.models.query import Q
 from django.forms import ModelForm
@@ -125,6 +126,26 @@ class ModelFormsetTest(TestCase):
         request = factory.post('/', data=data)
 
         TestModelFormSet(request.POST, request.FILES)
+
+
+class CacheTests(TestCase):
+
+    def test_cache_class(self):
+        """
+            Test that the cache has the right class
+        """
+        from djangae.core.cache.backends import AppEngineMemcacheCache
+        self.assertEqual(cache.__class__, AppEngineMemcacheCache)
+
+    def test_cache_set(self):
+        cache.set('test?', 'yes!')
+        self.assertEqual(cache.get('test?'), 'yes!')
+
+    def test_cache_timeout(self):
+        cache.set('test?', 'yes!', 1)
+        import time
+        time.sleep(1)
+        self.assertEqual(cache.get('test?'), None)
 
 
 class TransactionTests(TestCase):
@@ -742,7 +763,7 @@ class BlobstoreFileUploadHandlerTest(TestCase):
         self.assertIsNotNone(self.uploader.blobkey)
 
 class ApplicationTests(TestCase):
-    
+
     @unittest.skipIf(webtest is NotImplemented, "pip install webtest to run functional tests")
     def test_environ_is_patched_when_request_processed(self):
         def application(environ, start_response):
