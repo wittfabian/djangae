@@ -155,7 +155,7 @@ class QueryByKeys(object):
 
 
 class SelectCommand(object):
-    def __init__(self, connection, query, keys_only=False, all_fields=False):
+    def __init__(self, connection, query, keys_only=False):
 
         self.original_query = query
         self.connection = connection
@@ -184,28 +184,31 @@ class SelectCommand(object):
 
         if keys_only:
             self.queried_fields = [ opts.pk.column ]
-        elif not all_fields:
-            for x in query.select:
-                if isinstance(x, tuple):
-                    #Django < 1.6 compatibility
-                    self.queried_fields.append(x[1])
-                else:
-                    self.queried_fields.append(x.col[1])
-
-                    if x.lookup_type == 'year':
-                        assert self.distinct_on_field is None
-                        self.distinct_on_field = x.col[1]
-                        self.distinct_field_convertor = field_conv_year_only
-                    elif x.lookup_type == 'month':
-                        assert self.distinct_on_field is None
-                        self.distinct_on_field = x.col[1]
-                        self.distinct_field_convertor = field_conv_month_only
-                    elif x.lookup_type == 'day':
-                        assert self.distinct_on_field is None
-                        self.distinct_on_field = x.col[1]
-                        self.distinct_field_convertor = field_conv_day_only
+        else:
+            if query.deferred_loading[0] and not query.deferred_loading[1]:
+                self.queried_fields = [ opts.pk.column ] + list(query.deferred_loading[0])
+            else:
+                for x in query.select:
+                    if isinstance(x, tuple):
+                        #Django < 1.6 compatibility
+                        self.queried_fields.append(x[1])
                     else:
-                        raise NotSupportedError("Unhandled lookup type: {0}".format(x.lookup_type))
+                        self.queried_fields.append(x.col[1])
+
+                        if x.lookup_type == 'year':
+                            assert self.distinct_on_field is None
+                            self.distinct_on_field = x.col[1]
+                            self.distinct_field_convertor = field_conv_year_only
+                        elif x.lookup_type == 'month':
+                            assert self.distinct_on_field is None
+                            self.distinct_on_field = x.col[1]
+                            self.distinct_field_convertor = field_conv_month_only
+                        elif x.lookup_type == 'day':
+                            assert self.distinct_on_field is None
+                            self.distinct_on_field = x.col[1]
+                            self.distinct_field_convertor = field_conv_day_only
+                        else:
+                            raise NotSupportedError("Unhandled lookup type: {0}".format(x.lookup_type))
 
 
         #Projection queries don't return results unless all projected fields are
