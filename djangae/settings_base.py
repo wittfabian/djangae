@@ -13,9 +13,3 @@ DATABASES = {
 }
 
 GENERATE_SPECIAL_INDEXES_DURING_TESTING = False
-
-CACHES = {
-    'default': {
-        'BACKEND': 'djangae.core.cache.backends.AppEngineMemcacheCache'
-    }
-}
