@@ -43,3 +43,6 @@ LOGGING = {
         },
     }
 }
+
+
+TEST_RUNNER = 'djangae.test_runner.DjangaeTestSuiteRunner'
