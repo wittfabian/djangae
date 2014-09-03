@@ -130,13 +130,6 @@ class ModelFormsetTest(TestCase):
 
 class CacheTests(TestCase):
 
-    def test_cache_class(self):
-        """
-            Test that the cache has the right class
-        """
-        from djangae.core.cache.backends import AppEngineMemcacheCache
-        self.assertEqual(cache.__class__, AppEngineMemcacheCache)
-
     def test_cache_set(self):
         cache.set('test?', 'yes!')
         self.assertEqual(cache.get('test?'), 'yes!')
