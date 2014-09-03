@@ -26,7 +26,7 @@ from djangae.db.exceptions import NotSupportedError
 from djangae.db.constraints import UniqueMarker
 from djangae.indexing import add_special_index
 from djangae.db.utils import entity_matches_query
-from djangae.db.backends.appengine.commands import normalize_query
+from djangae.db.backends.appengine.commands import normalize_query, expand_where
 from djangae.db import transaction
 from djangae.fields import ComputedCharField
 
@@ -228,6 +228,36 @@ class QueryNormalizationTests(TestCase):
         [ [(column, operator, value), (column, operator, value) ]] <- AND only query
         [ [(column, operator, value)], [(column, operator, value) ]] <- OR query, of multiple ANDs
     """
+
+    def test_expansion(self):
+        connection = connections['default']
+
+        #Basic AND test
+        qs = TestUser.objects.filter(username="test1").filter(email="test@example.com").all()
+        self.assertEqual([("username", "=", "test1"), ("email", "=", "test@example.com")], expand_where(qs.query.where, connection))
+
+        #Basic OR test
+        qs = TestUser.objects.filter(Q(username="test1") | Q(username="test2")).all()
+        self.assertEqual([[("username", "=", "test1")], [("username", "=", "test2")]], expand_where(qs.query.where, connection))
+
+        #In queries should be expanded to a series of ORs
+        qs = TestUser.objects.filter(username__in=["test1", "test2"]).all()
+        self.assertEqual([[("username", "=", "test1")], [("username", "=", "test2")]], expand_where(qs.query.where, connection))
+
+        #Startswith should be expanded to a bounded AND query
+        qs = TestUser.objects.filter(username__startswith="test").all()
+        self.assertEqual([("username", ">=", "test"), ("username", "<", "test" + u'\ufffd')], expand_where(qs.query.where, connection))
+
+        #Negated exact should be expanded to a >/< OR
+        qs = TestUser.objects.exclude(username="test").all()
+        self.assertEqual([[("username", "<", "test")], [("username", ">", "test")]], expand_where(qs.query.where, connection))
+
+        #Negated IN should become a series of < > OR statements
+        qs = TestUser.objects.exclude(username__in=["test1", "test2"]).all()
+        self.assertEqual(
+            [[("username", "<", "test1"), ("username", ">", "test1")],[("username", "<", "test2"), ("username", ">", "test2")]],
+            expand_where(qs.query.where, connection)
+        )
 
     def test_and_queries(self):
         connection = connections['default']

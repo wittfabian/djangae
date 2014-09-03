@@ -10,7 +10,7 @@ from django.core.cache import cache
 from django.db.backends.mysql.compiler import SQLCompiler
 from django.db import IntegrityError
 from django.db.models.sql.datastructures import EmptyResultSet
-from django.db.models.sql.where import AND, OR
+from django.db.models.sql.where import AND, OR, WhereNode
 from django import dispatch
 from google.appengine.api import datastore
 from google.appengine.api.datastore import Query
@@ -119,6 +119,67 @@ def log_once(logging_call, text, args):
     log_once.logged.add(identifier)
 
 log_once.logged = set()
+
+
+def expand_where(where, connection, result=None, negated=False):
+    """
+        Given a Django where query, this turns the tree into a list of lists or tuples. A list of lists indicates an
+        OR, and a list of tuples indicates an AND. We expand certain queries (e.g. IN) into more basic equivalents (e.g.
+        a series of ORs), and do any field conversions.
+    """
+
+    result = [] if result is None else result
+    if isinstance(where, WhereNode):
+        if where.negated:
+            negated = not negated
+
+        for child in where.children:
+            if isinstance(child, WhereNode) and len(child.children) == 1:
+                child = child.children[0]
+
+            if where.connector == OR:
+                this_level = []
+                result.append(this_level)
+                expand_where(child, connection, this_level, negated=negated)
+            else:
+                this_level = result
+                expand_where(child, connection, this_level, negated=negated)
+
+    else:
+        column, op, value = parse_constraint(where, connection)
+        final_op = OPERATORS_MAP[op]
+
+        if final_op is None:
+            #Special cases!
+            if op == "in":
+                for subvalue in value:
+                    if negated:
+                        result.append([(column, "<", subvalue), (column, ">", subvalue)])
+                    else:
+                        result.append([(column, "=", subvalue)])
+            elif op == "startswith":
+                if value.endswith("%"):
+                    value = value[:-1]
+
+                if negated:
+                    result.append([(column, "<", value)])
+                    result.append([(column, ">=", value)])
+                else:
+                    result.append((column, ">=", value))
+                    result.append((column, "<", value + u'\ufffd'))
+            else:
+                raise CouldBeSupportedError("Unhandled operation: %s" % op)
+        else:
+            if negated:
+                if final_op == "=":
+                    result.append([(column, "<", value)])
+                    result.append([(column, ">", value)])
+                else:
+                    raise CouldBeSupportedError("Unhandled negated operation: %s" % op)
+            else:
+                result.append((column, final_op, value))
+
+    return result
 
 def explode(target):
     pass
