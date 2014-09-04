@@ -181,7 +181,7 @@ def normalize_query(node, connection, negated=False):
             if isinstance(end_value, str):
                 end_value = end_value.decode("utf-8")
             end_value += u'\ufffd'
-            return ('OR', [(column, '<=', end_value), (column, '>=', value)])
+            return ('OR', [(column, '<=', end_value), (column, '>=', end_value)])
         return (column, _op, value)
     else:
         if node.negated:
