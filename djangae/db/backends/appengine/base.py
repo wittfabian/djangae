@@ -262,8 +262,6 @@ class DatabaseOperations(BaseDatabaseOperations):
         if value is None:
             return None
 
-        value = field.get_db_prep_save(value, self.connection)
-
         db_type = self.connection.creation.db_type(field)
 
         if db_type == 'string' or db_type == 'text':

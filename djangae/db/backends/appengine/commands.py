@@ -153,6 +153,9 @@ class QueryByKeys(object):
 
         return ( x for x in results if utils.entity_matches_query(x, self.query) )
 
+    def Count(self, limit, offset):
+        return len([ x for x in self.Run(limit, offset) ])
+
 
 class SelectCommand(object):
     def __init__(self, connection, query, keys_only=False):
@@ -315,10 +318,17 @@ class SelectCommand(object):
                 packed, value = constraint.process(op, value, self.connection)
                 alias, column, db_type = packed
 
+                #Don't ask me why, but constraint.process on isnull wipes out the value (it returns an empty list)
+                # so we have to special case this to use the annotation value instead
+                if op == "isnull":
+                    value = annotation
+
                 if op not in ("in", "year") and isinstance(value, list):
                     if len(value[:2]) > 1:
                         raise ValueError("Only IN queries can lookup on a list of values")
+
                     value = value[0]
+
 
                 if isinstance(value, (list, tuple)):
                     value = [ self.connection.ops.prep_lookup_value(self.model, x, constraint.field, constraint=constraint) for x in value]
