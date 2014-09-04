@@ -3,14 +3,14 @@ from datetime import datetime
 import logging
 import copy
 from functools import partial
-from itertools import chain
+from itertools import chain, product
 
 #LIBRARIES
 from django.core.cache import cache
 from django.db.backends.mysql.compiler import SQLCompiler
 from django.db import IntegrityError
 from django.db.models.sql.datastructures import EmptyResultSet
-from django.db.models.sql.where import AND, OR
+from django.db.models.sql.where import AND, OR, Constraint
 from django import dispatch
 from google.appengine.api import datastore
 from google.appengine.api.datastore import Query
@@ -124,15 +124,91 @@ def log_once(logging_call, text, args):
 log_once.logged = set()
 
 
-def normalize_query(query_where):
-    output = []
+def parse_constraint(child, connection):
+    #First, unpack the constraint
+    constraint, op, annotation, value = child
+    was_list = isinstance(value, (list, tuple))
+    packed, value = constraint.process(op, value, connection)
+    alias, column, db_type = packed
 
-    #1. Explode IN queries into an OR tree e.g. (OR, (x = 1), (x = 2))
-    #2. Explode != queries into (AND, (x < y), (x > y))
-    #3. Explode startswith into x > y && x < y + u'\ufffd'
-    #4. Convert to disjunctive normal form
+    if op not in REQUIRES_SPECIAL_INDEXES:
+        #Don't convert if this op requires special indexes, it will be handled there
+        value = [ connection.ops.prep_lookup_value(constraint.field.model, x, constraint.field, constraint=constraint) for x in value]
+        if not was_list:
+            value = value[0]
+    else:
+        if not was_list:
+            value = value[0]
 
-    return output
+        add_special_index(constraint.field.model, column, op) #Add the index if we can (e.g. on dev_appserver)
+
+        if op not in special_indexes_for_column(constraint.field.model, column):
+            raise RuntimeError("There is a missing index in your djangaeidx.yaml - \n\n{0}:\n\t{1}: [{2}]".format(
+                constraint.field.model, column, op)
+            )
+
+        indexer = REQUIRES_SPECIAL_INDEXES[op]
+        column = indexer.indexed_column_name(column)
+        value = indexer.prep_value_for_query(value)
+        op = "exact" #Perhaps this should be supplied by the indexer?
+
+    return column, op, value
+
+
+def normalize_query(node, connection, negated=False):
+    """
+        Converts a django_where_tree which is CNF to a DNF for use in the datastore.
+        This function does a lot of heavy lifting so optimization is welcome.
+
+        The connection is needed for calculating the values on the literals, it would
+        be nice if we can remove that so this only has one task, but it's fine for now
+    """
+    if isinstance(node, tuple) and isinstance(node[0], Constraint):
+        column, op, value = parse_constraint(node, connection)
+        if op == 'in': # Explode INs into OR
+            if not isinstance(value, (list, tuple, set)):
+                raise ValueError("IN queries must be supplied a list of values")
+            return ('OR', [(column, '=', x) for x in value])
+        _op = OPERATORS_MAP[op]
+        if negated and _op == '=': # Explode
+            return ('OR', [(column, '>', value), (column, '<', value)])
+        elif _op == "startswith":
+            #You can emulate starts with by adding the last unicode char
+            #to the value, then doing <=. Genius.
+            if value.endswith("%"):
+                value = value[:-1]
+            end_value = value[:]
+            if isinstance(end_value, str):
+                end_value = end_value.decode("utf-8")
+            end_value += u'\ufffd'
+            return ('OR', [(column, '<=', end_value), (column, '>=', value)])
+        return (column, _op, value)
+    else:
+        if node.negated:
+            negated = True
+        if len(node.children) > 1: # If there is more than one child then attempt to reduce
+            exploded = (node.connector, [normalize_query(child, connection, negated=negated) for child in node.children])
+            if node.connector == 'AND':
+                if len(exploded[1]) == 2 and [x[0] for x in exploded[1]].count('OR') == 1:
+                    _or = [x for x in exploded[1] if x[0] == 'OR' ][0]
+                    tar = [x for x in exploded[1] if x[0] != 'OR'][0]
+                    prods = [('AND', list(x)) for x in product([tar], _or[1])]
+                    finals = []
+                    for prod in prods:
+                        if any(x[0] == 'AND' for x in prod[1]):
+                            _ands = [x for x in prod[1] if x[0] == 'AND']
+                            tar = [x for x in prod[1] if x[0] != 'AND']
+                            finals.append(('AND', list(chain(_ands[0][1], tar))))
+                        else:
+                            finals.append(prod)
+                    return ('OR', finals)
+            elif node.connector == 'OR':
+                if all(x[0] == 'OR' for x in exploded[1]):
+                    return ('OR', list(chain.from_iterable((x[1] for x in exploded[1]))))
+            return exploded
+        else:
+            return normalize_query(node.children[0], connection, negated=negated)
+
 
 
 class QueryByKeys(object):
