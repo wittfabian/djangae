@@ -498,9 +498,6 @@ class SelectCommand(object):
             ordering.append((order, direction))
 
         def process_and_branch(query, and_branch):
-            if and_branch[-1][0][0] == 'OR': #Nested ORs can't be supported
-                raise NotSupportedError("Probably too many inequality filters, where was {}".format(self.where))
-
             for column, op, value in and_branch[-1]:
                 if column == self.pk_col:
                     column = "__key__"
