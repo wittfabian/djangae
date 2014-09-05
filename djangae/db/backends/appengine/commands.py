@@ -230,6 +230,10 @@ def normalize_query(node, connection, negated=False, filtered_columns=None):
                         else:
                             finals.append(prod)
                     return ('OR', finals)
+                elif len(exploded[1]) == 2 and [x[0] for x in exploded[1]].count('OR') == 2:
+                    ret = ('OR', [ ('AND', list(x)) for x in product(exploded[1][0][1], exploded[1][1][1]) ])
+                    return ret
+
             elif node.connector == 'OR':
                 if all(x[0] == 'OR' for x in exploded[1]):
                     return ('OR', list(chain.from_iterable((x[1] for x in exploded[1]))))
@@ -524,6 +528,8 @@ class SelectCommand(object):
 
             operator = self.where[0]
             assert operator == 'OR'
+#            print self.where
+
 
             for and_branch in self.where[1]:
                 #Duplicate the query for all the "OR"s
