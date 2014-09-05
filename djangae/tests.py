@@ -503,11 +503,9 @@ class EdgeCaseTests(TestCase):
         self.assertEqual(2, len(results))
         self.assertItemsEqual(["A", "B"], [x.username for x in results])
 
-        with self.assertRaises(NotSupportedError):
-            #FIXME: This should be special cased! We can just remove the username from the IN list
-            results = TestUser.objects.filter(username__in=["A", "B"]).exclude(username="A")
-            self.assertEqual(1, len(results), results)
-            self.assertItemsEqual(["B"], [x.username for x in results])
+        results = TestUser.objects.filter(username__in=["A", "B"]).exclude(username="A")
+        self.assertEqual(1, len(results), results)
+        self.assertItemsEqual(["B"], [x.username for x in results])
 
         results = TestUser.objects.filter(username__lt="E")
         self.assertEqual(4, len(results))
@@ -518,7 +516,7 @@ class EdgeCaseTests(TestCase):
 
         #Double exclude not supported
         with self.assertRaises(NotSupportedError):
-            list(TestUser.objects.exclude(username="E").exclude(username="A"))
+            results = list(TestUser.objects.exclude(username="E").exclude(username="A"))
 
         results = TestUser.objects.filter(username="A", email="test@example.com")
         self.assertEqual(1, len(results))

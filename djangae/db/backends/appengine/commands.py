@@ -182,6 +182,10 @@ def normalize_query(node, connection, negated=False, filtered_columns=None):
             if not isinstance(value, (list, tuple, set)):
                 raise ValueError("IN queries must be supplied a list of values")
             return ('OR', [(column, '=', x) for x in value])
+
+        if op not in OPERATORS_MAP:
+            raise NotSupportedError("Unsupported operator %s" % op)
+
         _op = OPERATORS_MAP[op]
         if negated and _op == '=': # Explode
             return ('OR', [(column, '>', value), (column, '<', value)])
@@ -523,13 +527,12 @@ class SelectCommand(object):
                 self.where = ('OR', [(u'AND', [ self.where ])])
             elif isinstance(self.where, tuple) and self.where[0] == 'AND':
                 self.where = ('OR', [self.where])
-            elif isinstance(self.where, tuple) and self.where[0] == 'OR' and isinstance(self.where[1][0], tuple):
+            elif isinstance(self.where, tuple) and self.where[0] == 'OR' and isinstance(self.where[1][0], tuple) and self.where[1][0][0] != 'AND':
                 self.where = ('OR', [ ('AND', [x]) for x in self.where[-1] ])
 
             operator = self.where[0]
             assert operator == 'OR'
-#            print self.where
-
+            print query._Query__kind, self.where
 
             for and_branch in self.where[1]:
                 #Duplicate the query for all the "OR"s
