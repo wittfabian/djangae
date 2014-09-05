@@ -242,11 +242,22 @@ def entity_matches_query(entity, query):
         raise CouldBeSupportedError("We just need to separate the multiquery into 'queries' then everything should work")
 
     for query in queries:
-        comparisons = chain([ ("kind", "=", "_Query__kind") ], [ tuple(x.split(" ") + [ x ]) for x in query.keys() ])
+        comparisons = chain(
+            [("kind", "=", "_Query__kind") ],
+            [ tuple(x.split(" ") + [ x ]) for x in query.keys()]
+        )
+
         for ent_attr, op, query_attr in comparisons:
+            if ent_attr == "__key__":
+                continue
+
             op = OPERATORS[op] #We want this to throw if there's some op we don't know about
 
-            ent_attr = entity.get(ent_attr) or getattr(entity, ent_attr, None)
+            if ent_attr == "kind":
+                ent_attr = entity.kind()
+            else:
+                ent_attr = entity.get(ent_attr)
+
             if callable(ent_attr):
                 #entity.kind() is a callable, so we need this to save special casing it in a more
                 #ugly way
@@ -258,7 +269,7 @@ def entity_matches_query(entity, query):
                 #The query value can be a list of ANDed values
                 query_attrs = query_attr
 
-            query_attrs = [ query.get(x) or getattr(query, x) for x in query_attrs ]
+            query_attrs = [ getattr(query, x) if x == "_Query__kind" else query.get(x) for x in query_attrs ]
 
             if not isinstance(ent_attr, (list, tuple)):
                 ent_attr = [ ent_attr ]
