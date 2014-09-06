@@ -275,13 +275,16 @@ def normalize_query(node, connection, negated=False, filtered_columns=None, _ine
                     return ('OR', list(chain.from_iterable((x[1] for x in exploded[1]))))
             return exploded
         else:
-            return normalize_query(
+            exploded = normalize_query(
                 node.children[0],
                 connection,
                 negated=negated,
                 filtered_columns=filtered_columns,
                 _inequality_property=_inequality_property
             )
+            if len(exploded[1]) and exploded[0] == exploded[1][0][0]: # crush any single child 'OR' or 'AND' hangover
+              return (exploded[0], [x for x in exploded[1][0][1]])
+            return exploded
 
 
 
