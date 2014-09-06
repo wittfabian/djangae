@@ -52,7 +52,6 @@ OPERATORS_MAP = {
     'in': None,
     'startswith': None,
     'range': None,
-    'year': None
 }
 
 REVERSE_OP_MAP = {
@@ -539,14 +538,14 @@ class SelectCommand(object):
                 if column == self.pk_col:
                     column = "__key__"
 
-                    if not isinstance(value, datastore.Key):
-                        value = get_datastore_key(self.model, value)
-
                     if op == "=" and "__key__ =" in query:
                         #We've already done an exact lookup on a key, this query can't return anything!
                         raise EmptyResultSet()
                     elif op == "=" and value is None:
                         raise EmptyResultSet() #You can't filter on None and get something back
+
+                    if not isinstance(value, datastore.Key):
+                        value = get_datastore_key(self.model, value)
 
                 key = "%s %s" % (column, op)
                 if key in query:
