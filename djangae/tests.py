@@ -238,7 +238,8 @@ class QueryNormalizationTests(TestCase):
             ('AND', [("username", "<=", "test"), ("email", "<", "test@example.com")]),
         ])
 
-        self.assertEqual(expected, normalize_query(qs.query.where, connection=connection))
+        with self.assertRaises(NotSupportedError):
+            normalize_query(qs.query.where, connection=connection)
 
     def test_or_queries(self):
 
@@ -581,12 +582,8 @@ class EdgeCaseTests(TestCase):
         self.assertEqual(5, TestUser.objects.count())
         self.assertEqual(2, TestUser.objects.filter(email="test3@example.com").count())
         self.assertEqual(3, TestUser.objects.exclude(email="test3@example.com").count())
-        self.assertEqual(1,
-            TestUser.objects.filter(username="A").exclude(email="test3@example.com").count())
-
-        with self.assertRaises(NotSupportedError):
-            list(TestUser.objects.exclude(username="E").exclude(username="A"))
-
+        self.assertEqual(1, TestUser.objects.filter(username="A").exclude(email="test3@example.com").count())
+        self.assertEqual(3, TestUser.objects.exclude(username="E").exclude(username="A").count())
 
     def test_deletion(self):
         count = TestUser.objects.count()
