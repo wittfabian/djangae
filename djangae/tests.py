@@ -514,9 +514,12 @@ class EdgeCaseTests(TestCase):
         results = TestUser.objects.filter(username__lte="E")
         self.assertEqual(5, len(results))
 
-        #Double exclude not supported
+        #Double exclude on different properties not supported
         with self.assertRaises(NotSupportedError):
-            results = list(TestUser.objects.exclude(username="E").exclude(username="A"))
+            list(TestUser.objects.exclude(username="E").exclude(email="A"))
+
+        results = list(TestUser.objects.exclude(username="E").exclude(username="A"))
+        self.assertItemsEqual(["B", "C", "D"], [x.username for x in results ])
 
         results = TestUser.objects.filter(username="A", email="test@example.com")
         self.assertEqual(1, len(results))
@@ -537,9 +540,8 @@ class EdgeCaseTests(TestCase):
         self.assertEqual(1, len(results))
         self.assertItemsEqual(["A"], [x.username for x in results])
 
-        #Negated in not supported
-        with self.assertRaises(NotSupportedError):
-            list(TestUser.objects.all().exclude(username__in=["A"]))
+        results = list(TestUser.objects.all().exclude(username__in=["A"]))
+        self.assertItemsEqual(["B", "C", "D", "E"], [x.username for x in results ])
 
     @unittest.skip("We need to properly implement OR queries")
     def test_or_queryset(self):

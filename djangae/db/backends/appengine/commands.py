@@ -63,6 +63,7 @@ REVERSE_OP_MAP = {
     '<=':'lte',
 }
 
+INEQUALITY_OPERATORS = frozenset(['>', '<', '<=', '>='])
 
 def get_field_from_column(model, column):
     #FIXME: memoize this
@@ -162,7 +163,7 @@ def parse_constraint(child, connection):
     return column, op, value
 
 
-def normalize_query(node, connection, negated=False, filtered_columns=None):
+def normalize_query(node, connection, negated=False, filtered_columns=None, _inequality_property=None):
     """
         Converts a django_where_tree which is CNF to a DNF for use in the datastore.
         This function does a lot of heavy lifting so optimization is welcome.
@@ -170,6 +171,21 @@ def normalize_query(node, connection, negated=False, filtered_columns=None):
         The connection is needed for calculating the values on the literals, it would
         be nice if we can remove that so this only has one task, but it's fine for now
     """
+    _inequality_property = _inequality_property if _inequality_property is not None else []
+
+    def check_inequality_usage(_op, _column, _current_inequality):
+        if _op in INEQUALITY_OPERATORS:
+            if _current_inequality and _current_inequality[0] != _column:
+                raise NotSupportedError(
+                    "You can only specify inequality filters ({}) on one property. There is already one on {}, you're attempting to use one on {}".format(
+                        INEQUALITY_OPERATORS,
+                        _current_inequality[0],
+                        _column
+                    )
+                )
+            else:
+                #We have to use a list, because Python 2.x doesn't have 'nonlocal' :/
+                _current_inequality.append(_column)
 
     if isinstance(node, tuple) and isinstance(node[0], Constraint):
         column, op, value = parse_constraint(node, connection)
@@ -181,13 +197,22 @@ def normalize_query(node, connection, negated=False, filtered_columns=None):
         if op == 'in': # Explode INs into OR
             if not isinstance(value, (list, tuple, set)):
                 raise ValueError("IN queries must be supplied a list of values")
-            return ('OR', [(column, '=', x) for x in value])
+
+            if negated:
+                check_inequality_usage(">", column, _inequality_property)
+                return ('OR', [ ('OR', [(column, '>', x), (column, '<', x)]) for x in value ])
+            else:
+                return ('OR', [(column, '=', x) for x in value])
 
         if op not in OPERATORS_MAP:
             raise NotSupportedError("Unsupported operator %s" % op)
 
         _op = OPERATORS_MAP[op]
+
+        check_inequality_usage(_op, column, _inequality_property) #Check we aren't doing an additional inequality
+
         if negated and _op == '=': # Explode
+            check_inequality_usage('>', column, _inequality_property)
             return ('OR', [(column, '>', value), (column, '<', value)])
         elif op == "startswith":
             #You can emulate starts with by adding the last unicode char
@@ -198,6 +223,8 @@ def normalize_query(node, connection, negated=False, filtered_columns=None):
             if isinstance(end_value, str):
                 end_value = end_value.decode("utf-8")
             end_value += u'\ufffd'
+
+            check_inequality_usage('>=', column, _inequality_property)
             if not negated:
                 return ('AND', [(column, '>=', value), (column, '<', end_value)])
             else:
@@ -207,6 +234,7 @@ def normalize_query(node, connection, negated=False, filtered_columns=None):
             if (value and not negated) or (not value and negated): #We're checking for isnull=True
                 return (column, "=", None)
             else: #We're checking for isnull=False
+                check_inequality_usage('>', column, _inequality_property)
                 return ('OR', [(column, '>', None), (column, '<', None)])
         elif _op == None:
             raise NotSupportedError("Unhandled lookup type %s" % op)
@@ -219,7 +247,11 @@ def normalize_query(node, connection, negated=False, filtered_columns=None):
         if node.negated:
             negated = True
         if len(node.children) > 1: # If there is more than one child then attempt to reduce
-            exploded = (node.connector, [normalize_query(child, connection, negated=negated, filtered_columns=filtered_columns) for child in node.children])
+            exploded = (node.connector, [
+                normalize_query(child, connection, negated=negated, filtered_columns=filtered_columns, _inequality_property=_inequality_property)
+                for child in node.children
+            ])
+
             if node.connector == 'AND':
                 if len(exploded[1]) == 2 and [x[0] for x in exploded[1]].count('OR') == 1:
                     _or = [x for x in exploded[1] if x[0] == 'OR' ][0]
@@ -243,7 +275,13 @@ def normalize_query(node, connection, negated=False, filtered_columns=None):
                     return ('OR', list(chain.from_iterable((x[1] for x in exploded[1]))))
             return exploded
         else:
-            return normalize_query(node.children[0], connection, negated=negated, filtered_columns=filtered_columns)
+            return normalize_query(
+                node.children[0],
+                connection,
+                negated=negated,
+                filtered_columns=filtered_columns,
+                _inequality_property=_inequality_property
+            )
 
 
 
@@ -419,6 +457,19 @@ class SelectCommand(object):
         self.aggregate_type = "count" if self.is_count else None
         self._do_fetch()
 
+    def __eq__(self, other):
+        if not isinstance(other, self.__class__):
+            return False
+
+        return self.__repr__() == other.__repr__()
+
+    def __repr__(self):
+        return "<SelectCommand - SELECT {} FROM {} WHERE {}>".format(
+            ", ".join(self.queried_fields or []),
+            self.db_table,
+            self.where
+        )
+
     def _log(self):
         templ = """
             SELECT {0} FROM {1} WHERE {2}
@@ -510,13 +561,20 @@ class SelectCommand(object):
                 if column == self.pk_col:
                     column = "__key__"
 
+                    if not isinstance(value, datastore.Key):
+                        value = get_datastore_key(self.model, value)
+
                     if op == "=" and "__key__ =" in query:
                         #We've already done an exact lookup on a key, this query can't return anything!
                         raise EmptyResultSet()
                     elif op == "=" and value is None:
                         raise EmptyResultSet() #You can't filter on None and get something back
 
-                query["%s %s" % (column, op)] = value
+                key = "%s %s" % (column, op)
+                if key in query:
+                    query[key] = [ query[key], value ]
+                else:
+                    query[key] = value
 
         if self.where and self.where[-1]:
             queries = []
@@ -532,7 +590,7 @@ class SelectCommand(object):
 
             operator = self.where[0]
             assert operator == 'OR'
-            print query._Query__kind, self.where
+            #print query._Query__kind, self.where
 
             for and_branch in self.where[1]:
                 #Duplicate the query for all the "OR"s
