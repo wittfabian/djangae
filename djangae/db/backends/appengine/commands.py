@@ -470,31 +470,6 @@ class SelectCommand(object):
             self.where
         )
 
-    def _log(self):
-        templ = """
-            SELECT {0} FROM {1} WHERE {2}
-        """
-
-        select = ", ".join(self.projection) if self.projection else "*"
-        if self.aggregate_type:
-            select = "COUNT(*)"
-
-        where = str(self.gae_query)
-
-        final = templ.format(
-            select,
-            get_datastore_kind(self.model),
-            where
-        ).strip()
-
-        tmp = SQLCompiler(self.original_query, self.connection, None)
-        try:
-            sql, params = tmp.as_sql()
-            print(sql % params)
-        except:
-            print("Unable to print MySQL equivalent - empty query")
-        print(final)
-
     def _set_db_table(self):
         """ Work out which Datstore kind we should actually be querying. This allows for poly
             models, i.e. non-abstract parent models which we support by storing all fields for
