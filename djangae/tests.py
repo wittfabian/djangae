@@ -13,13 +13,15 @@ from django.forms import ModelForm
 from django.test import TestCase, RequestFactory
 from django.forms.models import modelformset_factory
 from google.appengine.api.datastore_errors import EntityNotFoundError
+from django.db import connections
+
 
 # DJANGAE
 from djangae.db.exceptions import NotSupportedError
 from djangae.db.constraints import UniqueMarker
 from djangae.indexing import add_special_index
 from djangae.db.utils import entity_matches_query
-from djangae.db.backends.appengine.commands import normalize_query
+from djangae.db.backends.appengine.commands import normalize_query, parse_constraint
 from djangae.db import transaction
 from djangae.fields import ComputedCharField
 
@@ -207,35 +209,42 @@ class QueryNormalizationTests(TestCase):
     """
 
     def test_and_queries(self):
+        connection = connections['default']
+
         qs = TestUser.objects.filter(username="test").all()
 
-        self.assertEqual([ ("username", "=", "test") ], normalize_query(qs.query.where))
+        self.assertEqual(("username", "=", "test"), normalize_query(qs.query.where, connection=connection))
 
         qs = TestUser.objects.filter(username="test", email="test@example.com")
 
-        expected = [
+        expected = ('AND', [ # Cannot be reduced
             ("username", "=", "test"),
             ("email", "=", "test@example.com")
-        ]
-        self.assertEqual(expected, normalize_query(qs.query.where))
-
+        ])
+        self.assertEqual(expected, normalize_query(qs.query.where, connection=connection))
+        #
         qs = TestUser.objects.filter(username="test").exclude(email="test@example.com")
-        expected = [
-            ("username", "=", "test"),
-            ("email", ">", "test@example.com"),
-            ("email", "<", "test@example.com")
-        ]
-        self.assertEqual(expected, normalize_query(qs.query.where))
+
+        expected = ('OR', [
+            ('AND', [("username", "=", "test"), ("email", ">", "test@example.com")]),
+            ('AND', [("username", "=", "test"), ("email", "<", "test@example.com")]),
+        ])
+
+        self.assertEqual(expected, normalize_query(qs.query.where, connection=connection))
 
         qs = TestUser.objects.filter(username__lte="test").exclude(email="test@example.com")
-        expected = [
-            ("username", "<=", "test"),
-            ("email", ">", "test@example.com"),
-            ("email", "<", "test@example.com")
-        ]
-        self.assertEqual(expected, normalize_query(qs.query.where))
+        expected = ('OR', [
+            ('AND', [("username", "<=", "test"), ("email", ">", "test@example.com")]),
+            ('AND', [("username", "<=", "test"), ("email", "<", "test@example.com")]),
+        ])
+
+        with self.assertRaises(NotSupportedError):
+            normalize_query(qs.query.where, connection=connection)
 
     def test_or_queries(self):
+
+        connection = connections['default']
+
         qs = TestUser.objects.filter(
             username="python").filter(
             Q(username__in=["ruby", "jruby"]) | (Q(username="php") & ~Q(username="perl"))
@@ -253,43 +262,49 @@ class QueryNormalizationTests(TestCase):
         # (OR: (AND: username='python', username = 'ruby'), (AND: username='python', username='jruby'), (AND: username='python', username='php', username < 'perl') \
         #      (AND: username='python', username='php', username > 'perl')
 
-        expected = [
-            [ ("username", "=", "python"), ("username", "=", "ruby") ],
-            [ ("username", "=", "python"), ("username", "=", "jruby") ],
-            [ ("username", "=", "python"), ("username", "=", "php"), ("username", "<", "perl") ],
-            [ ("username", "=", "python"), ("username", "=", "php"), ("username", ">", "perl") ],
-        ]
 
-        self.assertEqual(expected, normalize_query(qs.query.where))
+        expected = ('OR', [
+            ('AND', [('username', '=', 'python'), ('username', '=', 'ruby')]),
+            ('AND', [('username', '=', 'python'), ('username', '=', 'jruby')]),
+            ('AND', [('username', '=', 'php'), ('username', '>', 'perl'), ('username', '=', 'python')]),
+            ('AND', [('username', '=', 'php'), ('username', '<', 'perl'), ('username', '=', 'python')])
+        ])
+
+        self.assertEqual(expected, normalize_query(qs.query.where, connection=connection))
+        #
 
         qs = TestUser.objects.filter(username="test") | TestUser.objects.filter(username="cheese")
 
-        expected = [
-            [ ("username", "=", "test") ],
-            [ ("username", "=", "cheese") ]
-        ]
+        expected = ('OR', [
+            ("username", "=", "test"),
+            ("username", "=", "cheese"),
+        ])
 
-        self.assertEqual(expected, normalize_query(qs.query.where))
+        self.assertEqual(expected, normalize_query(qs.query.where, connection=connection))
+        #
+        # These tests need to be changed so they check the pk value is a key from Path
+        #
+        # qs = TestUser.objects.filter(pk__in=[1, 2, 3])
+        #
+        # expected = ('OR', [
+        #     ("id", "=", 1),
+        #     ("id", "=", 2),
+        #     ("id", "=", 3),
+        # ])
+        #
+        # import pdb; pdb.set_trace()
+        #
+        # self.assertEqual(expected, normalize_query(qs.query.where, connection=connection))
 
-        qs = TestUser.objects.filter(pk__in=[1, 2, 3])
-
-        expected = [
-            [ ("id", "=", 1) ],
-            [ ("id", "=", 2) ],
-            [ ("id", "=", 3) ]
-        ]
-
-        self.assertEqual(expected, normalize_query(qs.query.where))
-
-        qs = TestUser.objects.filter(pk__in=[1, 2, 3]).filter(username="test")
-
-        expected = [
-            [ ("id", "=", 1), ("username", "=", "test") ],
-            [ ("id", "=", 2), ("username", "=", "test") ],
-            [ ("id", "=", 3), ("username", "=", "test") ]
-        ]
-
-        self.assertEqual(expected, normalize_query(qs.query.where))
+        # qs = TestUser.objects.filter(pk__in=[1, 2, 3]).filter(username="test")
+        #
+        # expected = ('OR', [
+        #     ('AND', [("id", "=", 1), ('username', '=', "test")]),
+        #     ('AND', [("id", "=", 2), ('username', '=', "test")]),
+        #     ('AND', [("id", "=", 3), ('username', '=', "test")]),
+        # ])
+        #
+        # self.assertEqual(expected, normalize_query(qs.query.where, connection=connection))
 
 
 class ModelWithUniques(models.Model):
@@ -500,9 +515,12 @@ class EdgeCaseTests(TestCase):
         results = TestUser.objects.filter(username__lte="E")
         self.assertEqual(5, len(results))
 
-        #Double exclude not supported
+        #Double exclude on different properties not supported
         with self.assertRaises(NotSupportedError):
-            list(TestUser.objects.exclude(username="E").exclude(username="A"))
+            list(TestUser.objects.exclude(username="E").exclude(email="A"))
+
+        results = list(TestUser.objects.exclude(username="E").exclude(username="A"))
+        self.assertItemsEqual(["B", "C", "D"], [x.username for x in results ])
 
         results = TestUser.objects.filter(username="A", email="test@example.com")
         self.assertEqual(1, len(results))
@@ -523,9 +541,8 @@ class EdgeCaseTests(TestCase):
         self.assertEqual(1, len(results))
         self.assertItemsEqual(["A"], [x.username for x in results])
 
-        #Negated in not supported
-        with self.assertRaises(NotSupportedError):
-            list(TestUser.objects.all().exclude(username__in=["A"]))
+        results = list(TestUser.objects.all().exclude(username__in=["A"]))
+        self.assertItemsEqual(["B", "C", "D", "E"], [x.username for x in results ])
 
     @unittest.skip("We need to properly implement OR queries")
     def test_or_queryset(self):
@@ -565,12 +582,8 @@ class EdgeCaseTests(TestCase):
         self.assertEqual(5, TestUser.objects.count())
         self.assertEqual(2, TestUser.objects.filter(email="test3@example.com").count())
         self.assertEqual(3, TestUser.objects.exclude(email="test3@example.com").count())
-        self.assertEqual(1,
-            TestUser.objects.filter(username="A").exclude(email="test3@example.com").count())
-
-        with self.assertRaises(NotSupportedError):
-            list(TestUser.objects.exclude(username="E").exclude(username="A"))
-
+        self.assertEqual(1, TestUser.objects.filter(username="A").exclude(email="test3@example.com").count())
+        self.assertEqual(3, TestUser.objects.exclude(username="E").exclude(username="A").count())
 
     def test_deletion(self):
         count = TestUser.objects.count()
