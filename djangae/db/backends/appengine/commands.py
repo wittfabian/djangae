@@ -25,6 +25,7 @@ from djangae.db.utils import (
     get_prepared_db_value,
     MockInstance,
     get_top_concrete_parent,
+    get_concrete_parents,
     has_concrete_parents
 )
 from djangae.indexing import special_indexes_for_column, REQUIRES_SPECIAL_INDEXES, add_special_index
@@ -324,6 +325,18 @@ class SelectCommand(object):
         self.limits = (query.low_mark, query.high_mark)
 
         opts = query.get_meta()
+
+        self.distinct = query.distinct
+        self.distinct_values = set()
+        self.distinct_on_field = None
+        self.distinct_field_convertor = None
+        self.queried_fields = []
+        self.model = query.model
+        self.pk_col = opts.pk.column
+        self.is_count = query.aggregates
+        self.extra_select = query.extra_select
+        self._set_db_table()
+
         if not query.default_ordering:
             self.ordering = query.order_by
         else:
@@ -337,40 +350,43 @@ class SelectCommand(object):
                     log_once(DJANGAE_LOG.warning, "The following orderings were ignored as cross-table orderings are not supported on the datastore: %s", diff)
                 self.ordering = ordering
 
-        self.distinct = query.distinct
-        self.distinct_values = set()
-        self.distinct_on_field = None
-        self.distinct_field_convertor = None
-        self.queried_fields = []
+        #If the query uses defer()/only() then we need to process deferred. We have to get all deferred columns
+        # for all (concrete) inherited models and then only include columns if they appear in that list
+        deferred_columns = {}
+        query.deferred_to_data(deferred_columns, query.deferred_to_columns_cb)
+        inherited_db_tables = [ x._meta.db_table for x in get_concrete_parents(self.model) ]
+        only_load = list(chain(*[ list(deferred_columns.get(x, [])) for x in inherited_db_tables ]))
 
-        if keys_only:
-            self.queried_fields = [ opts.pk.column ]
-        else:
-            if query.deferred_loading[0] and not query.deferred_loading[1]:
-                self.queried_fields = [ opts.pk.column ] + list(query.deferred_loading[0])
-            else:
-                for x in query.select:
-                    if isinstance(x, tuple):
-                        #Django < 1.6 compatibility
-                        self.queried_fields.append(x[1])
+        if query.select:
+            for x in query.select:
+                column = x[1] if isinstance(x, (list, tuple)) else x.col[1]
+
+                if only_load and column not in only_load:
+                    continue
+
+                self.queried_fields.append(column)
+
+                if not isinstance(x, (list, tuple)):
+                    if x.lookup_type == 'year':
+                        assert self.distinct_on_field is None
+                        self.distinct_on_field = x.col[1]
+                        self.distinct_field_convertor = field_conv_year_only
+                    elif x.lookup_type == 'month':
+                        assert self.distinct_on_field is None
+                        self.distinct_on_field = x.col[1]
+                        self.distinct_field_convertor = field_conv_month_only
+                    elif x.lookup_type == 'day':
+                        assert self.distinct_on_field is None
+                        self.distinct_on_field = x.col[1]
+                        self.distinct_field_convertor = field_conv_day_only
                     else:
-                        self.queried_fields.append(x.col[1])
+                        raise NotSupportedError("Unhandled lookup type: {0}".format(x.lookup_type))
+        else:
+            self.queried_fields = [ x.column for x in opts.fields if (not only_load) or (x.column in only_load) ]
 
-                        if x.lookup_type == 'year':
-                            assert self.distinct_on_field is None
-                            self.distinct_on_field = x.col[1]
-                            self.distinct_field_convertor = field_conv_year_only
-                        elif x.lookup_type == 'month':
-                            assert self.distinct_on_field is None
-                            self.distinct_on_field = x.col[1]
-                            self.distinct_field_convertor = field_conv_month_only
-                        elif x.lookup_type == 'day':
-                            assert self.distinct_on_field is None
-                            self.distinct_on_field = x.col[1]
-                            self.distinct_field_convertor = field_conv_day_only
-                        else:
-                            raise NotSupportedError("Unhandled lookup type: {0}".format(x.lookup_type))
+        self.keys_only = keys_only or self.queried_fields == [ opts.pk.column ]
 
+        assert self.queried_fields
 
         #Projection queries don't return results unless all projected fields are
         #indexed on the model. This means if you add a field, and all fields on the model
@@ -382,24 +398,14 @@ class SelectCommand(object):
         #thing on a queryset that would do this whenever possible, but that's for the future, maybe.
         try_projection = bool(self.queried_fields)
 
-        if not self.queried_fields:
-            self.queried_fields = [ x.column for x in opts.fields ]
-
-        self.connection = connection
-        self.pk_col = opts.pk.column
-        self.model = query.model
-        self.is_count = query.aggregates
-        self.keys_only = False #FIXME: This should be used where possible
-
         self.excluded_pks = set()
 
         self.has_inequality_filter = False
         self.all_filters = []
         self.results = None
-        self.extra_select = query.extra_select
+
         self.gae_query = None
 
-        self._set_db_table()
         self._validate_query_is_possible(query)
 
         projection_fields = []
@@ -428,8 +434,6 @@ class SelectCommand(object):
         if opts.parents:
             self.projection = None
 
-        #FIXME: RAISE AN ERROR IF WE ARE FILTERING ON A TEXT OR BLOB FIELD
-        #FIXME: RAISE AN ERROR IF WE HAVE TOO MANY INEQUALITY FILTERS
         columns = set()
         self.where = normalize_query(query.where, self.connection, filtered_columns=columns)
 
@@ -750,8 +754,12 @@ class InsertCommand(object):
 
         for obj in objs:
             if self.has_pk:
-                #FIXME: Apparently if the PK is required, and obj.pk is None here, we need to raise an IntegrityError
-                self.included_keys.append(get_datastore_key(model, obj.pk) if obj.pk else None)
+                #We must convert the PK value here, even though this normally happens in django_instance_to_entity otherwise
+                #custom PK fields don't work properly
+                value = model._meta.pk.get_db_prep_save(model._meta.pk.pre_save(obj, True), connection)
+                self.included_keys.append(get_datastore_key(model, value) if value else None)
+                if not self.model._meta.pk.blank and self.included_keys[-1] is None:
+                    raise IntegrityError("You must specify a primary key value for {} instances".format(model))
             else:
                 #We zip() self.entities and self.included_keys in execute(), so they should be the same legnth
                 self.included_keys.append(None)

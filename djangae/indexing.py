@@ -175,9 +175,35 @@ class WeekDayIndexer(Indexer):
     def indexed_column_name(self, field_column):
         return "_idx_week_day_{0}".format(field_column)
 
+class ContainsIndexer(Indexer):
+    def validate_can_be_indexed(self, value):
+        return isinstance(value, basestring) and len(value) < 500
+
+    def prep_value_for_database(self, value):
+        result = []
+        if value:
+            result.extend([value[count:] for count in range(len(value))])
+        return result
+
+    def prep_value_for_query(self, value):
+        if value.startswith("%") and value.endswith("%"):
+            value = value[1:-1]
+        return value
+
+    def indexed_column_name(self, field_column):
+        return "_idx_contains_{0}".format(field_column)
+
+class IContainsIndexer(ContainsIndexer):
+    def prep_value_for_database(self, value):
+        return [ x.lower() for x in super(IContainsIndexer, self).prep_value_for_database(value) ]
+
+    def indexed_column_name(self, field_column):
+        return "_idx_icontains_{0}".format(field_column)
 
 REQUIRES_SPECIAL_INDEXES = {
     "iexact": IExactIndexer(),
+    "contains": ContainsIndexer(),
+    "icontains": IContainsIndexer(),
     "day" : DayIndexer(),
     "month" : MonthIndexer(),
     "year": YearIndexer(),
