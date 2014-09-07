@@ -232,6 +232,10 @@ def normalize_query(node, connection, negated=False, filtered_columns=None, _ine
 
         elif op == "isnull":
             if (value and not negated) or (not value and negated): #We're checking for isnull=True
+                #If we are checking that a primary key isnull, then don't do an impossible query!
+                if node[0].field.primary_key:
+                    raise EmptyResultSet()
+
                 return (column, "=", None)
             else: #We're checking for isnull=False
                 check_inequality_usage('>', column, _inequality_property)
@@ -542,11 +546,10 @@ class SelectCommand(object):
                 if column == self.pk_col:
                     column = "__key__"
 
+                    #FIXME: This EmptyResultSet check should happen during normalization so that Django doesn't count it as a query
                     if op == "=" and "__key__ =" in query:
                         #We've already done an exact lookup on a key, this query can't return anything!
                         raise EmptyResultSet()
-                    elif op == "=" and value is None:
-                        raise EmptyResultSet() #You can't filter on None and get something back
 
                     if not isinstance(value, datastore.Key):
                         value = get_datastore_key(self.model, value)
