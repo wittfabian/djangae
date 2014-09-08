@@ -467,7 +467,6 @@ class SelectCommand(object):
 
         columns = set()
         self.where = normalize_query(query.where, self.connection, filtered_columns=columns)
-
         #DISABLE PROJECTION IF WE ARE FILTERING ON ONE OF THE PROJECTION_FIELDS
         for field in self.projection or []:
             if field in columns:

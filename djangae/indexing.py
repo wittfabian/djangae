@@ -111,10 +111,12 @@ class DayIndexer(Indexer):
         return None
 
     def prep_value_for_query(self, value):
+        if isinstance(value, (int, long)):
+            return value
+
         if isinstance(value, basestring):
             value = datetime.datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
-            return value.day
-        return value
+        return value.day
 
     def indexed_column_name(self, field_column):
         return "_idx_day_{0}".format(field_column)
@@ -129,10 +131,13 @@ class YearIndexer(Indexer):
         return None
 
     def prep_value_for_query(self, value):
+        if isinstance(value, (int, long)):
+            return value
+
         if isinstance(value, basestring):
             value = datetime.datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
-            return value.year
-        return value
+
+        return value.year
 
     def indexed_column_name(self, field_column):
         return "_idx_year_{0}".format(field_column)
@@ -147,10 +152,13 @@ class MonthIndexer(Indexer):
         return None
 
     def prep_value_for_query(self, value):
+        if isinstance(value, (int, long)):
+            return value
+
         if isinstance(value, basestring):
             value = datetime.datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
-            return value.month
-        return value
+
+        return value.month
 
     def indexed_column_name(self, field_column):
         return "_idx_month_{0}".format(field_column)

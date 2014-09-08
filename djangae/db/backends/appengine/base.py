@@ -238,7 +238,7 @@ class DatabaseOperations(BaseDatabaseOperations):
         return self.value_to_db_decimal(value, field.max_digits, field.decimal_places)
 
     def prep_lookup_date(self, model, value, field):
-        return self.value_to_db_date(value)
+        return self.value_to_db_datetime(value)
 
     def prep_lookup_time(self, model, value, field):
         return self.value_to_db_time(value)
@@ -248,6 +248,7 @@ class DatabaseOperations(BaseDatabaseOperations):
             return self.prep_lookup_key(model, value, field)
 
         db_type = self.connection.creation.db_type(field)
+
         if db_type == 'decimal':
             return self.prep_lookup_decimal(model, value, field)
 
