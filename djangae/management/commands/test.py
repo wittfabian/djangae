@@ -1,7 +1,6 @@
 import sys
 from unittest import skip
 
-import django
 from django.core.management.commands import test
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
@@ -36,6 +35,7 @@ def _monkey_patch_unsupported_tests():
     unsupported_tests = []
 
     if 'django.contrib.auth' in settings.INSTALLED_APPS:
+        import django
         if django.VERSION[:2] == (1, 5):
             unsupported_tests.extend([
                 #These auth tests override the AUTH_USER_MODEL setting, which then uses M2M joins

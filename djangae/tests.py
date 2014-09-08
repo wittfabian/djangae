@@ -544,7 +544,6 @@ class EdgeCaseTests(TestCase):
         results = list(TestUser.objects.all().exclude(username__in=["A"]))
         self.assertItemsEqual(["B", "C", "D", "E"], [x.username for x in results ])
 
-    @unittest.skip("We need to properly implement OR queries")
     def test_or_queryset(self):
         """
             This constructs an OR query, this is currently broken in the parse_where_and_check_projection
@@ -555,7 +554,6 @@ class EdgeCaseTests(TestCase):
 
         self.assertItemsEqual([self.u1, self.u2], list(q1 | q2))
 
-    @unittest.skip("We need to properly implement OR queries")
     def test_or_q_objects(self):
         """ Test use of Q objects in filters. """
         query = TestUser.objects.filter(Q(username="A") | Q(username="B"))
