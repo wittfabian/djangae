@@ -375,6 +375,10 @@ class SelectCommand(object):
 
                         self.distinct_on_field = column
 
+                        #This whole section of code is weird, and is probably better implemented as a custom Query type (like QueryByKeys)
+                        # basically, appengine gives back dates as a time since the epoch, we convert it to a date, then floor it, then convert it back
+                        # in our transform function. The transform is applied when the results are read back so that only distinct values are returned.
+                        # this is very hacky...
                         def date_to_epoch(d):
                             import calendar
                             return int(calendar.timegm(d.timetuple()) * 1000000)
