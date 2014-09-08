@@ -7,7 +7,7 @@ from string import letters
 # LIBRARIES
 from django.core.files.uploadhandler import StopFutureHandlers
 from django.core.cache import cache
-from django.db import IntegrityError, models
+from django.db import DataError, IntegrityError, models
 from django.db.models.query import Q
 from django.forms import ModelForm
 from django.test import TestCase, RequestFactory
@@ -348,14 +348,14 @@ class ConstraintTests(TestCase):
     def test_conflicting_insert_throws_integrity_error(self):
         ModelWithUniques.objects.create(name="One")
 
-        with self.assertRaises(IntegrityError):
+        with self.assertRaises((IntegrityError, DataError)):
             ModelWithUniques.objects.create(name="One")
 
     def test_conflicting_update_throws_integrity_error(self):
         ModelWithUniques.objects.create(name="One")
 
         instance = ModelWithUniques.objects.create(name="Two")
-        with self.assertRaises(IntegrityError):
+        with self.assertRaises((IntegrityError, DataError)):
             instance.name = "One"
             instance.save()
 
@@ -638,6 +638,7 @@ class EdgeCaseTests(TestCase):
         def replacement_init(*args, **kwargs):
             replacement_init.called_args = args
             replacement_init.called_kwargs = kwargs
+            original_init(*args, **kwargs)
 
         replacement_init.called_args = None
         replacement_init.called_kwargs = None

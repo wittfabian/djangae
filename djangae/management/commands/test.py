@@ -1,6 +1,7 @@
 import sys
 from unittest import skip
 
+import django
 from django.core.management.commands import test
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
@@ -35,20 +36,21 @@ def _monkey_patch_unsupported_tests():
     unsupported_tests = []
 
     if 'django.contrib.auth' in settings.INSTALLED_APPS:
-        unsupported_tests.extend([
-            #These auth tests override the AUTH_USER_MODEL setting, which then uses M2M joins
-            'django.contrib.auth.tests.auth_backends.CustomPermissionsUserModelBackendTest.test_custom_perms',
-            'django.contrib.auth.tests.auth_backends.CustomPermissionsUserModelBackendTest.test_get_all_superuser_permissions',
-            'django.contrib.auth.tests.auth_backends.CustomPermissionsUserModelBackendTest.test_has_no_object_perm',
-            'django.contrib.auth.tests.auth_backends.CustomPermissionsUserModelBackendTest.test_has_perm',
-            'django.contrib.auth.tests.auth_backends.ExtensionUserModelBackendTest.test_custom_perms',
-            'django.contrib.auth.tests.auth_backends.ExtensionUserModelBackendTest.test_has_perm',
-            'django.contrib.auth.tests.auth_backends.ExtensionUserModelBackendTest.test_get_all_superuser_permissions',
-            'django.contrib.auth.tests.auth_backends.ExtensionUserModelBackendTest.test_has_no_object_perm'
-        ])
+        if django.VERSION[:2] == (1, 5):
+            unsupported_tests.extend([
+                #These auth tests override the AUTH_USER_MODEL setting, which then uses M2M joins
+                'django.contrib.auth.tests.auth_backends.CustomPermissionsUserModelBackendTest.test_custom_perms',
+                'django.contrib.auth.tests.auth_backends.CustomPermissionsUserModelBackendTest.test_get_all_superuser_permissions',
+                'django.contrib.auth.tests.auth_backends.CustomPermissionsUserModelBackendTest.test_has_no_object_perm',
+                'django.contrib.auth.tests.auth_backends.CustomPermissionsUserModelBackendTest.test_has_perm',
+                'django.contrib.auth.tests.auth_backends.ExtensionUserModelBackendTest.test_custom_perms',
+                'django.contrib.auth.tests.auth_backends.ExtensionUserModelBackendTest.test_has_perm',
+                'django.contrib.auth.tests.auth_backends.ExtensionUserModelBackendTest.test_get_all_superuser_permissions',
+                'django.contrib.auth.tests.auth_backends.ExtensionUserModelBackendTest.test_has_no_object_perm'
+            ])
 
-    for test in unsupported_tests:
-        module_path, klass_name, method_name = test.rsplit(".", 2)
+    for unsupported_test in unsupported_tests:
+        module_path, klass_name, method_name = unsupported_test.rsplit(".", 2)
         __import__(module_path, klass_name)
 
         module = sys.modules[module_path]

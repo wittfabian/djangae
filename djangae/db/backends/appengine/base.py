@@ -459,6 +459,8 @@ class DatabaseFeatures(BaseDatabaseFeatures):
     supports_transactions = False #FIXME: Make this True!
     can_return_id_from_insert = True
     supports_select_related = False
+    autocommits_when_autocommit_is_off = True
+    uses_savepoints = False
 
 class DatabaseWrapper(BaseDatabaseWrapper):
     operators = {
@@ -480,6 +482,7 @@ class DatabaseWrapper(BaseDatabaseWrapper):
         self.creation = DatabaseCreation(self)
         self.introspection = DatabaseIntrospection(self)
         self.validation = BaseDatabaseValidation(self)
+        self.autocommit = True
 
     def is_usable(self):
         return True
@@ -495,8 +498,11 @@ class DatabaseWrapper(BaseDatabaseWrapper):
     def init_connection_state(self):
         pass
 
-    def _set_autocommit(self, enabled):
+    def _start_transaction_under_autocommit(self):
         pass
+
+    def _set_autocommit(self, enabled):
+        self.autocommit = enabled
 
     def create_cursor(self):
         if not self.connection:

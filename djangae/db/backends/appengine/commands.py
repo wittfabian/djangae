@@ -9,6 +9,7 @@ from itertools import chain, product
 from django.core.cache import cache
 from django.db.backends.mysql.compiler import SQLCompiler
 from django.db import IntegrityError
+from django.db.models import Field
 from django.db.models.sql.datastructures import EmptyResultSet
 from django.db.models.sql.where import AND, OR, Constraint
 from django import dispatch
@@ -297,6 +298,7 @@ class QueryByKeys(object):
         self.query = query
         self.keys = keys
         self.ordering = ordering
+        self._Query__kind = query._Query__kind
 
     def Run(self, limit, offset):
 
@@ -363,28 +365,17 @@ class SelectCommand(object):
 
         if query.select:
             for x in query.select:
-                column = x[1] if isinstance(x, (list, tuple)) else x.col[1]
+                if isinstance(x[1], Field):
+                    #In Django 1.6+ 'x' above is a SelectInfo (which is a tuple subclass), whereas in 1.5 it's a tuple
+                    # in 1.6 x[1] == Field, but 1.5 x[1] == unicode (column name)
+                    column = x[1].column
+                else:
+                    column = x[1]
 
                 if only_load and column not in only_load:
                     continue
 
                 self.queried_fields.append(column)
-
-                if not isinstance(x, (list, tuple)):
-                    if x.lookup_type == 'year':
-                        assert self.distinct_on_field is None
-                        self.distinct_on_field = x.col[1]
-                        self.distinct_field_convertor = field_conv_year_only
-                    elif x.lookup_type == 'month':
-                        assert self.distinct_on_field is None
-                        self.distinct_on_field = x.col[1]
-                        self.distinct_field_convertor = field_conv_month_only
-                    elif x.lookup_type == 'day':
-                        assert self.distinct_on_field is None
-                        self.distinct_on_field = x.col[1]
-                        self.distinct_field_convertor = field_conv_day_only
-                    else:
-                        raise NotSupportedError("Unhandled lookup type: {0}".format(x.lookup_type))
         else:
             self.queried_fields = [ x.column for x in opts.fields if (not only_load) or (x.column in only_load) ]
 
@@ -424,7 +415,7 @@ class SelectCommand(object):
                 #projection query
                 f = get_field_from_column(self.model, field)
                 if not f:
-                    raise NotSupportedError("Attemping a cross-table select. Maybe? #FIXME")
+                    raise CouldBeSupportedError("Attemping a cross-table select or dates query, or something?!")
                 assert f #If this happens, we have a cross-table select going on! #FIXME
                 db_type = f.db_type(connection)
 
@@ -510,7 +501,9 @@ class SelectCommand(object):
 
     def _build_gae_query(self):
         """ Build and return the Datstore Query object. """
-        query_kwargs = {}
+        query_kwargs = {
+            "kind": str(self.db_table)
+        }
 
         if self.distinct:
             query_kwargs["distinct"] = True
@@ -521,7 +514,6 @@ class SelectCommand(object):
             query_kwargs["projection"] = self.projection
 
         query = Query(
-            self.db_table,
             **query_kwargs
         )
 
@@ -578,7 +570,7 @@ class SelectCommand(object):
 
             for and_branch in self.where[1]:
                 #Duplicate the query for all the "OR"s
-                queries.append(Query(query._Query__kind, **query_kwargs))
+                queries.append(Query(**query_kwargs))
                 queries[-1].update(query) #Make sure we copy across filters (e.g. class =)
                 try:
                     process_and_branch(queries[-1], and_branch)
