@@ -665,31 +665,34 @@ class EdgeCaseTests(TestCase):
         self.assertEqual(["A", "B", "C", "D", "E"][::-1], [x.username for x in users])
 
     def test_dates_query(self):
-        TestUser.objects.create(username="Z", email="z@example.com", last_login=datetime.date(2013, 4, 5))
+        z_user = TestUser.objects.create(username="Z", email="z@example.com")
+        z_user.last_login = datetime.date(2013, 4, 5)
+        z_user.save()
 
         last_a_login = TestUser.objects.get(username="A").last_login
 
         dates = TestUser.objects.dates('last_login', 'year')
+
         self.assertItemsEqual(
-            [datetime.datetime(2013, 1, 1, 0, 0), datetime.datetime(last_a_login.year, 1, 1, 0, 0)],
+            [datetime.date(2013, 1, 1), datetime.date(last_a_login.year, 1, 1)],
             dates
         )
 
         dates = TestUser.objects.dates('last_login', 'month')
         self.assertItemsEqual(
-            [datetime.datetime(2013, 4, 1, 0, 0), datetime.datetime(last_a_login.year, last_a_login.month, 1, 0, 0)],
+            [datetime.date(2013, 4, 1), datetime.date(last_a_login.year, last_a_login.month, 1)],
             dates
         )
 
         dates = TestUser.objects.dates('last_login', 'day')
         self.assertItemsEqual(
-            [datetime.datetime(2013, 4, 5, 0, 0), datetime.datetime.combine(last_a_login, datetime.datetime.min.time())],
+            [datetime.date(2013, 4, 5), last_a_login],
             dates
         )
 
         dates = TestUser.objects.dates('last_login', 'day', order='DESC')
         self.assertItemsEqual(
-            [datetime.datetime.combine(last_a_login, datetime.datetime.min.time()), datetime.datetime(2013, 4, 5, 0, 0)],
+            [last_a_login, datetime.date(2013, 4, 5)],
             dates
         )
 

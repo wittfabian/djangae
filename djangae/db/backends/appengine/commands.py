@@ -1,5 +1,5 @@
 #STANDARD LIB
-from datetime import datetime
+from datetime import datetime, date
 import logging
 import copy
 from functools import partial
@@ -365,10 +365,42 @@ class SelectCommand(object):
 
         if query.select:
             for x in query.select:
-                if isinstance(x[1], Field):
+                if hasattr(x, "field"):
                     #In Django 1.6+ 'x' above is a SelectInfo (which is a tuple subclass), whereas in 1.5 it's a tuple
                     # in 1.6 x[1] == Field, but 1.5 x[1] == unicode (column name)
-                    column = x[1].column
+                    if x.field is None:
+                        column = x.col.col[1] #This is the column we are getting
+
+                        lookup_type = x.col.lookup_type
+
+                        self.distinct_on_field = column
+
+                        def date_to_epoch(d):
+                            import calendar
+                            return int(calendar.timegm(d.timetuple()) * 1000000)
+
+                        if lookup_type == "year":
+                            def year_transform(value):
+                                value = self.connection.ops.value_from_db_date(value)
+                                return date_to_epoch(date(value.year, 1, 1)) if value else None
+
+                            self.distinct_field_convertor = year_transform
+                        elif lookup_type == "month":
+                            def month_transform(value):
+                                value = self.connection.ops.value_from_db_date(value)
+                                return date_to_epoch(date(value.year, value.month, 1)) if value else None
+
+                            self.distinct_field_convertor = month_transform
+                        elif lookup_type == "day":
+                            def day_transform(value):
+                                value = self.connection.ops.value_from_db_date(value)
+                                return date_to_epoch(value) if value else None
+
+                            self.distinct_field_convertor = day_transform
+                        else:
+                            raise CouldBeSupportedError("Unhandled lookup_type %s" % lookup_type)
+                    else:
+                        column = x.field.column
                 else:
                     column = x[1]
 
@@ -710,6 +742,7 @@ class SelectCommand(object):
             if self.distinct_on_field: #values for distinct queries
                 value = x[self.distinct_on_field]
                 value = self.distinct_field_convertor(value)
+
                 if value in self.distinct_values:
                     continue
                 else:
