@@ -11,7 +11,7 @@ from django.db.backends.mysql.compiler import SQLCompiler
 from django.db import IntegrityError
 from django.db.models.sql.datastructures import EmptyResultSet
 from django.db.models.sql.where import AND, OR
-from django import dispatch
+
 from google.appengine.api import datastore
 from google.appengine.api.datastore import Query
 from google.appengine.ext import db
@@ -32,13 +32,6 @@ from djangae.utils import on_production, in_testing
 from djangae.db import constraints, utils
 
 DJANGAE_LOG = logging.getLogger("djangae")
-
-entity_pre_update = dispatch.Signal(providing_args=["sender", "entity"])
-entity_post_update = dispatch.Signal(providing_args=["sender", "entity"])
-entity_post_insert = dispatch.Signal(providing_args=["sender", "entity"])
-entity_deleted = dispatch.Signal(providing_args=["sender", "entity"])
-get_pre_execute = dispatch.Signal(providing_args=["sender", "key"])
-query_pre_execute = dispatch.Signal(providing_args=["sender", "query", "aggregate"])
 
 OPERATORS_MAP = {
     'exact': '=',
@@ -590,8 +583,6 @@ class SelectCommand(object):
         self.query_done = True
 
     def _run_query(self, limit=None, start=None, aggregate_type=None):
-        query_pre_execute.send(sender=self.model, query=self.gae_query, aggregate=self.aggregate_type)
-
         if aggregate_type is None:
             results = self.gae_query.Run(limit=limit, offset=start)
         elif self.aggregate_type == "count":
@@ -741,8 +732,6 @@ class InsertCommand(object):
                         constraints.release_markers(markers)
                         raise
 
-                    entity_post_insert.send(sender=self.model, entity=ent)
-
                 txn()
 
             return results
@@ -757,7 +746,6 @@ class InsertCommand(object):
 
             for ent, m in zip(self.entities, markers):
                 constraints.update_instance_on_markers(ent, m)
-                entity_post_insert.send(sender=self.model, entity=ent)
 
             return results
 
@@ -774,7 +762,6 @@ class DeleteCommand(object):
         for entity in self.select.results:
             keys.append(entity.key())
             constraints.release(self.select.model, entity)
-            entity_deleted.send(sender=self.select.model, entity=entity)
         datastore.Delete(keys)
 
 class UpdateCommand(object):
@@ -797,8 +784,6 @@ class UpdateCommand(object):
                 indexer = REQUIRES_SPECIAL_INDEXES[index]
                 result[indexer.indexed_column_name(field.column)] = indexer.prep_value_for_database(value)
 
-        entity_pre_update.send(sender=self.model, entity=result)
-
         to_acquire, to_release = constraints.get_markers_for_update(self.model, original, result)
 
         #Acquire first, because if that fails then we don't want to alter what's already there
@@ -812,16 +797,12 @@ class UpdateCommand(object):
             #Now we release the ones we don't want anymore
             constraints.release_identifiers(to_release)
 
-        entity_post_update.send(sender=self.model, entity=result)
-
     def execute(self):
         self.select.execute()
 
         results = self.select.results
 
-        i = 0
-        for key in results:
+        for i, key in enumerate(results):
             self._update_entity(key)
-            i += 1
 
         return i
