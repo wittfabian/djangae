@@ -56,3 +56,25 @@ def unique_identifiers_from_entity(model, entity, ignore_pk=False, ignore_null_v
             identifiers.append(model._meta.db_table + "|" + "|".join(identifier))
 
     return identifiers
+
+def query_is_unique(model, query):
+    """
+        If the query is entirely on unique constraints then return the combination the list of fields
+        that form the unique combination. Otherwise return False
+    """
+
+    combinations = _unique_combinations(model)
+
+    queried_fields = [ x.strip() for x in query.keys() ]
+
+    for combination in combinations:
+        unique_match = True
+        for field in combination:
+            if "{} =".format(field) not in queried_fields:
+                unique_match = False
+                break
+
+        if unique_match:
+            return combination
+
+    return False

@@ -23,6 +23,7 @@ from djangae.db.constraints import UniqueMarker
 from djangae.indexing import add_special_index
 from djangae.db.utils import entity_matches_query
 from djangae.db.backends.appengine.commands import normalize_query, parse_constraint
+from djangae.db.unique_utils import query_is_unique
 from djangae.db import transaction
 from djangae.fields import ComputedCharField
 
@@ -45,6 +46,15 @@ class TestUser(models.Model):
     def __unicode__(self):
         return self.username
 
+class UniqueModel(models.Model):
+    unique_field = models.CharField(max_length=100, unique=True)
+    unique_combo_one = models.IntegerField()
+    unique_combo_two = models.CharField(max_length=100)
+
+    class Meta:
+        unique_together = [
+            ("unique_combo_one", "unique_combo_two")
+        ]
 
 class TestFruit(models.Model):
     name = models.CharField(primary_key=True, max_length=32)
@@ -76,6 +86,23 @@ class MultiTableChildOne(MultiTableParent):
 class MultiTableChildTwo(MultiTableParent):
     child_two_field = models.CharField(max_length=32)
 
+
+class CachingTests(TestCase):
+    def test_query_is_unique(self):
+        qry = datastore.Query(UniqueModel._meta.db_table)
+        qry["unique_field ="] = "test"
+        self.assertTrue(query_is_unique(UniqueModel, qry))
+        del qry["unique_field ="]
+
+        qry["unique_field >"] = "test"
+        self.assertFalse(query_is_unique(UniqueModel, qry))
+        del qry["unique_field >"]
+
+        qry["unique_combo_one ="] = "one"
+        self.assertFalse(query_is_unique(UniqueModel, qry))
+
+        qry["unique_combo_two ="] = "two"
+        self.assertTrue(query_is_unique(UniqueModel, qry))
 
 class BackendTests(TestCase):
     def test_entity_matches_query(self):
