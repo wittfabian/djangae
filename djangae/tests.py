@@ -3,6 +3,7 @@ from cStringIO import StringIO
 import datetime
 import unittest
 from string import letters
+from hashlib import md5
 
 # LIBRARIES
 from django.core.files.uploadhandler import StopFutureHandlers
@@ -332,7 +333,7 @@ class ConstraintTests(TestCase):
         marker = [ x for x in qry.Run()][0]
         self.assertEqual(datastore.Key(marker["instance"]), datastore.Key.from_path(instance._meta.db_table, instance.pk)) #Make sure we assigned the instance
 
-        expected_marker = "{}|name:{}".format(ModelWithUniques._meta.db_table, hash("One"))
+        expected_marker = "{}|name:{}".format(ModelWithUniques._meta.db_table, md5("One").hexdigest())
         self.assertEqual(expected_marker, marker.key().id_or_name())
 
         instance.name = "Two"
@@ -342,7 +343,7 @@ class ConstraintTests(TestCase):
         marker = [ x for x in qry.Run()][0]
         self.assertEqual(datastore.Key(marker["instance"]), datastore.Key.from_path(instance._meta.db_table, instance.pk)) #Make sure we assigned the instance
 
-        expected_marker = "{}|name:{}".format(ModelWithUniques._meta.db_table, hash("Two"))
+        expected_marker = "{}|name:{}".format(ModelWithUniques._meta.db_table, md5("Two").hexdigest())
         self.assertEqual(expected_marker, marker.key().id_or_name())
 
     def test_conflicting_insert_throws_integrity_error(self):
@@ -372,7 +373,7 @@ class ConstraintTests(TestCase):
         marker = [ x for x in qry.Run()][0]
         self.assertEqual(datastore.Key(marker["instance"]), datastore.Key.from_path(instance._meta.db_table, instance.pk)) #Make sure we assigned the instance
 
-        expected_marker = "{}|name:{}".format(ModelWithUniques._meta.db_table, hash("One"))
+        expected_marker = "{}|name:{}".format(ModelWithUniques._meta.db_table, md5("One").hexdigest())
         self.assertEqual(expected_marker, marker.key().id_or_name())
 
         instance.name = "Two"
@@ -403,7 +404,7 @@ class ConstraintTests(TestCase):
         marker = [ x for x in qry.Run()][0]
         self.assertEqual(datastore.Key(marker["instance"]), datastore.Key.from_path(instance._meta.db_table, instance.pk)) #Make sure we assigned the instance
 
-        expected_marker = "{}|name:{}".format(ModelWithUniques._meta.db_table, hash("One"))
+        expected_marker = "{}|name:{}".format(ModelWithUniques._meta.db_table, md5("One").hexdigest())
         self.assertEqual(expected_marker, marker.key().id_or_name())
 
     def test_error_on_insert_doesnt_create_markers(self):
