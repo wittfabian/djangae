@@ -29,6 +29,7 @@ from djangae.indexing import special_indexes_for_column, REQUIRES_SPECIAL_INDEXE
 from djangae.utils import on_production, in_testing
 from djangae.db import constraints, utils
 from djangae.db.backends.appengine import caching
+from djangae.db.unique_utils import query_is_unique
 
 DJANGAE_LOG = logging.getLogger("djangae")
 
@@ -311,6 +312,29 @@ class NoOpQuery(object):
 
     def Count(self, limit, offset):
         return 0
+
+class UniqueQuery(object):
+    def __init__(self, unique_identifier, gae_query, model):
+        self._identifier = unique_identifier
+        self._gae_query = gae_query
+        self._model = model
+
+    def Run(self, limit, offset):
+        ret = caching.get_from_cache(self._identifier)
+        if ret is None:
+            ret = [ x for x in self._gae_query.Run(limit=limit, offset=offset) ]
+            assert len(ret) <= 1
+            if ret:
+                caching.add_entity_to_context_cache(self._model, ret[0])
+            return iter(ret)
+
+        return iter([ ret ])
+
+    def Count(self, limit, offset):
+        ret = caching.get_from_cache(self._identifier)
+        if ret is None:
+            return self._gae_query.Count(limit=limit, offset=offset)
+        return 1
 
 class SelectCommand(object):
     def __init__(self, connection, query, keys_only=False):
@@ -640,7 +664,7 @@ class SelectCommand(object):
 
             if all_queries_same_except_key(queries):
                 included_pks = [ qry["__key__ ="] for qry in queries ]
-                query = QueryByKeys(queries[0], included_pks, ordering) #Just use whatever query to determine the matches
+                return QueryByKeys(queries[0], included_pks, ordering) #Just use whatever query to determine the matches
             else:
                 if len(queries) > 1:
                     query = datastore.MultiQuery(queries, ordering)
@@ -649,6 +673,12 @@ class SelectCommand(object):
                     query.Order(*ordering)
         else:
             query.Order(*ordering)
+
+        #If the resulting query was unique, then wrap as a unique query which
+        #will hit the cache first
+        unique_identifier = query_is_unique(self.model, query)
+        if unique_identifier:
+            return UniqueQuery(unique_identifier, query, self.model)
 
         DJANGAE_LOG.debug("Select query: {0}, {1}".format(self.model.__name__, self.where))
 

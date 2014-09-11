@@ -1,7 +1,7 @@
 import logging
 import threading
 
-from django.core.signals import request_finished
+from django.core.signals import request_finished, request_started
 from django.dispatch import receiver
 
 from djangae.db.unique_utils import unique_identifiers_from_entity
@@ -41,8 +41,33 @@ def uncache_entity(model, entity):
     for identifier in identifiers:
         cache.delete(identifier)
 
+def get_from_cache(unique_identifier):
+    if not hasattr(context, "cache"):
+        return None
+
+    return context.cache.get(unique_identifier)
 
 @receiver(request_finished)
+@receiver(request_started)
 def clear_context_cache(*args, **kwargs):
     global context_cache
     context.cache = {}
+
+    #Make sure we always re-enable the caching when the request starts
+    if hasattr(context, "cache_disabled"):
+        delattr(context, "cache_disabled")
+
+class DisableContextCache(object):
+    """
+        A context manager that forcibly disables getting objects from the context cache
+    """
+    def __enter__(self):
+        global context
+        context.cache_disabled = True
+
+    def __exit__(self):
+        global context
+        if hasattr(context, "cache_disabled"):
+            delattr(context, "cache_disabled")
+
+disable_context_cache = DisableContextCache
