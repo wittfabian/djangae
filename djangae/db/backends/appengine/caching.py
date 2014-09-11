@@ -21,10 +21,10 @@ def add_entity_to_context_cache(model, entity):
     for identifier in identifiers:
         context.cache[identifier] = entity
 
-    context.reverse_cache[str(entity.key())] = identifiers
+    context.reverse_cache[entity.key()] = identifiers
 
 def remove_entity_from_context_cache(entity):
-    key = str(entity.key())
+    key = entity.key()
 
     if key in context.reverse_cache:
         for identifier in context.reverse_cache[key]:
