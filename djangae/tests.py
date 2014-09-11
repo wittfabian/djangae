@@ -121,6 +121,44 @@ class CachingTests(TestCase):
         new_keys = list(set(caching.context.reverse_cache.keys()) - set(original_rc_keys))
         self.assertEqual(new_keys[0].id_or_name(), instance.pk)
 
+    def test_pk_queries_hit_the_context_cache(self):
+        instance = UniqueModel.objects.create(unique_field="test") #Create an instance
+
+        from google.appengine.api import datastore
+        from djangae.db.backends.appengine import commands
+
+        #With the context cache enabled, make sure we don't hit the DB
+        wrapper = mock.Mock(wraps=commands.UniqueQuery.Run)
+        rpc_wrapper = mock.Mock(wraps=datastore.Query.Run)
+
+        UniqueModel.objects.get(pk=instance.pk)
+        self.assertTrue(wrapper.called)
+        self.assertFalse(rpc_wrapper.called)
+
+    def test_insert_then_unique_query_returns_from_cache(self):
+        UniqueModel.objects.create(unique_field="test") #Create an instance
+
+        from google.appengine.api import datastore
+        from djangae.db.backends.appengine import commands
+
+        #With the context cache enabled, make sure we don't hit the DB
+        with mock.patch("djangae.db.backends.appengine.commands.UniqueQuery.Run", wraps=commands.UniqueQuery.Run) as wrapper:
+            rpc_wrapper = mock.Mock(wraps=datastore.Query.Run)
+
+            instance_from_cache = UniqueModel.objects.get(unique_field="test")
+            self.assertTrue(wrapper.called)
+            self.assertFalse(rpc_wrapper.called)
+
+        #Disable the context cache, make sure that we hit the database
+        with caching.disable_context_cache():
+            wrapper = mock.Mock(wraps=commands.UniqueQuery.Run)
+            rpc_wrapper = mock.Mock(wraps=datastore.Query.Run)
+
+            instance_from_database = UniqueModel.objects.get(unique_field="test")
+            self.assertTrue(wrapper.called)
+            self.assertTrue(rpc_wrapper.called)
+
+        self.assertEqual(instance_from_cache, instance_from_database)
 
 class BackendTests(TestCase):
     def test_entity_matches_query(self):
