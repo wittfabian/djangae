@@ -11,6 +11,25 @@ logger = logging.getLogger("djangae")
 
 context = threading.local()
 
+def add_entity_to_context_cache(model, entity):
+    identifiers = unique_identifiers_from_entity(model, entity)
+
+    if not hasattr(context, "cache"):
+        context.cache = {}
+        context.reverse_cache = {}
+
+    for identifier in identifiers:
+        context.cache[identifier] = entity
+
+    context.reverse_cache[str(entity.key())] = identifiers
+
+def remove_entity_from_context_cache(entity):
+    key = str(entity.key())
+
+    if key in context.reverse_cache:
+        for identifier in context.reverse_cache[key]:
+            del context.cache[identifier]
+
 def cache_entity(model, entity):
     identifiers = unique_identifiers_from_entity(model, entity)
     logger.debug("Caching entity with key %s and identifiers %s", entity.key(), identifiers)

@@ -32,6 +32,7 @@ from djangae.db.utils import (
 from djangae.indexing import special_indexes_for_column, REQUIRES_SPECIAL_INDEXES, add_special_index
 from djangae.utils import on_production, in_testing
 from djangae.db import constraints, utils
+from djangae.db.backends.appengine import caching
 
 DJANGAE_LOG = logging.getLogger("djangae")
 
@@ -767,6 +768,9 @@ class FlushCommand(object):
 
         cache.clear()
 
+        from .caching import clear_context_cache
+        clear_context_cache()
+
 class InsertCommand(object):
     def __init__(self, connection, model, objs, fields, raw):
         self.has_pk = any([x.primary_key for x in fields])
@@ -807,6 +811,7 @@ class InsertCommand(object):
                     markers = constraints.acquire(self.model, ent)
                     try:
                         results.append(datastore.Put(ent))
+                        caching.add_entity_to_context_cache(self.model, ent)
                     except:
                         #Make sure we delete any created markers before we re-raise
                         constraints.release_markers(markers)
@@ -816,9 +821,14 @@ class InsertCommand(object):
 
             return results
         else:
+            #FIXME: We should rearrange this so that each entity is handled individually like above. We'll
+            #lose insert performance, but gain consistency on errors which is more important
             markers = constraints.acquire_bulk(self.model, self.entities)
             try:
                 results = datastore.Put(self.entities)
+                for entity in self.entities:
+                    caching.add_entity_to_context_cache(self.model, entity)
+
             except:
                 to_delete = chain(*markers)
                 constraints.release_markers(to_delete)

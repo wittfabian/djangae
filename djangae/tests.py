@@ -23,6 +23,7 @@ from djangae.db.constraints import UniqueMarker
 from djangae.indexing import add_special_index
 from djangae.db.utils import entity_matches_query
 from djangae.db.backends.appengine.commands import normalize_query, parse_constraint
+from djangae.db.backends.appengine import caching
 from djangae.db.unique_utils import query_is_unique
 from djangae.db import transaction
 from djangae.fields import ComputedCharField
@@ -48,8 +49,10 @@ class TestUser(models.Model):
 
 class UniqueModel(models.Model):
     unique_field = models.CharField(max_length=100, unique=True)
-    unique_combo_one = models.IntegerField()
-    unique_combo_two = models.CharField(max_length=100)
+    unique_combo_one = models.IntegerField(blank=True, default=0)
+    unique_combo_two = models.CharField(max_length=100, blank=True, default="")
+
+    unique_relation = models.ForeignKey('self', null=True, blank=True, unique=True)
 
     class Meta:
         unique_together = [
@@ -103,6 +106,18 @@ class CachingTests(TestCase):
 
         qry["unique_combo_two ="] = "two"
         self.assertTrue(query_is_unique(UniqueModel, qry))
+
+    def test_insert_adds_to_context_cache(self):
+        original_keys = caching.context.cache.keys()
+        original_rc_keys = caching.context.reverse_cache.keys()
+
+        instance = UniqueModel.objects.create(unique_field="test")
+
+        self.assertEqual(1, len(caching.context.cache.keys()) - len(original_keys))
+
+        new_keys = list(set(original_rc_keys) - set(original_keys))
+        self.assertEqual(new_keys[0].id_or_name(), instance.pk)
+
 
 class BackendTests(TestCase):
     def test_entity_matches_query(self):
