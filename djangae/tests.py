@@ -119,10 +119,10 @@ class CachingTests(TestCase):
 
         instance = UniqueModel.objects.create(unique_field="test")
 
-        import ipdb; ipdb.set_trace()
-        self.assertEqual(1, len(caching.context.cache.keys()) - len(original_keys))
+        #There are 3 unique combinations (id, unique_field, unique_combo), we should've cached under all of them
+        self.assertEqual(3, len(caching.context.cache.keys()) - len(original_keys))
 
-        new_keys = list(set(original_rc_keys) - set(original_keys))
+        new_keys = list(set(caching.context.reverse_cache.keys()) - set(original_rc_keys))
         self.assertEqual(new_keys[0].id_or_name(), instance.pk)
 
 
