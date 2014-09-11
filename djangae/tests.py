@@ -177,7 +177,7 @@ class BackendTests(TestCase):
             self.assertEqual(1, get_mock.call_count)
 
         with mock.patch("djangae.db.backends.appengine.commands.datastore.MultiQuery.Run", return_value=[]) as query_mock:
-            list(TestUser.objects.filter(username__startswith="test"))
+            list(TestUser.objects.exclude(username__startswith="test"))
             self.assertEqual(1, query_mock.call_count)
 
 class ModelFormsetTest(TestCase):

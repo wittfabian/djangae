@@ -900,7 +900,7 @@ class UpdateCommand(object):
         results = self.select.results
 
         i = 0
-        for i, key in enumerate(results):
+        for key in results:
             self._update_entity(key)
-
+            i += 1
         return i
