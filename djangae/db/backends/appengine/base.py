@@ -29,6 +29,7 @@ from google.appengine.ext import testbed
 from google.appengine.api.datastore import Key
 
 #DJANGAE
+from djangae.utils import find_project_root
 from djangae.db.exceptions import DatabaseError, NotSupportedError, CouldBeSupportedError
 from djangae.db.utils import (
     decimal_to_string,
@@ -237,7 +238,7 @@ class DatabaseOperations(BaseDatabaseOperations):
         return self.value_to_db_decimal(value, field.max_digits, field.decimal_places)
 
     def prep_lookup_date(self, model, value, field):
-        return self.value_to_db_date(value)
+        return self.value_to_db_datetime(value)
 
     def prep_lookup_time(self, model, value, field):
         return self.value_to_db_time(value)
@@ -247,6 +248,7 @@ class DatabaseOperations(BaseDatabaseOperations):
             return self.prep_lookup_key(model, value, field)
 
         db_type = self.connection.creation.db_type(field)
+
         if db_type == 'decimal':
             return self.prep_lookup_decimal(model, value, field)
 
@@ -260,8 +262,6 @@ class DatabaseOperations(BaseDatabaseOperations):
     def value_for_db(self, value, field):
         if value is None:
             return None
-
-        value = field.get_db_prep_save(value, self.connection)
 
         db_type = self.connection.creation.db_type(field)
 
@@ -425,7 +425,7 @@ class DatabaseCreation(BaseDatabaseCreation):
         self.testbed.init_logservice_stub()
         self.testbed.init_mail_stub()
         self.testbed.init_memcache_stub()
-        self.testbed.init_taskqueue_stub()
+        self.testbed.init_taskqueue_stub(root_path=find_project_root())
         self.testbed.init_urlfetch_stub()
         self.testbed.init_user_stub()
         self.testbed.init_xmpp_stub()
@@ -460,6 +460,8 @@ class DatabaseFeatures(BaseDatabaseFeatures):
     supports_transactions = False #FIXME: Make this True!
     can_return_id_from_insert = True
     supports_select_related = False
+    autocommits_when_autocommit_is_off = True
+    uses_savepoints = False
 
 class DatabaseWrapper(BaseDatabaseWrapper):
     operators = {
@@ -481,6 +483,7 @@ class DatabaseWrapper(BaseDatabaseWrapper):
         self.creation = DatabaseCreation(self)
         self.introspection = DatabaseIntrospection(self)
         self.validation = BaseDatabaseValidation(self)
+        self.autocommit = True
 
     def is_usable(self):
         return True
@@ -496,8 +499,11 @@ class DatabaseWrapper(BaseDatabaseWrapper):
     def init_connection_state(self):
         pass
 
-    def _set_autocommit(self, enabled):
+    def _start_transaction_under_autocommit(self):
         pass
+
+    def _set_autocommit(self, enabled):
+        self.autocommit = enabled
 
     def create_cursor(self):
         if not self.connection:

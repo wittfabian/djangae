@@ -49,7 +49,7 @@ def unique_identifiers_from_entity(model, entity, ignore_pk=False, ignore_null_v
 
             #AppEngine max key length is 500 chars, so if the value is a string we hexdigest it to reduce the length
             #otherwise we str() it as it's probably an int or bool or something.
-            value = hash(value) if isinstance(value, basestring) else str(value)
+            value = md5(value.encode("utf-8")).hexdigest() if isinstance(value, basestring) else str(value)
             identifier.append("{}:{}".format(field_name, value))
 
         if include_combination:

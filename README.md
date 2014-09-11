@@ -176,3 +176,7 @@ Here's an example of how your `DATABASES` might look in settings.py if you're us
 See the Google documentation for more information on connecting to Cloud SQL via the
 [MySQL client](https://developers.google.com/cloud-sql/docs/mysql-client) and from
 [external applications](https://developers.google.com/cloud-sql/docs/external).
+
+## Contributing
+
+Contributions are accepted via pull request and will be reviewed as soon as possible. If you have access to master, please do not commit directly! Pull requests only!

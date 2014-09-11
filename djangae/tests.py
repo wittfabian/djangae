@@ -9,17 +9,19 @@ from cStringIO import StringIO
 import datetime
 import unittest
 from string import letters
+from hashlib import md5
 
 # LIBRARIES
 from django.core.files.uploadhandler import StopFutureHandlers
-from django.db import IntegrityError, models
+from django.core.cache import cache
+from django.db import DataError, IntegrityError, models
 from django.db.models.query import Q
 from django.forms import ModelForm
 from django.test import TestCase, RequestFactory
 from django.forms.models import modelformset_factory
+from google.appengine.api.datastore_errors import EntityNotFoundError
 from django.db import connections
 
-from google.appengine.api.datastore_errors import EntityNotFoundError
 
 # DJANGAE
 from djangae.db.exceptions import NotSupportedError
@@ -36,7 +38,6 @@ from .storage import BlobstoreFileUploadHandler
 from .wsgi import DjangaeApplication
 
 from google.appengine.api import datastore
-
 
 try:
     import webtest
@@ -203,6 +204,19 @@ class ModelFormsetTest(TestCase):
         TestModelFormSet(request.POST, request.FILES)
 
 
+class CacheTests(TestCase):
+
+    def test_cache_set(self):
+        cache.set('test?', 'yes!')
+        self.assertEqual(cache.get('test?'), 'yes!')
+
+    def test_cache_timeout(self):
+        cache.set('test?', 'yes!', 1)
+        import time
+        time.sleep(1)
+        self.assertEqual(cache.get('test?'), None)
+
+
 class TransactionTests(TestCase):
     def test_atomic_decorator(self):
 
@@ -273,50 +287,42 @@ class QueryNormalizationTests(TestCase):
 
         qs = TestUser.objects.filter(username="test").all()
 
-        self.assertEqual([ ("username", "=", "test") ], normalize_query(qs.query.where, connection))
+        self.assertEqual(("username", "=", "test"), normalize_query(qs.query.where, connection=connection))
 
         qs = TestUser.objects.filter(username="test", email="test@example.com")
 
-        expected = [
-            [("username", "=", "test"),("email", "=", "test@example.com")]
-        ]
-        self.assertEqual(expected, normalize_query(qs.query.where, connection))
-
+        expected = ('AND', [ # Cannot be reduced
+            ("username", "=", "test"),
+            ("email", "=", "test@example.com")
+        ])
+        self.assertEqual(expected, normalize_query(qs.query.where, connection=connection))
+        #
         qs = TestUser.objects.filter(username="test").exclude(email="test@example.com")
 
-        expected = [
-            [("username", "=", "test"), ("email", ">", "test@example.com")],
-            [("username", "=", "test"), ("email", "<", "test@example.com")]
-        ]
+        expected = ('OR', [
+            ('AND', [("username", "=", "test"), ("email", ">", "test@example.com")]),
+            ('AND', [("username", "=", "test"), ("email", "<", "test@example.com")]),
+        ])
 
-        self.assertEqual(expected, normalize_query(qs.query.where, connection))
+        self.assertEqual(expected, normalize_query(qs.query.where, connection=connection))
 
         qs = TestUser.objects.filter(username__lte="test").exclude(email="test@example.com")
+        expected = ('OR', [
+            ('AND', [("username", "<=", "test"), ("email", ">", "test@example.com")]),
+            ('AND', [("username", "<=", "test"), ("email", "<", "test@example.com")]),
+        ])
 
-        expected = [
-            [("username", "<=", "test"), ("email", ">", "test@example.com")],
-            [("username", "<=", "test"), ("email", "<", "test@example.com")]
-        ]
-
-        self.assertEqual(expected, normalize_query(qs.query.where, connection))
-
-        qs = TestUser.objects.filter(username__in=["test", "charlie"]).values_list("username")
-
-        expected = [
-            [("username", "=", "test")],
-            [("username", "=", "charlie")]
-        ]
-        self.assertEqual(expected, normalize_query(qs.query.where, connection))
+        with self.assertRaises(NotSupportedError):
+            normalize_query(qs.query.where, connection=connection)
 
     def test_or_queries(self):
+
         connection = connections['default']
 
         qs = TestUser.objects.filter(
             username="python").filter(
             Q(username__in=["ruby", "jruby"]) | (Q(username="php") & ~Q(username="perl"))
         )
-
-        # qs = TestUser.objects.filter(Q(username="php") & ~Q(username="perl") | Q(username__in=["ruby", "jruby"]))
 
         # After IN and != explosion, we have...
         # (AND: (username='python', OR: (username='ruby', username='jruby', AND: (username='php', AND: (username < 'perl', username > 'perl')))))
@@ -330,43 +336,49 @@ class QueryNormalizationTests(TestCase):
         # (OR: (AND: username='python', username = 'ruby'), (AND: username='python', username='jruby'), (AND: username='python', username='php', username < 'perl') \
         #      (AND: username='python', username='php', username > 'perl')
 
-        expected = [
-            [ ("username", "=", "python"), ("username", "=", "ruby") ],
-            [ ("username", "=", "python"), ("username", "=", "jruby") ],
-            [ ("username", "=", "python"), ("username", "=", "php"), ("username", "<", "perl") ],
-            [ ("username", "=", "python"), ("username", "=", "php"), ("username", ">", "perl") ],
-        ]
 
-        self.assertEqual(expected, normalize_query(qs.query.where, connection))
+        expected = ('OR', [
+            ('AND', [('username', '=', 'python'), ('username', '=', 'ruby')]),
+            ('AND', [('username', '=', 'python'), ('username', '=', 'jruby')]),
+            ('AND', [('username', '=', 'php'), ('username', '>', 'perl'), ('username', '=', 'python')]),
+            ('AND', [('username', '=', 'php'), ('username', '<', 'perl'), ('username', '=', 'python')])
+        ])
+
+        self.assertEqual(expected, normalize_query(qs.query.where, connection=connection))
+        #
 
         qs = TestUser.objects.filter(username="test") | TestUser.objects.filter(username="cheese")
 
-        expected = [
-            [ ("username", "=", "test") ],
-            [ ("username", "=", "cheese") ]
-        ]
+        expected = ('OR', [
+            ("username", "=", "test"),
+            ("username", "=", "cheese"),
+        ])
 
-        self.assertEqual(expected, normalize_query(qs.query.where, connection))
+        self.assertEqual(expected, normalize_query(qs.query.where, connection=connection))
+        #
+        # These tests need to be changed so they check the pk value is a key from Path
+        #
+        # qs = TestUser.objects.filter(pk__in=[1, 2, 3])
+        #
+        # expected = ('OR', [
+        #     ("id", "=", 1),
+        #     ("id", "=", 2),
+        #     ("id", "=", 3),
+        # ])
+        #
+        # import pdb; pdb.set_trace()
+        #
+        # self.assertEqual(expected, normalize_query(qs.query.where, connection=connection))
 
-        qs = TestUser.objects.filter(pk__in=[1, 2, 3])
-
-        expected = [
-            [ ("id", "=", 1) ],
-            [ ("id", "=", 2) ],
-            [ ("id", "=", 3) ]
-        ]
-
-        self.assertEqual(expected, normalize_query(qs.query.where, connection))
-
-        qs = TestUser.objects.filter(pk__in=[1, 2, 3]).filter(username="test")
-
-        expected = [
-            [ ("id", "=", 1), ("username", "=", "test") ],
-            [ ("id", "=", 2), ("username", "=", "test") ],
-            [ ("id", "=", 3), ("username", "=", "test") ]
-        ]
-
-        self.assertEqual(expected, normalize_query(qs.query.where, connection))
+        # qs = TestUser.objects.filter(pk__in=[1, 2, 3]).filter(username="test")
+        #
+        # expected = ('OR', [
+        #     ('AND', [("id", "=", 1), ('username', '=', "test")]),
+        #     ('AND', [("id", "=", 2), ('username', '=', "test")]),
+        #     ('AND', [("id", "=", 3), ('username', '=', "test")]),
+        # ])
+        #
+        # self.assertEqual(expected, normalize_query(qs.query.where, connection=connection))
 
 
 class ModelWithUniques(models.Model):
@@ -394,7 +406,7 @@ class ConstraintTests(TestCase):
         marker = [ x for x in qry.Run()][0]
         self.assertEqual(datastore.Key(marker["instance"]), datastore.Key.from_path(instance._meta.db_table, instance.pk)) #Make sure we assigned the instance
 
-        expected_marker = "{}|name:{}".format(ModelWithUniques._meta.db_table, hash("One"))
+        expected_marker = "{}|name:{}".format(ModelWithUniques._meta.db_table, md5("One").hexdigest())
         self.assertEqual(expected_marker, marker.key().id_or_name())
 
         instance.name = "Two"
@@ -404,20 +416,20 @@ class ConstraintTests(TestCase):
         marker = [ x for x in qry.Run()][0]
         self.assertEqual(datastore.Key(marker["instance"]), datastore.Key.from_path(instance._meta.db_table, instance.pk)) #Make sure we assigned the instance
 
-        expected_marker = "{}|name:{}".format(ModelWithUniques._meta.db_table, hash("Two"))
+        expected_marker = "{}|name:{}".format(ModelWithUniques._meta.db_table, md5("Two").hexdigest())
         self.assertEqual(expected_marker, marker.key().id_or_name())
 
     def test_conflicting_insert_throws_integrity_error(self):
         ModelWithUniques.objects.create(name="One")
 
-        with self.assertRaises(IntegrityError):
+        with self.assertRaises((IntegrityError, DataError)):
             ModelWithUniques.objects.create(name="One")
 
     def test_conflicting_update_throws_integrity_error(self):
         ModelWithUniques.objects.create(name="One")
 
         instance = ModelWithUniques.objects.create(name="Two")
-        with self.assertRaises(IntegrityError):
+        with self.assertRaises((IntegrityError, DataError)):
             instance.name = "One"
             instance.save()
 
@@ -434,7 +446,7 @@ class ConstraintTests(TestCase):
         marker = [ x for x in qry.Run()][0]
         self.assertEqual(datastore.Key(marker["instance"]), datastore.Key.from_path(instance._meta.db_table, instance.pk)) #Make sure we assigned the instance
 
-        expected_marker = "{}|name:{}".format(ModelWithUniques._meta.db_table, hash("One"))
+        expected_marker = "{}|name:{}".format(ModelWithUniques._meta.db_table, md5("One").hexdigest())
         self.assertEqual(expected_marker, marker.key().id_or_name())
 
         instance.name = "Two"
@@ -465,7 +477,7 @@ class ConstraintTests(TestCase):
         marker = [ x for x in qry.Run()][0]
         self.assertEqual(datastore.Key(marker["instance"]), datastore.Key.from_path(instance._meta.db_table, instance.pk)) #Make sure we assigned the instance
 
-        expected_marker = "{}|name:{}".format(ModelWithUniques._meta.db_table, hash("One"))
+        expected_marker = "{}|name:{}".format(ModelWithUniques._meta.db_table, md5("One").hexdigest())
         self.assertEqual(expected_marker, marker.key().id_or_name())
 
     def test_error_on_insert_doesnt_create_markers(self):
@@ -577,9 +589,12 @@ class EdgeCaseTests(TestCase):
         results = TestUser.objects.filter(username__lte="E")
         self.assertEqual(5, len(results))
 
-        #Double exclude not supported
+        #Double exclude on different properties not supported
         with self.assertRaises(NotSupportedError):
-            list(TestUser.objects.exclude(username="E").exclude(username="A"))
+            list(TestUser.objects.exclude(username="E").exclude(email="A"))
+
+        results = list(TestUser.objects.exclude(username="E").exclude(username="A"))
+        self.assertItemsEqual(["B", "C", "D"], [x.username for x in results ])
 
         results = TestUser.objects.filter(username="A", email="test@example.com")
         self.assertEqual(1, len(results))
@@ -600,11 +615,9 @@ class EdgeCaseTests(TestCase):
         self.assertEqual(1, len(results))
         self.assertItemsEqual(["A"], [x.username for x in results])
 
-        #Negated in not supported
-        with self.assertRaises(NotSupportedError):
-            list(TestUser.objects.all().exclude(username__in=["A"]))
+        results = list(TestUser.objects.all().exclude(username__in=["A"]))
+        self.assertItemsEqual(["B", "C", "D", "E"], [x.username for x in results ])
 
-    @unittest.skip("We need to properly implement OR queries")
     def test_or_queryset(self):
         """
             This constructs an OR query, this is currently broken in the parse_where_and_check_projection
@@ -615,7 +628,6 @@ class EdgeCaseTests(TestCase):
 
         self.assertItemsEqual([self.u1, self.u2], list(q1 | q2))
 
-    @unittest.skip("We need to properly implement OR queries")
     def test_or_q_objects(self):
         """ Test use of Q objects in filters. """
         query = TestUser.objects.filter(Q(username="A") | Q(username="B"))
@@ -642,12 +654,8 @@ class EdgeCaseTests(TestCase):
         self.assertEqual(5, TestUser.objects.count())
         self.assertEqual(2, TestUser.objects.filter(email="test3@example.com").count())
         self.assertEqual(3, TestUser.objects.exclude(email="test3@example.com").count())
-        self.assertEqual(1,
-            TestUser.objects.filter(username="A").exclude(email="test3@example.com").count())
-
-        with self.assertRaises(NotSupportedError):
-            list(TestUser.objects.exclude(username="E").exclude(username="A"))
-
+        self.assertEqual(1, TestUser.objects.filter(username="A").exclude(email="test3@example.com").count())
+        self.assertEqual(3, TestUser.objects.exclude(username="E").exclude(username="A").count())
 
     def test_deletion(self):
         count = TestUser.objects.count()
@@ -685,13 +693,13 @@ class EdgeCaseTests(TestCase):
     def test_select_related(self):
         """ select_related should be a no-op... for now """
         user = TestUser.objects.get(username="A")
-        perm = Permission.objects.create(user=user, perm="test_perm")
+        Permission.objects.create(user=user, perm="test_perm")
         select_related = [ (p.perm, p.user.username) for p in user.permission_set.select_related() ]
         self.assertEqual(user.username, select_related[0][1])
 
     def test_cross_selects(self):
         user = TestUser.objects.get(username="A")
-        perm = Permission.objects.create(user=user, perm="test_perm")
+        Permission.objects.create(user=user, perm="test_perm")
         with self.assertRaises(NotSupportedError):
             perms = list(Permission.objects.all().values_list("user__username", "perm"))
             self.assertEqual("A", perms[0][0])
@@ -702,6 +710,7 @@ class EdgeCaseTests(TestCase):
         def replacement_init(*args, **kwargs):
             replacement_init.called_args = args
             replacement_init.called_kwargs = kwargs
+            original_init(*args, **kwargs)
 
         replacement_init.called_args = None
         replacement_init.called_kwargs = None
@@ -730,31 +739,34 @@ class EdgeCaseTests(TestCase):
         self.assertEqual(["A", "B", "C", "D", "E"][::-1], [x.username for x in users])
 
     def test_dates_query(self):
-        TestUser.objects.create(username="Z", email="z@example.com", last_login=datetime.date(2013, 4, 5))
+        z_user = TestUser.objects.create(username="Z", email="z@example.com")
+        z_user.last_login = datetime.date(2013, 4, 5)
+        z_user.save()
 
         last_a_login = TestUser.objects.get(username="A").last_login
 
         dates = TestUser.objects.dates('last_login', 'year')
+
         self.assertItemsEqual(
-            [datetime.datetime(2013, 1, 1, 0, 0), datetime.datetime(last_a_login.year, 1, 1, 0, 0)],
+            [datetime.date(2013, 1, 1), datetime.date(last_a_login.year, 1, 1)],
             dates
         )
 
         dates = TestUser.objects.dates('last_login', 'month')
         self.assertItemsEqual(
-            [datetime.datetime(2013, 4, 1, 0, 0), datetime.datetime(last_a_login.year, last_a_login.month, 1, 0, 0)],
+            [datetime.date(2013, 4, 1), datetime.date(last_a_login.year, last_a_login.month, 1)],
             dates
         )
 
         dates = TestUser.objects.dates('last_login', 'day')
         self.assertItemsEqual(
-            [datetime.datetime(2013, 4, 5, 0, 0), datetime.datetime.combine(last_a_login, datetime.datetime.min.time())],
+            [datetime.date(2013, 4, 5), last_a_login],
             dates
         )
 
         dates = TestUser.objects.dates('last_login', 'day', order='DESC')
         self.assertItemsEqual(
-            [datetime.datetime.combine(last_a_login, datetime.datetime.min.time()), datetime.datetime(2013, 4, 5, 0, 0)],
+            [last_a_login, datetime.date(2013, 4, 5)],
             dates
         )
 
