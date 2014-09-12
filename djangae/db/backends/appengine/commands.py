@@ -697,7 +697,14 @@ class SelectCommand(object):
                 return QueryByKeys(queries[0], included_pks, ordering) #Just use whatever query to determine the matches
             else:
                 if len(queries) > 1:
-                    query = datastore.MultiQuery(queries, ordering)
+                    #Disable keys only queries for MultiQuery
+                    new_queries = []
+                    for query in queries:
+                        qry = Query(query._Query__kind, projection=query._Query__query_options.projection)
+                        qry.update(query)
+                        new_queries.append(qry)
+
+                    query = datastore.MultiQuery(new_queries, ordering)
                 else:
                     query = queries[0]
                     query.Order(*ordering)
