@@ -65,7 +65,7 @@ class DisableContextCache(object):
         global context
         context.cache_disabled = True
 
-    def __exit__(self):
+    def __exit__(self, *args, **kwargs):
         global context
         if hasattr(context, "cache_disabled"):
             delattr(context, "cache_disabled")

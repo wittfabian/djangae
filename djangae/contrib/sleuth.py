@@ -2,10 +2,16 @@
 
 # USAGE:
 
+#  Watch calls with sleuth.watch
+#
 #  with sleuth.watch("some.path.to.thing") as mock:
-#      thing()
+#      thing(1, a=2)
 #      self.assertTrue(mock.called)
-
+#      self.assertEqual(1, mock.call_count)
+#      self.assertEqual([((1,), {a:2})], mock.calls)
+#
+#  Replace functions with sleuth.switch...
+#
 #  with sleuth.switch("some.path.to.thing", lambda x: pass) as mock:
 #
 
@@ -33,18 +39,6 @@ def _patch(path, replacement):
     )
     setattr(thing, path.split(".")[-1], replacement)
 
-class Mock(object):
-
-    def __getattr__(self, name):
-        return Mock()
-
-    def __setattr__(self, name, value):
-        pass
-
-    def __repr__(self):
-        return "<Mock %s>" % id(self)
-
-
 class Watch(object):
     def __init__(self, func_path):
         self._original_func = _evaluate_path(func_path)
@@ -59,10 +53,12 @@ class Watch(object):
                 wrapped.calls.append(
                     (args, kwargs)
                 )
+                wrapped.called = True
                 return _func(*args, **kwargs)
 
             wrapped.call_count = 0
             wrapped.calls = []
+            wrapped.called = False
 
             return wrapped
 
@@ -92,7 +88,7 @@ class Switch(object):
         return self._watch.__enter__()
 
     def __exit__(self, *args, **kwargs):
-        self._watch.__exit__()
+        self._watch.__exit__(*args, **kwargs)
         _patch(self._func_path, self._original_func)
 
 switch = Switch
