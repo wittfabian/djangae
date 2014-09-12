@@ -1,10 +1,5 @@
 import os
 
-try:
-    import mock
-except ImportError:
-    raise RuntimeError("You must have mock installed to run the Djangae tests")
-
 from cStringIO import StringIO
 import datetime
 import unittest
@@ -14,16 +9,17 @@ from hashlib import md5
 # LIBRARIES
 from django.core.files.uploadhandler import StopFutureHandlers
 from django.core.cache import cache
+from django.db import connections
 from django.db import DataError, IntegrityError, models
 from django.db.models.query import Q
 from django.forms import ModelForm
 from django.test import TestCase, RequestFactory
 from django.forms.models import modelformset_factory
 from google.appengine.api.datastore_errors import EntityNotFoundError
-from django.db import connections
-
+from google.appengine.api import datastore
 
 # DJANGAE
+from djangae.contrib import sleuth
 from djangae.db.exceptions import NotSupportedError
 from djangae.db.constraints import UniqueMarker
 from djangae.indexing import add_special_index
@@ -36,10 +32,6 @@ from djangae.fields import ComputedCharField
 
 from .storage import BlobstoreFileUploadHandler
 from .wsgi import DjangaeApplication
-
-from google.appengine.api import datastore
-
-from djangae.contrib import sleuth
 
 try:
     import webtest
@@ -195,19 +187,19 @@ class BackendTests(TestCase):
             list(TestUser.objects.filter(pk__in=[1, 2, 3])) #Force the query to run
             self.assertEqual(1, get_mock.call_count)
 
-        with mock.patch("djangae.db.backends.appengine.commands.datastore.Query.Run", return_value=[]) as query_mock:
+        with sleuth.switch("djangae.db.backends.appengine.commands.datastore.Query.Run", lambda *args, **kwargs: []) as query_mock:
             list(TestUser.objects.filter(username="test"))
             self.assertEqual(1, query_mock.call_count)
 
-        with mock.patch("djangae.db.backends.appengine.commands.datastore.MultiQuery.Run", return_value=[]) as query_mock:
+        with sleuth.switch("djangae.db.backends.appengine.commands.datastore.MultiQuery.Run", lambda *args, **kwargs: []) as query_mock:
             list(TestUser.objects.filter(username__in=["test", "cheese"]))
             self.assertEqual(1, query_mock.call_count)
 
-        with mock.patch("djangae.db.backends.appengine.commands.datastore.Get", return_value=[]) as get_mock:
+        with sleuth.switch("djangae.db.backends.appengine.commands.datastore.Get", lambda *args, **kwargs: []) as get_mock:
             list(TestUser.objects.filter(pk=1))
             self.assertEqual(1, get_mock.call_count)
 
-        with mock.patch("djangae.db.backends.appengine.commands.datastore.MultiQuery.Run", return_value=[]) as query_mock:
+        with sleuth.switch("djangae.db.backends.appengine.commands.datastore.MultiQuery.Run", lambda *args, **kwargs: []) as query_mock:
             list(TestUser.objects.exclude(username__startswith="test"))
             self.assertEqual(1, query_mock.call_count)
 
@@ -219,7 +211,7 @@ class ModelFormsetTest(TestCase):
 
         test_model = TestUser.objects.create(username='foo', field2='bar')
         TestModelFormSet = modelformset_factory(TestUser, form=TestModelForm, extra=0)
-        test_model_formset = TestModelFormSet(queryset=TestUser.objects.filter(pk=test_model.pk))
+        TestModelFormSet(queryset=TestUser.objects.filter(pk=test_model.pk))
 
         data = {
             'form-INITIAL_FORMS': 0,
