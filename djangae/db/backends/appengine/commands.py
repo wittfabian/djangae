@@ -10,6 +10,7 @@ from django.core.cache import cache
 from django.db import IntegrityError
 from django.db.models.sql.datastructures import EmptyResultSet
 from django.db.models.sql.where import Constraint
+from django.db.models.sql.where import EmptyWhere
 from google.appengine.api import datastore
 from google.appengine.api.datastore import Query
 from google.appengine.ext import db
@@ -370,7 +371,6 @@ class UniqueQuery(object):
 
 class SelectCommand(object):
     def __init__(self, connection, query, keys_only=False):
-
         self.original_query = query
         self.connection = connection
 
@@ -520,7 +520,13 @@ class SelectCommand(object):
             self.projection = None
 
         columns = set()
-        self.where = normalize_query(query.where, self.connection, filtered_columns=columns)
+
+        if isinstance(query.where, EmptyWhere):
+            #Empty where means return nothing!
+            raise EmptyResultSet()
+        else:
+            self.where = normalize_query(query.where, self.connection, filtered_columns=columns)
+
         #DISABLE PROJECTION IF WE ARE FILTERING ON ONE OF THE PROJECTION_FIELDS
         for field in self.projection or []:
             if field in columns:
