@@ -12,6 +12,7 @@ from django.db import IntegrityError
 from django.db.models import Field
 from django.db.models.sql.datastructures import EmptyResultSet
 from django.db.models.sql.where import AND, OR, Constraint
+from django.db.models.sql.where import EmptyWhere
 from django import dispatch
 from google.appengine.api import datastore
 from google.appengine.api.datastore import Query
@@ -520,7 +521,13 @@ class SelectCommand(object):
             self.projection = None
 
         columns = set()
-        self.where = normalize_query(query.where, self.connection, filtered_columns=columns)
+
+        if isinstance(query.where, EmptyWhere):
+            #Empty where means return nothing!
+            raise EmptyResultSet()
+        else:
+            self.where = normalize_query(query.where, self.connection, filtered_columns=columns)
+
         #DISABLE PROJECTION IF WE ARE FILTERING ON ONE OF THE PROJECTION_FIELDS
         for field in self.projection or []:
             if field in columns:
