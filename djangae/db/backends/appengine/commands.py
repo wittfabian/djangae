@@ -287,6 +287,16 @@ def normalize_query(node, connection, negated=False, filtered_columns=None, _ine
             return exploded
 
 
+def _convert_entity_based_on_query_options(entity, opts):
+    if opts.keys_only:
+        return entity.key()
+
+    if opts.projection:
+        for k in entity.keys()[:]:
+            if k not in opts.projection:
+                del entity[k]
+
+    return entity
 
 class QueryByKeys(object):
     def __init__(self, query, keys, ordering):
@@ -295,9 +305,27 @@ class QueryByKeys(object):
         self.ordering = ordering
         self._Query__kind = query._Query__kind
 
-    def Run(self, limit, offset):
+    def Run(self, limit=None, offset=None):
+        assert not self.query._Query__ancestor_pb #FIXME: We don't handle this yet
 
-        results = sorted((x for x in datastore.Get(self.keys) if x is not None), cmp=partial(utils.django_ordering_comparison, self.ordering))
+        opts = self.query._Query__query_options
+
+        results = None
+
+        #If we have a single key lookup going on, just hit the cache
+        if len(self.keys) == 1:
+            ret = caching.get_from_cache_by_key(self.keys[0])
+            if ret is not None:
+                results = [ret]
+
+        #If there was nothing in the cache, or we had more than one key, then use Get()
+        if results is None:
+            results = sorted((x for x in datastore.Get(self.keys) if x is not None), cmp=partial(utils.django_ordering_comparison, self.ordering))
+
+        results = [
+            _convert_entity_based_on_query_options(x, opts)
+            for x in results if utils.entity_matches_query(x, self.query)
+        ]
 
         if offset:
             results = results[offset:]
@@ -305,7 +333,7 @@ class QueryByKeys(object):
         if limit is not None:
             results = results[:limit]
 
-        return ( x for x in results if utils.entity_matches_query(x, self.query) )
+        return iter(results)
 
     def Count(self, limit, offset):
         return len([ x for x in self.Run(limit, offset) ])
@@ -324,6 +352,10 @@ class UniqueQuery(object):
         self._model = model
 
     def Run(self, limit, offset):
+        opts = self._gae_query._Query__query_options
+        if opts.keys_only or opts.projection:
+            return self._gae_query.Run(limit=limit, offset=offset)
+
         ret = caching.get_from_cache(self._identifier)
         if ret is None:
             ret = [ x for x in self._gae_query.Run(limit=limit, offset=offset) ]
@@ -445,7 +477,11 @@ class SelectCommand(object):
         #subset of fields was specified (e.g. values_list('bananas')) which makes the behaviour a
         #bit more predictable. It would be nice at some point to add some kind of force_projection()
         #thing on a queryset that would do this whenever possible, but that's for the future, maybe.
-        try_projection = bool(self.queried_fields)
+        try_projection = (self.keys_only is False) and bool(self.queried_fields)
+
+        if not self.queried_fields:
+            self.queried_fields = [ x.column for x in opts.fields ]
+
 
         self.excluded_pks = set()
 
@@ -490,16 +526,11 @@ class SelectCommand(object):
             if field in columns:
                 self.projection = None
                 break
-
         try:
             #If the PK was queried, we switch it in our queried
             #fields store with __key__
             pk_index = self.queried_fields.index(self.pk_col)
             self.queried_fields[pk_index] = "__key__"
-
-            #If the only field queried was the key, then we can do a keys_only
-            #query
-            self.keys_only = len(self.queried_fields) == 1
         except ValueError:
             pass
 
@@ -871,7 +902,7 @@ class InsertCommand(object):
 
 class DeleteCommand(object):
     def __init__(self, connection, query):
-        self.select = SelectCommand(connection, query)
+        self.select = SelectCommand(connection, query, keys_only=True)
 
     def execute(self):
         self.select.execute()
@@ -879,9 +910,15 @@ class DeleteCommand(object):
         #This is a little bit more inefficient than just doing a keys_only query and
         #sending it to delete, but I think this is the sacrifice to make for the unique caching layer
         keys = []
-        for entity in self.select.results:
+        for entity in QueryByKeys(
+                Query(self.select.model._meta.db_table),
+                [ x for x in self.select.results ],
+                []
+            ).Run():
+
             keys.append(entity.key())
             constraints.release(self.select.model, entity)
+            caching.remove_entity_from_context_cache_by_key(entity.key())
         datastore.Delete(keys)
 
 class UpdateCommand(object):
@@ -893,6 +930,8 @@ class UpdateCommand(object):
 
     @db.transactional
     def _update_entity(self, key):
+        caching.remove_entity_from_context_cache_by_key(key)
+
         result = datastore.Get(key)
         original = copy.deepcopy(result)
 
@@ -910,6 +949,7 @@ class UpdateCommand(object):
         constraints.acquire_identifiers(to_acquire, result.key())
         try:
             datastore.Put(result)
+            caching.add_entity_to_context_cache(self.model, result)
         except:
             constraints.release_identifiers(to_acquire)
             raise
