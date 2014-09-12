@@ -130,39 +130,30 @@ class CachingTests(TestCase):
     def test_pk_queries_hit_the_context_cache(self):
         instance = UniqueModel.objects.create(unique_field="test") #Create an instance
 
-        from google.appengine.api import datastore
-        from djangae.db.backends.appengine import commands
-
         #With the context cache enabled, make sure we don't hit the DB
-        wrapper = mock.Mock(wraps=commands.UniqueQuery.Run)
-        rpc_wrapper = mock.Mock(wraps=datastore.Query.Run)
-
-        UniqueModel.objects.get(pk=instance.pk)
-        self.assertTrue(wrapper.called)
-        self.assertFalse(rpc_wrapper.called)
+        with sleuth.watch("google.appengine.api.datastore.Query.Run") as rpc_run:
+            with sleuth.watch("djangae.db.backends.appengine.commands.QueryByKeys.Run") as query_run:
+                UniqueModel.objects.get(pk=instance.pk)
+                self.assertTrue(query_run.called)
+                self.assertFalse(rpc_run.called)
 
     def test_insert_then_unique_query_returns_from_cache(self):
         UniqueModel.objects.create(unique_field="test") #Create an instance
 
-        from google.appengine.api import datastore
-        from djangae.db.backends.appengine import commands
-
         #With the context cache enabled, make sure we don't hit the DB
-        with mock.patch("djangae.db.backends.appengine.commands.UniqueQuery.Run", wraps=commands.UniqueQuery.Run) as wrapper:
-            rpc_wrapper = mock.Mock(wraps=datastore.Query.Run)
-
-            instance_from_cache = UniqueModel.objects.get(unique_field="test")
-            self.assertTrue(wrapper.called)
-            self.assertFalse(rpc_wrapper.called)
+        with sleuth.watch("google.appengine.api.datastore.Query.Run") as rpc_wrapper:
+            with sleuth.watch("djangae.db.backends.appengine.commands.UniqueQuery.Run") as wrapper:
+                instance_from_cache = UniqueModel.objects.get(unique_field="test")
+                self.assertTrue(wrapper.called)
+                self.assertFalse(rpc_wrapper.called)
 
         #Disable the context cache, make sure that we hit the database
         with caching.disable_context_cache():
-            wrapper = mock.Mock(wraps=commands.UniqueQuery.Run)
-            rpc_wrapper = mock.Mock(wraps=datastore.Query.Run)
-
-            instance_from_database = UniqueModel.objects.get(unique_field="test")
-            self.assertTrue(wrapper.called)
-            self.assertTrue(rpc_wrapper.called)
+            with sleuth.watch("google.appengine.api.datastore.Query.Run") as rpc_wrapper:
+                with sleuth.watch("djangae.db.backends.appengine.commands.UniqueQuery.Run") as wrapper:
+                    instance_from_database = UniqueModel.objects.get(unique_field="test")
+                    self.assertTrue(wrapper.called)
+                    self.assertTrue(rpc_wrapper.called)
 
         self.assertEqual(instance_from_cache, instance_from_database)
 
