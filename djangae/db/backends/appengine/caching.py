@@ -25,7 +25,9 @@ def add_entity_to_context_cache(model, entity):
 
 def remove_entity_from_context_cache(entity):
     key = entity.key()
+    remove_entity_from_context_cache_by_key(key)
 
+def remove_entity_from_context_cache_by_key(key):
     if key in context.reverse_cache:
         for identifier in context.reverse_cache[key]:
             del context.cache[identifier]
@@ -41,7 +43,17 @@ def uncache_entity(model, entity):
     for identifier in identifiers:
         cache.delete(identifier)
 
+def get_from_cache_by_key(key):
+    if key not in context.reverse_cache:
+        return None
+
+    identifier = context.reverse_cache[key][0] #Pick any identifier
+    return get_from_cache(identifier)
+
 def get_from_cache(unique_identifier):
+    if getattr(context, "cache_disabled", False):
+        return None
+
     if not hasattr(context, "cache"):
         return None
 
@@ -52,10 +64,14 @@ def get_from_cache(unique_identifier):
 def clear_context_cache(*args, **kwargs):
     global context_cache
     context.cache = {}
+    context.reverse_cache = {}
 
     #Make sure we always re-enable the caching when the request starts
     if hasattr(context, "cache_disabled"):
         delattr(context, "cache_disabled")
+
+def clear_all_caches():
+    clear_context_cache()
 
 class DisableContextCache(object):
     """

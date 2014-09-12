@@ -36,6 +36,7 @@ from djangae.db.utils import (
     make_timezone_naive,
     get_datastore_key,
 )
+from djangae.db.backends.appengine import caching
 from djangae.indexing import load_special_indexes
 from .commands import (
     SelectCommand,
@@ -214,6 +215,7 @@ class DatabaseOperations(BaseDatabaseOperations):
         if creation.testbed:
             creation._destroy_test_db(':memory:', verbosity=1)
             creation._create_test_db(':memory:', autoclobber=True)
+            caching.clear_all_caches()
             return []
         else:
             return [ FlushCommand(table) for table in tables ]

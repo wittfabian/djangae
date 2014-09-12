@@ -80,7 +80,10 @@ def query_is_unique(model, query):
             if field == model._meta.pk.column:
                 field = "__key__"
 
-            if "{} =".format(field) not in queried_fields:
+            #We don't match this combination if the field didn't exist in the queried fields
+            #or if it was, but the value was None (you can have multiple NULL values, they aren't unique)
+            key = "{} =".format(field)
+            if key not in queried_fields or query[key] is None:
                 unique_match = False
                 break
 

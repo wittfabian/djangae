@@ -124,9 +124,9 @@ class CachingTests(TestCase):
 
         #With the context cache enabled, make sure we don't hit the DB
         with sleuth.watch("google.appengine.api.datastore.Query.Run") as rpc_run:
-            with sleuth.watch("djangae.db.backends.appengine.commands.QueryByKeys.Run") as query_run:
+            with sleuth.watch("djangae.db.backends.appengine.caching.get_from_cache") as cache_hit:
                 UniqueModel.objects.get(pk=instance.pk)
-                self.assertTrue(query_run.called)
+                self.assertTrue(cache_hit.called)
                 self.assertFalse(rpc_run.called)
 
     def test_insert_then_unique_query_returns_from_cache(self):
@@ -134,17 +134,17 @@ class CachingTests(TestCase):
 
         #With the context cache enabled, make sure we don't hit the DB
         with sleuth.watch("google.appengine.api.datastore.Query.Run") as rpc_wrapper:
-            with sleuth.watch("djangae.db.backends.appengine.commands.UniqueQuery.Run") as wrapper:
+            with sleuth.watch("djangae.db.backends.appengine.caching.get_from_cache") as cache_hit:
                 instance_from_cache = UniqueModel.objects.get(unique_field="test")
-                self.assertTrue(wrapper.called)
+                self.assertTrue(cache_hit.called)
                 self.assertFalse(rpc_wrapper.called)
 
         #Disable the context cache, make sure that we hit the database
         with caching.disable_context_cache():
             with sleuth.watch("google.appengine.api.datastore.Query.Run") as rpc_wrapper:
-                with sleuth.watch("djangae.db.backends.appengine.commands.UniqueQuery.Run") as wrapper:
+                with sleuth.watch("djangae.db.backends.appengine.caching.get_from_cache") as cache_hit:
                     instance_from_database = UniqueModel.objects.get(unique_field="test")
-                    self.assertTrue(wrapper.called)
+                    self.assertTrue(cache_hit.called)
                     self.assertTrue(rpc_wrapper.called)
 
         self.assertEqual(instance_from_cache, instance_from_database)
