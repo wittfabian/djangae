@@ -40,6 +40,11 @@ def _patch(path, replacement):
     setattr(thing, path.split(".")[-1], replacement)
 
 class Watch(object):
+    """
+        A context manager that is used to watch a function for calls. It essentially decorates
+        the function for the lifetime of the context and records all the calls made to it so that
+        you can test that everything is as you expect it to be
+    """
     def __init__(self, func_path):
         self._original_func = _evaluate_path(func_path)
         self._func_path = func_path
@@ -76,6 +81,11 @@ watch = Watch
 
 
 class Switch(object):
+    """
+        Replaces a function specified by a path, with the passed callable. The passed in callable is
+        wrapped using the above Watch context manager so that you can also assert that your replacement is
+        called as you expect.
+    """
     def __init__(self, func_path, replacement):
         self._original_func = _evaluate_path(func_path)
         self._func_path = func_path
