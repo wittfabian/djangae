@@ -39,6 +39,8 @@ from .wsgi import DjangaeApplication
 
 from google.appengine.api import datastore
 
+from djangae.contrib import sleuth
+
 try:
     import webtest
 except ImportError:
@@ -198,7 +200,7 @@ class BackendTests(TestCase):
     def test_gae_conversion(self):
         #A PK IN query should result in a single get by key
 
-        with mock.patch("djangae.db.backends.appengine.commands.datastore.Get", return_value=[]) as get_mock:
+        with sleuth.switch("djangae.db.backends.appengine.commands.datastore.Get", lambda *args, **kwargs: []) as get_mock:
             list(TestUser.objects.filter(pk__in=[1, 2, 3])) #Force the query to run
             self.assertEqual(1, get_mock.call_count)
 
