@@ -129,6 +129,17 @@ class CachingTests(TestCase):
                 self.assertTrue(cache_hit.called)
                 self.assertFalse(rpc_run.called)
 
+
+    def test_transactions_clear_the_context_cache(self):
+        UniqueModel.objects.create(unique_field="test") #Create an instance
+
+        with transaction.atomic():
+            self.assertFalse(caching.context.cache)
+            UniqueModel.objects.create(unique_field="test2", unique_combo_one=1) #Create an instance
+            self.assertTrue(caching.context.cache)
+
+        self.assertFalse(caching.context.cache)
+
     def test_insert_then_unique_query_returns_from_cache(self):
         UniqueModel.objects.create(unique_field="test") #Create an instance
 

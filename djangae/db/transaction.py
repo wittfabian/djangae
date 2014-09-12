@@ -9,6 +9,8 @@ from google.appengine.api.datastore import (
 
 from google.appengine.datastore.datastore_rpc import TransactionOptions
 
+from djangae.db.backends.appengine import caching
+
 class AtomicDecorator(object):
     def __init__(self, *args, **kwargs):
         self.func = None
@@ -37,12 +39,18 @@ class AtomicDecorator(object):
         _PushConnection(None)
         _SetConnection(conn.new_transaction(options))
 
+        #Clear the context cache at the start of a transaction
+        caching.clear_context_cache()
+
     def _finalize(self):
         _PopConnection() #Pop the transaction connection
         if self.parent_conn:
             #If there was a parent transaction, now put that back
             _PushConnection(self.parent_conn)
             self.parent_conn = None
+
+        #Clear the context cache at the end of a transaction
+        caching.clear_context_cache()
 
     def __call__(self, *args, **kwargs):
         def call_func(*_args, **_kwargs):
