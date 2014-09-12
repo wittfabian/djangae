@@ -1,4 +1,10 @@
 import os
+
+try:
+    import mock
+except ImportError:
+    raise RuntimeError("You must have mock installed to run the Djangae tests")
+
 from cStringIO import StringIO
 import datetime
 import unittest
@@ -33,7 +39,7 @@ from .wsgi import DjangaeApplication
 
 from google.appengine.api import datastore
 
-import mock
+from djangae.contrib import sleuth
 
 try:
     import webtest
@@ -194,7 +200,7 @@ class BackendTests(TestCase):
     def test_gae_conversion(self):
         #A PK IN query should result in a single get by key
 
-        with mock.patch("djangae.db.backends.appengine.commands.datastore.Get", return_value=[]) as get_mock:
+        with sleuth.switch("djangae.db.backends.appengine.commands.datastore.Get", lambda *args, **kwargs: []) as get_mock:
             list(TestUser.objects.filter(pk__in=[1, 2, 3])) #Force the query to run
             self.assertEqual(1, get_mock.call_count)
 
@@ -727,13 +733,13 @@ class EdgeCaseTests(TestCase):
     def test_select_related(self):
         """ select_related should be a no-op... for now """
         user = TestUser.objects.get(username="A")
-        perm = Permission.objects.create(user=user, perm="test_perm")
+        Permission.objects.create(user=user, perm="test_perm")
         select_related = [ (p.perm, p.user.username) for p in user.permission_set.select_related() ]
         self.assertEqual(user.username, select_related[0][1])
 
     def test_cross_selects(self):
         user = TestUser.objects.get(username="A")
-        perm = Permission.objects.create(user=user, perm="test_perm")
+        Permission.objects.create(user=user, perm="test_perm")
         with self.assertRaises(NotSupportedError):
             perms = list(Permission.objects.all().values_list("user__username", "perm"))
             self.assertEqual("A", perms[0][0])
