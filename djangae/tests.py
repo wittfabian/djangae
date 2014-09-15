@@ -586,6 +586,9 @@ class EdgeCaseTests(TestCase):
         self.assertEqual(1, MultiTableChildTwo.objects.count())
         self.assertEqual(child2, MultiTableChildTwo.objects.get())
 
+        self.assertEqual(child2, MultiTableChildTwo.objects.get(pk=child2.pk))
+        self.assertTrue(MultiTableParent.objects.filter(pk=child2.pk).exists())
+
 
     def test_anding_pks(self):
         results = TestUser.objects.filter(id__exact=self.u1.pk).filter(id__exact=self.u2.pk)
