@@ -62,7 +62,6 @@ def get_from_cache(unique_identifier):
 @receiver(request_finished)
 @receiver(request_started)
 def clear_context_cache(*args, **kwargs):
-    global context_cache
     context.cache = {}
     context.reverse_cache = {}
 

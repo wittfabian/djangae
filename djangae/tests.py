@@ -9,10 +9,12 @@ from hashlib import md5
 # LIBRARIES
 from django.core.files.uploadhandler import StopFutureHandlers
 from django.core.cache import cache
+from django.core.signals import request_finished, request_started
 from django.db import connections
 from django.db import DataError, IntegrityError, models
 from django.db.models.query import Q
 from django.forms import ModelForm
+from django.http import HttpRequest
 from django.test import TestCase, RequestFactory
 from django.forms.models import modelformset_factory
 from google.appengine.api.datastore_errors import EntityNotFoundError
@@ -129,7 +131,6 @@ class CachingTests(TestCase):
                 self.assertTrue(cache_hit.called)
                 self.assertFalse(rpc_run.called)
 
-
     def test_transactions_clear_the_context_cache(self):
         UniqueModel.objects.create(unique_field="test") #Create an instance
 
@@ -159,6 +160,27 @@ class CachingTests(TestCase):
                     self.assertTrue(rpc_wrapper.called)
 
         self.assertEqual(instance_from_cache, instance_from_database)
+
+    def test_context_cache_cleared_after_request(self):
+        """ The context cache should be cleared bewteen requests. """
+        UniqueModel.objects.create(unique_field="test")
+        with sleuth.watch("google.appengine.api.datastore.Query.Run") as query:
+            UniqueModel.objects.get(unique_field="test")
+            self.assertEqual(query.call_count, 0)
+            # Now start a new request, which should clear the cache
+            request_started.send(HttpRequest())
+            UniqueModel.objects.get(unique_field="test")
+            self.assertEqual(query.call_count, 1)
+            # Now do another call, which should use the cache (because it would have been
+            # populated by the previous call)
+            UniqueModel.objects.get(unique_field="test")
+            self.assertEqual(query.call_count, 1)
+            # Now clear the cache again by *finishing* a request
+            request_finished.send(HttpRequest())
+            UniqueModel.objects.get(unique_field="test")
+            self.assertEqual(query.call_count, 2)
+
+
 
 class BackendTests(TestCase):
     def test_entity_matches_query(self):
