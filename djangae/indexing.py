@@ -234,6 +234,19 @@ class EndsWithIndexer(Indexer):
     def indexed_column_name(self, field_column):
         return "_idx_endswith_{0}".format(field_column)
 
+class IEndsWithIndexer(EndsWithIndexer):
+    """
+        Same as above, just all lower cased
+    """
+    def prep_value_for_database(self, value):
+        return super(IEndsWithIndexer, self).prep_value_for_database(value.lower())
+
+    def prep_value_for_query(self, value):
+        return super(IEndsWithIndexer, self).prep_value_for_query(value.lower())
+
+    def indexed_column_name(self, field_column):
+        return "_idx_iendswith_{0}".format(field_column)
+
 REQUIRES_SPECIAL_INDEXES = {
     "iexact": IExactIndexer(),
     "contains": ContainsIndexer(),
@@ -242,5 +255,6 @@ REQUIRES_SPECIAL_INDEXES = {
     "month" : MonthIndexer(),
     "year": YearIndexer(),
     "week_day": WeekDayIndexer(),
-    "endswith": EndsWithIndexer()
+    "endswith": EndsWithIndexer(),
+    "iendswith": IEndsWithIndexer(),
 }
