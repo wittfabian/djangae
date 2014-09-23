@@ -35,6 +35,16 @@ from djangae.utils import on_production, in_testing
 from djangae.db import constraints, utils
 from djangae.db.backends.appengine import caching
 from djangae.db.unique_utils import query_is_unique
+from djangae.db.backends.appengine import transforms
+
+DATE_TRANSFORMS = {
+    "year": transforms.year_transform,
+    "month": transforms.month_transform,
+    "day": transforms.day_transform,
+    "hour": transforms.hour_transform,
+    "minute": transforms.minute_transform,
+    "second": transforms.second_transform
+}
 
 DJANGAE_LOG = logging.getLogger("djangae")
 
@@ -434,28 +444,8 @@ class SelectCommand(object):
                         # basically, appengine gives back dates as a time since the epoch, we convert it to a date, then floor it, then convert it back
                         # in our transform function. The transform is applied when the results are read back so that only distinct values are returned.
                         # this is very hacky...
-                        def date_to_epoch(d):
-                            import calendar
-                            return int(calendar.timegm(d.timetuple()) * 1000000)
-
-                        if lookup_type == "year":
-                            def year_transform(value):
-                                value = self.connection.ops.value_from_db_date(value)
-                                return date_to_epoch(date(value.year, 1, 1)) if value else None
-
-                            self.distinct_field_convertor = year_transform
-                        elif lookup_type == "month":
-                            def month_transform(value):
-                                value = self.connection.ops.value_from_db_date(value)
-                                return date_to_epoch(date(value.year, value.month, 1)) if value else None
-
-                            self.distinct_field_convertor = month_transform
-                        elif lookup_type == "day":
-                            def day_transform(value):
-                                value = self.connection.ops.value_from_db_date(value)
-                                return date_to_epoch(value) if value else None
-
-                            self.distinct_field_convertor = day_transform
+                        if lookup_type in DATE_TRANSFORMS:
+                            self.distinct_field_convertor = lambda value: DATE_TRANSFORMS[lookup_type](self.connection, value)
                         else:
                             raise CouldBeSupportedError("Unhandled lookup_type %s" % lookup_type)
                     else:
