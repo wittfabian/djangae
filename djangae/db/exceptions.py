@@ -1,7 +1,4 @@
-from django.db import IntegrityError
-
-class DatabaseError(Exception):
-    pass
+from django.db import IntegrityError, DatabaseError
 
 class IntegrityError(IntegrityError, DatabaseError):
     pass

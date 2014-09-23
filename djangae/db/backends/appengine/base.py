@@ -269,7 +269,11 @@ class DatabaseOperations(BaseDatabaseOperations):
 
         if db_type == 'string' or db_type == 'text':
             if isinstance(value, str):
-                value = value.decode('utf-8')
+                try:
+                    value = value.decode('utf-8')
+                except UnicodeDecodeError:
+                    raise DatabaseError("Bytestring is not encoded in utf-8")
+
             if db_type == 'text':
                 value = Text(value)
         elif db_type == 'bytes':
