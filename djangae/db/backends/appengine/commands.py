@@ -347,6 +347,10 @@ class NoOpQuery(object):
         return 0
 
 class UniqueQuery(object):
+    """
+        This mimics a normal query but hits the cache if possible. It must
+        be passed the set of unique fields that form a unique constraint
+    """
     def __init__(self, unique_identifier, gae_query, model):
         self._identifier = unique_identifier
         self._gae_query = gae_query

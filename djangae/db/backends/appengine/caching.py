@@ -28,9 +28,8 @@ def remove_entity_from_context_cache(entity):
     remove_entity_from_context_cache_by_key(key)
 
 def remove_entity_from_context_cache_by_key(key):
-    if key in context.reverse_cache:
-        for identifier in context.reverse_cache[key]:
-            del context.cache[identifier]
+    for identifier in context.reverse_cache.get(key, []):
+        del context.cache[identifier]
 
 def cache_entity(model, entity):
     identifiers = unique_identifiers_from_entity(model, entity)
@@ -54,10 +53,7 @@ def get_from_cache(unique_identifier):
     if getattr(context, "cache_disabled", False):
         return None
 
-    if not hasattr(context, "cache"):
-        return None
-
-    return context.cache.get(unique_identifier)
+    return getattr(context, "cache", {}).get(unique_identifier)
 
 @receiver(request_finished)
 @receiver(request_started)
@@ -66,8 +62,10 @@ def clear_context_cache(*args, **kwargs):
     context.reverse_cache = {}
 
     #Make sure we always re-enable the caching when the request starts
-    if hasattr(context, "cache_disabled"):
+    try:
         delattr(context, "cache_disabled")
+    except AttributeError:
+        pass
 
 def clear_all_caches():
     clear_context_cache()

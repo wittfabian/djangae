@@ -88,7 +88,7 @@ def query_is_unique(model, query):
                 break
 
         if unique_match:
-            return model._meta.db_table + "|" + "|".join([
+            return "|".join([model._meta.db_table] + [
                 "{}:{}".format(x, _format_value_for_identifier(query["{} =".format(x)]))
                 for x in combination
             ])
