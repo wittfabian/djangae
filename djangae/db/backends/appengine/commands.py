@@ -297,6 +297,23 @@ def normalize_query(node, connection, negated=False, filtered_columns=None, _ine
               return (exploded[0], [x for x in exploded[1][0][1]])
             return exploded
 
+def convert_keys_to_entities(results):
+    """
+        If for performance reasons we do a keys_only query, then the result
+        of the query will be a list of keys, not a list of entities. Here
+        we convert to a FakeEntity type which should be enough for the rest of the
+        pipeline to process without knowing any different!
+    """
+
+    class FakeEntity(dict):
+        def __init__(self, key):
+            self._key = key
+
+        def key(self):
+            return self._key
+
+    for result in results:
+        yield FakeEntity(result)
 
 def _convert_entity_based_on_query_options(entity, opts):
     if opts.keys_only:
@@ -730,6 +747,10 @@ class SelectCommand(object):
     def _run_query(self, limit=None, start=None, aggregate_type=None):
         if aggregate_type is None:
             results = self.gae_query.Run(limit=limit, offset=start)
+            if self.keys_only:
+                #If we did a keys_only query for performance, we need to wrap the result
+                results = convert_keys_to_entities(results)
+
         elif self.aggregate_type == "count":
             return self.gae_query.Count(limit=limit, offset=start)
         else:
@@ -920,7 +941,7 @@ class DeleteCommand(object):
         keys = []
         for entity in QueryByKeys(
                 Query(self.select.model._meta.db_table),
-                [ x for x in self.select.results ],
+                [ x.key() for x in self.select.results ],
                 []
             ).Run():
 
@@ -971,8 +992,8 @@ class UpdateCommand(object):
         results = self.select.results
 
         i = 0
-        for key in results:
-            self._update_entity(key)
+        for result in results:
+            self._update_entity(result.key())
             i += 1
 
         return i
