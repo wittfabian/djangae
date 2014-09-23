@@ -408,6 +408,8 @@ class SelectCommand(object):
         self.extra_select = query.extra_select
         self._set_db_table()
 
+        self._validate_query_is_possible(query)
+
         if not query.default_ordering:
             self.ordering = query.order_by
         else:
@@ -435,7 +437,6 @@ class SelectCommand(object):
                     # in 1.6 x[1] == Field, but 1.5 x[1] == unicode (column name)
                     if x.field is None:
                         column = x.col.col[1] #This is the column we are getting
-
                         lookup_type = x.col.lookup_type
 
                         self.distinct_on_field = column
@@ -486,7 +487,6 @@ class SelectCommand(object):
 
         self.gae_query = None
 
-        self._validate_query_is_possible(query)
 
         projection_fields = []
 
