@@ -87,6 +87,7 @@ class Indexer(object):
     def prep_value_for_database(self, value): raise NotImplementedError()
     def prep_value_for_query(self, value): raise NotImplementedError()
     def indexed_column_name(self, field_column): raise NotImplementedError()
+    def prep_query_operator(self, op): return "exact"
 
 class IExactIndexer(Indexer):
     def validate_can_be_indexed(self, value):
@@ -208,6 +209,31 @@ class IContainsIndexer(ContainsIndexer):
     def indexed_column_name(self, field_column):
         return "_idx_icontains_{0}".format(field_column)
 
+class EndsWithIndexer(Indexer):
+    """
+        dbindexer originally reversed the string and did a startswith on it.
+        However, this is problematic as it uses an inequality and therefore
+        limits the queries you can perform. Instead, we store all permuatations
+        of the last characters in a list field. Then we can just do an exact lookup on
+        the value. Which isn't as nice, but is more flexible.
+    """
+    def validate_can_be_indexed(self, value):
+        return isinstance(value, basestring) and len(value) < 500
+
+    def prep_value_for_database(self, value):
+        results = []
+        for i in xrange(len(value)):
+            results.append(value[i:])
+        return results
+
+    def prep_value_for_query(self, value):
+        if value.startswith("%"):
+            value = value[1:]
+        return value
+
+    def indexed_column_name(self, field_column):
+        return "_idx_endswith_{0}".format(field_column)
+
 REQUIRES_SPECIAL_INDEXES = {
     "iexact": IExactIndexer(),
     "contains": ContainsIndexer(),
@@ -215,5 +241,6 @@ REQUIRES_SPECIAL_INDEXES = {
     "day" : DayIndexer(),
     "month" : MonthIndexer(),
     "year": YearIndexer(),
-    "week_day": WeekDayIndexer()
+    "week_day": WeekDayIndexer(),
+    "endswith": EndsWithIndexer()
 }

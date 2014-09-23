@@ -165,7 +165,7 @@ def parse_constraint(child, connection):
         indexer = REQUIRES_SPECIAL_INDEXES[op]
         column = indexer.indexed_column_name(column)
         value = indexer.prep_value_for_query(value)
-        op = "exact" #Perhaps this should be supplied by the indexer?
+        op = indexer.prep_query_operator(op)
 
     return column, op, value
 
