@@ -12,6 +12,7 @@ from django.db import IntegrityError
 from django.db.models import Field
 from django.db.models.sql.datastructures import EmptyResultSet
 from django.db.models.sql.where import AND, OR, Constraint
+from django.db.models.sql.where import EmptyWhere
 from django import dispatch
 from google.appengine.api import datastore
 from google.appengine.api.datastore import Query
@@ -32,15 +33,10 @@ from djangae.db.utils import (
 from djangae.indexing import special_indexes_for_column, REQUIRES_SPECIAL_INDEXES, add_special_index
 from djangae.utils import on_production, in_testing
 from djangae.db import constraints, utils
+from djangae.db.backends.appengine import caching
+from djangae.db.unique_utils import query_is_unique
 
 DJANGAE_LOG = logging.getLogger("djangae")
-
-entity_pre_update = dispatch.Signal(providing_args=["sender", "entity"])
-entity_post_update = dispatch.Signal(providing_args=["sender", "entity"])
-entity_post_insert = dispatch.Signal(providing_args=["sender", "entity"])
-entity_deleted = dispatch.Signal(providing_args=["sender", "entity"])
-get_pre_execute = dispatch.Signal(providing_args=["sender", "key"])
-query_pre_execute = dispatch.Signal(providing_args=["sender", "query", "aggregate"])
 
 OPERATORS_MAP = {
     'exact': '=',
@@ -292,6 +288,16 @@ def normalize_query(node, connection, negated=False, filtered_columns=None, _ine
             return exploded
 
 
+def _convert_entity_based_on_query_options(entity, opts):
+    if opts.keys_only:
+        return entity.key()
+
+    if opts.projection:
+        for k in entity.keys()[:]:
+            if k not in opts.projection:
+                del entity[k]
+
+    return entity
 
 class QueryByKeys(object):
     def __init__(self, query, keys, ordering):
@@ -300,9 +306,27 @@ class QueryByKeys(object):
         self.ordering = ordering
         self._Query__kind = query._Query__kind
 
-    def Run(self, limit, offset):
+    def Run(self, limit=None, offset=None):
+        assert not self.query._Query__ancestor_pb #FIXME: We don't handle this yet
 
-        results = sorted((x for x in datastore.Get(self.keys) if x is not None), cmp=partial(utils.django_ordering_comparison, self.ordering))
+        opts = self.query._Query__query_options
+
+        results = None
+
+        #If we have a single key lookup going on, just hit the cache
+        if len(self.keys) == 1:
+            ret = caching.get_from_cache_by_key(self.keys[0])
+            if ret is not None:
+                results = [ret]
+
+        #If there was nothing in the cache, or we had more than one key, then use Get()
+        if results is None:
+            results = sorted((x for x in datastore.Get(self.keys) if x is not None), cmp=partial(utils.django_ordering_comparison, self.ordering))
+
+        results = [
+            _convert_entity_based_on_query_options(x, opts)
+            for x in results if utils.entity_matches_query(x, self.query)
+        ]
 
         if offset:
             results = results[offset:]
@@ -310,7 +334,7 @@ class QueryByKeys(object):
         if limit is not None:
             results = results[:limit]
 
-        return ( x for x in results if utils.entity_matches_query(x, self.query) )
+        return iter(results)
 
     def Count(self, limit, offset):
         return len([ x for x in self.Run(limit, offset) ])
@@ -321,6 +345,37 @@ class NoOpQuery(object):
 
     def Count(self, limit, offset):
         return 0
+
+class UniqueQuery(object):
+    """
+        This mimics a normal query but hits the cache if possible. It must
+        be passed the set of unique fields that form a unique constraint
+    """
+    def __init__(self, unique_identifier, gae_query, model):
+        self._identifier = unique_identifier
+        self._gae_query = gae_query
+        self._model = model
+
+    def Run(self, limit, offset):
+        opts = self._gae_query._Query__query_options
+        if opts.keys_only or opts.projection:
+            return self._gae_query.Run(limit=limit, offset=offset)
+
+        ret = caching.get_from_cache(self._identifier)
+        if ret is None:
+            ret = [ x for x in self._gae_query.Run(limit=limit, offset=offset) ]
+            assert len(ret) <= 1
+            if ret:
+                caching.add_entity_to_context_cache(self._model, ret[0])
+            return iter(ret)
+
+        return iter([ ret ])
+
+    def Count(self, limit, offset):
+        ret = caching.get_from_cache(self._identifier)
+        if ret is None:
+            return self._gae_query.Count(limit=limit, offset=offset)
+        return 1
 
 class SelectCommand(object):
     def __init__(self, connection, query, keys_only=False):
@@ -427,7 +482,11 @@ class SelectCommand(object):
         #subset of fields was specified (e.g. values_list('bananas')) which makes the behaviour a
         #bit more predictable. It would be nice at some point to add some kind of force_projection()
         #thing on a queryset that would do this whenever possible, but that's for the future, maybe.
-        try_projection = bool(self.queried_fields)
+        try_projection = (self.keys_only is False) and bool(self.queried_fields)
+
+        if not self.queried_fields:
+            self.queried_fields = [ x.column for x in opts.fields ]
+
 
         self.excluded_pks = set()
 
@@ -466,22 +525,23 @@ class SelectCommand(object):
             self.projection = None
 
         columns = set()
-        self.where = normalize_query(query.where, self.connection, filtered_columns=columns)
+
+        if isinstance(query.where, EmptyWhere):
+            #Empty where means return nothing!
+            raise EmptyResultSet()
+        else:
+            self.where = normalize_query(query.where, self.connection, filtered_columns=columns)
+
         #DISABLE PROJECTION IF WE ARE FILTERING ON ONE OF THE PROJECTION_FIELDS
         for field in self.projection or []:
             if field in columns:
                 self.projection = None
                 break
-
         try:
             #If the PK was queried, we switch it in our queried
             #fields store with __key__
             pk_index = self.queried_fields.index(self.pk_col)
             self.queried_fields[pk_index] = "__key__"
-
-            #If the only field queried was the key, then we can do a keys_only
-            #query
-            self.keys_only = len(self.queried_fields) == 1
         except ValueError:
             pass
 
@@ -639,15 +699,28 @@ class SelectCommand(object):
 
             if all_queries_same_except_key(queries):
                 included_pks = [ qry["__key__ ="] for qry in queries ]
-                query = QueryByKeys(queries[0], included_pks, ordering) #Just use whatever query to determine the matches
+                return QueryByKeys(queries[0], included_pks, ordering) #Just use whatever query to determine the matches
             else:
                 if len(queries) > 1:
-                    query = datastore.MultiQuery(queries, ordering)
+                    #Disable keys only queries for MultiQuery
+                    new_queries = []
+                    for query in queries:
+                        qry = Query(query._Query__kind, projection=query._Query__query_options.projection)
+                        qry.update(query)
+                        new_queries.append(qry)
+
+                    query = datastore.MultiQuery(new_queries, ordering)
                 else:
                     query = queries[0]
                     query.Order(*ordering)
         else:
             query.Order(*ordering)
+
+        #If the resulting query was unique, then wrap as a unique query which
+        #will hit the cache first
+        unique_identifier = query_is_unique(self.model, query)
+        if unique_identifier:
+            return UniqueQuery(unique_identifier, query, self.model)
 
         DJANGAE_LOG.debug("Select query: {0}, {1}".format(self.model.__name__, self.where))
 
@@ -665,8 +738,6 @@ class SelectCommand(object):
         self.query_done = True
 
     def _run_query(self, limit=None, start=None, aggregate_type=None):
-        query_pre_execute.send(sender=self.model, query=self.gae_query, aggregate=self.aggregate_type)
-
         if aggregate_type is None:
             results = self.gae_query.Run(limit=limit, offset=start)
         elif self.aggregate_type == "count":
@@ -776,6 +847,9 @@ class FlushCommand(object):
 
         cache.clear()
 
+        from .caching import clear_context_cache
+        clear_context_cache()
+
 class InsertCommand(object):
     def __init__(self, connection, model, objs, fields, raw):
         self.has_pk = any([x.primary_key for x in fields])
@@ -816,20 +890,24 @@ class InsertCommand(object):
                     markers = constraints.acquire(self.model, ent)
                     try:
                         results.append(datastore.Put(ent))
+                        caching.add_entity_to_context_cache(self.model, ent)
                     except:
                         #Make sure we delete any created markers before we re-raise
                         constraints.release_markers(markers)
                         raise
 
-                    entity_post_insert.send(sender=self.model, entity=ent)
-
                 txn()
 
             return results
         else:
+            #FIXME: We should rearrange this so that each entity is handled individually like above. We'll
+            #lose insert performance, but gain consistency on errors which is more important
             markers = constraints.acquire_bulk(self.model, self.entities)
             try:
                 results = datastore.Put(self.entities)
+                for entity in self.entities:
+                    caching.add_entity_to_context_cache(self.model, entity)
+
             except:
                 to_delete = chain(*markers)
                 constraints.release_markers(to_delete)
@@ -837,13 +915,12 @@ class InsertCommand(object):
 
             for ent, m in zip(self.entities, markers):
                 constraints.update_instance_on_markers(ent, m)
-                entity_post_insert.send(sender=self.model, entity=ent)
 
             return results
 
 class DeleteCommand(object):
     def __init__(self, connection, query):
-        self.select = SelectCommand(connection, query)
+        self.select = SelectCommand(connection, query, keys_only=True)
 
     def execute(self):
         self.select.execute()
@@ -851,10 +928,15 @@ class DeleteCommand(object):
         #This is a little bit more inefficient than just doing a keys_only query and
         #sending it to delete, but I think this is the sacrifice to make for the unique caching layer
         keys = []
-        for entity in self.select.results:
+        for entity in QueryByKeys(
+                Query(self.select.model._meta.db_table),
+                [ x for x in self.select.results ],
+                []
+            ).Run():
+
             keys.append(entity.key())
             constraints.release(self.select.model, entity)
-            entity_deleted.send(sender=self.select.model, entity=entity)
+            caching.remove_entity_from_context_cache_by_key(entity.key())
         datastore.Delete(keys)
 
 class UpdateCommand(object):
@@ -866,6 +948,8 @@ class UpdateCommand(object):
 
     @db.transactional
     def _update_entity(self, key):
+        caching.remove_entity_from_context_cache_by_key(key)
+
         result = datastore.Get(key)
         original = copy.deepcopy(result)
 
@@ -877,22 +961,19 @@ class UpdateCommand(object):
                 indexer = REQUIRES_SPECIAL_INDEXES[index]
                 result[indexer.indexed_column_name(field.column)] = indexer.prep_value_for_database(value)
 
-        entity_pre_update.send(sender=self.model, entity=result)
-
         to_acquire, to_release = constraints.get_markers_for_update(self.model, original, result)
 
         #Acquire first, because if that fails then we don't want to alter what's already there
         constraints.acquire_identifiers(to_acquire, result.key())
         try:
             datastore.Put(result)
+            caching.add_entity_to_context_cache(self.model, result)
         except:
             constraints.release_identifiers(to_acquire)
             raise
         else:
             #Now we release the ones we don't want anymore
             constraints.release_identifiers(to_release)
-
-        entity_post_update.send(sender=self.model, entity=result)
 
     def execute(self):
         self.select.execute()

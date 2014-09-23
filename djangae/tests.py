@@ -1,4 +1,5 @@
 import os
+
 from cStringIO import StringIO
 import datetime
 import unittest
@@ -8,28 +9,31 @@ from hashlib import md5
 # LIBRARIES
 from django.core.files.uploadhandler import StopFutureHandlers
 from django.core.cache import cache
+from django.core.signals import request_finished, request_started
+from django.db import connections
 from django.db import DataError, IntegrityError, models
 from django.db.models.query import Q
 from django.forms import ModelForm
+from django.http import HttpRequest
 from django.test import TestCase, RequestFactory
 from django.forms.models import modelformset_factory
 from google.appengine.api.datastore_errors import EntityNotFoundError
-from django.db import connections
-
+from google.appengine.api import datastore
 
 # DJANGAE
+from djangae.contrib import sleuth
 from djangae.db.exceptions import NotSupportedError
 from djangae.db.constraints import UniqueMarker
 from djangae.indexing import add_special_index
 from djangae.db.utils import entity_matches_query
 from djangae.db.backends.appengine.commands import normalize_query, parse_constraint
+from djangae.db.backends.appengine import caching
+from djangae.db.unique_utils import query_is_unique
 from djangae.db import transaction
 from djangae.fields import ComputedCharField
 
 from .storage import BlobstoreFileUploadHandler
 from .wsgi import DjangaeApplication
-
-from google.appengine.api import datastore
 
 try:
     import webtest
@@ -45,6 +49,17 @@ class TestUser(models.Model):
     def __unicode__(self):
         return self.username
 
+class UniqueModel(models.Model):
+    unique_field = models.CharField(max_length=100, unique=True)
+    unique_combo_one = models.IntegerField(blank=True, default=0)
+    unique_combo_two = models.CharField(max_length=100, blank=True, default="")
+
+    unique_relation = models.ForeignKey('self', null=True, blank=True, unique=True)
+
+    class Meta:
+        unique_together = [
+            ("unique_combo_one", "unique_combo_two")
+        ]
 
 class TestFruit(models.Model):
     name = models.CharField(primary_key=True, max_length=32)
@@ -77,6 +92,96 @@ class MultiTableChildTwo(MultiTableParent):
     child_two_field = models.CharField(max_length=32)
 
 
+class CachingTests(TestCase):
+    def test_query_is_unique(self):
+        qry = datastore.Query(UniqueModel._meta.db_table)
+        qry["unique_field ="] = "test"
+        self.assertTrue(query_is_unique(UniqueModel, qry))
+        del qry["unique_field ="]
+
+        qry["unique_field >"] = "test"
+        self.assertFalse(query_is_unique(UniqueModel, qry))
+        del qry["unique_field >"]
+
+        qry["unique_combo_one ="] = "one"
+        self.assertFalse(query_is_unique(UniqueModel, qry))
+
+        qry["unique_combo_two ="] = "two"
+        self.assertTrue(query_is_unique(UniqueModel, qry))
+
+    def test_insert_adds_to_context_cache(self):
+        original_keys = caching.context.cache.keys()
+        original_rc_keys = caching.context.reverse_cache.keys()
+
+        instance = UniqueModel.objects.create(unique_field="test")
+
+        #There are 3 unique combinations (id, unique_field, unique_combo), we should've cached under all of them
+        self.assertEqual(3, len(caching.context.cache.keys()) - len(original_keys))
+
+        new_keys = list(set(caching.context.reverse_cache.keys()) - set(original_rc_keys))
+        self.assertEqual(new_keys[0].id_or_name(), instance.pk)
+
+    def test_pk_queries_hit_the_context_cache(self):
+        instance = UniqueModel.objects.create(unique_field="test") #Create an instance
+
+        #With the context cache enabled, make sure we don't hit the DB
+        with sleuth.watch("google.appengine.api.datastore.Query.Run") as rpc_run:
+            with sleuth.watch("djangae.db.backends.appengine.caching.get_from_cache") as cache_hit:
+                UniqueModel.objects.get(pk=instance.pk)
+                self.assertTrue(cache_hit.called)
+                self.assertFalse(rpc_run.called)
+
+    def test_transactions_clear_the_context_cache(self):
+        UniqueModel.objects.create(unique_field="test") #Create an instance
+
+        with transaction.atomic():
+            self.assertFalse(caching.context.cache)
+            UniqueModel.objects.create(unique_field="test2", unique_combo_one=1) #Create an instance
+            self.assertTrue(caching.context.cache)
+
+        self.assertFalse(caching.context.cache)
+
+    def test_insert_then_unique_query_returns_from_cache(self):
+        UniqueModel.objects.create(unique_field="test") #Create an instance
+
+        #With the context cache enabled, make sure we don't hit the DB
+        with sleuth.watch("google.appengine.api.datastore.Query.Run") as rpc_wrapper:
+            with sleuth.watch("djangae.db.backends.appengine.caching.get_from_cache") as cache_hit:
+                instance_from_cache = UniqueModel.objects.get(unique_field="test")
+                self.assertTrue(cache_hit.called)
+                self.assertFalse(rpc_wrapper.called)
+
+        #Disable the context cache, make sure that we hit the database
+        with caching.disable_context_cache():
+            with sleuth.watch("google.appengine.api.datastore.Query.Run") as rpc_wrapper:
+                with sleuth.watch("djangae.db.backends.appengine.caching.get_from_cache") as cache_hit:
+                    instance_from_database = UniqueModel.objects.get(unique_field="test")
+                    self.assertTrue(cache_hit.called)
+                    self.assertTrue(rpc_wrapper.called)
+
+        self.assertEqual(instance_from_cache, instance_from_database)
+
+    def test_context_cache_cleared_after_request(self):
+        """ The context cache should be cleared bewteen requests. """
+        UniqueModel.objects.create(unique_field="test")
+        with sleuth.watch("google.appengine.api.datastore.Query.Run") as query:
+            UniqueModel.objects.get(unique_field="test")
+            self.assertEqual(query.call_count, 0)
+            # Now start a new request, which should clear the cache
+            request_started.send(HttpRequest())
+            UniqueModel.objects.get(unique_field="test")
+            self.assertEqual(query.call_count, 1)
+            # Now do another call, which should use the cache (because it would have been
+            # populated by the previous call)
+            UniqueModel.objects.get(unique_field="test")
+            self.assertEqual(query.call_count, 1)
+            # Now clear the cache again by *finishing* a request
+            request_finished.send(HttpRequest())
+            UniqueModel.objects.get(unique_field="test")
+            self.assertEqual(query.call_count, 2)
+
+
+
 class BackendTests(TestCase):
     def test_entity_matches_query(self):
         entity = datastore.Entity("test_model")
@@ -107,6 +212,30 @@ class BackendTests(TestCase):
         entity["name"] = [ "Bob", "Fred", "Dave" ]
         self.assertTrue(entity_matches_query(entity, query)) #ListField test
 
+
+    def test_gae_conversion(self):
+        #A PK IN query should result in a single get by key
+
+        with sleuth.switch("djangae.db.backends.appengine.commands.datastore.Get", lambda *args, **kwargs: []) as get_mock:
+            list(TestUser.objects.filter(pk__in=[1, 2, 3])) #Force the query to run
+            self.assertEqual(1, get_mock.call_count)
+
+        with sleuth.switch("djangae.db.backends.appengine.commands.datastore.Query.Run", lambda *args, **kwargs: []) as query_mock:
+            list(TestUser.objects.filter(username="test"))
+            self.assertEqual(1, query_mock.call_count)
+
+        with sleuth.switch("djangae.db.backends.appengine.commands.datastore.MultiQuery.Run", lambda *args, **kwargs: []) as query_mock:
+            list(TestUser.objects.filter(username__in=["test", "cheese"]))
+            self.assertEqual(1, query_mock.call_count)
+
+        with sleuth.switch("djangae.db.backends.appengine.commands.datastore.Get", lambda *args, **kwargs: []) as get_mock:
+            list(TestUser.objects.filter(pk=1))
+            self.assertEqual(1, get_mock.call_count)
+
+        with sleuth.switch("djangae.db.backends.appengine.commands.datastore.MultiQuery.Run", lambda *args, **kwargs: []) as query_mock:
+            list(TestUser.objects.exclude(username__startswith="test"))
+            self.assertEqual(1, query_mock.call_count)
+
 class ModelFormsetTest(TestCase):
     def test_reproduce_index_error(self):
         class TestModelForm(ModelForm):
@@ -115,7 +244,7 @@ class ModelFormsetTest(TestCase):
 
         test_model = TestUser.objects.create(username='foo', field2='bar')
         TestModelFormSet = modelformset_factory(TestUser, form=TestModelForm, extra=0)
-        test_model_formset = TestModelFormSet(queryset=TestUser.objects.filter(pk=test_model.pk))
+        TestModelFormSet(queryset=TestUser.objects.filter(pk=test_model.pk))
 
         data = {
             'form-INITIAL_FORMS': 0,
@@ -479,6 +608,9 @@ class EdgeCaseTests(TestCase):
         self.assertEqual(1, MultiTableChildTwo.objects.count())
         self.assertEqual(child2, MultiTableChildTwo.objects.get())
 
+        self.assertEqual(child2, MultiTableChildTwo.objects.get(pk=child2.pk))
+        self.assertTrue(MultiTableParent.objects.filter(pk=child2.pk).exists())
+
 
     def test_anding_pks(self):
         results = TestUser.objects.filter(id__exact=self.u1.pk).filter(id__exact=self.u2.pk)
@@ -620,13 +752,13 @@ class EdgeCaseTests(TestCase):
     def test_select_related(self):
         """ select_related should be a no-op... for now """
         user = TestUser.objects.get(username="A")
-        perm = Permission.objects.create(user=user, perm="test_perm")
+        Permission.objects.create(user=user, perm="test_perm")
         select_related = [ (p.perm, p.user.username) for p in user.permission_set.select_related() ]
         self.assertEqual(user.username, select_related[0][1])
 
     def test_cross_selects(self):
         user = TestUser.objects.get(username="A")
-        perm = Permission.objects.create(user=user, perm="test_perm")
+        Permission.objects.create(user=user, perm="test_perm")
         with self.assertRaises(NotSupportedError):
             perms = list(Permission.objects.all().values_list("user__username", "perm"))
             self.assertEqual("A", perms[0][0])
