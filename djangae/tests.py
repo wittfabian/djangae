@@ -393,11 +393,10 @@ class QueryNormalizationTests(TestCase):
         #      (AND: username='python', username='php', username > 'perl')
 
 
-        expected = ('OR', [
-            ('AND', [('username', '=', 'python'), ('username', '=', 'ruby')]),
+        expected = ('OR', [('AND', [('username', '=', 'python'), ('username', '=', 'ruby')]),
             ('AND', [('username', '=', 'python'), ('username', '=', 'jruby')]),
-            ('AND', [('username', '=', 'php'), ('username', '>', 'perl'), ('username', '=', 'python')]),
-            ('AND', [('username', '=', 'php'), ('username', '<', 'perl'), ('username', '=', 'python')])
+            ('AND', [('username', '=', 'python'), ('username', '=', 'php'), ('username', '>', 'perl')]),
+            ('AND', [('username', '=', 'python'), ('username', '=', 'php'), ('username', '<', 'perl')])
         ])
 
         self.assertEqual(expected, normalize_query(qs.query.where, connection=connection))

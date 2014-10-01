@@ -195,6 +195,9 @@ def normalize_query(node, connection, negated=False, filtered_columns=None, _ine
                 _current_inequality.append(_column)
 
     if isinstance(node, tuple) and isinstance(node[0], Constraint):
+        # This is where contraints are exploded
+        #
+        #
         column, op, value = parse_constraint(node, connection)
 
         if filtered_columns is not None:
@@ -209,6 +212,8 @@ def normalize_query(node, connection, negated=False, filtered_columns=None, _ine
                 check_inequality_usage(">", column, _inequality_property)
                 return ('OR', [ ('OR', [(column, '>', x), (column, '<', x)]) for x in value ])
             else:
+                if len(value) == 1:
+                    return (column, '=', value[0])
                 return ('OR', [(column, '=', x) for x in value])
 
         if op not in OPERATORS_MAP:
@@ -252,6 +257,9 @@ def normalize_query(node, connection, negated=False, filtered_columns=None, _ine
 
         return (column, _op, value)
     else:
+        # This is where the distribution is applied over the children
+        #
+        #
         if not node.children:
             return []
 
@@ -264,26 +272,70 @@ def normalize_query(node, connection, negated=False, filtered_columns=None, _ine
             ])
 
             if node.connector == 'AND':
-                if len(exploded[1]) == 2 and [x[0] for x in exploded[1]].count('OR') == 1:
-                    _or = [x for x in exploded[1] if x[0] == 'OR' ][0]
-                    tar = [x for x in exploded[1] if x[0] != 'OR'][0]
-                    prods = [('AND', list(x)) for x in product([tar], _or[1])]
-                    finals = []
-                    for prod in prods:
-                        if any(x[0] == 'AND' for x in prod[1]):
-                            _ands = [x for x in prod[1] if x[0] == 'AND']
-                            tar = [x for x in prod[1] if x[0] != 'AND']
-                            finals.append(('AND', list(chain(_ands[0][1], tar))))
-                        else:
-                            finals.append(prod)
-                    return ('OR', finals)
-                elif len(exploded[1]) == 2 and [x[0] for x in exploded[1]].count('OR') == 2:
-                    ret = ('OR', [ ('AND', list(x)) for x in product(exploded[1][0][1], exploded[1][1][1]) ])
-                    return ret
+
+                if len(exploded[1]) > 1:
+                    # import ipdb; ipdb.set_trace()
+
+                    # recursivly applies Conjunction Distributes over Disjunction
+                    # a AND (b OR c) -> (a AND b) OR (a AND c)
+                    #
+                    # this can be applied over and over again
+                    # a AND b AND (c AND d) AND (e AND f)
+                    # ((a AND b AND c) AND (a AND b AND d)) AND (e AND f)
+                    # (((a AND b AND c) AND (a AND b AND d)) AND e) AND (((a AND b AND c) AND (a AND b AND d)) AND f)
+                    # and so on....
+                    _ors = [x for x in exploded[1] if x[0] == 'OR' ]
+                    tars = [x for x in exploded[1] if x[0] != 'OR']
+
+                    def chain_ands(tars, _o):
+                        """ Unpacks ands for distribution, works much like chain with some extra filtering """
+                        # import ipdb; ipdb.set_trace()
+                        for x in tars:
+                            yield x
+                        for x in _o:
+                            if x[0] == 'AND':
+                                for y in x[1]:
+                                    yield y
+                            else:
+                                yield x
+
+                    # The last peice of the puzzle is to combine the following 2 functions
+                    def distribute(_ors, tars):
+                        ret = []
+                        _or = _ors.pop()
+                        for _o in _or[1]:
+                            chained = [x for x in chain_ands(tars, [_o])]
+                            ret.append(('AND', chained))
+                        return _ors, ('OR', ret)
+
+                    def special_product(*args, **kwds):
+                        pools = map(tuple, args) * kwds.get('repeat', 1)
+                        result = [[]]
+                        for pool in pools:
+                            result = [x+[y] for x in result for y in pool]
+                        for prod in result:
+                            yield ('AND', list(prod))
+
+                    reduced = False
+
+                    if len(tars) == 0:
+                        # If there are only ORs under the AND then we can get a flat product
+                        reduced = True
+                        prod = special_product(*[x[1] for x in _ors])
+                        return ('OR', [x for x in prod])
+
+                    while len(_ors) > 0:
+                        # If there are ORs and ANDs under the AND then we can use distribution
+                        reduced = True
+                        _ors, tars = distribute(_ors, tars)
+
+                    if reduced:
+                        return tars
 
             elif node.connector == 'OR':
                 if all(x[0] == 'OR' for x in exploded[1]):
                     return ('OR', list(chain.from_iterable((x[1] for x in exploded[1]))))
+
             return exploded
         else:
             exploded = normalize_query(
@@ -293,8 +345,10 @@ def normalize_query(node, connection, negated=False, filtered_columns=None, _ine
                 filtered_columns=filtered_columns,
                 _inequality_property=_inequality_property
             )
+
             if len(exploded[1]) and exploded[0] == exploded[1][0][0]: # crush any single child 'OR' or 'AND' hangover
-              return (exploded[0], [x for x in exploded[1][0][1]])
+                return (exploded[0], [x for x in exploded[1][0][1]])
+
             return exploded
 
 def convert_keys_to_entities(results):
@@ -538,6 +592,7 @@ class SelectCommand(object):
             raise EmptyResultSet()
         else:
             self.where = normalize_query(query.where, self.connection, filtered_columns=columns)
+
 
         #DISABLE PROJECTION IF WE ARE FILTERING ON ONE OF THE PROJECTION_FIELDS
         for field in self.projection or []:
