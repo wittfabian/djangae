@@ -258,8 +258,6 @@ def normalize_query(node, connection, negated=False, filtered_columns=None, _ine
         return (column, _op, value)
     else:
         # This is where the distribution is applied over the children
-        #
-        #
         if not node.children:
             return []
 
@@ -274,69 +272,34 @@ def normalize_query(node, connection, negated=False, filtered_columns=None, _ine
             if node.connector == 'AND':
 
                 if len(exploded[1]) > 1:
-                    # import ipdb; ipdb.set_trace()
-
-                    # recursivly applies Conjunction Distributes over Disjunction
-                    # a AND (b OR c) -> (a AND b) OR (a AND c)
-                    #
-                    # this can be applied over and over again
-                    # a AND b AND (c AND d) AND (e AND f)
-                    # ((a AND b AND c) AND (a AND b AND d)) AND (e AND f)
-                    # (((a AND b AND c) AND (a AND b AND d)) AND e) AND (((a AND b AND c) AND (a AND b AND d)) AND f)
-                    # and so on....
+                    # We need to know if there are any ORs under this AND node
                     _ors = [x for x in exploded[1] if x[0] == 'OR' ]
-                    tars = [x for x in exploded[1] if x[0] != 'OR']
 
-                    def chain_ands(tars, _o):
-                        """ Unpacks ands for distribution, works much like chain with some extra filtering """
-                        # import ipdb; ipdb.set_trace()
-                        for x in tars:
-                            yield x
-                        for x in _o:
-                            if x[0] == 'AND':
-                                for y in x[1]:
-                                    yield y
-                            else:
-                                yield x
-
-                    # The last peice of the puzzle is to combine the following 2 functions
-                    def distribute(_ors, tars):
-                        ret = []
-                        _or = _ors.pop()
-                        for _o in _or[1]:
-                            chained = [x for x in chain_ands(tars, [_o])]
-                            ret.append(('AND', chained))
-                        return _ors, ('OR', ret)
-
-                    def special_product(*args, **kwds):
-                        pools = map(tuple, args) * kwds.get('repeat', 1)
+                    def special_product(*args):
+                        """
+                            Modified product to return the prods in an AND container
+                        """
+                        pools = map(tuple, args)
                         result = [[]]
                         for pool in pools:
-                            result = [x+[y] for x in result for y in pool]
+                            result = [x+[y] if y[0] != 'AND' else x+y[1] for x in result for y in pool]
                         for prod in result:
                             yield ('AND', list(prod))
 
-                    reduced = False
-
-                    if len(tars) == 0:
-                        # If there are only ORs under the AND then we can get a flat product
-                        reduced = True
-                        prod = special_product(*[x[1] for x in _ors])
-                        return ('OR', [x for x in prod])
-
-                    while len(_ors) > 0:
-                        # If there are ORs and ANDs under the AND then we can use distribution
-                        reduced = True
-                        _ors, tars = distribute(_ors, tars)
-
-                    if reduced:
-                        return tars
+                    if len(_ors) > 0:
+                        # This is a bit complicated to explain in a comment
+                        # But you can calculate the DNF by doing a clever product on the children of the AND node
+                        # It's all to do with grouping the ORs in groups and the ANDs individualy
+                        # This returns a DNF which is naturally wrapped in an OR
+                        _literals = (x for x in exploded[1] if x[0] != 'OR')
+                        flat_ors = (x[1] if x[0] == 'OR' else x for x in _ors)
+                        flat_literals = ([y] if y[0] != 'AND' else ([q] for q in y[1]) for y in _literals)
+                        return ('OR', [x for x in special_product(*chain(flat_ors, flat_literals))])
 
             elif node.connector == 'OR':
                 if all(x[0] == 'OR' for x in exploded[1]):
                     return ('OR', list(chain.from_iterable((x[1] for x in exploded[1]))))
 
-            return exploded
         else:
             exploded = normalize_query(
                 node.children[0],
@@ -346,10 +309,10 @@ def normalize_query(node, connection, negated=False, filtered_columns=None, _ine
                 _inequality_property=_inequality_property
             )
 
-            if len(exploded[1]) and exploded[0] == exploded[1][0][0]: # crush any single child 'OR' or 'AND' hangover
+            if exploded[0] == exploded[1][0][0]: # crush any single child 'OR' or 'AND' hangover
                 return (exploded[0], [x for x in exploded[1][0][1]])
 
-            return exploded
+        return exploded
 
 def convert_keys_to_entities(results):
     """
