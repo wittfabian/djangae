@@ -897,6 +897,10 @@ class InsertCommand(object):
                         if utils.key_exists(key):
                             raise IntegrityError("Tried to INSERT with existing key")
 
+                    id_or_name = key.id_or_name()
+                    if isinstance(id_or_name, basestring) and id_or_name.startswith("__"):
+                        raise NotSupportedError("Datastore ids cannot start with __. Id was %s" % id_or_name)
+
                     markers = constraints.acquire(self.model, ent)
                     try:
                         results.append(datastore.Put(ent))
