@@ -161,6 +161,7 @@ def django_instance_to_entity(connection, model, fields, raw, instance):
                 )
                 primary_key = primary_key[:500]
 
+            primary_key = primary_key.replace("__", "--")
             kwargs["name"] = primary_key
         else:
             raise ValueError("Invalid primary key value")
@@ -180,6 +181,9 @@ def get_datastore_key(model, pk):
     """
 
     kind = get_top_concrete_parent(model)._meta.db_table
+
+    if isinstance(pk, basestring):
+        pk = pk.replace("__", "--")
     return Key.from_path(kind, pk)
 
 class MockInstance(object):

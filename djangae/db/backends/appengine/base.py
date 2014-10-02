@@ -139,7 +139,10 @@ class Cursor(object):
             if col == "__key__":
                 key = entity if isinstance(entity, Key) else entity.key()
                 self.returned_ids.append(key)
-                result.append(key.id_or_name())
+                id_or_name = key.id_or_name()
+                if isinstance(id_or_name, basestring):
+                    id_or_name = id_or_name.replace("--", "__")
+                result.append(id_or_name)
             else:
                 field = get_field_from_column(self.last_select_command.model, col)
                 value = self.connection.ops.convert_values(entity.get(col), field)
@@ -196,8 +199,11 @@ class DatabaseOperations(BaseDatabaseOperations):
         value = super(DatabaseOperations, self).convert_values(value, field)
 
         db_type = self.connection.creation.db_type(field)
-        if db_type == 'string' and isinstance(value, str):
-            value = value.decode("utf-8")
+        if db_type == 'string':
+            if isinstance(value, str):
+                value = value.decode("utf-8")
+            if field.primary_key:
+                value = value.replace("--", "__")
         elif db_type == "datetime":
             value = self.connection.ops.value_from_db_datetime(value)
         elif db_type == "date":
