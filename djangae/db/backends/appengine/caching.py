@@ -10,6 +10,8 @@ from django.core.cache import cache
 logger = logging.getLogger("djangae")
 
 context = threading.local()
+context.cache = {}
+context.reverse_cache = {}
 
 def add_entity_to_context_cache(model, entity):
     identifiers = unique_identifiers_from_entity(model, entity)
