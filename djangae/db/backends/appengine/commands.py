@@ -391,8 +391,7 @@ class UniqueQuery(object):
         ret = caching.get_from_cache(self._identifier)
         if ret is None:
             ret = [ x for x in self._gae_query.Run(limit=limit, offset=offset) ]
-            assert len(ret) <= 1
-            if ret:
+            if len(ret) == 1:
                 caching.add_entity_to_context_cache(self._model, ret[0])
             return iter(ret)
 
