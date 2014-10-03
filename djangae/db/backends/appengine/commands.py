@@ -408,8 +408,7 @@ class UniqueQuery(object):
         ret = caching.get_from_cache(self._identifier)
         if ret is None:
             ret = [ x for x in self._gae_query.Run(limit=limit, offset=offset) ]
-            assert len(ret) <= 1
-            if ret:
+            if len(ret) == 1:
                 caching.add_entity_to_context_cache(self._model, ret[0])
             return iter(ret)
 
@@ -915,6 +914,10 @@ class InsertCommand(object):
                     if key is not None:
                         if utils.key_exists(key):
                             raise IntegrityError("Tried to INSERT with existing key")
+
+                    id_or_name = key.id_or_name()
+                    if isinstance(id_or_name, basestring) and id_or_name.startswith("__"):
+                        raise NotSupportedError("Datastore ids cannot start with __. Id was %s" % id_or_name)
 
                     markers = constraints.acquire(self.model, ent)
                     try:
