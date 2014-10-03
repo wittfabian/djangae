@@ -351,13 +351,15 @@ class QueryNormalizationTests(TestCase):
             ("username", "=", "test"),
             ("email", "=", "test@example.com")
         ])
+
         self.assertEqual(expected, normalize_query(qs.query.where, connection=connection))
         #
         qs = TestUser.objects.filter(username="test").exclude(email="test@example.com")
 
         expected = ('OR', [
-            ('AND', [("username", "=", "test"), ("email", ">", "test@example.com")]),
-            ('AND', [("username", "=", "test"), ("email", "<", "test@example.com")]),
+            ('AND', [('email', '>', 'test@example.com'), ('username', '=', 'test')]),
+            ('AND', [('email', '<', 'test@example.com'), ('username', '=', 'test')])
+
         ])
 
         self.assertEqual(expected, normalize_query(qs.query.where, connection=connection))
@@ -394,12 +396,12 @@ class QueryNormalizationTests(TestCase):
 
 
         expected = ('OR', [
-            ('AND', [('username', '=', 'python'), ('username', '=', 'ruby')]),
-            ('AND', [('username', '=', 'python'), ('username', '=', 'jruby')]),
-            ('AND', [('username', '=', 'php'), ('username', '>', 'perl'), ('username', '=', 'python')]),
-            ('AND', [('username', '=', 'php'), ('username', '<', 'perl'), ('username', '=', 'python')])
+        ('AND', [('username', '=', 'ruby'), ('username', '=', 'python')]),
+        ('AND', [('username', '=', 'jruby'), ('username', '=', 'python')]),
+        ('AND', [('username', '>', 'perl'), ('username', '=', 'php'), ('username', '=', 'python')]),
+        ('AND', [('username', '<', 'perl'), ('username', '=', 'php'), ('username', '=', 'python')])
         ])
-
+        
         self.assertEqual(expected, normalize_query(qs.query.where, connection=connection))
         #
 
