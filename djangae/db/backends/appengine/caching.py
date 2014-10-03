@@ -16,10 +16,6 @@ context.reverse_cache = {}
 def add_entity_to_context_cache(model, entity):
     identifiers = unique_identifiers_from_entity(model, entity)
 
-    if not hasattr(context, "cache"):
-        context.cache = {}
-        context.reverse_cache = {}
-
     for identifier in identifiers:
         context.cache[identifier] = entity
 
@@ -55,7 +51,7 @@ def get_from_cache(unique_identifier):
     if getattr(context, "cache_disabled", False):
         return None
 
-    return getattr(context, "cache", {}).get(unique_identifier)
+    return context.cache.get(unique_identifier)
 
 @receiver(request_finished)
 @receiver(request_started)
