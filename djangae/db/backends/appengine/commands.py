@@ -272,8 +272,14 @@ def normalize_query(node, connection, negated=False, filtered_columns=None, _ine
             if node.connector == 'AND':
 
                 if len(exploded[1]) > 1:
-                    # We need to know if there are any ORs under this AND node
+                    # This is a bit complicated to explain in a comment
+                    # But you can calculate the DNF by doing a clever product on the children of the AND node
+                    # It's all to do with grouping the ORs in groups and the ANDs individualy
+                    # This returns a DNF which is naturally wrapped in an OR
                     _ors = [x for x in exploded[1] if x[0] == 'OR' ]
+                    _literals = [x for x in exploded[1] if x[0] != 'OR']
+                    flat_ors = [x[1] if x[0] == 'OR' else x for x in _ors]
+                    flat_literals = [[y] if y[0] != 'AND' else [q for q in y[1]] for y in _literals]
 
                     def special_product(*args):
                         """
@@ -281,20 +287,13 @@ def normalize_query(node, connection, negated=False, filtered_columns=None, _ine
                         """
                         pools = map(tuple, args)
                         result = [[]]
+                        pools = [pool for pool in pools]
                         for pool in pools:
                             result = [x+[y] if y[0] != 'AND' else x+y[1] for x in result for y in pool]
                         for prod in result:
                             yield ('AND', list(prod))
 
-                    if len(_ors) > 0:
-                        # This is a bit complicated to explain in a comment
-                        # But you can calculate the DNF by doing a clever product on the children of the AND node
-                        # It's all to do with grouping the ORs in groups and the ANDs individualy
-                        # This returns a DNF which is naturally wrapped in an OR
-                        _literals = (x for x in exploded[1] if x[0] != 'OR')
-                        flat_ors = (x[1] if x[0] == 'OR' else x for x in _ors)
-                        flat_literals = ([y] if y[0] != 'AND' else ([q] for q in y[1]) for y in _literals)
-                        return ('OR', [x for x in special_product(*chain(flat_ors, flat_literals))])
+                    return ('OR', [x for x in special_product(*chain(flat_ors, flat_literals))])
 
             elif node.connector == 'OR':
                 if all(x[0] == 'OR' for x in exploded[1]):
