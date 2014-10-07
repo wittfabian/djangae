@@ -91,6 +91,12 @@ class MultiTableChildOne(MultiTableParent):
 class MultiTableChildTwo(MultiTableParent):
     child_two_field = models.CharField(max_length=32)
 
+class Relation(models.Model):
+    pass
+
+class Related(models.Model):
+    headline = models.CharField(max_length=500)
+    relation = models.ForeignKey(Relation)
 
 class CachingTests(TestCase):
     def test_query_is_unique(self):
@@ -373,6 +379,17 @@ class QueryNormalizationTests(TestCase):
         with self.assertRaises(NotSupportedError):
             normalize_query(qs.query.where, connection=connection)
 
+        instance = Relation(pk=1)
+        qs = instance.related_set.filter(headline__startswith='Fir')
+
+        expected = ('OR', [
+            ('AND', [('related_id', '=', 1), ('headline', '>=', u'Fir') ]),
+            ('AND', [('related_id', '=', 1), ('headline', '<', u'Fir\ufffd')])
+        ])
+
+        self.assertEqual(expected, normalize_query(qs.query.where, connection=connection))
+
+
     def test_or_queries(self):
 
         connection = connections['default']
@@ -401,7 +418,7 @@ class QueryNormalizationTests(TestCase):
         ('AND', [('username', '>', 'perl'), ('username', '=', 'php'), ('username', '=', 'python')]),
         ('AND', [('username', '<', 'perl'), ('username', '=', 'php'), ('username', '=', 'python')])
         ])
-        
+
         self.assertEqual(expected, normalize_query(qs.query.where, connection=connection))
         #
 
@@ -741,7 +758,7 @@ class EdgeCaseTests(TestCase):
         user = TestUser.objects.create(id=1, username="test1", last_login=datetime.datetime.now().date())
         self.assertEqual(1, user.pk)
 
-        with self.assertRaises(IntegrityError):
+        with self.assertRaises(DataError):
             TestUser.objects.create(id=1, username="test2", last_login=datetime.datetime.now().date())
 
     def test_included_pks(self):

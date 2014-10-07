@@ -671,7 +671,7 @@ class SelectCommand(object):
                 else:
                     query[key] = value
 
-        if self.where and self.where[-1]:
+        if self.where:
             queries = []
 
             #If there is a single filter, we make it out it's an OR with only one branch
