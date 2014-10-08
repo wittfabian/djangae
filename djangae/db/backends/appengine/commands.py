@@ -212,6 +212,9 @@ def normalize_query(node, connection, negated=False, filtered_columns=None, _ine
                 check_inequality_usage(">", column, _inequality_property)
                 return ('OR', [ ('OR', [(column, '>', x), (column, '<', x)]) for x in value ])
             else:
+                if not value:
+                    raise EmptyResultSet()
+
                 if len(value) == 1:
                     return (column, '=', value[0])
                 return ('OR', [(column, '=', x) for x in value])

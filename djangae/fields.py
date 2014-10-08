@@ -8,6 +8,7 @@ from django.db.models.fields.subclassing import Creator
 from django.utils.text import capfirst
 from django import forms
 from djangae.forms.fields import TrueOrNullFormField, IterableFieldModelChoiceFormField, ListFormField
+from django.db.models.loading import get_model
 
 class _FakeModel(object):
     """
@@ -101,6 +102,10 @@ class IterableField(models.Field):
         self.fk_model = None
         if isinstance(item_field_type, models.ForeignKey):
             self.fk_model = item_field_type.rel.to
+
+            if isinstance(self.fk_model, basestring):
+                self.fk_model = get_model(*self.fk_model.split("."))
+
             if isinstance(self.fk_model._meta.pk, models.AutoField):
                 item_field_type = models.PositiveIntegerField()
             else:

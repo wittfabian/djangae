@@ -17,6 +17,7 @@ from django.forms import ModelForm
 from django.http import HttpRequest
 from django.test import TestCase, RequestFactory
 from django.forms.models import modelformset_factory
+from django.db.models.sql.datastructures import EmptyResultSet
 from google.appengine.api.datastore_errors import EntityNotFoundError
 from google.appengine.api import datastore
 
@@ -431,6 +432,13 @@ class QueryNormalizationTests(TestCase):
         ])
 
         self.assertEqual(expected, normalize_query(qs.query.where, connection=connection))
+
+        qs = TestUser.objects.using("default").filter(username__in=set()).values_list('email')
+
+        with self.assertRaises(EmptyResultSet):
+            normalize_query(qs.query.where, connection=connection)
+
+
         #
         # These tests need to be changed so they check the pk value is a key from Path
         #
