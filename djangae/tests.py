@@ -382,10 +382,7 @@ class QueryNormalizationTests(TestCase):
         instance = Relation(pk=1)
         qs = instance.related_set.filter(headline__startswith='Fir')
 
-        expected = ('OR', [
-            ('AND', [('relation_id', '=', 1), ('headline', '>=', u'Fir') ]),
-            ('AND', [('relation_id', '=', 1), ('headline', '<', u'Fir\ufffd')])
-        ])
+        expected = ('OR', [('AND', [('relation_id', '=', 1), ('_idx_startswith_headline', '=', u'Fir')])])
 
         norm = normalize_query(qs.query.where, connection=connection)
 
@@ -438,7 +435,7 @@ class QueryNormalizationTests(TestCase):
             normalize_query(qs.query.where, connection=connection)
 
         qs = TestUser.objects.filter(username__startswith='Hello') |  TestUser.objects.filter(username__startswith='Goodbye')
-        expected = ('OR', [('AND', [('username', '>=', u'Hello'), ('username', '<', u'Hello\ufffd')]), ('AND', [('username', '>=', u'Goodbye'), ('username', '<', u'Goodbye\ufffd')])])
+        expected = ('OR', [('_idx_startswith_username', '=', u'Hello'), ('_idx_startswith_username', '=', u'Goodbye')])
         self.assertEqual(expected, normalize_query(qs.query.where, connection=connection))
 
 

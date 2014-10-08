@@ -261,7 +261,7 @@ class StartsWithIndexer(Indexer):
 
     def prep_value_for_database(self, value):
         results = []
-        for i in xrange(len(value)):
+        for i in xrange(1, len(value) + 1):
             results.append(value[:i])
         return results
 
