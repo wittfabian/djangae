@@ -353,9 +353,8 @@ class QueryNormalizationTests(TestCase):
 
         qs = TestUser.objects.filter(username="test", email="test@example.com")
 
-        expected = ('AND', [ # Cannot be reduced
-            ("username", "=", "test"),
-            ("email", "=", "test@example.com")
+        expected = ('OR', [
+            ('AND', [("username", "=", "test"), ("email", "=", "test@example.com")])
         ])
 
         self.assertEqual(expected, normalize_query(qs.query.where, connection=connection))
@@ -383,11 +382,13 @@ class QueryNormalizationTests(TestCase):
         qs = instance.related_set.filter(headline__startswith='Fir')
 
         expected = ('OR', [
-            ('AND', [('related_id', '=', 1), ('headline', '>=', u'Fir') ]),
-            ('AND', [('related_id', '=', 1), ('headline', '<', u'Fir\ufffd')])
+            ('AND', [('relation_id', '=', 1), ('headline', '>=', u'Fir') ]),
+            ('AND', [('relation_id', '=', 1), ('headline', '<', u'Fir\ufffd')])
         ])
 
-        self.assertEqual(expected, normalize_query(qs.query.where, connection=connection))
+        norm = normalize_query(qs.query.where, connection=connection)
+
+        self.assertEqual(expected, norm)
 
 
     def test_or_queries(self):
