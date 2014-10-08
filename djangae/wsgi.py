@@ -79,7 +79,7 @@ class DjangaeApplication(object):
         from django.core.exceptions import ImproperlyConfigured
 
         for app in settings.INSTALLED_APPS[::-1]:
-            if app.startswith("django"):
+            if app.startswith("django."):
                 raise ImproperlyConfigured("You must place 'djangae' after 'django' apps in installed apps")
             elif app == "djangae":
                 break
