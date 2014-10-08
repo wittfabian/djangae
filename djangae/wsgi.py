@@ -1,15 +1,29 @@
+import warnings
+
 from google.appengine.runtime import request_environment
 
 from djangae.utils import on_production
 
+
 class DjangaeApplication(object):
+
     def fix_subprocess_module(self):
         """
             Making the subprocess module work on the dev_appserver is hard work
-            so I've isloated it all here
+            so I've isolated it all here
         """
+
         if on_production():
             return
+
+        # TODO: Remove support for the subprocess module.
+        warnings.warn(
+            (
+                "Subprocess support on dev_appserver will be removed soon. Mediagenerator/assetpipe users should find "
+                "alternatives which run in a separate process."
+            ),
+            DeprecationWarning
+        )
 
         import sys
         from google.appengine import dist27
@@ -25,7 +39,6 @@ class DjangaeApplication(object):
 
             if "subprocess" in sys.modules:
                 del sys.modules["subprocess"]
-
 
             for finder in sys.meta_path:
                 if isinstance(finder, sandbox.ModuleOverrideImportHook):
