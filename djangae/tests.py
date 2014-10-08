@@ -391,7 +391,6 @@ class QueryNormalizationTests(TestCase):
 
         self.assertEqual(expected, norm)
 
-
     def test_or_queries(self):
 
         connection = connections['default']
@@ -437,6 +436,10 @@ class QueryNormalizationTests(TestCase):
 
         with self.assertRaises(EmptyResultSet):
             normalize_query(qs.query.where, connection=connection)
+
+        qs = TestUser.objects.filter(username__startswith='Hello') |  TestUser.objects.filter(username__startswith='Goodbye')
+        expected = ('OR', [('AND', [('username', '>=', u'Hello'), ('username', '<', u'Hello\ufffd')]), ('AND', [('username', '>=', u'Goodbye'), ('username', '<', u'Goodbye\ufffd')])])
+        self.assertEqual(expected, normalize_query(qs.query.where, connection=connection))
 
 
         #
@@ -620,6 +623,42 @@ class EdgeCaseTests(TestCase):
         self.assertEqual(instance2, ModelWithDates.objects.get(start__gt=datetime.date(2014, 1, 2)))
         self.assertEqual(instance2, ModelWithDates.objects.get(start__gte=datetime.date(2014, 2, 1)))
 
+
+    def test_double_starts_with(self):
+        qs = TestUser.objects.filter(username__startswith='Hello') |  TestUser.objects.filter(username__startswith='Goodbye')
+
+        self.assertEqual(0, qs.count())
+
+        TestUser.objects.create(username="Hello")
+        self.assertEqual(1, qs.count())
+
+        TestUser.objects.create(username="Goodbye")
+        self.assertEqual(2, qs.count())
+
+        TestUser.objects.create(username="Hello and Goodbye")
+        self.assertEqual(3, qs.count())
+
+    def test_impossible_starts_with(self):
+        TestUser.objects.create(username="Hello")
+        TestUser.objects.create(username="Goodbye")
+        TestUser.objects.create(username="Hello and Goodbye")
+
+        qs = TestUser.objects.filter(username__startswith='Hello') &  TestUser.objects.filter(username__startswith='Goodbye')
+        self.assertEqual(0, qs.count())
+
+    def test_combinations_of_special_indexes(self):
+        qs = TestUser.objects.filter(username__iexact='Hello') | TestUser.objects.filter(username__contains='ood')
+
+        self.assertEqual(0, qs.count())
+
+        TestUser.objects.create(username="Hello")
+        self.assertEqual(1, qs.count())
+
+        TestUser.objects.create(username="Goodbye")
+        self.assertEqual(2, qs.count())
+
+        TestUser.objects.create(username="Hello and Goodbye")
+        self.assertEqual(3, qs.count())
 
     def test_multi_table_inheritance(self):
 

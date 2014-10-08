@@ -191,7 +191,11 @@ class ContainsIndexer(Indexer):
     def prep_value_for_database(self, value):
         result = []
         if value:
-            result.extend([value[count:] for count in range(len(value))])
+            length = len(value)
+            result = [value[i:j+1] for i in xrange(length) for j in xrange(i,length)]
+            if len(result) > 500:
+                raise ValueError("Can't index for contains query, this value has too many permuatations")
+
         return result
 
     def prep_value_for_query(self, value):
@@ -247,6 +251,41 @@ class IEndsWithIndexer(EndsWithIndexer):
     def indexed_column_name(self, field_column):
         return "_idx_iendswith_{0}".format(field_column)
 
+class StartsWithIndexer(Indexer):
+    """
+        Although we can do a startswith natively, doing it this way allows us to
+        use more queries (E.g. we save an exclude)
+    """
+    def validate_can_be_indexed(self, value):
+        return isinstance(value, basestring) and len(value) < 500
+
+    def prep_value_for_database(self, value):
+        results = []
+        for i in xrange(len(value)):
+            results.append(value[:i])
+        return results
+
+    def prep_value_for_query(self, value):
+        if value.endswith("%"):
+            value = value[:-1]
+        return value
+
+    def indexed_column_name(self, field_column):
+        return "_idx_startswith_{0}".format(field_column)
+
+class IStartsWithIndexer(StartsWithIndexer):
+    """
+        Same as above, just all lower cased
+    """
+    def prep_value_for_database(self, value):
+        return super(IStartsWithIndexer, self).prep_value_for_database(value.lower())
+
+    def prep_value_for_query(self, value):
+        return super(IStartsWithIndexer, self).prep_value_for_query(value.lower())
+
+    def indexed_column_name(self, field_column):
+        return "_idx_istartswith_{0}".format(field_column)
+
 REQUIRES_SPECIAL_INDEXES = {
     "iexact": IExactIndexer(),
     "contains": ContainsIndexer(),
@@ -257,4 +296,6 @@ REQUIRES_SPECIAL_INDEXES = {
     "week_day": WeekDayIndexer(),
     "endswith": EndsWithIndexer(),
     "iendswith": IEndsWithIndexer(),
+    "startswith": StartsWithIndexer(),
+    "istartswith": IStartsWithIndexer()
 }

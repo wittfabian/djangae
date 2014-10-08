@@ -58,7 +58,6 @@ OPERATORS_MAP = {
     # The following operators are supported with special code below.
     'isnull': None,
     'in': None,
-    'startswith': None,
     'range': None,
 }
 
@@ -229,22 +228,6 @@ def normalize_query(node, connection, negated=False, filtered_columns=None, _ine
         if negated and _op == '=': # Explode
             check_inequality_usage('>', column, _inequality_property)
             return ('OR', [(column, '>', value), (column, '<', value)])
-        elif op == "startswith":
-            #You can emulate starts with by adding the last unicode char
-            #to the value, then doing <=. Genius.
-            if value.endswith("%"):
-                value = value[:-1]
-            end_value = value[:]
-            if isinstance(end_value, str):
-                end_value = end_value.decode("utf-8")
-            end_value += u'\ufffd'
-
-            check_inequality_usage('>=', column, _inequality_property)
-            if not negated:
-                return ('AND', [(column, '>=', value), (column, '<', end_value)])
-            else:
-                return ('OR', [(column, '<', value), (column, '>=', end_value)])
-
         elif op == "isnull":
             if (value and not negated) or (not value and negated): #We're checking for isnull=True
                 #If we are checking that a primary key isnull, then don't do an impossible query!
@@ -255,7 +238,7 @@ def normalize_query(node, connection, negated=False, filtered_columns=None, _ine
             else: #We're checking for isnull=False
                 check_inequality_usage('>', column, _inequality_property)
                 return ('OR', [(column, '>', None), (column, '<', None)])
-        elif _op == None:
+        elif op is None:
             raise NotSupportedError("Unhandled lookup type %s" % op)
 
         return (column, _op, value)
