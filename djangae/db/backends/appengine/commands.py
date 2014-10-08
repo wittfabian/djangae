@@ -576,7 +576,7 @@ class SelectCommand(object):
         )
 
     def _set_db_table(self):
-        """ Work out which Datstore kind we should actually be querying. This allows for poly
+        """ Work out which Datastore kind we should actually be querying. This allows for poly
             models, i.e. non-abstract parent models which we support by storing all fields for
             both the parent model and its child models on the parent table.
         """
