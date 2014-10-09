@@ -31,7 +31,7 @@ class AppEngineUserAPI(ModelBackend):
             # Django expects a TypeError if this backend cannot handle the given credentials
             raise TypeError()
 
-        # TODO: check that these values actually exist in the crecentials
+        # TODO: I (adamalton) don't see why request is necessary here.  Probably from legacy code.
         request = credentials.get('request', None)
         google_user = credentials.get('google_user', None)
 
