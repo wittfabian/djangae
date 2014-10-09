@@ -2,7 +2,6 @@
 
 # LIBRARIES
 from django.contrib.auth import get_user_model
-from django.http import HttpRequest
 from django.test import TestCase
 from google.appengine.api import users
 
@@ -27,11 +26,10 @@ class BackendTests(TestCase):
         User = get_user_model()
         self.assertEqual(User.objects.count(), 0)
         google_user = users.User('1@example.com', _user_id='111111111100000000001')
-        request = HttpRequest()
         backend = AppEngineUserAPI()
-        user = backend.authenticate(google_user=google_user, request=request)
+        user = backend.authenticate(google_user=google_user,)
         self.assertEqual(user.email, '1@example.com')
         self.assertEqual(User.objects.count(), 1)
         # Calling authenticate again with the same credentials should not create another user
-        user2 = backend.authenticate(google_user=google_user, request=request)
+        user2 = backend.authenticate(google_user=google_user)
         self.assertEqual(user.pk, user2.pk)

@@ -27,15 +27,13 @@ class AppEngineUserAPI(ModelBackend):
                 " subclass of djangae.contrib.auth.models.GaeAbstractUser."
             )
 
-        if len(credentials) != 2:
+        if len(credentials) != 1:
             # Django expects a TypeError if this backend cannot handle the given credentials
             raise TypeError()
 
-        # TODO: I (adamalton) don't see why request is necessary here.  Probably from legacy code.
-        request = credentials.get('request', None)
         google_user = credentials.get('google_user', None)
 
-        if request and google_user:
+        if google_user:
             user_id = google_user.user_id()
             email = google_user.email().lower()
             try:
