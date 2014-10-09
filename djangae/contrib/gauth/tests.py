@@ -1,12 +1,18 @@
 #STANDARD LIB
 
 # LIBRARIES
-from django.contrib.auth import get_user_model
+from django.contrib.auth import get_user_model, get_user
+from django.contrib.sessions.middleware import SessionMiddleware
+from django.http import HttpRequest
 from django.test import TestCase
+from django.test.utils import override_settings
 from google.appengine.api import users
 
 # DJANGAE
 from djangae.contrib.gauth.backends import AppEngineUserAPI
+from djangae.contrib.gauth.middleware import AuthenticationMiddleware
+from djangae.contrib.gauth.settings import AUTHENTICATION_BACKENDS
+from djangae.contrib import sleuth
 
 
 class BackendTests(TestCase):
@@ -33,3 +39,41 @@ class BackendTests(TestCase):
         # Calling authenticate again with the same credentials should not create another user
         user2 = backend.authenticate(google_user=google_user)
         self.assertEqual(user.pk, user2.pk)
+
+
+@override_settings(AUTHENTICATION_BACKENDS=AUTHENTICATION_BACKENDS)
+class MiddlewareTests(TestCase):
+    """ Tets for the AuthenticationMiddleware. """
+
+    def test_login(self):
+
+        def _get_current_user():
+            return users.User('1@example.com', _user_id='111111111100000000001')
+
+        request = HttpRequest()
+        SessionMiddleware().process_request(request) # Make the damn sessions work
+        middleware = AuthenticationMiddleware()
+        # Check that we're not logged in already
+        user = get_user(request)
+        self.assertFalse(user.is_authenticated())
+
+        # Check that running the middelware when the Google users API doesn't know the current
+        # user still leaves us as an anonymous users.
+        with sleuth.switch('djangae.contrib.gauth.middleware.users.get_current_user', lambda: None):
+            middleware.process_request(request)
+
+        # Check that the middleware successfully logged us in
+        user = get_user(request)
+        self.assertFalse(user.is_authenticated())
+
+        # Now check that when the Google users API *does* know who we are, that we are logged in.
+        with sleuth.switch('djangae.contrib.gauth.middleware.users.get_current_user', _get_current_user):
+            middleware.process_request(request)
+
+        # Check that the middleware successfully logged us in
+        user = get_user(request)
+        self.assertTrue(user.is_authenticated())
+        self.assertEqual(user.email, '1@example.com')
+        self.assertEqual(user.user_id, '111111111100000000001')
+
+
