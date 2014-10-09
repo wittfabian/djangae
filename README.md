@@ -123,6 +123,9 @@ datastore is good at (e.g. handling huge bandwidth of reads and writes) and thin
 
  * Add the following to your URL handler: `url(r'^_ah/', include('djangae.urls'))`
 
+ * It is recommended that for improved security you add `djangae.contrib.security.middleware.AppEngineSecurityMiddleware` as the first
+   of your middleware classes. This middleware patches a number of insecure parts of the Python and App Engine libraries and warns if your
+   Django settings aren't as secure as they could be.
 
 ## Local/remote management commands
 
