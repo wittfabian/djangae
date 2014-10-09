@@ -6,7 +6,7 @@ from django.test import TestCase
 from google.appengine.api import users
 
 # DJANGAE
-from djangae.contrib.auth.backends import AppEngineUserAPI
+from djangae.contrib.gauth.backends import AppEngineUserAPI
 
 
 class BackendTests(TestCase):

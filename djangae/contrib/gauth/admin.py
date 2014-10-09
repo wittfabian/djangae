@@ -1,7 +1,8 @@
 from django.contrib import admin
 from django.contrib.auth import get_user_model
 
-from djangae.contrib.auth.models import GaeUser, GaeDatastoreUser
+# DJANGAE
+from djangae.contrib.gauth.models import GaeUser, GaeDatastoreUser
 
 # Only register the user model with the admin if it is a Djangae model.  If a different/custom user
 # model is in use, then allow that app to deal with the Django admin.

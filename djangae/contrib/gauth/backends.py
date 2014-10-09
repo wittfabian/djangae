@@ -1,8 +1,10 @@
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ImproperlyConfigured
-
-from djangae.contrib.auth.models import GaeAbstractUser
 from django.contrib.auth.backends import ModelBackend
+
+# DJANGAE
+from djangae.contrib.gauth.models import GaeAbstractUser
+
 
 class AppEngineUserAPI(ModelBackend):
     """

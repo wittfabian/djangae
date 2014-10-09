@@ -25,7 +25,7 @@ class AuthenticationMiddleware(DjangoMiddleware):
         backend_str = request.session.get(BACKEND_SESSION_KEY)
 
         #Now make sure we update is_superuser and is_staff appropriately
-        if backend_str == 'djangae.contrib.auth.backends.AppEngineUserAPI':
+        if backend_str == 'djangae.contrib.gauth.backends.AppEngineUserAPI':
             is_superuser = users.is_current_user_admin()
             google_email = users.get_current_user().email().lower()
             resave = False
