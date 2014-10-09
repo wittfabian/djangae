@@ -327,8 +327,10 @@ class ShardedCounter(list):
             shard.save()
 
     def decrement(self):
-        #Find the first non-empty shard and decrement it
-        for shard_id in self:
+        #Find a non-empty shard and decrement it
+        shards = self[:]
+        random.shuffle(shards)
+        for shard_id in shards:
             with transaction.atomic():
                 shard = CounterShard.objects.get(pk=shard_id)
                 if not shard.count:
