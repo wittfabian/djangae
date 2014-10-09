@@ -169,10 +169,8 @@ class AppEngineSecurityMiddleware(object):
             urlfetch.fetch = _HttpUrlLoggingWrapper(urlfetch.fetch)
             urlfetch.make_fetch_call = _HttpUrlLoggingWrapper(urlfetch.make_fetch_call)
 
-            if not getattr(settings, "SESSION_COOKIE_HTTPONLY", False):
-                logging.warning("settings.SESSION_COOKIE_HTTPONLY is not set to True, this is insecure")
-
-            if not getattr(settings, "SESSION_COOKIE_SECURE", False):
-                logging.warning("settings.SESSION_COOKIE_SECURE is not set to True, this is insecure")
+            for setting in ("CSRF_COOKIE_SECURE", "SESSION_COOKIE_HTTPONLY", "SESSION_COOKIE_SECURE"):
+                if not getattr(settings, setting, False):
+                    logging.warning("settings.%s is not set to True, this is insecure", setting)
 
             _PATCHES_APPLIED = True
