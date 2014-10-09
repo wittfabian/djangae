@@ -5,6 +5,8 @@ The sexiest way to run Django on Google App Engine.
 Djangae (djan-gee) is a Django app that allows you to run Django applications on Google App Engine, including (if you
 want to) using Django's models with the App Engine Datastore as the underlying database.
 
+**Note: Djangae is under heavy development, stability is not guaranteed. A 1.0 release will happen when it's ready**
+
 ## Features
 
 * A WSGI middleware that provides a clean way via which your Django app is plugged into App Engine.
@@ -19,6 +21,10 @@ want to) using Django's models with the App Engine Datastore as the underlying d
 * A `shell` command that correctly sets up the environment/database. (Note, we should support this set up for any
   custom commands as well, see TODO.md).
 
+## Supported Django Versions
+
+The intention is always to support the last two versions of Django, although older versions may work. Currently only
+Django 1.6 is supported, but 1.7 support is in the pipeline.
 
 ## The Database Backend
 
