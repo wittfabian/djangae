@@ -87,11 +87,11 @@ datastore is good at (e.g. handling huge bandwidth of reads and writes) and thin
 
     ```yml
     - url: /_ah/(mapreduce|queue|warmup).*
-        script: YOUR_DJANGO_APP.wsgi.application
-        login: admin
+      script: YOUR_DJANGO_APP.wsgi.application
+      login: admin
 
     - url: /.*
-        script: YOUR_DJANGO_APP.wsgi.application
+      script: YOUR_DJANGO_APP.wsgi.application
     ```
 
  * You may also want to add `- ^\.gaedata` to the `skip_files` section in app.yaml, as that's where the local
