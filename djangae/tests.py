@@ -31,7 +31,8 @@ from djangae.db.backends.appengine.commands import normalize_query, parse_constr
 from djangae.db.backends.appengine import caching
 from djangae.db.unique_utils import query_is_unique
 from djangae.db import transaction
-from djangae.fields import ComputedCharField
+from djangae.fields import ComputedCharField, ShardedCounterField
+from djangae.models import CounterShard
 
 from .storage import BlobstoreFileUploadHandler
 from .wsgi import DjangaeApplication
@@ -1008,3 +1009,31 @@ class ComputedFieldTests(TestCase):
         instance = ComputedFieldModel(int_field=1, char_field="test")
         instance.save()
         self.assertEqual(instance.test_field, "1_test")
+
+
+class ModelWithCounter(models.Model):
+    counter = ShardedCounterField()
+
+class ShardedCounterTest(TestCase):
+    def test_basic_usage(self):
+        instance = ModelWithCounter.objects.create()
+
+        self.assertEqual(0, instance.counter.value())
+
+        instance.counter.increment()
+
+        self.assertEqual(30, len(instance.counter))
+        self.assertEqual(30, CounterShard.objects.count())
+        self.assertEqual(1, instance.counter.value())
+
+        instance.counter.increment()
+        self.assertEqual(2, instance.counter.value())
+
+        instance.counter.decrement()
+        instance.counter.decrement()
+
+        self.assertEqual(0, instance.counter.value())
+
+        instance.counter.decrement()
+        self.assertEqual(0, instance.counter.value())
+

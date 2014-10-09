@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import random
+
 from django.db import models
 from django.utils.translation import ugettext_lazy as _
 from django.core.exceptions import ValidationError
@@ -9,6 +11,9 @@ from django.utils.text import capfirst
 from django import forms
 from djangae.forms.fields import TrueOrNullFormField, IterableFieldModelChoiceFormField, ListFormField
 from django.db.models.loading import get_model
+
+from djangae.db import transaction
+from djangae.models import CounterShard
 
 class _FakeModel(object):
     """
@@ -310,3 +315,53 @@ class ComputedTextField(ComputedFieldMixin, models.TextField):
 
 class ComputedPositiveIntegerField(ComputedFieldMixin, models.PositiveIntegerField):
     __metaclass__ = models.SubfieldBase
+
+
+class ShardedCounter(list):
+    def increment(self):
+        idx = random.randint(0, len(self) - 1)
+
+        with transaction.atomic():
+            shard = CounterShard.objects.get(pk=self[idx])
+            shard.count += 1
+            shard.save()
+
+    def decrement(self):
+        #Find the first non-empty shard and decrement it
+        for shard_id in self:
+            with transaction.atomic():
+                shard = CounterShard.objects.get(pk=shard_id)
+                if not shard.count:
+                    continue
+                else:
+                    shard.count -= 1
+                    shard.save()
+
+    def value(self):
+        shards = CounterShard.objects.filter(pk__in=self).values_list('count', flat=True)
+        return sum(shards)
+
+class ShardedCounterField(ListField):
+    __metaclass__ = models.SubfieldBase
+
+    def __init__(self, shard_count=30, *args, **kwargs):
+        self.shard_count = shard_count
+        super(ShardedCounterField, self).__init__(*args, **kwargs)
+
+    def pre_save(self, model_instance, add):
+        value = super(ShardedCounterField, self).pre_save(model_instance, add)
+        current_length = len(value)
+
+        for i in xrange(current_length, self.shard_count):
+            value.append(CounterShard.objects.create(count=0).pk)
+
+        ret = ShardedCounter(value)
+        setattr(model_instance, self.attname, ret)
+        return ret
+
+    def to_python(self, value):
+        value = super(ShardedCounterField, self).to_python(value)
+        return ShardedCounter(value)
+
+    def get_prep_value(self, value):
+        return value
