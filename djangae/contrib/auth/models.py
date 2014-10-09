@@ -198,10 +198,6 @@ class GaeAbstractUser(AbstractBaseUser):
 
     class Meta:
         abstract = True
-        verbose_name = _('user')
-        verbose_name_plural = _('users')
-        abstract=True
-        app_label = "djangae"
 
     def get_absolute_url(self):
         return "/users/%s/" % urlquote(self.user_id)
@@ -230,7 +226,12 @@ class GaeUser(GaeAbstractUser):
         Cannot be used with permissions when using the Datastore, because it
         uses the standard django permissions models which use M2M relationships.
     """
-    pass
+
+    class Meta:
+        app_label = "djangae"
+        swappable = 'AUTH_USER_MODEL'
+        verbose_name = _('user')
+        verbose_name_plural = _('users')
 
 
 class GaeAbstractDatastoreUser(GaeAbstractUser, PermissionsMixin):
@@ -246,8 +247,9 @@ class GaeDatastoreUser(GaeAbstractUser, PermissionsMixin):
     """ A basic user model which can be used with GAE authentication and allows
         permissions to work on the Datastore backend.
     """
-    pass
 
     class Meta:
         app_label = "djangae"
         swappable = 'AUTH_USER_MODEL'
+        verbose_name = _('user')
+        verbose_name_plural = _('users')
