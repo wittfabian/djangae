@@ -51,6 +51,7 @@ def _monkey_patch_unsupported_tests():
 
     for unsupported_test in unsupported_tests:
         module_path, klass_name, method_name = unsupported_test.rsplit(".", 2)
+
         __import__(module_path, klass_name)
 
         module = sys.modules[module_path]
