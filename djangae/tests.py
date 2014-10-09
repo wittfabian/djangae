@@ -1030,10 +1030,11 @@ class ShardedCounterTest(TestCase):
         self.assertEqual(2, instance.counter.value())
 
         instance.counter.decrement()
+        self.assertEqual(1, instance.counter.value())
+
         instance.counter.decrement()
 
         self.assertEqual(0, instance.counter.value())
 
         instance.counter.decrement()
         self.assertEqual(0, instance.counter.value())
-

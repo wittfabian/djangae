@@ -338,6 +338,7 @@ class ShardedCounter(list):
                 else:
                     shard.count -= 1
                     shard.save()
+                    break
 
     def value(self):
         shards = CounterShard.objects.filter(pk__in=self).values_list('count', flat=True)
