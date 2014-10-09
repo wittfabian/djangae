@@ -60,6 +60,8 @@ def add_special_index(model_class, field_name, index_type):
     from djangae.utils import on_production, in_testing
     from django.conf import settings
 
+    field_name = field_name.encode("utf-8") #Make sure we are working with strings
+
     load_special_indexes()
 
     if special_index_exists(model_class, field_name, index_type):
