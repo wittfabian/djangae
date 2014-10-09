@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset='utf-8'>
+    <meta http-equiv="X-UA-Compatible" content="chrome=1">
+    <link href='https://fonts.googleapis.com/css?family=Chivo:900' rel='stylesheet' type='text/css'>
+    <link rel="stylesheet" type="text/css" href="stylesheets/stylesheet.css" media="screen">
+    <link rel="stylesheet" type="text/css" href="stylesheets/pygment_trac.css" media="screen">
+    <link rel="stylesheet" type="text/css" href="stylesheets/print.css" media="print">
+    <!--[if lt IE 9]>
+    <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <title>Djangae by potatolondon</title>
+  </head>
+
+  <body>
+    <div id="container">
+      <div class="inner">
+
+        <header>
+          <h1>Djangae</h1>
+          <h2>The best way to run Django on Google App Engine</h2>
+        </header>
+
+        <section id="downloads" class="clearfix">
+          <a href="https://github.com/potatolondon/djangae/zipball/master" id="download-zip" class="button"><span>Download .zip</span></a>
+          <a href="https://github.com/potatolondon/djangae/tarball/master" id="download-tar-gz" class="button"><span>Download .tar.gz</span></a>
+          <a href="https://github.com/potatolondon/djangae" id="view-on-github" class="button"><span>View on GitHub</span></a>
+        </section>
+
+        <hr>
+
+        <section id="main_content">
+          <h1>
+<a name="djangae" class="anchor" href="#djangae"><span class="octicon octicon-link"></span></a>Djangae</h1>
+
+<p>The sexiest way to run Django on Google App Engine.</p>
+
+<p>Djangae (djan-gee) is a Django app that allows you to run Django applications on Google App Engine, including (if you
+want to) using Django's models with the App Engine Datastore as the underlying database.</p>
+
+<p><strong>Note: Djangae is under heavy development, stability is not guaranteed. A 1.0 release will happen when it's ready</strong></p>
+
+<h2>
+<a name="features" class="anchor" href="#features"><span class="octicon octicon-link"></span></a>Features</h2>
+
+<ul>
+<li>A WSGI middleware that provides a clean way via which your Django app is plugged into App Engine.</li>
+<li>A hook to allow App Engine's deferred tasks and mapreduce handlers to run through the same environment.</li>
+<li>The ability to use use the Datastore as the database for Django's models.  See <strong>The Database Backend</strong> for details.
+You can also use App Engine's NDB, or you can use Google Cloud SQL (via the standard django MySQL backend) instead of
+or along side the Datastore. Or use all 3!</li>
+<li>
+<code>djangae.contrib.auth</code> which provides a custom user model, auth backend and middleware that makes django.contrib.auth
+work on the datastore (i.e. without Many-To-Many relationships).</li>
+<li>A <code>runserver</code> command which fires up the App Engine SDK to serve your app (while still using Django's code reloading).</li>
+<li>The ability to run management commands locally or on the remote App Engine Datastore.</li>
+<li>A <code>shell</code> command that correctly sets up the environment/database. (Note, we should support this set up for any
+custom commands as well, see TODO.md).</li>
+</ul><h2>
+<a name="supported-django-versions" class="anchor" href="#supported-django-versions"><span class="octicon octicon-link"></span></a>Supported Django Versions</h2>
+
+<p>The intention is always to support the last two versions of Django, although older versions may work. Currently only
+Django 1.6 is supported, but 1.7 support is in the pipeline.</p>
+
+<h2>
+<a name="the-database-backend" class="anchor" href="#the-database-backend"><span class="octicon octicon-link"></span></a>The Database Backend</h2>
+
+<p>Previously, in order to use Django's ORM with the App Engine Datastore, django-nonrel was required, along with
+djangoappengine. That's now changed. With Djangae you can use vanilla Django with the Datastore. Heavily inspired by
+djangoappengine (thanks Waldemar!) Djangae provides an intelligent database backend that allows vanilla Django to be
+used, and makes use of many of the Datastore's speed and efficiency features such as projection queries.</p>
+
+<p>Here's the full list of magic:</p>
+
+<ul>
+<li>Database-level enforcement of <code>unique</code> and <code>unique_together</code> constraints.</li>
+<li>A transparent caching layer for queries which return a single result (<code>.get</code> or any query filtering on a unique field
+or unique-together fields). This helps to avoid Datastore
+<a href="https://developers.google.com/appengine/docs/python/datastore/structuring_for_strong_consistency_">consistency issues</a>.</li>
+<li>Automatic creation of additional index fields containing pre-manipulated values, so that queries such as <code>__iexact</code>
+work out of the box. These index fields are created automatically when you use the queries.  Use
+<code>settings.GENERATE_SPECIAL_INDEXES_DURING_TESTING</code> to control whether that automatic creation happens during tests.</li>
+<li>Support for queries which weren't possible with djangoappengine, such as OR queries using <code>Q</code> objects.</li>
+<li>A <code>ListField</code> which provides a "normal" django model field for storing lists (a feature of the Datastore).</li>
+</ul><h3>
+<a name="what-cant-it-do" class="anchor" href="#what-cant-it-do"><span class="octicon octicon-link"></span></a>What Can't It Do?</h3>
+
+<p>Due to the limitations of the App Engine Datastore (it being a non-relational database for a start), there are some
+things which you still can't do with the Django ORM when using the djangae backend.  The easiest way to find these out
+is to just build your app and look out for the <code>NotSupportedError</code> exceptions.  But if you don't like surprises, here's
+a quick list:</p>
+
+<ul>
+<li>
+<code>ManyToManyField</code> - a non-relational database simply can't do these (or not efficiently).  However, you can probably
+solve these kind of problems using djangae's <code>ListField</code>.  We may even create a many-to-many replacement based on
+that in the future.</li>
+<li>
+<code>__in</code> queries with more than 30 values.  This is a limitation of the Datastore.  You can filter for up to 500 values
+on the primary key field though.</li>
+<li>More than one inequality filter, i.e. you can't do <code>.exclude(a=1, b=2)</code>.  This is a limitation of the Datastore.</li>
+<li>Transactions.  The Datastore has transactions, but they are not "normal" transactions in the SQL sense. Transactions
+should be done using <code>google.appengine.api.datastore.RunInTransaction</code>.</li>
+</ul><h3>
+<a name="other-considerations" class="anchor" href="#other-considerations"><span class="octicon octicon-link"></span></a>Other Considerations</h3>
+
+<p>When using the Datastore you should bear in mind its capabilities and limitations. While Djangae allows you to run
+Django on the Datastore, it doesn't turn the Datastore into a relational database. There are things which the
+datastore is good at (e.g. handling huge bandwidth of reads and writes) and things which it isn't good at
+(e.g. counting). Djangae is not a substitute for knowing how to use the
+<a href="https://developers.google.com/appengine/docs/python/datastore/">Datastore</a>.</p>
+
+<h1>
+<a name="how-do-i-use-this-thing" class="anchor" href="#how-do-i-use-this-thing"><span class="octicon octicon-link"></span></a>How do I use this thing?</h1>
+
+<ul>
+<li>Create up your App Engine project as usual (with app.yaml, etc).</li>
+<li>Create your django project (with settings.py, wsgi.py, etc and place it inside your App Engine project).</li>
+<li>Put the djangae on the path somewhere.</li>
+<li>Add djangae to <code>INSTALLED_APPS</code>.</li>
+<li>At the top of your settings, insert the following line: <code>from djangae.settings_base import *</code> - this sets up some
+default settings.</li>
+<li>In app.yaml, add your preferred version of <code>django</code> to the <code>libraries</code> section, or include the library in your
+project folder if you'd rather.
+<a href="https://developers.google.com/appengine/docs/python/config/appconfig#Python_app_yaml_Configuring_libraries">Docs</a>.</li>
+<li>
+<p>In app.yaml add the following handlers:</p>
+
+<div class="highlight highlight-yml"><pre><span class="p-Indicator">-</span> <span class="l-Scalar-Plain">url</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">/_ah/(mapreduce|queue|warmup).*</span>
+  <span class="l-Scalar-Plain">script</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">YOUR_DJANGO_APP.wsgi.application</span>
+  <span class="l-Scalar-Plain">login</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">admin</span>
+
+<span class="p-Indicator">-</span> <span class="l-Scalar-Plain">url</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">/.*</span>
+  <span class="l-Scalar-Plain">script</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">YOUR_DJANGO_APP.wsgi.application</span>
+</pre></div>
+</li>
+<li><p>You may also want to add <code>- ^\.gaedata</code> to the <code>skip_files</code> section in app.yaml, as that's where the local
+development Datastore data is located.</p></li>
+<li>
+<p>Make your manage.py look something like this:</p>
+
+<div class="highlight highlight-python"><pre><span class="k">if</span> <span class="n">__name__</span> <span class="o">==</span> <span class="s">"__main__"</span><span class="p">:</span>
+    <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s">"DJANGO_SETTINGS_MODULE"</span><span class="p">,</span> <span class="s">"myapp.settings"</span><span class="p">)</span>
+
+    <span class="kn">from</span> <span class="nn">djangae.core.management</span> <span class="kn">import</span> <span class="n">execute_from_command_line</span>
+
+    <span class="n">execute_from_command_line</span><span class="p">(</span><span class="n">sys</span><span class="o">.</span><span class="n">argv</span><span class="p">)</span>
+</pre></div>
+</li>
+<li>
+<p>Use the Djangae WSGI handler in your wsgi.py, something like</p>
+
+<div class="highlight highlight-python"><pre><span class="kn">from</span> <span class="nn">django.core.wsgi</span> <span class="kn">import</span> <span class="n">get_wsgi_application</span>
+
+<span class="kn">from</span> <span class="nn">djangae.wsgi</span> <span class="kn">import</span> <span class="n">DjangaeApplication</span>
+
+<span class="n">application</span> <span class="o">=</span> <span class="n">DjangaeApplication</span><span class="p">(</span><span class="n">get_wsgi_application</span><span class="p">())</span>
+</pre></div>
+</li>
+<li><p>Add the following to your URL handler: <code>url(r'^_ah/', include('djangae.urls'))</code></p></li>
+</ul><h2>
+<a name="localremote-management-commands" class="anchor" href="#localremote-management-commands"><span class="octicon octicon-link"></span></a>Local/remote management commands</h2>
+
+<p>If you set your manage.py up as described above, djangae will allow you to run management commands locally or
+remotely, by specifying a <code>--sandbox</code>. Eg.</p>
+
+<pre><code>  ./manage.py --sandbox=local shell   # Starts a shell locally (the default)
+  ./manage.py --sandbox=remote shell  # Starts a shell using the remote datastore
+</code></pre>
+
+<p>With no arguments, management commands are run locally.</p>
+
+<h2>
+<a name="djangaecontribauth" class="anchor" href="#djangaecontribauth"><span class="octicon octicon-link"></span></a>djangae.contrib.auth</h2>
+
+<p>This includes a custom user model, auth backend and middleware that makes django.contrib.auth work on the datastore.</p>
+
+<p>To use, do the following:</p>
+
+<ul>
+<li>At the bottom of your settings.py add: from djangae.contrib.auth.settings import * (this sets up the auth backend,
+login url and custom user model)</li>
+<li>Replace 'django.contrib.auth.middleware.AuthenticationMiddleware' with
+'djangae.contrib.auth.middleware.AuthenticationMiddleware'</li>
+<li>Add 'djangae.contrib.auth' to INSTALLED_APPS probably after 'django.contrib.auth'</li>
+</ul><h2>
+<a name="using-other-databases" class="anchor" href="#using-other-databases"><span class="octicon octicon-link"></span></a>Using other databases</h2>
+
+<p>You can use Google Cloud SQL or sqlite (locally) instead of or along side the Datastore.</p>
+
+<p>Note that the Database backend and settings for the Datastore remain the same whether you're in local development on on
+App Engine Production, djanagae switches between the SDK and the production datastore appropriately.  However, with
+Cloud SQL you will need to switch the settings yourself, otherwise you could find yourself developing on your
+live database!</p>
+
+<p>Here's an example of how your <code>DATABASES</code> might look in settings.py if you're using both Cloud SQL and the Datastore.</p>
+
+<pre><code>```python
+from djangae.utils import on_production
+
+DATABASES = {
+    'default': {
+        'ENGINE': 'djangae.db.backends.appengine'
+    }
+}
+
+if on_production():
+    DATABASES['sql'] = {
+        'ENGINE': 'django.db.backends.mysql',
+        'HOST': '/cloudsql/YOUR_GOOGLE_CLOUD_PROJECT:YOUR_INSTANCE_NAME',
+        'NAME': 'YOUR_DATABASE_NAME',
+        'USER': 'root',
+    }
+else:
+    DATABASES['sql'] = {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': 'development.sqlite3'
+    }
+```
+</code></pre>
+
+<p>See the Google documentation for more information on connecting to Cloud SQL via the
+<a href="https://developers.google.com/cloud-sql/docs/mysql-client">MySQL client</a> and from
+<a href="https://developers.google.com/cloud-sql/docs/external">external applications</a>.</p>
+
+<h2>
+<a name="contributing" class="anchor" href="#contributing"><span class="octicon octicon-link"></span></a>Contributing</h2>
+
+<p>Contributions are accepted via pull request and will be reviewed as soon as possible. If you have access to master, please do not commit directly! Pull requests only!</p>
+        </section>
+
+        <footer>
+          Djangae is maintained by <a href="https://github.com/potatolondon">potatolondon</a><br>
+          This page was generated by <a href="http://pages.github.com">GitHub Pages</a>. Tactile theme by <a href="https://twitter.com/jasonlong">Jason Long</a>.
+        </footer>
+
+        
+      </div>
+    </div>
+  </body>
+</html>
