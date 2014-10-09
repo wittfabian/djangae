@@ -10,6 +10,8 @@ import yaml
 
 from google.appengine.api import urlfetch
 
+from django.conf import settings
+
 class ApiSecurityException(Exception):
   """Error when attempting to call an unsafe API."""
   pass
@@ -166,5 +168,11 @@ class AppEngineSecurityMiddleware(object):
             replace_default_argument(urlfetch.make_fetch_call, 'validate_certificate', True)
             urlfetch.fetch = _HttpUrlLoggingWrapper(urlfetch.fetch)
             urlfetch.make_fetch_call = _HttpUrlLoggingWrapper(urlfetch.make_fetch_call)
+
+            if not getattr(settings, "SESSION_COOKIE_HTTPONLY", False):
+                logging.warning("settings.SESSION_COOKIE_HTTPONLY is not set to True, this is insecure")
+
+            if not getattr(settings, "SESSION_COOKIE_SECURE", False):
+                logging.warning("settings.SESSION_COOKIE_SECURE is not set to True, this is insecure")
 
             _PATCHES_APPLIED = True
