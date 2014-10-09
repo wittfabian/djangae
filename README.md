@@ -6,6 +6,7 @@ Djangae (djan-gee) is a Django app that allows you to run Django applications on
 want to) using Django's models with the App Engine Datastore as the underlying database.
 
 https://potatolondon.github.io/djangae/
+
 https://github.com/potatolondon/djangae
 
 **Note: Djangae is under heavy development, stability is not guaranteed. A 1.0 release will happen when it's ready**
@@ -159,7 +160,7 @@ live database!
 
 Here's an example of how your `DATABASES` might look in settings.py if you're using both Cloud SQL and the Datastore.
 
-    ```python
+```python
     from djangae.utils import on_production
 
     DATABASES = {
@@ -180,7 +181,7 @@ Here's an example of how your `DATABASES` might look in settings.py if you're us
             'ENGINE': 'django.db.backends.sqlite3',
             'NAME': 'development.sqlite3'
         }
-    ```
+```
 
 See the Google documentation for more information on connecting to Cloud SQL via the
 [MySQL client](https://developers.google.com/cloud-sql/docs/mysql-client) and from
