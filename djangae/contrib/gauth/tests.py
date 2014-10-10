@@ -40,6 +40,24 @@ class BackendTests(TestCase):
         user2 = backend.authenticate(google_user=google_user)
         self.assertEqual(user.pk, user2.pk)
 
+    @override_settings(ALLOW_USER_PRE_CREATION=True)
+    def test_user_pre_creation(self):
+        """ User objects for Google-Accounts-based users should be able to be pre-created in DB and
+            then matched by email address when they log in.
+        """
+        User = get_user_model()
+        backend = AppEngineUserAPI()
+        email = '1@example.com'
+        # Pre-create our user
+        user = User.objects.pre_create_google_user(email)
+        # Now authenticate this user via the Google Accounts API
+        google_user = users.User(email=email, _user_id='111111111100000000001')
+        user = backend.authenticate(google_user=google_user)
+        # Check things
+        self.assertEqual(user.email, email)
+        self.assertIsNotNone(user.last_login)
+        self.assertFalse(user.has_usable_password())
+
 
 @override_settings(AUTHENTICATION_BACKENDS=AUTHENTICATION_BACKENDS)
 class MiddlewareTests(TestCase):

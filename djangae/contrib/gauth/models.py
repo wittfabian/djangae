@@ -1,6 +1,7 @@
 import re
 
 from django.contrib import auth
+from django.contrib.auth.hashers import make_password
 from django.contrib.auth.models import (
     AbstractBaseUser,
     python_2_unicode_compatible,
@@ -165,6 +166,25 @@ class PermissionsMixin(models.Model):
         return _user_has_module_perms(self, app_label)
 
 
+class GaeUserManager(UserManager):
+
+    def pre_create_google_user(self, email, **extra_fields):
+        """ Pre-create a User object for a user who will later log in via Google Accounts. """
+        values  = dict(
+            # defaults which can be overriden
+            is_active=True,
+        )
+        values.update(**extra_fields)
+        values.update(
+            # things which cannot be overridden
+            email=self.normalize_email(email),
+            username=None,
+            password=make_password(None), # unusable password
+            # Stupidly, last_login is not nullable, so we can't set it to None.
+        )
+        return self.create(**values)
+
+
 class GaeAbstractUser(AbstractBaseUser):
     """ Absract base class for creating a User model which works with the App Engine users API. """
 
@@ -196,7 +216,7 @@ class GaeAbstractUser(AbstractBaseUser):
     USERNAME_FIELD = 'username'
     REQUIRED_FIELDS = ['email']
 
-    objects = UserManager()
+    objects = GaeUserManager()
 
     class Meta:
         abstract = True

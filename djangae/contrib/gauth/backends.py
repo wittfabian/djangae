@@ -3,6 +3,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import BaseUserManager
 from django.core.exceptions import ImproperlyConfigured
 from django.contrib.auth.backends import ModelBackend
+from django.utils import timezone
 
 # DJANGAE
 from djangae.contrib.gauth.models import GaeAbstractUser
@@ -51,7 +52,7 @@ class AppEngineUserAPI(ModelBackend):
                         # Google Accounts, and ONLY via Google Accounts.
                         user = User.objects.get(email=BaseUserManager.normalize_email(email), username=None)
                         user.username = user_id
-                        user.set_unusable_password()
+                        user.last_login = timezone.now()
                         user.save()
                         return user
                     except User.DoesNotExist:
