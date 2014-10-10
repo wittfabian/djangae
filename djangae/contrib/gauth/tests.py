@@ -74,6 +74,6 @@ class MiddlewareTests(TestCase):
         user = get_user(request)
         self.assertTrue(user.is_authenticated())
         self.assertEqual(user.email, '1@example.com')
-        self.assertEqual(user.user_id, '111111111100000000001')
+        self.assertEqual(user.username, '111111111100000000001')
 
 

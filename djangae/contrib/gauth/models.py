@@ -165,35 +165,12 @@ class PermissionsMixin(models.Model):
         return _user_has_module_perms(self, app_label)
 
 
-class GaeUserManager(UserManager):
-
-    # Because create_user and create_superuser take the 'username' as a positional first argument,
-    # we don't need to customise those methods; the 'user_id' just gets passed through via that arg.
-
-    def _create_user(self, user_id, email, password,
-                     is_staff, is_superuser, **extra_fields):
-        """
-        Creates and saves a User with the given user_id (username), email and password.
-        """
-        now = timezone.now()
-        if not user_id:
-            raise ValueError('The Google user_id must be set')
-        email = self.normalize_email(email)
-        user = self.model(
-            user_id=user_id, email=email, is_staff=is_staff, is_active=True,
-            is_superuser=is_superuser, last_login=now, date_joined=now, **extra_fields
-        )
-        user.set_password(password)
-        user.save(using=self._db)
-        return user
-
-
 class GaeAbstractUser(AbstractBaseUser):
     """ Absract base class for creating a User model which works with the App Engine users API. """
 
-    user_id = models.CharField(
-        # This stores the Google user_id
         _('User ID'), max_length=21, unique=True,
+    username = models.CharField(
+        # This stores the Google user_id, or custom username for non-Google-based users.
         validators=[
             validators.RegexValidator(re.compile('^\d{21}$'), _('User Id should be 21 digits.'), 'invalid')
         ]
@@ -215,16 +192,16 @@ class GaeAbstractUser(AbstractBaseUser):
     date_joined = models.DateTimeField(_('date joined'), default=timezone.now)
 
 
-    USERNAME_FIELD = 'user_id'
+    USERNAME_FIELD = 'username'
     REQUIRED_FIELDS = ['email']
 
-    objects = GaeUserManager()
+    objects = UserManager()
 
     class Meta:
         abstract = True
 
     def get_absolute_url(self):
-        return "/users/%s/" % urlquote(self.user_id)
+        return "/users/%s/" % urlquote(self.username)
 
     def get_full_name(self):
         """

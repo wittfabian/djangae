@@ -39,7 +39,7 @@ class AppEngineUserAPI(ModelBackend):
             user_id = google_user.user_id()
             email = google_user.email().lower()
             try:
-                user = User.objects.get(user_id=user_id)
+                user = User.objects.get(username=user_id)
 
             except User.DoesNotExist:
                 user = User.objects.create_user(user_id, email)
