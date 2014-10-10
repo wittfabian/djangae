@@ -1,6 +1,12 @@
 # Byte-compiled / optimized / DLL files
 __pycache__/
+.DS_Store
 *.py[cod]
+*.swp
+
+/.*
+!/.gitignore
+!/.gitmodules
 
 # C extensions
 *.so

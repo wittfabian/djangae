@@ -6,7 +6,10 @@ Djangae (djan-gee) is a Django app that allows you to run Django applications on
 want to) using Django's models with the App Engine Datastore as the underlying database.
 
 https://potatolondon.github.io/djangae/
+
 https://github.com/potatolondon/djangae
+
+**Note: Djangae is under heavy development, stability is not guaranteed. A 1.0 release will happen when it's ready**
 
 ## Features
 
@@ -22,6 +25,10 @@ https://github.com/potatolondon/djangae
 * A `shell` command that correctly sets up the environment/database. (Note, we should support this set up for any
   custom commands as well, see TODO.md).
 
+## Supported Django Versions
+
+The intention is always to support the last two versions of Django, although older versions may work. Currently only
+Django 1.6 is supported, but 1.7 support is in the pipeline.
 
 ## The Database Backend
 
@@ -55,7 +62,7 @@ a quick list:
   that in the future.
 * `__in` queries with more than 30 values.  This is a limitation of the Datastore.  You can filter for up to 500 values
   on the primary key field though.
-* More than one in equality filter, i.e. you can't do `.exclude(a=1, b=2)`.  This is a limitation of the Datastore.
+* More than one inequality filter, i.e. you can't do `.exclude(a=1, b=2)`.  This is a limitation of the Datastore.
 * Transactions.  The Datastore has transactions, but they are not "normal" transactions in the SQL sense. Transactions
   should be done using `google.appengine.api.datastore.RunInTransaction`.
 
@@ -63,13 +70,13 @@ a quick list:
 ### Other Considerations
 
 When using the Datastore you should bear in mind its capabilities and limitations. While Djangae allows you to run
-Django on the Datastore, it doesn't turn the Datastore into a non-relational database. There are things which the
+Django on the Datastore, it doesn't turn the Datastore into a relational database. There are things which the
 datastore is good at (e.g. handling huge bandwidth of reads and writes) and things which it isn't good at
 (e.g. counting). Djangae is not a substitute for knowing how to use the
 [Datastore](https://developers.google.com/appengine/docs/python/datastore/).
 
 
-# How do i use this thing?
+# How do I use this thing?
 
  * Create up your App Engine project as usual (with app.yaml, etc).
  * Create your django project (with settings.py, wsgi.py, etc and place it inside your App Engine project).
@@ -84,11 +91,11 @@ datastore is good at (e.g. handling huge bandwidth of reads and writes) and thin
 
     ```yml
     - url: /_ah/(mapreduce|queue|warmup).*
-        script: YOUR_DJANGO_APP.wsgi.application
-        login: admin
+      script: YOUR_DJANGO_APP.wsgi.application
+      login: admin
 
     - url: /.*
-        script: YOUR_DJANGO_APP.wsgi.application
+      script: YOUR_DJANGO_APP.wsgi.application
     ```
 
  * You may also want to add `- ^\.gaedata` to the `skip_files` section in app.yaml, as that's where the local
@@ -116,6 +123,9 @@ datastore is good at (e.g. handling huge bandwidth of reads and writes) and thin
 
  * Add the following to your URL handler: `url(r'^_ah/', include('djangae.urls'))`
 
+ * It is recommended that for improved security you add `djangae.contrib.security.middleware.AppEngineSecurityMiddleware` as the first
+   of your middleware classes. This middleware patches a number of insecure parts of the Python and App Engine libraries and warns if your
+   Django settings aren't as secure as they could be.
 
 ## Local/remote management commands
 
@@ -153,7 +163,7 @@ live database!
 
 Here's an example of how your `DATABASES` might look in settings.py if you're using both Cloud SQL and the Datastore.
 
-    ```python
+```python
     from djangae.utils import on_production
 
     DATABASES = {
@@ -174,8 +184,12 @@ Here's an example of how your `DATABASES` might look in settings.py if you're us
             'ENGINE': 'django.db.backends.sqlite3',
             'NAME': 'development.sqlite3'
         }
-    ```
+```
 
 See the Google documentation for more information on connecting to Cloud SQL via the
 [MySQL client](https://developers.google.com/cloud-sql/docs/mysql-client) and from
 [external applications](https://developers.google.com/cloud-sql/docs/external).
+
+## Contributing
+
+Contributions are accepted via pull request and will be reviewed as soon as possible. If you have access to master, please do not commit directly! Pull requests only!

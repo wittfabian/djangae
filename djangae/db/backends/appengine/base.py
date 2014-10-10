@@ -29,12 +29,14 @@ from google.appengine.ext import testbed
 from google.appengine.api.datastore import Key
 
 #DJANGAE
+from djangae.utils import find_project_root
 from djangae.db.exceptions import DatabaseError, NotSupportedError, CouldBeSupportedError
 from djangae.db.utils import (
     decimal_to_string,
     make_timezone_naive,
     get_datastore_key,
 )
+from djangae.db.backends.appengine import caching
 from djangae.indexing import load_special_indexes
 from .commands import (
     SelectCommand,
@@ -208,11 +210,16 @@ class DatabaseOperations(BaseDatabaseOperations):
         return value
 
     def sql_flush(self, style, tables, seqs, allow_cascade=False):
-        if getattr(settings, "COMPLETE_FLUSH_WHILE_TESTING", False):
-            if "test" in sys.argv:
-                tables = metadata.get_kinds()
 
-        return [ FlushCommand(table) for table in tables ]
+        creation = self.connection.creation
+        if creation.testbed:
+            creation._destroy_test_db(':memory:', verbosity=1)
+            creation._create_test_db(':memory:', autoclobber=True)
+            caching.clear_all_caches()
+            return []
+        else:
+            return [ FlushCommand(table) for table in tables ]
+
 
     def prep_lookup_key(self, model, value, field):
         if isinstance(value, basestring):
@@ -232,13 +239,25 @@ class DatabaseOperations(BaseDatabaseOperations):
     def prep_lookup_decimal(self, model, value, field):
         return self.value_to_db_decimal(value, field.max_digits, field.decimal_places)
 
-    def prep_lookup_value(self, model, value, field):
-        if field.primary_key and field.model == model:
+    def prep_lookup_date(self, model, value, field):
+        return self.value_to_db_datetime(value)
+
+    def prep_lookup_time(self, model, value, field):
+        return self.value_to_db_time(value)
+
+    def prep_lookup_value(self, model, value, field, constraint=None):
+        if field.primary_key and (constraint is None or constraint.col == model._meta.pk.column):
             return self.prep_lookup_key(model, value, field)
 
         db_type = self.connection.creation.db_type(field)
+
         if db_type == 'decimal':
             return self.prep_lookup_decimal(model, value, field)
+
+        elif db_type == 'date':
+            return self.prep_lookup_date(model, value, field)
+        elif db_type == 'time':
+            return self.prep_lookup_time(model, value, field)
 
         return value
 
@@ -250,7 +269,11 @@ class DatabaseOperations(BaseDatabaseOperations):
 
         if db_type == 'string' or db_type == 'text':
             if isinstance(value, str):
-                value = value.decode('utf-8')
+                try:
+                    value = value.decode('utf-8')
+                except UnicodeDecodeError:
+                    raise DatabaseError("Bytestring is not encoded in utf-8")
+
             if db_type == 'text':
                 value = Text(value)
         elif db_type == 'bytes':
@@ -408,7 +431,7 @@ class DatabaseCreation(BaseDatabaseCreation):
         self.testbed.init_logservice_stub()
         self.testbed.init_mail_stub()
         self.testbed.init_memcache_stub()
-        self.testbed.init_taskqueue_stub()
+        self.testbed.init_taskqueue_stub(root_path=find_project_root())
         self.testbed.init_urlfetch_stub()
         self.testbed.init_user_stub()
         self.testbed.init_xmpp_stub()
@@ -423,6 +446,7 @@ class DatabaseCreation(BaseDatabaseCreation):
     def _destroy_test_db(self, name, verbosity):
         if self.testbed:
             self.testbed.deactivate()
+        self.testbed = None
 
 
 class DatabaseIntrospection(BaseDatabaseIntrospection):
@@ -442,6 +466,8 @@ class DatabaseFeatures(BaseDatabaseFeatures):
     supports_transactions = False #FIXME: Make this True!
     can_return_id_from_insert = True
     supports_select_related = False
+    autocommits_when_autocommit_is_off = True
+    uses_savepoints = False
 
 class DatabaseWrapper(BaseDatabaseWrapper):
     operators = {
@@ -463,6 +489,7 @@ class DatabaseWrapper(BaseDatabaseWrapper):
         self.creation = DatabaseCreation(self)
         self.introspection = DatabaseIntrospection(self)
         self.validation = BaseDatabaseValidation(self)
+        self.autocommit = True
 
     def is_usable(self):
         return True
@@ -478,8 +505,11 @@ class DatabaseWrapper(BaseDatabaseWrapper):
     def init_connection_state(self):
         pass
 
-    def _set_autocommit(self, enabled):
+    def _start_transaction_under_autocommit(self):
         pass
+
+    def _set_autocommit(self, enabled):
+        self.autocommit = enabled
 
     def create_cursor(self):
         if not self.connection:

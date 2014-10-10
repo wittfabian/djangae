@@ -32,7 +32,7 @@ def acquire_identifiers(identifiers, entity_key):
             if not marker.instance and (datetime.datetime.utcnow() - marker.created).seconds > 5:
                 marker.delete()
             elif marker.instance and Key(marker.instance) != entity_key and key_exists(Key(marker.instance)):
-                raise IntegrityError()
+                raise IntegrityError("Unable to acquire marker for %s" % identifier)
             else:
                 #The marker is ours anyway
                 return marker
@@ -58,7 +58,7 @@ def acquire_identifiers(identifiers, entity_key):
     return markers
 
 
-def update_markers(model, old_entity, new_entity):
+def get_markers_for_update(model, old_entity, new_entity):
     """
         Given an old entity state, and the new state, updates the identifiers
         appropriately. Should be called before saving the new_state
@@ -69,18 +69,22 @@ def update_markers(model, old_entity, new_entity):
     to_release = old_ids - new_ids
     to_acquire = new_ids - old_ids
 
-    #Acquire first, because if that fails then we don't want to alter what's already there
-    new_markers = acquire_identifiers(to_acquire, new_entity.key())
-
-    #Now we release the ones we don't want anymore
-    release_identifiers(to_release)
-
-    return new_markers
+    return to_acquire, to_release
 
 def update_instance_on_markers(entity, markers):
-    for marker in markers:
-        marker.instance = str(entity.key())
+
+    @db.transactional(propagation=TransactionOptions.INDEPENDENT)
+    def update(marker, instance):
+        marker = UniqueMarker.get(marker.key())
+        if not marker:
+            return
+
+        marker.instance = instance
         marker.put()
+
+    instance = str(entity.key())
+    for marker in markers:
+        update(marker, instance)
 
 def acquire_bulk(model, entities):
     markers = []
@@ -90,7 +94,7 @@ def acquire_bulk(model, entities):
 
     except:
         for m in markers:
-            Delete([ x.key() for x in m])
+            release_markers(m)
         raise
     return markers
 
@@ -102,6 +106,14 @@ def acquire(model, entity):
 
     identifiers = unique_identifiers_from_entity(model, entity, ignore_pk=True)
     return acquire_identifiers(identifiers, entity.key())
+
+
+def release_markers(markers):
+    @db.transactional(propagation=TransactionOptions.INDEPENDENT)
+    def delete(marker):
+        Delete(marker.key())
+
+    [ delete(x) for x in markers ]
 
 def release_identifiers(identifiers):
 

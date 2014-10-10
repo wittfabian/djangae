@@ -37,21 +37,21 @@ def deferred(request):
 
     if 'HTTP_X_APPENGINE_TASKNAME' not in request.META:
         logging.critical('Detected an attempted XSRF attack. The header "X-AppEngine-Taskname" was not set.')
-        response.status = 403
+        response.status_code = 403
         return response
 
     in_prod = on_production()
 
     if in_prod and os.environ.get("REMOTE_ADDR") != "0.1.0.2":
         logging.critical('Detected an attempted XSRF attack. This request did not originate from Task Queue.')
-        response.status = 403
+        response.status_code = 403
         return response
 
     try:
         run(request.body)
     except SingularTaskFailure:
         logging.debug("Failure executing task, task retry forced")
-        response.status = 408
+        response.status_code = 408
     except PermanentTaskFailure:
         logging.exception("Permanent failure attempting to execute task")
 

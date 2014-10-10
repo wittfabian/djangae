@@ -1,13 +1,29 @@
+import warnings
+
+from google.appengine.runtime import request_environment
+
 from djangae.utils import on_production
 
+
 class DjangaeApplication(object):
+
     def fix_subprocess_module(self):
         """
             Making the subprocess module work on the dev_appserver is hard work
-            so I've isloated it all here
+            so I've isolated it all here
         """
+
         if on_production():
             return
+
+        # TODO: Remove support for the subprocess module.
+        warnings.warn(
+            (
+                "Subprocess support on dev_appserver will be removed soon. Mediagenerator/assetpipe users should find "
+                "alternatives which run in a separate process."
+            ),
+            DeprecationWarning
+        )
 
         import sys
         from google.appengine import dist27
@@ -24,13 +40,13 @@ class DjangaeApplication(object):
             if "subprocess" in sys.modules:
                 del sys.modules["subprocess"]
 
-
             for finder in sys.meta_path:
                 if isinstance(finder, sandbox.ModuleOverrideImportHook):
                     del finder.policies['os']
 
             if "os" in sys.modules:
                 del sys.modules["os"]
+                request_environment.PatchOsEnviron(__import__("os"))
 
         if "select" in dist27.MODULE_OVERRIDES:
             dist27.MODULE_OVERRIDES.remove("select")
@@ -72,6 +88,15 @@ class DjangaeApplication(object):
 
 
     def __init__(self, application):
+        from django.conf import settings
+        from django.core.exceptions import ImproperlyConfigured
+
+        for app in settings.INSTALLED_APPS[::-1]:
+            if app.startswith("django."):
+                raise ImproperlyConfigured("You must place 'djangae' after 'django' apps in installed apps")
+            elif app == "djangae":
+                break
+
         self.wrapped_app = application
 
     def __call__(self, environ, start_response):

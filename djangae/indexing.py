@@ -60,6 +60,8 @@ def add_special_index(model_class, field_name, index_type):
     from djangae.utils import on_production, in_testing
     from django.conf import settings
 
+    field_name = field_name.encode("utf-8") #Make sure we are working with strings
+
     load_special_indexes()
 
     if special_index_exists(model_class, field_name, index_type):
@@ -87,6 +89,7 @@ class Indexer(object):
     def prep_value_for_database(self, value): raise NotImplementedError()
     def prep_value_for_query(self, value): raise NotImplementedError()
     def indexed_column_name(self, field_column): raise NotImplementedError()
+    def prep_query_operator(self, op): return "exact"
 
 class IExactIndexer(Indexer):
     def validate_can_be_indexed(self, value):
@@ -111,7 +114,12 @@ class DayIndexer(Indexer):
         return None
 
     def prep_value_for_query(self, value):
-        return value
+        if isinstance(value, (int, long)):
+            return value
+
+        if isinstance(value, basestring):
+            value = datetime.datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
+        return value.day
 
     def indexed_column_name(self, field_column):
         return "_idx_day_{0}".format(field_column)
@@ -126,7 +134,13 @@ class YearIndexer(Indexer):
         return None
 
     def prep_value_for_query(self, value):
-        return value
+        if isinstance(value, (int, long)):
+            return value
+
+        if isinstance(value, basestring):
+            value = datetime.datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
+
+        return value.year
 
     def indexed_column_name(self, field_column):
         return "_idx_year_{0}".format(field_column)
@@ -141,7 +155,13 @@ class MonthIndexer(Indexer):
         return None
 
     def prep_value_for_query(self, value):
-        return value
+        if isinstance(value, (int, long)):
+            return value
+
+        if isinstance(value, basestring):
+            value = datetime.datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
+
+        return value.month
 
     def indexed_column_name(self, field_column):
         return "_idx_month_{0}".format(field_column)
@@ -166,11 +186,118 @@ class WeekDayIndexer(Indexer):
     def indexed_column_name(self, field_column):
         return "_idx_week_day_{0}".format(field_column)
 
+class ContainsIndexer(Indexer):
+    def validate_can_be_indexed(self, value):
+        return isinstance(value, basestring) and len(value) < 500
+
+    def prep_value_for_database(self, value):
+        result = []
+        if value:
+            length = len(value)
+            result = [value[i:j+1] for i in xrange(length) for j in xrange(i,length)]
+            if len(result) > 500:
+                raise ValueError("Can't index for contains query, this value has too many permuatations")
+
+        return result
+
+    def prep_value_for_query(self, value):
+        if value.startswith("%") and value.endswith("%"):
+            value = value[1:-1]
+        return value
+
+    def indexed_column_name(self, field_column):
+        return "_idx_contains_{0}".format(field_column)
+
+class IContainsIndexer(ContainsIndexer):
+    def prep_value_for_database(self, value):
+        return [ x.lower() for x in super(IContainsIndexer, self).prep_value_for_database(value) ]
+
+    def indexed_column_name(self, field_column):
+        return "_idx_icontains_{0}".format(field_column)
+
+class EndsWithIndexer(Indexer):
+    """
+        dbindexer originally reversed the string and did a startswith on it.
+        However, this is problematic as it uses an inequality and therefore
+        limits the queries you can perform. Instead, we store all permuatations
+        of the last characters in a list field. Then we can just do an exact lookup on
+        the value. Which isn't as nice, but is more flexible.
+    """
+    def validate_can_be_indexed(self, value):
+        return isinstance(value, basestring) and len(value) < 500
+
+    def prep_value_for_database(self, value):
+        results = []
+        for i in xrange(len(value)):
+            results.append(value[i:])
+        return results
+
+    def prep_value_for_query(self, value):
+        if value.startswith("%"):
+            value = value[1:]
+        return value
+
+    def indexed_column_name(self, field_column):
+        return "_idx_endswith_{0}".format(field_column)
+
+class IEndsWithIndexer(EndsWithIndexer):
+    """
+        Same as above, just all lower cased
+    """
+    def prep_value_for_database(self, value):
+        return super(IEndsWithIndexer, self).prep_value_for_database(value.lower())
+
+    def prep_value_for_query(self, value):
+        return super(IEndsWithIndexer, self).prep_value_for_query(value.lower())
+
+    def indexed_column_name(self, field_column):
+        return "_idx_iendswith_{0}".format(field_column)
+
+class StartsWithIndexer(Indexer):
+    """
+        Although we can do a startswith natively, doing it this way allows us to
+        use more queries (E.g. we save an exclude)
+    """
+    def validate_can_be_indexed(self, value):
+        return isinstance(value, basestring) and len(value) < 500
+
+    def prep_value_for_database(self, value):
+        results = []
+        for i in xrange(1, len(value) + 1):
+            results.append(value[:i])
+        return results
+
+    def prep_value_for_query(self, value):
+        if value.endswith("%"):
+            value = value[:-1]
+        return value
+
+    def indexed_column_name(self, field_column):
+        return "_idx_startswith_{0}".format(field_column)
+
+class IStartsWithIndexer(StartsWithIndexer):
+    """
+        Same as above, just all lower cased
+    """
+    def prep_value_for_database(self, value):
+        return super(IStartsWithIndexer, self).prep_value_for_database(value.lower())
+
+    def prep_value_for_query(self, value):
+        return super(IStartsWithIndexer, self).prep_value_for_query(value.lower())
+
+    def indexed_column_name(self, field_column):
+        return "_idx_istartswith_{0}".format(field_column)
 
 REQUIRES_SPECIAL_INDEXES = {
     "iexact": IExactIndexer(),
+    "contains": ContainsIndexer(),
+    "icontains": IContainsIndexer(),
     "day" : DayIndexer(),
     "month" : MonthIndexer(),
     "year": YearIndexer(),
-    "week_day": WeekDayIndexer()
+    "week_day": WeekDayIndexer(),
+    "endswith": EndsWithIndexer(),
+    "iendswith": IEndsWithIndexer(),
+    "startswith": StartsWithIndexer(),
+    "istartswith": IStartsWithIndexer()
 }

@@ -175,7 +175,7 @@ class BlobstoreFileUploadHandler(FileUploadHandler):
                 continue
 
             #OK, we have a blob key, but is it the one for the field?
-            match = re.search('\sname="?(?P<field_name>[a-zA-Z0-9_]+)', part)
+            match = re.search('\sname="?(?P<field_name>[a-zA-Z0-9_-]+)', part)
             name = match.groupdict().get('field_name') if match else None
             if name != field_name:
                 #Nope, not for this field
@@ -196,7 +196,10 @@ class BlobstoreFileUploadHandler(FileUploadHandler):
             because that's what the WSGI spec says. However, to make this work we need to abuse the seeking (at least till Django 1.7)
         """
         self.boundary = boundary
-        self.data = StringIO(input_data.body) #Create a string IO object
+        if hasattr(input_data, "body"):
+            self.data = StringIO(input_data.body) #Create a string IO object
+        else:
+            self.data = input_data
         return None #Pass back to Django
 
     def receive_data_chunk(self, raw_data, start):

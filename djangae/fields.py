@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import random
+
 from django.db import models
 from django.utils.translation import ugettext_lazy as _
 from django.core.exceptions import ValidationError
@@ -8,6 +10,10 @@ from django.db.models.fields.subclassing import Creator
 from django.utils.text import capfirst
 from django import forms
 from djangae.forms.fields import TrueOrNullFormField, IterableFieldModelChoiceFormField, ListFormField
+from django.db.models.loading import get_model
+
+from djangae.db import transaction
+from djangae.models import CounterShard
 
 class _FakeModel(object):
     """
@@ -101,6 +107,10 @@ class IterableField(models.Field):
         self.fk_model = None
         if isinstance(item_field_type, models.ForeignKey):
             self.fk_model = item_field_type.rel.to
+
+            if isinstance(self.fk_model, basestring):
+                self.fk_model = get_model(*self.fk_model.split("."))
+
             if isinstance(self.fk_model._meta.pk, models.AutoField):
                 item_field_type = models.PositiveIntegerField()
             else:
@@ -277,19 +287,84 @@ class SetField(IterableField):
         return str(list(self._get_val_from_obj(obj)))
 
 
-class DictField(IterableField):
-    def get_internal_type(self):
-        return 'DictField'
+class ComputedFieldMixin(object):
+    def __init__(self, func, *args, **kwargs):
+        self.computer = func
 
-    @property
-    def _iterable_type(self):
-        return dict
+        kwargs["editable"] = False
 
-    def _map(self, function, iterable, *args, **kwargs):
-        return self._type((key, function(value, *args, **kwargs))
-                          for key, value in iterable.iteritems())
+        super(ComputedFieldMixin, self).__init__(*args, **kwargs)
 
-    def validate(self, values, model_instance):
-        if not isinstance(values, dict):
-            raise ValidationError("Value is of type %r. Should be a dict." %
-                                  type(values))
+    def pre_save(self, model_instance, add):
+        value = self.computer(model_instance)
+        setattr(model_instance, self.attname, value)
+        return value
+
+
+class ComputedCharField(ComputedFieldMixin, models.CharField):
+    __metaclass__ = models.SubfieldBase
+
+
+class ComputedIntegerField(ComputedFieldMixin, models.IntegerField):
+    __metaclass__ = models.SubfieldBase
+
+
+class ComputedTextField(ComputedFieldMixin, models.TextField):
+    __metaclass__ = models.SubfieldBase
+
+
+class ComputedPositiveIntegerField(ComputedFieldMixin, models.PositiveIntegerField):
+    __metaclass__ = models.SubfieldBase
+
+
+class ShardedCounter(list):
+    def increment(self):
+        idx = random.randint(0, len(self) - 1)
+
+        with transaction.atomic():
+            shard = CounterShard.objects.get(pk=self[idx])
+            shard.count += 1
+            shard.save()
+
+    def decrement(self):
+        #Find a non-empty shard and decrement it
+        shards = self[:]
+        random.shuffle(shards)
+        for shard_id in shards:
+            with transaction.atomic():
+                shard = CounterShard.objects.get(pk=shard_id)
+                if not shard.count:
+                    continue
+                else:
+                    shard.count -= 1
+                    shard.save()
+                    break
+
+    def value(self):
+        shards = CounterShard.objects.filter(pk__in=self).values_list('count', flat=True)
+        return sum(shards)
+
+class ShardedCounterField(ListField):
+    __metaclass__ = models.SubfieldBase
+
+    def __init__(self, shard_count=30, *args, **kwargs):
+        self.shard_count = shard_count
+        super(ShardedCounterField, self).__init__(*args, **kwargs)
+
+    def pre_save(self, model_instance, add):
+        value = super(ShardedCounterField, self).pre_save(model_instance, add)
+        current_length = len(value)
+
+        for i in xrange(current_length, self.shard_count):
+            value.append(CounterShard.objects.create(count=0).pk)
+
+        ret = ShardedCounter(value)
+        setattr(model_instance, self.attname, ret)
+        return ret
+
+    def to_python(self, value):
+        value = super(ShardedCounterField, self).to_python(value)
+        return ShardedCounter(value)
+
+    def get_prep_value(self, value):
+        return value
