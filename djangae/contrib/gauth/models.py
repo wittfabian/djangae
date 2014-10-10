@@ -168,9 +168,10 @@ class PermissionsMixin(models.Model):
 class GaeAbstractUser(AbstractBaseUser):
     """ Absract base class for creating a User model which works with the App Engine users API. """
 
-        _('User ID'), max_length=21, unique=True,
     username = models.CharField(
         # This stores the Google user_id, or custom username for non-Google-based users.
+        # We allow it to be null so that Google-based users can be pre-created before they log in.
+        _('User ID'), max_length=21, unique=True, null=True,
         validators=[
             validators.RegexValidator(re.compile('^\d{21}$'), _('User Id should be 21 digits.'), 'invalid')
         ]

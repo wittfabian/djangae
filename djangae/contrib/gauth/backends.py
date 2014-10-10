@@ -1,4 +1,6 @@
+from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import BaseUserManager
 from django.core.exceptions import ImproperlyConfigured
 from django.contrib.auth.backends import ModelBackend
 
@@ -42,6 +44,18 @@ class AppEngineUserAPI(ModelBackend):
                 user = User.objects.get(username=user_id)
 
             except User.DoesNotExist:
+                if getattr(settings, 'ALLOW_USER_PRE_CREATION', False):
+                    # Check to see if a User object for this email address has been pre-created.
+                    try:
+                        # Convert the pre-created User object so that the user can now login via
+                        # Google Accounts, and ONLY via Google Accounts.
+                        user = User.objects.get(email=BaseUserManager.normalize_email(email), username=None)
+                        user.username = user_id
+                        user.set_unusable_password()
+                        user.save()
+                        return user
+                    except User.DoesNotExist:
+                        pass
                 user = User.objects.create_user(user_id, email)
 
             return user
