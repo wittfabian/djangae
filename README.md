@@ -212,8 +212,10 @@ use this functionality, you have the following options:
  1. Don't mark fields as unique, or in the meta unique_together - this only works for your models, contrib models will still use unique markers
  2. Disable unique constaints on a per-model basis via the Djangae meta class (again, only works on the model you specify)
 
+```
     class Djangae:
         disable_constraint_checks = True
+```
 
  3. Disable constraint checking globally via `settings.DJANGAE_DISABLE_CONSTRAINT_CHECKING`
 
