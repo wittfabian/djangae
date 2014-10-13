@@ -1,7 +1,8 @@
-
-from django.contrib.auth.middleware import AuthenticationMiddleware as DjangoMiddleware
-from google.appengine.api import users
 from django.contrib.auth import authenticate, login, logout, get_user, BACKEND_SESSION_KEY
+from django.contrib.auth.middleware import AuthenticationMiddleware as DjangoMiddleware
+from django.contrib.auth.models import BaseUserManager
+from google.appengine.api import users
+
 
 class AuthenticationMiddleware(DjangoMiddleware):
     def process_request(self, request):
@@ -11,7 +12,7 @@ class AuthenticationMiddleware(DjangoMiddleware):
 
         if django_user.is_anonymous() and google_user:
             #If there is a google user, but we are anonymous, log in!
-            django_user = authenticate(request=request, google_user=google_user)
+            django_user = authenticate(google_user=google_user)
             if django_user:
                 login(request, django_user)
         elif not django_user.is_anonymous() and not google_user:
@@ -25,9 +26,9 @@ class AuthenticationMiddleware(DjangoMiddleware):
         backend_str = request.session.get(BACKEND_SESSION_KEY)
 
         #Now make sure we update is_superuser and is_staff appropriately
-        if backend_str == 'djangae.contrib.auth.backends.AppEngineUserAPI':
+        if backend_str == 'djangae.contrib.gauth.backends.AppEngineUserAPI':
             is_superuser = users.is_current_user_admin()
-            google_email = users.get_current_user().email().lower()
+            google_email = BaseUserManager.normalize_email(users.get_current_user().email())
             resave = False
 
             if is_superuser != django_user.is_superuser:
