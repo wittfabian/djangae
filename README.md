@@ -217,9 +217,9 @@ use this functionality, you have the following options:
         disable_constraint_checks = True
 ```
 
- 3. Disable constraint checking globally via `settings.DJANGAE_DISABLE_CONSTRAINT_CHECKING`
+ 3. Disable constraint checking globally via `settings.DJANGAE_DISABLE_CONSTRAINT_CHECKS`
 
-The `disable_constraint_checks` per-model setting overrides the global `DJANGAE_DISABLE_CONSTRAINT_CHECKING` so if you are concerned about speed/cost then you might want to disable globally and
+The `disable_constraint_checks` per-model setting overrides the global `DJANGAE_DISABLE_CONSTRAINT_CHECKS` so if you are concerned about speed/cost then you might want to disable globally and
 override on a per-model basis by setting `disable_constraint_checks = False` on models that require constraints.
 
 ## Contributing
