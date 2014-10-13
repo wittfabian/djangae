@@ -202,7 +202,7 @@ Unique constraint checks have the following caveats...
  - **Updating instances via the datastore API (NDB, DB, or datastore.Put and friends) will break your unique constraints. Don't do that!**
  - **Updating instances via the datastore admin will do the same thing, you'll be bypassing the unique marker creation**
 
-However, unique markers are very powerful when you need to enforce uniqueness. They are enabled by default simply because that's the behaviour that Django expects. If you don't want to
+However, unique markers are very powerful when you need to enforce uniqueness. **They are enabled by default** simply because that's the behaviour that Django expects. If you don't want to
 use this functionality, you have the following options:
 
  1. Don't mark fields as unique, or in the meta unique_together - this only works for your models, contrib models will still use unique markers
