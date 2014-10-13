@@ -127,7 +127,7 @@ datastore is good at (e.g. handling huge bandwidth of reads and writes) and thin
    of your middleware classes. This middleware patches a number of insecure parts of the Python and App Engine libraries and warns if your
    Django settings aren't as secure as they could be.
 
- * Make sure you read the section on [Unique Constraint Checking]
+ * Make sure you read the section on [Unique Constraint Checking](#unique-constraint-checking)
 
 ## Local/remote management commands
 
