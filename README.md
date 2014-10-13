@@ -127,6 +127,8 @@ datastore is good at (e.g. handling huge bandwidth of reads and writes) and thin
    of your middleware classes. This middleware patches a number of insecure parts of the Python and App Engine libraries and warns if your
    Django settings aren't as secure as they could be.
 
+ * Make sure you read the section on [Unique Constraint Checking]
+
 ## Local/remote management commands
 
 If you set your manage.py up as described above, djangae will allow you to run management commands locally or
@@ -192,6 +194,8 @@ See the Google documentation for more information on connecting to Cloud SQL via
 
 ## Unique Constraint Checking
 
+**IMPORTANT: Make sure you read and understand this section before configuring your project**
+
 Djangae by default enforces the unique constraints that you define on your models. It does so by creating so called "unique markers" in the datastore.
 Unique constraint checks have the following caveats...
 
@@ -199,8 +203,8 @@ Unique constraint checks have the following caveats...
    one unique field on your model, and you save() Djangae must do two datastore writes (one for the entity, one for the marker)
  - Unique constraints increase your datastore reads. Each time you save an object, Djangae needs to check for the existence of unique markers.
  - Unique constraints slow down your saves(). See above, each time you write a bunch of stuff needs to happen.
- - **Updating instances via the datastore API (NDB, DB, or datastore.Put and friends) will break your unique constraints. Don't do that!**
- - **Updating instances via the datastore admin will do the same thing, you'll be bypassing the unique marker creation**
+ - Updating instances via the datastore API (NDB, DB, or datastore.Put and friends) will break your unique constraints. Don't do that!
+ - Updating instances via the datastore admin will do the same thing, you'll be bypassing the unique marker creation
 
 However, unique markers are very powerful when you need to enforce uniqueness. **They are enabled by default** simply because that's the behaviour that Django expects. If you don't want to
 use this functionality, you have the following options:

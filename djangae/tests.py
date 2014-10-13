@@ -604,7 +604,7 @@ class ConstraintTests(TestCase):
         instance.delete()
         self.assertEqual(0, datastore.Query(UniqueMarker.kind()).Count() - initial_count)
 
-    @override_settings(DJANGAE_DISABLE_CONSTRAINT_CHECKING=True)
+    @override_settings(DJANGAE_DISABLE_CONSTRAINT_CHECKS=True)
     def test_constraints_disabled_doesnt_create_or_check_markers(self):
         initial_count = datastore.Query(UniqueMarker.kind()).Count()
 
@@ -617,7 +617,7 @@ class ConstraintTests(TestCase):
         self.assertEqual(instance1.name, instance2.name)
         self.assertFalse(instance1 == instance2)
 
-    @override_settings(DJANGAE_DISABLE_CONSTRAINT_CHECKING=True)
+    @override_settings(DJANGAE_DISABLE_CONSTRAINT_CHECKS=True)
     def test_constraints_can_be_enabled_per_model(self):
 
         initial_count = datastore.Query(UniqueMarker.kind()).Count()

@@ -904,36 +904,48 @@ class InsertCommand(object):
                     if isinstance(id_or_name, basestring) and id_or_name.startswith("__"):
                         raise NotSupportedError("Datastore ids cannot start with __. Id was %s" % id_or_name)
 
-                    markers = constraints.acquire(self.model, ent)
-                    try:
+                    if not constraints.constraint_checks_enabled(self.model):
+                        #Fast path, just insert
                         results.append(datastore.Put(ent))
-                        caching.add_entity_to_context_cache(self.model, ent)
-                    except:
-                        #Make sure we delete any created markers before we re-raise
-                        constraints.release_markers(markers)
-                        raise
+                    else:
+                        markers = constraints.acquire(self.model, ent)
+                        try:
+                            results.append(datastore.Put(ent))
+                            caching.add_entity_to_context_cache(self.model, ent)
+                        except:
+                            #Make sure we delete any created markers before we re-raise
+                            constraints.release_markers(markers)
+                            raise
 
                 txn()
 
             return results
         else:
-            #FIXME: We should rearrange this so that each entity is handled individually like above. We'll
-            #lose insert performance, but gain consistency on errors which is more important
-            markers = constraints.acquire_bulk(self.model, self.entities)
-            try:
+
+            if not constraints.constraint_checks_enabled(self.model):
+                #Fast path, just bulk insert
                 results = datastore.Put(self.entities)
                 for entity in self.entities:
                     caching.add_entity_to_context_cache(self.model, entity)
+                return results
+            else:
+                #FIXME: We should rearrange this so that each entity is handled individually like above. We'll
+                #lose insert performance, but gain consistency on errors which is more important
+                markers = constraints.acquire_bulk(self.model, self.entities)
+                try:
+                    results = datastore.Put(self.entities)
+                    for entity in self.entities:
+                        caching.add_entity_to_context_cache(self.model, entity)
 
-            except:
-                to_delete = chain(*markers)
-                constraints.release_markers(to_delete)
-                raise
+                except:
+                    to_delete = chain(*markers)
+                    constraints.release_markers(to_delete)
+                    raise
 
-            for ent, m in zip(self.entities, markers):
-                constraints.update_instance_on_markers(ent, m)
+                for ent, m in zip(self.entities, markers):
+                    constraints.update_instance_on_markers(ent, m)
 
-            return results
+                return results
 
 class DeleteCommand(object):
     def __init__(self, connection, query):
@@ -952,7 +964,11 @@ class DeleteCommand(object):
             ).Run():
 
             keys.append(entity.key())
-            constraints.release(self.select.model, entity)
+
+            ##Delete constraints if that's enabled
+            if constraints.constraint_checks_enabled(self.select.model):
+                constraints.release(self.select.model, entity)
+
             caching.remove_entity_from_context_cache_by_key(entity.key())
         datastore.Delete(keys)
 
@@ -978,19 +994,24 @@ class UpdateCommand(object):
                 indexer = REQUIRES_SPECIAL_INDEXES[index]
                 result[indexer.indexed_column_name(field.column)] = indexer.prep_value_for_database(value)
 
-        to_acquire, to_release = constraints.get_markers_for_update(self.model, original, result)
-
-        #Acquire first, because if that fails then we don't want to alter what's already there
-        constraints.acquire_identifiers(to_acquire, result.key())
-        try:
+        if not constraints.constraint_checks_enabled(self.model):
+            #The fast path, no constraint checking
             datastore.Put(result)
             caching.add_entity_to_context_cache(self.model, result)
-        except:
-            constraints.release_identifiers(to_acquire)
-            raise
         else:
-            #Now we release the ones we don't want anymore
-            constraints.release_identifiers(to_release)
+            to_acquire, to_release = constraints.get_markers_for_update(self.model, original, result)
+
+            #Acquire first, because if that fails then we don't want to alter what's already there
+            constraints.acquire_identifiers(to_acquire, result.key())
+            try:
+                datastore.Put(result)
+                caching.add_entity_to_context_cache(self.model, result)
+            except:
+                constraints.release_identifiers(to_acquire)
+                raise
+            else:
+                #Now we release the ones we don't want anymore
+                constraints.release_identifiers(to_release)
 
     def execute(self):
         self.select.execute()

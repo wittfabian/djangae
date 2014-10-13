@@ -26,7 +26,7 @@ def constraint_checks_enabled(model_or_instance):
             else:
                 return True
 
-    return getattr(settings, "DJANGAE_DISABLE_CONSTRAINT_CHECKING", False)
+    return not getattr(settings, "DJANGAE_DISABLE_CONSTRAINT_CHECKS", False)
 
 
 class UniqueMarker(db.Model):
