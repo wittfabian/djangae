@@ -1038,3 +1038,44 @@ class ShardedCounterTest(TestCase):
 
         instance.counter.decrement()
         self.assertEqual(0, instance.counter.value())
+
+
+from djangae.fields import AncestorAutoField, DescendentMixin, AncestorKey
+
+class AncestorModel(models.Model):
+    name = models.CharField(max_length=500)
+
+class ModelWithAncestor(models.Model, DescendentMixin):
+    id = AncestorAutoField(AncestorModel, primary_key=True)
+    name = models.CharField(max_length=500)
+
+class AncestorSupportTest(TestCase):
+    def test_saving_ancestor_key(self):
+        parent = AncestorModel.objects.create(name="parent")
+
+        child1 = ModelWithAncestor.objects.create(id=AncestorKey(parent), name="child1")
+        child2 = ModelWithAncestor.objects.create(id=AncestorKey(parent, 12345), name="child2")
+
+        parent_key = datastore.Key.from_path(AncestorModel._meta.db_table, parent.pk)
+        child1_key = datastore.Key.from_path(ModelWithAncestor._meta.db_table, child1.pk.id_or_name, parent=parent_key)
+
+        self.assertTrue(datastore.Get(child1_key))
+
+        child2_key = datastore.Key.from_path(ModelWithAncestor._meta.db_table, 12345, parent=parent_key)
+        self.assertTrue(datastore.Get(child2_key))
+
+        self.assertEqual(child1.id.parent, parent)
+        self.assertEqual(child2.id.parent, parent)
+        self.assertEqual(child2.id.id_or_name, 12345)
+
+    def test_querying_on_ancestor(self):
+        parent = AncestorModel.objects.create(name="parent")
+        parent2 = AncestorModel.objects.create(name="parent2")
+
+        ModelWithAncestor.objects.create(id=AncestorKey(parent), name="child1")
+        ModelWithAncestor.objects.create(id=AncestorKey(parent, 12345), name="child2")
+        ModelWithAncestor.objects.create(id=AncestorKey(parent2), name="other-child")
+
+        self.assertEqual(3, ModelWithAncestor.objects.count())
+        self.assertEqual(2, ModelWithAncestor.descendents_of(parent).count())
+        self.assertEqual(1, ModelWithAncestor.descendents_of(parent2).count())

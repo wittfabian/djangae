@@ -425,6 +425,7 @@ class SelectCommand(object):
         self.is_count = query.aggregates
         self.extra_select = query.extra_select
         self._set_db_table()
+        self.ancestor_filter = self._extract_ancestor(query)
 
         self._validate_query_is_possible(query)
 
@@ -553,6 +554,15 @@ class SelectCommand(object):
             self.queried_fields[pk_index] = "__key__"
         except ValueError:
             pass
+
+    def _extract_ancestor(self, query):
+        try:
+            if query.where.children[0][0].col == "__ancestor__":
+                ancestor_filter = query.where.children[0][-1]
+                del query.where.children[0]
+                return ancestor_filter
+        except (TypeError, IndexError):
+            return None
 
     def execute(self):
         #if not self.included_pks:
@@ -724,6 +734,9 @@ class SelectCommand(object):
                     query.Order(*ordering)
         else:
             query.Order(*ordering)
+
+        if self.ancestor_filter:
+            query.Ancestor(self.ancestor_filter)
 
         #If the resulting query was unique, then wrap as a unique query which
         #will hit the cache first

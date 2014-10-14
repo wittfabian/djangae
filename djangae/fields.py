@@ -368,3 +368,87 @@ class ShardedCounterField(ListField):
 
     def get_prep_value(self, value):
         return value
+
+
+from google.appengine.api.datastore import Key, AllocateIds
+from django.db.models.sql.where import Constraint
+
+class DescendentMixin(object):
+    @classmethod
+    def descendents_of(cls, instance):
+        qs = cls.objects.all()
+        qs.query.where.add(
+            (Constraint(None, '__ancestor__', cls._meta.pk), 'exact', instance.pk),
+            'AND'
+        )
+        return qs
+
+class AncestorKey(object):
+    def __init__(self, parent, id_or_name=None):
+        if parent:
+            if not parent.pk or (isinstance(parent, AncestorKey) and not parent.pk.id_or_name):
+                raise ValueError("Tried to set an unsaved ancestor")
+
+            parent_key = parent.pk
+            self.parent_model = parent.__class__
+        else:
+            parent_key = None
+            self.parent_model = None
+
+        self.parent_key = parent_key
+        self.id_or_name = id_or_name
+
+    @property
+    def parent(self):
+        if not self.parent_key:
+            raise AttributeError("AncestorKey has no parent")
+
+        return self.parent_model.objects.get(pk=self.parent_key)
+
+    def _get_datastore_key(self, this_model):
+        parent_key_part = None
+        if isinstance(self.parent_key, AncestorKey):
+            parent_key_part = self.parent_key._get_datastore_key()
+        elif isinstance(self.parent_key, (int, long, basestring)):
+            parent_key_part = Key.from_path(self.parent_model._meta.db_table, self.parent_key)
+        elif self.parent_key is not None:
+            raise ValueError("Unhandled parent key type")
+
+        if not self.id_or_name:
+            template_key = Key.from_path(this_model._meta.db_table, 1, parent=parent_key_part)
+            self.id_or_name = AllocateIds(template_key, 1)[0]
+
+        return Key.from_path(this_model._meta.db_table, self.id_or_name, parent=parent_key_part)
+
+class AncestorAutoField(models.Field):
+    description = "Like autofield, but allows setting an ancestor on creation"
+
+    def __init__(self, ancestor_model, *args, **kwargs):
+        self.ancestor_model = ancestor_model
+        super(AncestorAutoField, self).__init__(*args, **kwargs)
+
+    def db_type(self, connection):
+        if connection.settings_dict['ENGINE'] != 'djangae.db.backends.appengine':
+            raise ValueError("You can only use AncestorAutoField on the datastore")
+
+        return "key"
+
+    def get_prep_lookup(self, lookup_type, value):
+        if lookup_type != 'exact':
+            raise ValueError("Can only do exact lookups on ancestor fields")
+
+        if isinstance(value, (int, long, basestring)):
+            return Key.from_path(self.ancestor_model._meta.db_table, value)
+        elif isinstance(value, Key):
+            return value
+
+        raise TypeError("Unexpected type for ancestor lookup")
+
+    def get_db_prep_save(self, value, connection):
+        if connection.settings_dict['ENGINE'] != 'djangae.db.backends.appengine':
+            raise ValueError("You can only use AncestorAutoField on the datastore")
+
+        return value._get_datastore_key(self.model)
+
+    def to_python(self, value):
+        pass

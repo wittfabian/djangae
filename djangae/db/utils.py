@@ -162,6 +162,20 @@ def django_instance_to_entity(connection, model, fields, raw, instance):
                 primary_key = primary_key[:500]
 
             kwargs["name"] = primary_key
+        elif isinstance(primary_key, datastore.Key):
+            if not primary_key.parent():
+                raise ValueError("Tried to set a key directly when there is no parent, incorrect use of an ancestor field?")
+
+            if not primary_key.id_or_name():
+                kwargs["parent"] = primary_key.parent()
+            elif isinstance(primary_key.id_or_name(), (int, long)):
+                kwargs["id"] = primary_key.id_or_name()
+                kwargs["parent"] = primary_key.parent()
+            elif isinstance(primary_key.id_or_name(), basestring):
+                kwargs["name"] = primary_key.id_or_name()
+                kwargs["parent"] = primary_key.parent()
+            else:
+                raise ValueError("Invalid primary key value")
         else:
             raise ValueError("Invalid primary key value")
 
@@ -178,6 +192,9 @@ def django_instance_to_entity(connection, model, fields, raw, instance):
 def get_datastore_key(model, pk):
     """ Return a datastore.Key for the given model and primary key.
     """
+
+    if isinstance(pk, Key):
+        return pk
 
     kind = get_top_concrete_parent(model)._meta.db_table
     return Key.from_path(kind, pk)
@@ -204,6 +221,10 @@ class MockInstance(object):
 
 
 def key_exists(key):
+    if not key.has_id_or_name():
+        #Incomplete keys can't exist
+        return False
+
     qry = Query(keys_only=True)
     qry.Ancestor(key)
     return qry.Count(limit=1) > 0
