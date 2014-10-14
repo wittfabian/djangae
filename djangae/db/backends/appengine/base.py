@@ -137,13 +137,15 @@ class Cursor(object):
 
         for col in self.last_select_command.queried_fields:
             if col == "__key__":
-                key = entity if isinstance(entity, Key) else entity.key()
-                self.returned_ids.append(key)
-                result.append(key.id_or_name())
+                value = entity if isinstance(entity, Key) else entity.key()
+                field = self.last_select_command.model._meta.pk
+                self.returned_ids.append(value)
             else:
                 field = get_field_from_column(self.last_select_command.model, col)
-                value = self.connection.ops.convert_values(entity.get(col), field)
-                result.append(value)
+                value = entity.get(col)
+
+            value = self.connection.ops.convert_values(value, field)
+            result.append(value)
 
         return result
 
@@ -193,9 +195,16 @@ class DatabaseOperations(BaseDatabaseOperations):
     def convert_values(self, value, field):
         """ Called when returning values from the datastore"""
 
+        db_type = field.db_type(self.connection)
+
+        internal_type = field.get_internal_type()
+        if db_type == 'key':
+            if internal_type.endswith("IntegerField") or internal_type == "AutoField" or internal_type == "CharField":
+                value = value.id_or_name()
+
         value = super(DatabaseOperations, self).convert_values(value, field)
 
-        db_type = field.db_type(self.connection)
+
         if db_type == 'string' and isinstance(value, str):
             value = value.decode("utf-8")
         elif db_type == "datetime":

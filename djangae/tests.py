@@ -1068,6 +1068,8 @@ class AncestorSupportTest(TestCase):
         self.assertEqual(child2.id.parent, parent)
         self.assertEqual(child2.id.id_or_name, 12345)
 
+        self.assertEqual(child1.pk, ModelWithAncestor.objects.get(pk=child1.pk).pk)
+
     def test_querying_on_ancestor(self):
         parent = AncestorModel.objects.create(name="parent")
         parent2 = AncestorModel.objects.create(name="parent2")
@@ -1079,3 +1081,18 @@ class AncestorSupportTest(TestCase):
         self.assertEqual(3, ModelWithAncestor.objects.count())
         self.assertEqual(2, ModelWithAncestor.descendents_of(parent).count())
         self.assertEqual(1, ModelWithAncestor.descendents_of(parent2).count())
+
+    def test_pk_in_query(self):
+        parent = AncestorModel.objects.create(name="parent")
+        parent2 = AncestorModel.objects.create(name="parent2")
+
+        child1 = ModelWithAncestor.objects.create(id=AncestorKey(parent), name="child1")
+        child2 = ModelWithAncestor.objects.create(id=AncestorKey(parent, 12345), name="child2")
+        child3 = ModelWithAncestor.objects.create(id=AncestorKey(parent2), name="other-child")
+
+        self.assertEqual(child1, ModelWithAncestor.objects.get(pk=child1.pk))
+
+        self.assertEqual(2, ModelWithAncestor.objects.filter(pk__in=[child1.pk, child2.pk]).count())
+        self.assertEqual(1, ModelWithAncestor.objects.filter(pk__in=[child1.pk, child2.pk], name="child1").count())
+
+        self.assertEqual(child1, ModelWithAncestor.descendents_of(parent).filter(pk__in=[child1.pk, child3.pk]).get())

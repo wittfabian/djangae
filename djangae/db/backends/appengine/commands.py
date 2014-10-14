@@ -631,6 +631,9 @@ class SelectCommand(object):
             **query_kwargs
         )
 
+        if self.ancestor_filter:
+            query.Ancestor(self.ancestor_filter)
+
         if has_concrete_parents(self.model) and not self.model._meta.proxy:
             query["class ="] = self.model._meta.db_table
 
@@ -734,9 +737,6 @@ class SelectCommand(object):
                     query.Order(*ordering)
         else:
             query.Order(*ordering)
-
-        if self.ancestor_filter:
-            query.Ancestor(self.ancestor_filter)
 
         #If the resulting query was unique, then wrap as a unique query which
         #will hit the cache first
@@ -852,6 +852,7 @@ class SelectCommand(object):
                     # the correct value for this field. The alternative would be to call
                     # self.distinct_field_convertor again in Cursor.fetchone, but that's wasteful.
                     x[self.distinct_on_field] = value
+
             return x
 
 class FlushCommand(object):
@@ -902,7 +903,7 @@ class InsertCommand(object):
     def execute(self):
         if self.has_pk and not has_concrete_parents(self.model):
             results = []
-            #We are inserting, but we specified an ID, we need to check for existence before we Put()
+            #We are inserting, but we specified an ID, we need to check for exist   ence before we Put()
             #We do it in a loop so each check/put is transactional - because it's an ancestor query it shouldn't
             #cost any entity groups
 

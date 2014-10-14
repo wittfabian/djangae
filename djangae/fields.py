@@ -385,17 +385,8 @@ class DescendentMixin(object):
 
 class AncestorKey(object):
     def __init__(self, parent, id_or_name=None):
-        if parent:
-            if not parent.pk or (isinstance(parent, AncestorKey) and not parent.pk.id_or_name):
-                raise ValueError("Tried to set an unsaved ancestor")
-
-            parent_key = parent.pk
-            self.parent_model = parent.__class__
-        else:
-            parent_key = None
-            self.parent_model = None
-
-        self.parent_key = parent_key
+        self.parent_key = parent.pk if isinstance(parent, models.Model) else parent
+        self.parent_model = parent.__class__
         self.id_or_name = id_or_name
 
     @property
@@ -420,7 +411,15 @@ class AncestorKey(object):
 
         return Key.from_path(this_model._meta.db_table, self.id_or_name, parent=parent_key_part)
 
+    def __eq__(self, other):
+        if isinstance(other, AncestorKey):
+            return self.parent_key == other.parent_key and self.id_or_name == other.id_or_name
+        else:
+            raise TypeError("Type mismatch when testing equality")
+
 class AncestorAutoField(models.Field):
+    __metaclass__ = models.SubfieldBase
+
     description = "Like autofield, but allows setting an ancestor on creation"
 
     def __init__(self, ancestor_model, *args, **kwargs):
@@ -434,13 +433,29 @@ class AncestorAutoField(models.Field):
         return "key"
 
     def get_prep_lookup(self, lookup_type, value):
-        if lookup_type != 'exact':
+        if lookup_type not in ('exact', 'in'):
             raise ValueError("Can only do exact lookups on ancestor fields")
 
-        if isinstance(value, (int, long, basestring)):
-            return Key.from_path(self.ancestor_model._meta.db_table, value)
-        elif isinstance(value, Key):
-            return value
+        was_list = isinstance(value, (list, tuple))
+
+        if not was_list:
+            value = [ value ]
+
+        result = []
+        for v in value:
+            if isinstance(v, (int, long, basestring)):
+                result.append(Key.from_path(self.ancestor_model._meta.db_table, v))
+            elif isinstance(v, Key):
+                result.append(v)
+            elif isinstance(v, AncestorKey):
+                result.append(v._get_datastore_key(self.model))
+            else:
+                raise TypeError("Unexpected type for ancestor field lookup: {}".format(v.__class__))
+
+        if was_list:
+            return result
+        else:
+            return result[0]
 
         raise TypeError("Unexpected type for ancestor lookup")
 
@@ -451,4 +466,11 @@ class AncestorAutoField(models.Field):
         return value._get_datastore_key(self.model)
 
     def to_python(self, value):
-        pass
+        if isinstance(value, AncestorKey):
+            return value
+
+        if isinstance(value, Key):
+            return AncestorKey(value.parent().id_or_name(), value.id_or_name())
+
+
+        return value
