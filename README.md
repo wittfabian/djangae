@@ -37,7 +37,6 @@ Django 1.6 is supported, but 1.7 support is in the pipeline.
  * Add djangae to `INSTALLED_APPS`.
  * At the top of your settings, insert the following line: `from djangae.settings_base import *` - this sets up some
    default settings.
-   [Docs](https://developers.google.com/appengine/docs/python/config/appconfig#Python_app_yaml_Configuring_libraries).
  * In app.yaml add the following handlers:
 
     ```yml
