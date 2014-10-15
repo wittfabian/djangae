@@ -49,6 +49,20 @@ Here's the full list of magic:
 * Support for queries which weren't possible with djangoappengine, such as OR queries using `Q` objects.
 * A `ListField` which provides a "normal" django model field for storing lists (a feature of the Datastore).
 
+## Roadmap
+
+1.0-alpha
+
+ - Basic ancestor query support
+ - All tests either passing or throwing NotSupportedError in the testapp
+ - Configurable constraints
+
+1.0-beta
+
+ - Support for 'infinite' descendents in the ancestor support. Lots of tests
+ - Memcache backed caching by PK and unique constraints
+ - Mapreduce handlers and utilities
+ - All NotSupportedError tests being skipped, everything passes in the testapp
 
 ### What Can't It Do?
 
