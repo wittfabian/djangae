@@ -688,6 +688,12 @@ class SelectCommand(object):
             for and_branch in self.where[1]:
                 #Duplicate the query for all the "OR"s
                 queries.append(Query(**query_kwargs))
+
+                if query._Query__ancestor_pb:
+                    #Copy across any ancestor
+                    ancestor_key = datastore.Key._FromPb(query._Query__ancestor_pb)
+                    queries[-1].Ancestor(ancestor_key)
+
                 queries[-1].update(query) #Make sure we copy across filters (e.g. class =)
                 try:
                     process_and_branch(queries[-1], and_branch)
@@ -703,6 +709,10 @@ class SelectCommand(object):
 
                 for qry in _queries:
                     if "__key__ =" not in qry.keys():
+                        return False
+
+                    #Different ancestor means different query
+                    if qry._Query__ancestor_pb != test._Query__ancestor_pb:
                         return False
 
                     if qry._Query__kind != test._Query__kind:
