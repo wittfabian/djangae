@@ -18,8 +18,7 @@ https://github.com/potatolondon/djangae
 * The ability to use use the Datastore as the database for Django's models.  See **The Database Backend** for details.
   You can also use App Engine's NDB, or you can use Google Cloud SQL (via the standard django MySQL backend) instead of
   or along side the Datastore. Or use all 3!
-* `djangae.contrib.auth` which provides a custom user model, auth backend and middleware that makes django.contrib.auth
-  work on the datastore (i.e. without Many-To-Many relationships).
+* `djangae.contrib.gauth` which provides user models (both concrete and extendable abstract versions), an auth backend, and a middleware; which allow you to authenticate users using the App Engine's built-in Google Accounts authentication, and also allow you to use Django's permissions system on the Datastore (i.e. without being caught out by the Many-To-Many relationships).
 * A `runserver` command which fires up the App Engine SDK to serve your app (while still using Django's code reloading).
 * The ability to run management commands locally or on the remote App Engine Datastore.
 * A `shell` command that correctly sets up the environment/database. (Note, we should support this set up for any
@@ -74,6 +73,7 @@ Django 1.6 is supported, but 1.7 support is in the pipeline.
  * It is recommended that for improved security you add `djangae.contrib.security.middleware.AppEngineSecurityMiddleware` as the first
    of your middleware classes. This middleware patches a number of insecure parts of the Python and App Engine libraries and warns if your
    Django settings aren't as secure as they could be.
+* If you wish to use the App Engine's Google Accounts-based authentication to authenticate your users, and/or you wish to use Django's permissions system with the Datastore as you DB, then see the section on **Authentication**.
 
 ## The Database Backend
 
@@ -147,18 +147,57 @@ remotely, by specifying a `--sandbox`. Eg.
 
 With no arguments, management commands are run locally.
 
-## djangae.contrib.auth
+## Authentication
 
-This includes a custom user model, auth backend and middleware that makes django.contrib.auth work on the datastore.
+Djangae includes 'djangae.contrib.gauth', which allows you to authenticate your users with App Engine's built-in Google Accounts functionality, and also allows use of Django's permisions system on the Datastore, despite it usually requiring many-to-many relationships, which are not supported on the Datstore.
 
-To use, do the following:
+To set up Djangae's authentication system:
 
- - At the bottom of your settings.py add: from djangae.contrib.auth.settings import * (this sets up the auth backend,
-   login url and custom user model)
- - Replace 'django.contrib.auth.middleware.AuthenticationMiddleware' with
-   'djangae.contrib.auth.middleware.AuthenticationMiddleware'
- - Add 'djangae.contrib.auth' to INSTALLED_APPS probably after 'django.contrib.auth'
+* Add `'djangae.contrib.gauth'` to `INSTALLED_APPS` probably after `'django.contrib.auth'`.
+* At the bottom of your settings.py add: `from djangae.contrib.gauth.settings import *`.  This sets up the auth backend,
+   login url and sets `AUTH_USER_MODEL` to `'djangae.GaeDatastoreUser'`.
+* Replace 'django.contrib.auth.middleware.AuthenticationMiddleware' with `'djangae.contrib.auth.middleware.AuthenticationMiddleware'`.
 
+### Choosing A User Model
+
+There are 4 possible ways in which you may want to set up your authentication and database.  Djangae provides 4 differnet user models which correspond to these cases:
+
+1. Standard user model on a SQL database.
+	* Set `AUTH_USER_MODEL = 'djangae.GaeUser'`.
+	* This is equivalent to `django.contrib.auth.models.User`, but works with the Google Accounts authentication.
+2. Custom user model on a SQL database.
+	* Create your own `User` class by subclassing `djangae.contrib.gauth.models.GaeAbstractUser`.
+	* This base model is equivalent to `django.contrib.auth.models.AbstractBaseUser`, but works with the Google Accounts authentication.
+3. Standard user model on the Datastore.
+	* Set `AUTH_USER_MODEL = 'djangae.GaeDatastoreUser'`.
+	* This is equivalent to `django.contrib.auth.models.User`, but works with the Google Accounts authentication, and provides permissions models which work on the non-relational Datastore (i.e. they avoid M2M relationships while providing the same functionality).
+4. Custom user model on the Datastore.
+	* Create your own `User` class by subclassing `GaeAbstractDatastoreUser`.
+	* This base model is equivalent to `django.contrib.auth.models.AbstractBaseUser`, but works with the Google Accounts authentication, and provides permissions models which work on the non-relational Datastore (i.e. they avoid M2M relationships while providing the same functionality).
+
+ 
+### User Pre-Creation
+
+When using Google Accounts-based authentication, the `username` field of the user model is populated with the `user_id` which is provided by Google Accounts.  This is populated when the user object is created on the user's first log in, and is then used as the authentication check for subsequent log ins.  Because it's impossible to know what this ID is going to be before the user logs in, that creates an issue that you can't create users and assign permission to them until they have authenticated.
+
+Djangae allows you to pre-create users by specifying their email address.  First, you need to set `ALLOW_USER_PRE_CREATION` to `True` in settings, and then you can create user objects which have an email address and a `username` of `None`.  Djangae then recognises these as pre-created users, and will populate the `username` with their Google `user_id` when they first log in.
+
+### Username/password authentication
+
+As well as using Djangae's Google Accounts-based authnetication, you can also use the standard authentication backend from django.contrib.auth.  They can work alongside each other.  Simply include both, like this:
+
+
+```
+AUTHENTICATION_BACKENDS = (
+    'djangae.contrib.gauth.backends.AppEngineUserAPI',
+    'django.contrib.auth.backends.ModelBackend',
+)
+
+MIDDLEWARE_CLASSES = (
+    'djangae.contrib.gauth.middleware.AuthenticationMiddleware',
+    'django.contrib.auth.middleware.AuthenticationMiddleware',
+)
+```
 
 ## Using other databases
 
