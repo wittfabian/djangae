@@ -90,16 +90,13 @@ datastore is good at (e.g. handling huge bandwidth of reads and writes) and thin
 [Datastore](https://developers.google.com/appengine/docs/python/datastore/).
 
 
-# How do I use this thing?
+# Installation
 
- * Create up your App Engine project as usual (with app.yaml, etc).
- * Create your django project (with settings.py, wsgi.py, etc and place it inside your App Engine project).
- * Put the djangae on the path somewhere.
+ * Create a Django project, add app.yaml to the root. Make sure Django 1.6+ is in your project and importable
+ * Install Djangae into your project, make sure it's importable (you'll like need to manipulate the path in manage.py and wsgi.py)
  * Add djangae to `INSTALLED_APPS`.
  * At the top of your settings, insert the following line: `from djangae.settings_base import *` - this sets up some
    default settings.
- * In app.yaml, add your preferred version of `django` to the `libraries` section, or include the library in your
-   project folder if you'd rather.
    [Docs](https://developers.google.com/appengine/docs/python/config/appconfig#Python_app_yaml_Configuring_libraries).
  * In app.yaml add the following handlers:
 
@@ -112,8 +109,6 @@ datastore is good at (e.g. handling huge bandwidth of reads and writes) and thin
       script: YOUR_DJANGO_APP.wsgi.application
     ```
 
- * You may also want to add `- ^\.gaedata` to the `skip_files` section in app.yaml, as that's where the local
-   development Datastore data is located.
  * Make your manage.py look something like this:
 
     ```python
