@@ -336,7 +336,10 @@ class QueryByKeys(object):
         self._Query__kind = query._Query__kind
 
     def Run(self, limit=None, offset=None):
-        assert not self.query._Query__ancestor_pb #FIXME: We don't handle this yet
+        if self.query._Query__ancestor_pb:
+            #If there is an ancestor on the query, then ignore keys that don't share that ancestor
+            ancestor_path = datastore.Key._FromPb(self.query._Query__ancestor_pb).to_path()
+            self.keys = [ x for x in self.keys if x.to_path()[:len(ancestor_path)] == ancestor_path ]
 
         opts = self.query._Query__query_options
 
