@@ -197,10 +197,8 @@ class DatabaseOperations(BaseDatabaseOperations):
 
         db_type = field.db_type(self.connection)
 
-        internal_type = field.get_internal_type()
-        if db_type == 'key':
-            if internal_type.endswith("IntegerField") or internal_type == "AutoField" or internal_type == "CharField":
-                value = value.id_or_name()
+        if isinstance(value, Key) and db_type in ("integer", "string"):
+            value = value.id_or_name()
 
         value = super(DatabaseOperations, self).convert_values(value, field)
 
@@ -362,11 +360,11 @@ class DatabaseClient(BaseDatabaseClient):
 
 class DatabaseCreation(BaseDatabaseCreation):
     data_types = {
-        'AutoField':                  'key',
-        'RelatedAutoField':           'key',
-        'ForeignKey':                 'key',
-        'OneToOneField':              'key',
-        'ManyToManyField':            'key',
+        'AutoField':                  'integer',
+        'RelatedAutoField':           'integer',
+        'ForeignKey':                 'integer',
+        'OneToOneField':              'integer',
+        'ManyToManyField':            'integer',
         'BigIntegerField':            'long',
         'BooleanField':               'bool',
         'CharField':                  'string',
@@ -395,7 +393,6 @@ class DatabaseCreation(BaseDatabaseCreation):
         'TextField':                  'text',
         'XMLField':                   'text',
         'SetField':                   'list',
-        'DictField':                  'bytes',
         'EmbeddedModelField':         'bytes'
     }
 

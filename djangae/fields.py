@@ -376,6 +376,12 @@ from django.db.models.sql.where import Constraint
 class DescendentMixin(object):
     @classmethod
     def descendents_of(cls, instance):
+        """
+            This is a bit of a hack until we can drop support for 1.6 and (hopefully) reimplement this
+            using custom lookups in 1.7+. We add a constraint to the where claus with the magic column of
+            __ancestor__, then in the djangae database connector, we extract this constraint and remove it from the
+            where before our DNF work hits.
+        """
         qs = cls.objects.all()
         qs.query.where.add(
             (Constraint(None, '__ancestor__', cls._meta.pk), 'exact', instance.pk),
@@ -384,6 +390,12 @@ class DescendentMixin(object):
         return qs
 
 class AncestorKey(object):
+    """
+        Represents a key on appengine with a parent. Parent can either by an ID/Name (e.g. int/string)
+        or it can be another AncestorKey or an instance (which is the usual method).
+        id_or_name is the ID of the key itself.
+    """
+
     def __init__(self, parent, id_or_name=None):
         self.parent_key = parent.pk if isinstance(parent, models.Model) else parent
         self.parent_model = parent.__class__
