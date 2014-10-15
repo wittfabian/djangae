@@ -30,6 +30,52 @@ https://github.com/potatolondon/djangae
 The intention is always to support the last two versions of Django, although older versions may work. Currently only
 Django 1.6 is supported, but 1.7 support is in the pipeline.
 
+# Installation
+
+ * Create a Django project, add app.yaml to the root. Make sure Django 1.6+ is in your project and importable
+ * Install Djangae into your project, make sure it's importable (you'll likely need to manipulate the path in manage.py and wsgi.py)
+ * Add djangae to `INSTALLED_APPS`.
+ * At the top of your settings, insert the following line: `from djangae.settings_base import *` - this sets up some
+   default settings.
+   [Docs](https://developers.google.com/appengine/docs/python/config/appconfig#Python_app_yaml_Configuring_libraries).
+ * In app.yaml add the following handlers:
+
+    ```yml
+    - url: /_ah/(mapreduce|queue|warmup).*
+      script: YOUR_DJANGO_APP.wsgi.application
+      login: admin
+
+    - url: /.*
+      script: YOUR_DJANGO_APP.wsgi.application
+    ```
+
+ * Make your manage.py look something like this:
+
+    ```python
+    if __name__ == "__main__":
+        os.environ.setdefault("DJANGO_SETTINGS_MODULE", "myapp.settings")
+
+        from djangae.core.management import execute_from_command_line
+
+        execute_from_command_line(sys.argv)
+    ```
+
+ * Use the Djangae WSGI handler in your wsgi.py, something like
+
+    ```python
+    from django.core.wsgi import get_wsgi_application
+
+    from djangae.wsgi import DjangaeApplication
+
+    application = DjangaeApplication(get_wsgi_application())
+    ```
+
+ * Add the following to your URL handler: `url(r'^_ah/', include('djangae.urls'))`
+
+ * It is recommended that for improved security you add `djangae.contrib.security.middleware.AppEngineSecurityMiddleware` as the first
+   of your middleware classes. This middleware patches a number of insecure parts of the Python and App Engine libraries and warns if your
+   Django settings aren't as secure as they could be.
+
 ## The Database Backend
 
 Previously, in order to use Django's ORM with the App Engine Datastore, django-nonrel was required, along with
@@ -89,52 +135,6 @@ datastore is good at (e.g. handling huge bandwidth of reads and writes) and thin
 (e.g. counting). Djangae is not a substitute for knowing how to use the
 [Datastore](https://developers.google.com/appengine/docs/python/datastore/).
 
-
-# Installation
-
- * Create a Django project, add app.yaml to the root. Make sure Django 1.6+ is in your project and importable
- * Install Djangae into your project, make sure it's importable (you'll like need to manipulate the path in manage.py and wsgi.py)
- * Add djangae to `INSTALLED_APPS`.
- * At the top of your settings, insert the following line: `from djangae.settings_base import *` - this sets up some
-   default settings.
-   [Docs](https://developers.google.com/appengine/docs/python/config/appconfig#Python_app_yaml_Configuring_libraries).
- * In app.yaml add the following handlers:
-
-    ```yml
-    - url: /_ah/(mapreduce|queue|warmup).*
-      script: YOUR_DJANGO_APP.wsgi.application
-      login: admin
-
-    - url: /.*
-      script: YOUR_DJANGO_APP.wsgi.application
-    ```
-
- * Make your manage.py look something like this:
-
-    ```python
-    if __name__ == "__main__":
-        os.environ.setdefault("DJANGO_SETTINGS_MODULE", "myapp.settings")
-
-        from djangae.core.management import execute_from_command_line
-
-        execute_from_command_line(sys.argv)
-    ```
-
- * Use the Djangae WSGI handler in your wsgi.py, something like
-
-    ```python
-    from django.core.wsgi import get_wsgi_application
-
-    from djangae.wsgi import DjangaeApplication
-
-    application = DjangaeApplication(get_wsgi_application())
-    ```
-
- * Add the following to your URL handler: `url(r'^_ah/', include('djangae.urls'))`
-
- * It is recommended that for improved security you add `djangae.contrib.security.middleware.AppEngineSecurityMiddleware` as the first
-   of your middleware classes. This middleware patches a number of insecure parts of the Python and App Engine libraries and warns if your
-   Django settings aren't as secure as they could be.
 
 ## Local/remote management commands
 
