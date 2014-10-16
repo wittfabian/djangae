@@ -403,6 +403,9 @@ class AncestorKey(object):
 
     @property
     def parent(self):
+        # Should this have caching on the instance?  I.e. if you call this multiple times then
+        # surely we don't want to issue the same .get() call to the DB?  If we're not caching it
+        # then it probably shouldn't be a @property.
         if not self.parent_key:
             raise AttributeError("AncestorKey has no parent")
 

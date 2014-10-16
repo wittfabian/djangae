@@ -559,6 +559,8 @@ class SelectCommand(object):
             pass
 
     def _extract_ancestor(self, query):
+        # What?
+        # Why/how is it guaranteed to be in the first child of the where?
         try:
             if query.where.children[0][0].col == "__ancestor__":
                 ancestor_filter = query.where.children[0][-1]
