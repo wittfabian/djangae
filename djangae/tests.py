@@ -27,7 +27,7 @@ from djangae.db.exceptions import NotSupportedError
 from djangae.db.constraints import UniqueMarker
 from djangae.indexing import add_special_index
 from djangae.db.utils import entity_matches_query
-from djangae.db.backends.appengine.commands import normalize_query, parse_constraint
+from djangae.db.backends.appengine.commands import normalize_query
 from djangae.db.backends.appengine import caching
 from djangae.db.unique_utils import query_is_unique
 from djangae.db import transaction
