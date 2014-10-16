@@ -427,7 +427,8 @@ class AncestorKey(object):
         if isinstance(other, AncestorKey):
             return self.parent_key == other.parent_key and self.id_or_name == other.id_or_name
         else:
-            raise TypeError("Type mismatch when testing equality")
+            raise TypeError("Cannot compare AncestorKey with {0}".format(type(other)))
+
 
 class AncestorAutoField(models.Field):
     __metaclass__ = models.SubfieldBase
