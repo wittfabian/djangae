@@ -442,7 +442,6 @@ class AncestorAutoField(models.Field):
     def db_type(self, connection):
         if connection.settings_dict['ENGINE'] != 'djangae.db.backends.appengine':
             raise ValueError("You can only use AncestorAutoField on the datastore")
-
         return "key"
 
     def get_prep_lookup(self, lookup_type, value):
@@ -472,15 +471,9 @@ class AncestorAutoField(models.Field):
     def get_db_prep_save(self, value, connection):
         if connection.settings_dict['ENGINE'] != 'djangae.db.backends.appengine':
             raise ValueError("You can only use AncestorAutoField on the datastore")
-
         return value._get_datastore_key(self.model)
 
     def to_python(self, value):
-        if isinstance(value, AncestorKey):
-            return value
-
         if isinstance(value, Key):
             return AncestorKey(value.parent().id_or_name(), value.id_or_name())
-
-
         return value
