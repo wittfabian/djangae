@@ -163,19 +163,22 @@ def django_instance_to_entity(connection, model, fields, raw, instance):
 
             kwargs["name"] = primary_key
         elif isinstance(primary_key, datastore.Key):
-            if not primary_key.parent():
-                raise ValueError("Tried to set a key directly when there is no parent, incorrect use of an ancestor field?")
+            # PK is set as a datastore key in order to set an ancestor
+            parent = primary_key.parent()
+            id_or_name = primary_key.id_or_name()
 
-            if not primary_key.id_or_name():
-                kwargs["parent"] = primary_key.parent()
-            elif isinstance(primary_key.id_or_name(), (int, long)):
-                kwargs["id"] = primary_key.id_or_name()
-                kwargs["parent"] = primary_key.parent()
-            elif isinstance(primary_key.id_or_name(), basestring):
-                kwargs["name"] = primary_key.id_or_name()
-                kwargs["parent"] = primary_key.parent()
-            else:
-                raise ValueError("Invalid primary key value")
+            if not parent:
+                raise ValueError("Tried to set a key directly when there is no parent, incorrect use of an ancestor field?")
+            kwargs["parent"] = parent
+
+            # Parent must be set, but for creation of a new object the parent can be set without the PK value
+            if id_or_name:
+                if isinstance(id_or_name, (int, long)):
+                    kwargs["id"] = id_or_name
+                elif isinstance(id_or_name, basestring):
+                    kwargs["name"] = id_or_name
+                else:
+                    raise ValueError("Invalid primary key value")
         else:
             raise ValueError("Invalid primary key value")
 
@@ -192,12 +195,12 @@ def django_instance_to_entity(connection, model, fields, raw, instance):
 def get_datastore_key(model, pk):
     """ Return a datastore.Key for the given model and primary key.
     """
-
     if isinstance(pk, Key):
         return pk
 
     kind = get_top_concrete_parent(model)._meta.db_table
     return Key.from_path(kind, pk)
+
 
 class MockInstance(object):
     """
