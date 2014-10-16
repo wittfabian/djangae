@@ -467,10 +467,7 @@ class AncestorAutoField(models.Field):
 
         if was_list:
             return result
-        else:
-            return result[0]
-
-        raise TypeError("Unexpected type for ancestor lookup")
+        return result[0]
 
     def get_db_prep_save(self, value, connection):
         if connection.settings_dict['ENGINE'] != 'djangae.db.backends.appengine':
