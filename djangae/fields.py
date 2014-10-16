@@ -3,17 +3,20 @@
 
 import random
 
-from django.db import models
-from django.utils.translation import ugettext_lazy as _
 from django.core.exceptions import ValidationError
+from django.db import models
 from django.db.models.fields.subclassing import Creator
-from django.utils.text import capfirst
-from django import forms
-from djangae.forms.fields import TrueOrNullFormField, IterableFieldModelChoiceFormField, ListFormField
 from django.db.models.loading import get_model
+from django.db.models.sql.where import Constraint
+from django import forms
+from django.utils.text import capfirst
+from django.utils.translation import ugettext_lazy as _
+from google.appengine.api.datastore import Key, AllocateIds
 
 from djangae.db import transaction
+from djangae.forms.fields import TrueOrNullFormField, IterableFieldModelChoiceFormField, ListFormField
 from djangae.models import CounterShard
+
 
 class _FakeModel(object):
     """
@@ -369,9 +372,6 @@ class ShardedCounterField(ListField):
     def get_prep_value(self, value):
         return value
 
-
-from google.appengine.api.datastore import Key, AllocateIds
-from django.db.models.sql.where import Constraint
 
 class DescendentMixin(object):
     @classmethod
