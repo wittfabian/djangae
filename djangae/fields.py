@@ -81,6 +81,8 @@ class TrueOrNullField(models.NullBooleanField):
 
 
 class IterableField(models.Field):
+    __metaclass__ = models.SubfieldBase
+
     @property
     def _iterable_type(self): raise NotImplementedError()
 

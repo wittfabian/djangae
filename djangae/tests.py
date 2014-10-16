@@ -31,7 +31,7 @@ from djangae.db.backends.appengine.commands import normalize_query
 from djangae.db.backends.appengine import caching
 from djangae.db.unique_utils import query_is_unique
 from djangae.db import transaction
-from djangae.fields import ComputedCharField, ShardedCounterField
+from djangae.fields import ComputedCharField, ShardedCounterField, SetField, ListField
 from djangae.models import CounterShard
 
 from .storage import BlobstoreFileUploadHandler
@@ -1038,3 +1038,22 @@ class ShardedCounterTest(TestCase):
 
         instance.counter.decrement()
         self.assertEqual(0, instance.counter.value())
+
+
+class IterableFieldModel(models.Model):
+    set_field = SetField(models.CharField(max_length=1))
+    list_field = ListField(models.CharField(max_length=1))
+
+class IterableFieldTests(TestCase):
+    def test_empty_iterable_fields(self):
+        """ Test that an empty set field always returns set(), not None """
+        instance = IterableFieldModel()
+        # When assigning
+        self.assertEqual(instance.set_field, set())
+        self.assertEqual(instance.list_field, [])
+        instance.save()
+
+        instance = IterableFieldModel.objects.get()
+        # When getting it from the db
+        self.assertEqual(instance.set_field, set())
+        self.assertEqual(instance.list_field, [])
