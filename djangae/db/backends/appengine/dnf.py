@@ -21,9 +21,7 @@ def process_literal(node, filtered_columns=[], negated=False):
             return ('OR', lits), filtered_columns
         else:
             if not value:
-                raise EmptyResultSet()
-            if len(value) == 1:
-                return ('LIT', (column, '=', value[0])), filtered_columns
+                return None, filtered_columns
             return ('OR', [('LIT', (column, '=', x)) for x in value]), filtered_columns
     if op not in OPERATORS_MAP:
         raise NotSupportedError("Unsupported operator %s" % op)
@@ -35,7 +33,7 @@ def process_literal(node, filtered_columns=[], negated=False):
 
 def process_node(node, connection, negated=False):
     if isinstance(node, tuple) and isinstance(node[0], Constraint):
-        return ('LIT', parse_constraint(node, connection)), negated
+        return ('LIT', parse_constraint(node, connection, negated)), negated
     if isinstance(node, tuple):
         return node, negated
     if node.connector == 'AND' or 'OR':
@@ -46,34 +44,51 @@ def process_node(node, connection, negated=False):
 
 def parse_dnf(node, connection):
     tree, filtered_columns = parse_tree(node, connection)
-    new_tree = tripled(tree)
-    if new_tree[0] != 'OR':
-        new_tree = ('OR', [new_tree])
-    return new_tree, filtered_columns
+    if tree:
+        tree = tripled(tree)
+
+    elif filtered_columns:
+        #If there was no tree returned, but we did filter on something
+        #then we must have an empty result set (e.g. we filtered on an empty list)
+        raise EmptyResultSet()
+
+    if tree and tree[0] != 'OR':
+        tree = ('OR', [tree])
+
+    if tree and len(tree[-1]) > 30:
+        raise NotSupportedError("The datastore doesn't support this query, more than 30 filters were needed")
+
+    return tree, filtered_columns
 
 
-def parse_tree(node, connection, filtered_columns=set([]), negated=False):
+def parse_tree(node, connection, filtered_columns=None, negated=False):
     """
         Takes a django tree and parses all the nodes returning a new
         tree in the correct format for expansion
     """
+    filtered_columns = filtered_columns or set()
+
     node, negated = process_node(node, connection, negated=negated)
 
     if node[0] in ['AND', 'OR']:
         new_children = []
         for child in node[1]:
             parsed_node, _columns = parse_tree(child, connection, filtered_columns, negated)
-            new_children.append(parsed_node)
+            if parsed_node:
+                new_children.append(parsed_node)
+
             for col in _columns:
                 filtered_columns.add(col)
+
+        if not new_children:
+            return None, filtered_columns
+
         if len(new_children) == 1:
             return new_children[0], filtered_columns
         return (node[0], new_children), filtered_columns
     if node[0] == 'LIT':
-        try:
-            parsed_lit, _columns = process_literal(node, filtered_columns=filtered_columns, negated=negated)
-        except:
-            import ipdb; ipdb.set_trace()
+        parsed_lit, _columns = process_literal(node, filtered_columns=filtered_columns, negated=negated)
+
         for col in _columns:
             filtered_columns.add(col)
         return parsed_lit, filtered_columns

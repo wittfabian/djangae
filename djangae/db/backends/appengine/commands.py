@@ -129,7 +129,7 @@ def log_once(logging_call, text, args):
 log_once.logged = set()
 
 
-def parse_constraint(child, connection):
+def parse_constraint(child, connection, negated=False):
     #First, unpack the constraint
     constraint, op, annotation, value = child
     was_list = isinstance(value, (list, tuple))
@@ -151,6 +151,9 @@ def parse_constraint(child, connection):
         if not was_list:
             value = value[0]
     else:
+        if negated:
+            raise CouldBeSupportedError("Special indexing does not currently supported negated queries. See #80")
+
         if not was_list:
             value = value[0]
 
@@ -636,7 +639,6 @@ class SelectCommand(object):
             ordering.append((order, direction))
 
         def process_and_branch(query, and_branch):
-
             for child in and_branch[-1]:
                 column, op, value = child[1]
 
@@ -661,17 +663,6 @@ class SelectCommand(object):
         if self.where:
             queries = []
 
-            #If there is a single filter, we make it out it's an OR with only one branch
-            #just so that the code below is simpler
-            if isinstance(self.where, tuple) and len(self.where) == 3:
-                self.where = ('OR', [(u'AND', [ self.where ])])
-            elif isinstance(self.where, tuple) and self.where[0] == 'AND':
-                self.where = ('OR', [self.where])
-            elif isinstance(self.where, tuple) and self.where[0] == 'OR' and isinstance(self.where[1][0], tuple) and self.where[1][0][0] != 'AND':
-                self.where = ('OR', [ ('AND', [x]) for x in self.where[-1] ])
-
-            operator = self.where[0]
-            assert operator == 'OR'
             #print query._Query__kind, self.where
 
             for and_branch in self.where[1]:
@@ -679,6 +670,8 @@ class SelectCommand(object):
                 queries.append(Query(**query_kwargs))
                 queries[-1].update(query) #Make sure we copy across filters (e.g. class =)
                 try:
+                    if and_branch[0] == "LIT":
+                        and_branch = ("AND", [and_branch])
                     process_and_branch(queries[-1], and_branch)
                 except EmptyResultSet:
                     return NoOpQuery()
