@@ -20,6 +20,7 @@ from django.forms.models import modelformset_factory
 from django.db.models.sql.datastructures import EmptyResultSet
 from google.appengine.api.datastore_errors import EntityNotFoundError
 from google.appengine.api import datastore
+from django.test.utils import override_settings
 
 # DJANGAE
 from djangae.contrib import sleuth
@@ -473,6 +474,12 @@ class ModelWithDates(models.Model):
     start = models.DateField()
     end = models.DateField()
 
+class ModelWithUniquesAndOverride(models.Model):
+    name = models.CharField(max_length=64, unique=True)
+
+    class Djangae:
+        disable_constraint_checks = False
+
 class ConstraintTests(TestCase):
     """
         Tests for unique constaint handling
@@ -596,6 +603,30 @@ class ConstraintTests(TestCase):
         self.assertEqual(1, datastore.Query(UniqueMarker.kind()).Count() - initial_count)
         instance.delete()
         self.assertEqual(0, datastore.Query(UniqueMarker.kind()).Count() - initial_count)
+
+    @override_settings(DJANGAE_DISABLE_CONSTRAINT_CHECKS=True)
+    def test_constraints_disabled_doesnt_create_or_check_markers(self):
+        initial_count = datastore.Query(UniqueMarker.kind()).Count()
+
+        instance1 = ModelWithUniques.objects.create(name="One")
+
+        self.assertEqual(initial_count, datastore.Query(UniqueMarker.kind()).Count())
+
+        instance2 = ModelWithUniques.objects.create(name="One")
+
+        self.assertEqual(instance1.name, instance2.name)
+        self.assertFalse(instance1 == instance2)
+
+    @override_settings(DJANGAE_DISABLE_CONSTRAINT_CHECKS=True)
+    def test_constraints_can_be_enabled_per_model(self):
+
+        initial_count = datastore.Query(UniqueMarker.kind()).Count()
+
+        instance1 = ModelWithUniquesAndOverride.objects.create(name="One")
+
+        self.assertEqual(1, datastore.Query(UniqueMarker.kind()).Count() - initial_count)
+
+
 
 class EdgeCaseTests(TestCase):
     def setUp(self):
