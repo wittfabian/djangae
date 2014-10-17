@@ -532,14 +532,12 @@ class SelectCommand(object):
         if opts.parents:
             self.projection = None
 
-        columns = set()
-
         if isinstance(query.where, EmptyWhere):
             #Empty where means return nothing!
             raise EmptyResultSet()
         else:
-            self.where = normalize_query(query.where, self.connection, filtered_columns=columns)
-
+            from dnf import parse_dnf
+            self.where, columns = parse_dnf(query.where, self.connection)
 
         #DISABLE PROJECTION IF WE ARE FILTERING ON ONE OF THE PROJECTION_FIELDS
         for field in self.projection or []:
@@ -638,7 +636,11 @@ class SelectCommand(object):
             ordering.append((order, direction))
 
         def process_and_branch(query, and_branch):
-            for column, op, value in and_branch[-1]:
+
+            for child in and_branch[-1]:
+                column, op, value = child[1]
+
+            # for column, op, value in and_branch[-1]:
                 if column == self.pk_col:
                     column = "__key__"
 
