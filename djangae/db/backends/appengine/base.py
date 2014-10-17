@@ -117,7 +117,7 @@ class Cursor(object):
 
     def fetchone(self, delete_flag=False):
         try:
-            if isinstance(self.last_select_command.results, int):
+            if isinstance(self.last_select_command.results, (int, long)):
                 #Handle aggregate (e.g. count)
                 return (self.last_select_command.results, )
             else:
