@@ -929,10 +929,12 @@ class InsertCommand(object):
                     caching.add_entity_to_context_cache(self.model, entity)
                 return results
             else:
-                #FIXME: We should rearrange this so that each entity is handled individually like above. We'll
-                #lose insert performance, but gain consistency on errors which is more important
-                markers = constraints.acquire_bulk(self.model, self.entities)
+                markers = []
                 try:
+                    #FIXME: We should rearrange this so that each entity is handled individually like above. We'll
+                    #lose insert performance, but gain consistency on errors which is more important
+                    markers = constraints.acquire_bulk(self.model, self.entities)
+
                     results = datastore.Put(self.entities)
                     for entity in self.entities:
                         caching.add_entity_to_context_cache(self.model, entity)
