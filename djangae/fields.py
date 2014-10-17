@@ -281,6 +281,18 @@ class SetField(IterableField):
     def _iterable_type(self):
         return set
 
+    def get_db_prep_save(self, *args, **kwargs):
+        ret = super(SetField, self).get_db_prep_save(*args, **kwargs)
+        if ret:
+            ret = list(ret)
+        return ret
+
+    def get_db_prep_lookup(self, *args, **kwargs):
+        ret =  super(SetField, self).get_db_prep_lookup(*args, **kwargs)
+        if ret:
+            ret = list(ret)
+        return ret
+
     def value_to_string(self, obj):
         """
         Custom method for serialization, as JSON doesn't support
