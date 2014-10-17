@@ -31,7 +31,7 @@ Django 1.6 is supported, but 1.7 support is in the pipeline.
 
 # Installation
 
-**If you just want to get started on a fresh Django project, take a look at [https://github.com/potatolondon/djangae-scaffold](djangae-scaffold)**
+**If you just want to get started on a fresh Django project, take a look at [djangae-scaffold](https://github.com/potatolondon/djangae-scaffold)**
 
  * Create a Django project, add app.yaml to the root. Make sure Django 1.6+ is in your project and importable
  * Install Djangae into your project, make sure it's importable (you'll likely need to manipulate the path in manage.py and wsgi.py)
