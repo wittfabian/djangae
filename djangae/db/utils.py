@@ -180,7 +180,7 @@ def get_datastore_key(model, pk):
     """
 
     kind = get_top_concrete_parent(model)._meta.db_table
-    return Key.from_path(kind, pk)
+    return Key.from_path(kind, model._meta.pk.get_prep_value(pk))
 
 class MockInstance(object):
     """
