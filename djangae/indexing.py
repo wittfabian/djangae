@@ -276,6 +276,9 @@ class StartsWithIndexer(Indexer):
         results = []
         for i in xrange(1, len(value) + 1):
             results.append(value[:i])
+
+        if not results:
+            return None
         return results
 
     def prep_value_for_query(self, value):

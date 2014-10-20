@@ -561,7 +561,10 @@ class SelectCommand(object):
                         and_branch = ("AND", [and_branch])
                     process_and_branch(queries[-1], and_branch)
                 except EmptyResultSet:
-                    return NoOpQuery()
+                    if len(self.where[1]) == 1:
+                        return NoOpQuery()
+                    else:
+                        queries.pop()
 
             def all_queries_same_except_key(_queries):
                 """
