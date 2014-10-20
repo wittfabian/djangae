@@ -46,3 +46,4 @@ LOGGING = {
 
 
 TEST_RUNNER = 'djangae.test_runner.DjangaeTestSuiteRunner'
+EMAIL_BACKEND = 'djangae.mail.AsyncEmailBackend'
