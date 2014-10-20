@@ -14,7 +14,7 @@ from django.db.models.sql.datastructures import EmptyResultSet
 from django.db.models.sql.where import AND, OR, Constraint
 from django.db.models.sql.where import EmptyWhere
 from django import dispatch
-from google.appengine.api import datastore
+from google.appengine.api import datastore, datastore_errors
 from google.appengine.api.datastore import Query
 from google.appengine.ext import db
 
@@ -129,7 +129,7 @@ def log_once(logging_call, text, args):
 log_once.logged = set()
 
 
-def parse_constraint(child, connection):
+def parse_constraint(child, connection, negated=False):
     #First, unpack the constraint
     constraint, op, annotation, value = child
     was_list = isinstance(value, (list, tuple))
@@ -148,9 +148,15 @@ def parse_constraint(child, connection):
         if op == "isnull":
             value = [ annotation ]
 
+            if constraint.field.primary_key and value[0]:
+                raise EmptyResultSet()
+
         if not was_list:
             value = value[0]
     else:
+        if negated:
+            raise CouldBeSupportedError("Special indexing does not currently supported negated queries. See #80")
+
         if not was_list:
             value = value[0]
 
@@ -168,136 +174,6 @@ def parse_constraint(child, connection):
 
     return column, op, value
 
-
-def normalize_query(node, connection, negated=False, filtered_columns=None, _inequality_property=None):
-    """
-        Converts a django_where_tree which is CNF to a DNF for use in the datastore.
-        This function does a lot of heavy lifting so optimization is welcome.
-
-        The connection is needed for calculating the values on the literals, it would
-        be nice if we can remove that so this only has one task, but it's fine for now
-    """
-    _inequality_property = _inequality_property if _inequality_property is not None else []
-
-    def check_inequality_usage(_op, _column, _current_inequality):
-        if _op in INEQUALITY_OPERATORS:
-            if _current_inequality and _current_inequality[0] != _column:
-                raise NotSupportedError(
-                    "You can only specify inequality filters ({}) on one property. There is already one on {}, you're attempting to use one on {}".format(
-                        INEQUALITY_OPERATORS,
-                        _current_inequality[0],
-                        _column
-                    )
-                )
-            else:
-                #We have to use a list, because Python 2.x doesn't have 'nonlocal' :/
-                _current_inequality.append(_column)
-
-    if isinstance(node, tuple) and isinstance(node[0], Constraint):
-        # This is where contraints are exploded
-        #
-        #
-        column, op, value = parse_constraint(node, connection)
-
-        if filtered_columns is not None:
-            assert isinstance(filtered_columns, set)
-            filtered_columns.add(column)
-
-        if op == 'in': # Explode INs into OR
-            if not isinstance(value, (list, tuple, set)):
-                raise ValueError("IN queries must be supplied a list of values")
-
-            if negated:
-                check_inequality_usage(">", column, _inequality_property)
-                return ('OR', [ ('OR', [(column, '>', x), (column, '<', x)]) for x in value ])
-            else:
-                if not value:
-                    raise EmptyResultSet()
-
-                if len(value) == 1:
-                    return (column, '=', value[0])
-                return ('OR', [(column, '=', x) for x in value])
-
-        if op not in OPERATORS_MAP:
-            raise NotSupportedError("Unsupported operator %s" % op)
-
-        _op = OPERATORS_MAP[op]
-
-        check_inequality_usage(_op, column, _inequality_property) #Check we aren't doing an additional inequality
-
-        if negated and _op == '=': # Explode
-            check_inequality_usage('>', column, _inequality_property)
-            return ('OR', [(column, '>', value), (column, '<', value)])
-        elif op == "isnull":
-            if (value and not negated) or (not value and negated): #We're checking for isnull=True
-                #If we are checking that a primary key isnull, then don't do an impossible query!
-                if node[0].field.primary_key:
-                    raise EmptyResultSet()
-
-                return (column, "=", None)
-            else: #We're checking for isnull=False
-                check_inequality_usage('>', column, _inequality_property)
-                return ('OR', [(column, '>', None), (column, '<', None)])
-        elif op is None:
-            raise NotSupportedError("Unhandled lookup type %s" % op)
-
-        return (column, _op, value)
-    else:
-        # This is where the distribution is applied over the children
-        if not node.children:
-            return []
-
-        if node.negated:
-            negated = True
-        if len(node.children) > 1: # If there is more than one child then attempt to reduce
-            exploded = (node.connector, [
-                normalize_query(child, connection, negated=negated, filtered_columns=filtered_columns, _inequality_property=_inequality_property)
-                for child in node.children
-            ])
-
-            if node.connector == 'AND':
-
-                if len(exploded[1]) > 1:
-                    # This is a bit complicated to explain in a comment
-                    # But you can calculate the DNF by doing a clever product on the children of the AND node
-                    # It's all to do with grouping the ORs in groups and the ANDs individualy
-                    # This returns a DNF which is naturally wrapped in an OR
-                    _ors = [x for x in exploded[1] if x[0] == 'OR' ]
-                    _literals = [x for x in exploded[1] if x[0] != 'OR']
-                    flat_ors = [x[1] if x[0] == 'OR' else x for x in _ors]
-                    flat_literals = [[y] if y[0] != 'AND' else [q for q in y[1]] for y in _literals]
-
-                    def special_product(*args):
-                        """
-                            Modified product to return the prods in an AND container
-                        """
-                        pools = map(tuple, args)
-                        result = [[]]
-                        pools = [pool for pool in pools]
-                        for pool in pools:
-                            result = [x+[y] if y[0] != 'AND' else x+y[1] for x in result for y in pool]
-                        for prod in result:
-                            yield ('AND', list(prod))
-
-                    return ('OR', [x for x in special_product(*chain(flat_ors, flat_literals))])
-
-            elif node.connector == 'OR':
-                if all(x[0] == 'OR' for x in exploded[1]):
-                    return ('OR', list(chain.from_iterable((x[1] for x in exploded[1]))))
-
-        else:
-            exploded = normalize_query(
-                node.children[0],
-                connection,
-                negated=negated,
-                filtered_columns=filtered_columns,
-                _inequality_property=_inequality_property
-            )
-
-            if exploded[0] == exploded[1][0][0]: # crush any single child 'OR' or 'AND' hangover
-                return (exploded[0], [x for x in exploded[1][0][1]])
-
-        return exploded
 
 def convert_keys_to_entities(results):
     """
@@ -510,8 +386,14 @@ class SelectCommand(object):
 
         if try_projection:
             for field in self.queried_fields:
-                #We don't include the primary key in projection queries...
+                ##We don't include the primary key in projection queries...
                 if field == self.pk_col:
+                    order_fields = set([ x.strip("-") for x in self.ordering])
+
+                    if self.pk_col in order_fields or "pk" in order_fields:
+                        #If we were ordering on __key__ we can't do a projection at all
+                        self.projection_fields = []
+                        break
                     continue
 
                 #Text and byte fields aren't indexed, so we can't do a
@@ -532,14 +414,12 @@ class SelectCommand(object):
         if opts.parents:
             self.projection = None
 
-        columns = set()
-
         if isinstance(query.where, EmptyWhere):
             #Empty where means return nothing!
             raise EmptyResultSet()
         else:
-            self.where = normalize_query(query.where, self.connection, filtered_columns=columns)
-
+            from dnf import parse_dnf
+            self.where, columns = parse_dnf(query.where, self.connection)
 
         #DISABLE PROJECTION IF WE ARE FILTERING ON ONE OF THE PROJECTION_FIELDS
         for field in self.projection or []:
@@ -598,8 +478,10 @@ class SelectCommand(object):
 
         if query.aggregates:
             if query.aggregates.keys() == [ None ]:
-                if query.aggregates[None].col != "*":
-                    raise NotSupportedError("Counting anything other than '*' is not supported")
+                agg_col = query.aggregates[None].col
+                opts = self.model._meta
+                if agg_col != "*" and agg_col != (opts.db_table, opts.pk.column):
+                    raise NotSupportedError("Counting anything other than '*' or the primary key is not supported")
             else:
                 raise NotSupportedError("Unsupported aggregate query")
 
@@ -610,7 +492,10 @@ class SelectCommand(object):
         }
 
         if self.distinct:
-            query_kwargs["distinct"] = True
+            if self.projection:
+                query_kwargs["distinct"] = True
+            else:
+                logging.warning("Ignoring distinct on a query where a projection wasn't possible")
 
         if self.keys_only:
             query_kwargs["keys_only"] = self.keys_only
@@ -638,7 +523,10 @@ class SelectCommand(object):
             ordering.append((order, direction))
 
         def process_and_branch(query, and_branch):
-            for column, op, value in and_branch[-1]:
+            for child in and_branch[-1]:
+                column, op, value = child[1]
+
+            # for column, op, value in and_branch[-1]:
                 if column == self.pk_col:
                     column = "__key__"
 
@@ -651,25 +539,17 @@ class SelectCommand(object):
                         value = get_datastore_key(self.model, value)
 
                 key = "%s %s" % (column, op)
-                if key in query:
-                    query[key] = [ query[key], value ]
-                else:
-                    query[key] = value
+                try:
+                    if key in query:
+                        query[key] = [ query[key], value ]
+                    else:
+                        query[key] = value
+                except datastore_errors.BadFilterError as e:
+                    raise NotSupportedError(str(e))
 
         if self.where:
             queries = []
 
-            #If there is a single filter, we make it out it's an OR with only one branch
-            #just so that the code below is simpler
-            if isinstance(self.where, tuple) and len(self.where) == 3:
-                self.where = ('OR', [(u'AND', [ self.where ])])
-            elif isinstance(self.where, tuple) and self.where[0] == 'AND':
-                self.where = ('OR', [self.where])
-            elif isinstance(self.where, tuple) and self.where[0] == 'OR' and isinstance(self.where[1][0], tuple) and self.where[1][0][0] != 'AND':
-                self.where = ('OR', [ ('AND', [x]) for x in self.where[-1] ])
-
-            operator = self.where[0]
-            assert operator == 'OR'
             #print query._Query__kind, self.where
 
             for and_branch in self.where[1]:
@@ -677,9 +557,17 @@ class SelectCommand(object):
                 queries.append(Query(**query_kwargs))
                 queries[-1].update(query) #Make sure we copy across filters (e.g. class =)
                 try:
+                    if and_branch[0] == "LIT":
+                        and_branch = ("AND", [and_branch])
                     process_and_branch(queries[-1], and_branch)
                 except EmptyResultSet:
-                    return NoOpQuery()
+                    # This is a little hacky but basically if there is only one branch in the or, and it raises
+                    # and EmptyResultSet, then we just bail, however if there is more than one branch the query the
+                    # query might still return something. This logic needs cleaning up and moving to the DNF phase
+                    if len(self.where[1]) == 1:
+                        return NoOpQuery()
+                    else:
+                        queries.pop()
 
             def all_queries_same_except_key(_queries):
                 """

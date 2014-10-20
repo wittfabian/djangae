@@ -97,7 +97,8 @@ class Command(BaseRunserverCommand):
                 str(int(self.port) + 1),
                 "--automatic_restart",
                 "True" if do_reload else "False",
-                "--allow_skipped_files"
+                "--allow_skipped_files",
+                "--skip_sdk_update_check"
             ]
 
 

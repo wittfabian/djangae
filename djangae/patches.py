@@ -53,7 +53,8 @@ def update_contenttypes(app, created_models, verbosity=2, db=DEFAULT_DB_ALIAS, *
         created_or_existing_by_unique[(app_label, model_name)] = ct.pk
 
     #Now lets see if we should remove any
-    to_remove = ContentType.objects.filter(app_label=app_label).exclude(pk__in=created_or_existing_pks)
+
+    to_remove = [ x for x in ContentType.objects.filter(app_label=app_label) if x.pk not in created_or_existing_pks ]
 
     #Now it's possible that our get_or_create failed because of consistency issues and we create a duplicate.
     #Then the original appears in the to_remove and we remove the original. This is bad. So here we go through the
@@ -66,11 +67,11 @@ def update_contenttypes(app, created_models, verbosity=2, db=DEFAULT_DB_ALIAS, *
             ContentType.objects.get(pk=created_or_existing_by_unique[unique]).delete()
             created_or_existing_by_unique[unique] = ct.pk
             ct.save() #Recache this one in the context cache
+
     to_remove = [ x for x in to_remove if (x.app_label, x.model) not in created_or_existing_by_unique ]
 
     #Now, anything left should actually be a stale thing. It's still possible we missed some but they'll get picked up
     #next time
-
     # Confirm that the content type is stale before deletion.
     if to_remove:
         if kwargs.get('interactive', False):

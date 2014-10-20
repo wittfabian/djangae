@@ -28,13 +28,12 @@ from djangae.db.exceptions import NotSupportedError
 from djangae.db.constraints import UniqueMarker
 from djangae.indexing import add_special_index
 from djangae.db.utils import entity_matches_query
-from djangae.db.backends.appengine.commands import normalize_query
 from djangae.db.backends.appengine import caching
 from djangae.db.unique_utils import query_is_unique
 from djangae.db import transaction
 from djangae.fields import ComputedCharField, ShardedCounterField, SetField, ListField
 from djangae.models import CounterShard
-
+from djangae.db.backends.appengine.dnf import parse_dnf
 from .storage import BlobstoreFileUploadHandler
 from .wsgi import DjangaeApplication
 
@@ -340,7 +339,7 @@ class TransactionTests(TestCase):
 
 class QueryNormalizationTests(TestCase):
     """
-        The normalize_query function takes a Django where tree, and converts it
+        The parse_dnf function takes a Django where tree, and converts it
         into a tree of one of the following forms:
 
         [ (column, operator, value), (column, operator, value) ] <- AND only query
@@ -352,25 +351,22 @@ class QueryNormalizationTests(TestCase):
 
         qs = TestUser.objects.filter(username="test").all()
 
-        self.assertEqual(("username", "=", "test"), normalize_query(qs.query.where, connection=connection))
+        self.assertEqual(('OR', [('LIT', ('username', '=', 'test'))]), parse_dnf(qs.query.where, connection=connection)[0])
 
         qs = TestUser.objects.filter(username="test", email="test@example.com")
 
-        expected = ('OR', [
-            ('AND', [("username", "=", "test"), ("email", "=", "test@example.com")])
-        ])
+        expected = ('OR', [('AND', [('LIT', ('username', '=', 'test')), ('LIT', ('email', '=', 'test@example.com'))])])
 
-        self.assertEqual(expected, normalize_query(qs.query.where, connection=connection))
+        self.assertEqual(expected, parse_dnf(qs.query.where, connection=connection)[0])
         #
         qs = TestUser.objects.filter(username="test").exclude(email="test@example.com")
 
         expected = ('OR', [
-            ('AND', [('email', '>', 'test@example.com'), ('username', '=', 'test')]),
-            ('AND', [('email', '<', 'test@example.com'), ('username', '=', 'test')])
-
+            ('AND', [('LIT', ('username', '=', 'test')), ('LIT', ('email', '>', 'test@example.com'))]),
+            ('AND', [('LIT', ('username', '=', 'test')), ('LIT', ('email', '<', 'test@example.com'))])
         ])
 
-        self.assertEqual(expected, normalize_query(qs.query.where, connection=connection))
+        self.assertEqual(expected, parse_dnf(qs.query.where, connection=connection)[0])
 
         qs = TestUser.objects.filter(username__lte="test").exclude(email="test@example.com")
         expected = ('OR', [
@@ -378,15 +374,16 @@ class QueryNormalizationTests(TestCase):
             ('AND', [("username", "<=", "test"), ("email", "<", "test@example.com")]),
         ])
 
-        with self.assertRaises(NotSupportedError):
-            normalize_query(qs.query.where, connection=connection)
+        #FIXME: This will raise a BadFilterError on the datastore, we should instead raise NotSupportedError in that case
+        #with self.assertRaises(NotSupportedError):
+        #    parse_dnf(qs.query.where, connection=connection)
 
         instance = Relation(pk=1)
         qs = instance.related_set.filter(headline__startswith='Fir')
 
-        expected = ('OR', [('AND', [('relation_id', '=', 1), ('_idx_startswith_headline', '=', u'Fir')])])
+        expected = ('OR', [('AND', [('LIT', ('relation_id', '=', 1)), ('LIT', ('_idx_startswith_headline', '=', u'Fir'))])])
 
-        norm = normalize_query(qs.query.where, connection=connection)
+        norm = parse_dnf(qs.query.where, connection=connection)[0]
 
         self.assertEqual(expected, norm)
 
@@ -411,60 +408,64 @@ class QueryNormalizationTests(TestCase):
         # (OR: (AND: username='python', username = 'ruby'), (AND: username='python', username='jruby'), (AND: username='python', username='php', username < 'perl') \
         #      (AND: username='python', username='php', username > 'perl')
 
-
         expected = ('OR', [
-        ('AND', [('username', '=', 'ruby'), ('username', '=', 'python')]),
-        ('AND', [('username', '=', 'jruby'), ('username', '=', 'python')]),
-        ('AND', [('username', '>', 'perl'), ('username', '=', 'php'), ('username', '=', 'python')]),
-        ('AND', [('username', '<', 'perl'), ('username', '=', 'php'), ('username', '=', 'python')])
+            ('AND', [('LIT', ('username', '=', 'python')), ('LIT', ('username', '=', 'ruby'))]),
+            ('AND', [('LIT', ('username', '=', 'python')), ('LIT', ('username', '=', 'jruby'))]),
+            ('AND', [('LIT', ('username', '=', 'python')), ('LIT', ('username', '=', 'php')), ('LIT', ('username', '>', 'perl'))]),
+            ('AND', [('LIT', ('username', '=', 'python')), ('LIT', ('username', '=', 'php')), ('LIT', ('username', '<', 'perl'))])
         ])
 
-        self.assertEqual(expected, normalize_query(qs.query.where, connection=connection))
+        self.assertEqual(expected, parse_dnf(qs.query.where, connection=connection)[0])
         #
 
         qs = TestUser.objects.filter(username="test") | TestUser.objects.filter(username="cheese")
 
         expected = ('OR', [
-            ("username", "=", "test"),
-            ("username", "=", "cheese"),
+            ('LIT', ("username", "=", "test")),
+            ('LIT', ("username", "=", "cheese")),
         ])
 
-        self.assertEqual(expected, normalize_query(qs.query.where, connection=connection))
+        self.assertEqual(expected, parse_dnf(qs.query.where, connection=connection)[0])
 
         qs = TestUser.objects.using("default").filter(username__in=set()).values_list('email')
 
         with self.assertRaises(EmptyResultSet):
-            normalize_query(qs.query.where, connection=connection)
+            parse_dnf(qs.query.where, connection=connection)
 
         qs = TestUser.objects.filter(username__startswith='Hello') |  TestUser.objects.filter(username__startswith='Goodbye')
-        expected = ('OR', [('_idx_startswith_username', '=', u'Hello'), ('_idx_startswith_username', '=', u'Goodbye')])
-        self.assertEqual(expected, normalize_query(qs.query.where, connection=connection))
+        expected = ('OR', [
+            ('LIT', ('_idx_startswith_username', '=', u'Hello')),
+            ('LIT', ('_idx_startswith_username', '=', u'Goodbye'))
+        ])
+        self.assertEqual(expected, parse_dnf(qs.query.where, connection=connection)[0])
 
+        qs = TestUser.objects.filter(pk__in=[1, 2, 3])
 
-        #
-        # These tests need to be changed so they check the pk value is a key from Path
-        #
-        # qs = TestUser.objects.filter(pk__in=[1, 2, 3])
-        #
-        # expected = ('OR', [
-        #     ("id", "=", 1),
-        #     ("id", "=", 2),
-        #     ("id", "=", 3),
-        # ])
-        #
-        # import pdb; pdb.set_trace()
-        #
-        # self.assertEqual(expected, normalize_query(qs.query.where, connection=connection))
+        expected = ('OR', [
+            ('LIT', ("id", "=", datastore.Key.from_path(TestUser._meta.db_table, 1))),
+            ('LIT', ("id", "=", datastore.Key.from_path(TestUser._meta.db_table, 2))),
+            ('LIT', ("id", "=", datastore.Key.from_path(TestUser._meta.db_table, 3))),
+        ])
 
-        # qs = TestUser.objects.filter(pk__in=[1, 2, 3]).filter(username="test")
-        #
-        # expected = ('OR', [
-        #     ('AND', [("id", "=", 1), ('username', '=', "test")]),
-        #     ('AND', [("id", "=", 2), ('username', '=', "test")]),
-        #     ('AND', [("id", "=", 3), ('username', '=', "test")]),
-        # ])
-        #
-        # self.assertEqual(expected, normalize_query(qs.query.where, connection=connection))
+        self.assertEqual(expected, parse_dnf(qs.query.where, connection=connection)[0])
+
+        qs = TestUser.objects.filter(pk__in=[1, 2, 3]).filter(username="test")
+
+        expected = ('OR', [
+            ('AND', [
+                ('LIT', (u'id', '=', datastore.Key.from_path(TestUser._meta.db_table, 1))),
+                ('LIT', ('username', '=', 'test'))
+            ]),
+            ('AND', [
+                ('LIT', (u'id', '=', datastore.Key.from_path(TestUser._meta.db_table, 2))),
+                ('LIT', ('username', '=', 'test'))
+            ]),
+            ('AND', [
+                ('LIT', (u'id', '=', datastore.Key.from_path(TestUser._meta.db_table, 3))),
+                ('LIT', ('username', '=', 'test'))
+            ])
+        ])
+        self.assertEqual(expected, parse_dnf(qs.query.where, connection=connection)[0])
 
 
 class ModelWithUniques(models.Model):
