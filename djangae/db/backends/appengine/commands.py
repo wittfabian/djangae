@@ -510,8 +510,14 @@ class SelectCommand(object):
 
         if try_projection:
             for field in self.queried_fields:
-                #We don't include the primary key in projection queries...
+                ##We don't include the primary key in projection queries...
                 if field == self.pk_col:
+                    order_fields = set([ x.strip("-") for x in self.ordering])
+
+                    if self.pk_col in order_fields or "pk" in order_fields:
+                        #If we were ordering on __key__ we can't do a projection at all
+                        self.projection_fields = []
+                        break
                     continue
 
                 #Text and byte fields aren't indexed, so we can't do a
@@ -612,7 +618,10 @@ class SelectCommand(object):
         }
 
         if self.distinct:
-            query_kwargs["distinct"] = True
+            if self.projection:
+                query_kwargs["distinct"] = True
+            else:
+                logging.warning("Ignoring distinct on a query where a projection wasn't possible")
 
         if self.keys_only:
             query_kwargs["keys_only"] = self.keys_only
