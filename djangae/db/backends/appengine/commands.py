@@ -598,8 +598,10 @@ class SelectCommand(object):
 
         if query.aggregates:
             if query.aggregates.keys() == [ None ]:
-                if query.aggregates[None].col != "*":
-                    raise NotSupportedError("Counting anything other than '*' is not supported")
+                agg_col = query.aggregates[None].col
+                opts = self.model._meta
+                if agg_col != "*" and agg_col != (opts.db_table, opts.pk.column):
+                    raise NotSupportedError("Counting anything other than '*' or the primary key is not supported")
             else:
                 raise NotSupportedError("Unsupported aggregate query")
 
