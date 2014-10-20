@@ -177,6 +177,9 @@ There are 4 possible ways in which you may want to set up your authentication an
 	* Create your own `User` class by subclassing `GaeAbstractDatastoreUser`.
 	* This base model is equivalent to `django.contrib.auth.models.AbstractBaseUser`, but works with the Google Accounts authentication, and provides permissions models which work on the non-relational Datastore (i.e. they avoid M2M relationships while providing the same functionality).
 
+#### Permissions
+
+If you're using the Datastore for your User model (i.e. case *3.* or *4.* from above) then the permissions work slightly differently.  The Datastore-based user models have a `user_permissions` list field, which takes the place of the usual many-to-many relationship to a `Permission` model.  For groups, Djangae provides `djangae.contrib.gauth.Group`, which again has a list field for storing the permissions.  This `Group` model is registered with the Django admin automatically for you in cases *3.* and *4.* from above.
 
 ### User Pre-Creation
 
