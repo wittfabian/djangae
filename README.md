@@ -156,7 +156,7 @@ To set up Djangae's authentication system:
 * Add `'djangae.contrib.gauth'` to `INSTALLED_APPS` probably after `'django.contrib.auth'`.
 * At the bottom of your settings.py add: `from djangae.contrib.gauth.settings import *`.  This sets up the auth backend,
    login url and sets `AUTH_USER_MODEL` to `'djangae.GaeDatastoreUser'`.
-* Replace 'django.contrib.auth.middleware.AuthenticationMiddleware' with `'djangae.contrib.auth.middleware.AuthenticationMiddleware'`.
+* Replace 'django.contrib.auth.middleware.AuthenticationMiddleware' with `'djangae.contrib.gauth.middleware.AuthenticationMiddleware'`.
 
 ### Choosing A User Model
 
