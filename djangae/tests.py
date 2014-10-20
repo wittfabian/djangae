@@ -20,6 +20,7 @@ from django.forms.models import modelformset_factory
 from django.db.models.sql.datastructures import EmptyResultSet
 from google.appengine.api.datastore_errors import EntityNotFoundError
 from google.appengine.api import datastore
+from django.test.utils import override_settings
 
 # DJANGAE
 from djangae.contrib import sleuth
@@ -27,11 +28,11 @@ from djangae.db.exceptions import NotSupportedError
 from djangae.db.constraints import UniqueMarker
 from djangae.indexing import add_special_index
 from djangae.db.utils import entity_matches_query
-from djangae.db.backends.appengine.commands import normalize_query, parse_constraint
+from djangae.db.backends.appengine.commands import normalize_query
 from djangae.db.backends.appengine import caching
 from djangae.db.unique_utils import query_is_unique
 from djangae.db import transaction
-from djangae.fields import ComputedCharField, ShardedCounterField
+from djangae.fields import ComputedCharField, ShardedCounterField, SetField, ListField
 from djangae.models import CounterShard
 
 from .storage import BlobstoreFileUploadHandler
@@ -473,6 +474,12 @@ class ModelWithDates(models.Model):
     start = models.DateField()
     end = models.DateField()
 
+class ModelWithUniquesAndOverride(models.Model):
+    name = models.CharField(max_length=64, unique=True)
+
+    class Djangae:
+        disable_constraint_checks = False
+
 class ConstraintTests(TestCase):
     """
         Tests for unique constaint handling
@@ -596,6 +603,30 @@ class ConstraintTests(TestCase):
         self.assertEqual(1, datastore.Query(UniqueMarker.kind()).Count() - initial_count)
         instance.delete()
         self.assertEqual(0, datastore.Query(UniqueMarker.kind()).Count() - initial_count)
+
+    @override_settings(DJANGAE_DISABLE_CONSTRAINT_CHECKS=True)
+    def test_constraints_disabled_doesnt_create_or_check_markers(self):
+        initial_count = datastore.Query(UniqueMarker.kind()).Count()
+
+        instance1 = ModelWithUniques.objects.create(name="One")
+
+        self.assertEqual(initial_count, datastore.Query(UniqueMarker.kind()).Count())
+
+        instance2 = ModelWithUniques.objects.create(name="One")
+
+        self.assertEqual(instance1.name, instance2.name)
+        self.assertFalse(instance1 == instance2)
+
+    @override_settings(DJANGAE_DISABLE_CONSTRAINT_CHECKS=True)
+    def test_constraints_can_be_enabled_per_model(self):
+
+        initial_count = datastore.Query(UniqueMarker.kind()).Count()
+
+        instance1 = ModelWithUniquesAndOverride.objects.create(name="One")
+
+        self.assertEqual(1, datastore.Query(UniqueMarker.kind()).Count() - initial_count)
+
+
 
 class EdgeCaseTests(TestCase):
     def setUp(self):
@@ -1038,3 +1069,22 @@ class ShardedCounterTest(TestCase):
 
         instance.counter.decrement()
         self.assertEqual(0, instance.counter.value())
+
+
+class IterableFieldModel(models.Model):
+    set_field = SetField(models.CharField(max_length=1))
+    list_field = ListField(models.CharField(max_length=1))
+
+class IterableFieldTests(TestCase):
+    def test_empty_iterable_fields(self):
+        """ Test that an empty set field always returns set(), not None """
+        instance = IterableFieldModel()
+        # When assigning
+        self.assertEqual(instance.set_field, set())
+        self.assertEqual(instance.list_field, [])
+        instance.save()
+
+        instance = IterableFieldModel.objects.get()
+        # When getting it from the db
+        self.assertEqual(instance.set_field, set())
+        self.assertEqual(instance.list_field, [])

@@ -117,7 +117,7 @@ class Cursor(object):
 
     def fetchone(self, delete_flag=False):
         try:
-            if isinstance(self.last_select_command.results, int):
+            if isinstance(self.last_select_command.results, (int, long)):
                 #Handle aggregate (e.g. count)
                 return (self.last_select_command.results, )
             else:
@@ -195,7 +195,7 @@ class DatabaseOperations(BaseDatabaseOperations):
 
         value = super(DatabaseOperations, self).convert_values(value, field)
 
-        db_type = self.connection.creation.db_type(field)
+        db_type = field.db_type(self.connection)
         if db_type == 'string' and isinstance(value, str):
             value = value.decode("utf-8")
         elif db_type == "datetime":
@@ -249,7 +249,7 @@ class DatabaseOperations(BaseDatabaseOperations):
         if field.primary_key and (constraint is None or constraint.col == model._meta.pk.column):
             return self.prep_lookup_key(model, value, field)
 
-        db_type = self.connection.creation.db_type(field)
+        db_type = field.db_type(self.connection)
 
         if db_type == 'decimal':
             return self.prep_lookup_decimal(model, value, field)
@@ -265,7 +265,7 @@ class DatabaseOperations(BaseDatabaseOperations):
         if value is None:
             return None
 
-        db_type = self.connection.creation.db_type(field)
+        db_type = field.db_type(self.connection)
 
         if db_type == 'string' or db_type == 'text':
             if isinstance(value, str):
@@ -389,9 +389,6 @@ class DatabaseCreation(BaseDatabaseCreation):
         'DictField':                  'bytes',
         'EmbeddedModelField':         'bytes'
     }
-
-    def db_type(self, field):
-        return self.data_types[field.get_internal_type()]
 
     def __init__(self, *args, **kwargs):
         self.testbed = None

@@ -9,7 +9,25 @@ from .unique_utils import unique_identifiers_from_entity
 from .utils import key_exists
 from .exceptions import IntegrityError
 
+from django.conf import settings
+
 DJANGAE_LOG = logging.getLogger("djangae")
+
+def constraint_checks_enabled(model_or_instance):
+    """
+        Returns true if constraint checking is enabled on the model
+    """
+
+    opts = getattr(model_or_instance, "Djangae", None)
+    if opts:
+        if hasattr(opts, "disable_constraint_checks"):
+            if opts.disable_constraint_checks:
+                return False
+            else:
+                return True
+
+    return not getattr(settings, "DJANGAE_DISABLE_CONSTRAINT_CHECKS", False)
+
 
 class UniqueMarker(db.Model):
     instance = db.StringProperty()

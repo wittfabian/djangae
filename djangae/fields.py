@@ -81,6 +81,8 @@ class TrueOrNullField(models.NullBooleanField):
 
 
 class IterableField(models.Field):
+    __metaclass__ = models.SubfieldBase
+
     @property
     def _iterable_type(self): raise NotImplementedError()
 
@@ -278,6 +280,18 @@ class SetField(IterableField):
     @property
     def _iterable_type(self):
         return set
+
+    def get_db_prep_save(self, *args, **kwargs):
+        ret = super(SetField, self).get_db_prep_save(*args, **kwargs)
+        if ret:
+            ret = list(ret)
+        return ret
+
+    def get_db_prep_lookup(self, *args, **kwargs):
+        ret =  super(SetField, self).get_db_prep_lookup(*args, **kwargs)
+        if ret:
+            ret = list(ret)
+        return ret
 
     def value_to_string(self, obj):
         """
