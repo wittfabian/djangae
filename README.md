@@ -177,16 +177,19 @@ There are 4 possible ways in which you may want to set up your authentication an
 	* Create your own `User` class by subclassing `GaeAbstractDatastoreUser`.
 	* This base model is equivalent to `django.contrib.auth.models.AbstractBaseUser`, but works with the Google Accounts authentication, and provides permissions models which work on the non-relational Datastore (i.e. they avoid M2M relationships while providing the same functionality).
 
+#### Permissions
+
+If you're using the Datastore for your User model (i.e. case *3.* or *4.* from above) then the permissions work slightly differently.  The Datastore-based user models have a `user_permissions` list field, which takes the place of the usual many-to-many relationship to a `Permission` model.  For groups, Djangae provides `djangae.contrib.gauth.Group`, which again has a list field for storing the permissions.  This `Group` model is registered with the Django admin automatically for you in cases *3.* and *4.* from above.
 
 ### User Pre-Creation
 
-When using Google Accounts-based authentication, the `username` field of the user model is populated with the `user_id` which is provided by Google Accounts.  This is populated when the user object is created on the user's first log in, and is then used as the authentication check for subsequent log ins.  Because it's impossible to know what this ID is going to be before the user logs in, that creates an issue that you can't create users and assign permission to them until they have authenticated.
+When using Google Accounts-based authentication, the `username` field of the user model is populated with the `user_id` which is provided by Google Accounts.  This is populated when the user object is created on the user's first log in, and is then used as the authentication check for subsequent log ins.  It is impossible to know what this ID is going to be before the user logs in, which creates an issue if you want to create users and assign permissions to them before they have authenticated.
 
 Djangae allows you to pre-create users by specifying their email address.  First, you need to set `ALLOW_USER_PRE_CREATION` to `True` in settings, and then you can create user objects which have an email address and a `username` of `None`.  Djangae then recognises these as pre-created users, and will populate the `username` with their Google `user_id` when they first log in.
 
 ### Username/password authentication
 
-As well as using Djangae's Google Accounts-based authnetication, you can also use the standard authentication backend from django.contrib.auth.  They can work alongside each other.  Simply include both, like this:
+As well as using Djangae's Google Accounts-based authentication, you can also use the standard authentication backend from django.contrib.auth.  They can work alongside each other.  Simply include both, like this:
 
 
 ```
