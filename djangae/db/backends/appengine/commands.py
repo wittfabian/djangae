@@ -561,6 +561,9 @@ class SelectCommand(object):
                         and_branch = ("AND", [and_branch])
                     process_and_branch(queries[-1], and_branch)
                 except EmptyResultSet:
+                    # This is a little hacky but basically if there is only one branch in the or, and it raises
+                    # and EmptyResultSet, then we just bail, however if there is more than one branch the query the
+                    # query might still return something. This logic needs cleaning up and moving to the DNF phase
                     if len(self.where[1]) == 1:
                         return NoOpQuery()
                     else:
