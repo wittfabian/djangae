@@ -23,9 +23,14 @@ def process_literal(node, filtered_columns=[], negated=False):
             if not value:
                 return None, filtered_columns
             return ('OR', [('LIT', (column, '=', x)) for x in value]), filtered_columns
-    if op not in OPERATORS_MAP:
+    elif op == "isnull":
+        op = "exact"
+        value = None
+
+    if not OPERATORS_MAP.get(op):
         raise NotSupportedError("Unsupported operator %s" % op)
     _op = OPERATORS_MAP[op]
+
     if negated and _op == '=': # Explode
         return ('OR', [('LIT', (column, '>', value)), ('LIT', (column, '<', value))]), filtered_columns
     return ('LIT', (column, _op, value)), filtered_columns

@@ -91,6 +91,12 @@ class Indexer(object):
     def indexed_column_name(self, field_column): raise NotImplementedError()
     def prep_query_operator(self, op): return "exact"
 
+    def unescape(self, value):
+        value = value.replace("\\_", "_")
+        value = value.replace("\\%", "%")
+        value = value.replace("\\\\", "\\")
+        return value
+
 class IExactIndexer(Indexer):
     def validate_can_be_indexed(self, value):
         return len(value) < 500
@@ -201,6 +207,7 @@ class ContainsIndexer(Indexer):
         return result
 
     def prep_value_for_query(self, value):
+        value = self.unescape(value)
         if value.startswith("%") and value.endswith("%"):
             value = value[1:-1]
         return value
@@ -233,6 +240,7 @@ class EndsWithIndexer(Indexer):
         return results
 
     def prep_value_for_query(self, value):
+        value = self.unescape(value)
         if value.startswith("%"):
             value = value[1:]
         return value
@@ -262,14 +270,19 @@ class StartsWithIndexer(Indexer):
         return isinstance(value, basestring) and len(value) < 500
 
     def prep_value_for_database(self, value):
+        if isinstance(value, datetime.datetime):
+            value = value.strftime("%Y-%m-%d %H:%M:%S")
+
         results = []
         for i in xrange(1, len(value) + 1):
             results.append(value[:i])
         return results
 
     def prep_value_for_query(self, value):
+        value = self.unescape(value)
         if value.endswith("%"):
             value = value[:-1]
+
         return value
 
     def indexed_column_name(self, field_column):
