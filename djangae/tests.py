@@ -31,7 +31,7 @@ from djangae.db.utils import entity_matches_query
 from djangae.db.backends.appengine import caching
 from djangae.db.unique_utils import query_is_unique
 from djangae.db import transaction
-from djangae.fields import ComputedCharField, ShardedCounterField, SetField, ListField
+from djangae.fields import ComputedCharField, ComputedIntegerField, ShardedCounterField, SetField, ListField
 from djangae.models import CounterShard
 from djangae.db.backends.appengine.dnf import parse_dnf
 from .storage import BlobstoreFileUploadHandler
@@ -1041,6 +1041,10 @@ class ComputedFieldTests(TestCase):
         instance = ComputedFieldModel(int_field=1, char_field="test")
         instance.save()
         self.assertEqual(instance.test_field, "1_test")
+
+        # Try getting and saving the instance again
+        instance = ComputedFieldModel.objects.get(test_field="1_test")
+        instance.save()
 
 
 class ModelWithCounter(models.Model):

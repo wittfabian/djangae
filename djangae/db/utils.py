@@ -189,17 +189,20 @@ class MockInstance(object):
         conversion to a Django instance before writing back the entity
     """
 
-    def __init__(self, field, value, is_adding=False):
+    def __init__(self, **kwargs):
+        is_adding = kwargs.pop('_is_adding', False)
         class State:
             adding = is_adding
 
+        self.fields = {}
+        for field_name, value in kwargs.items():
+            self.fields[field_name] = value
+
         self._state = State()
-        self.field = field
-        self.value = value
 
     def __getattr__(self, attr):
-        if attr == self.field.attname:
-            return self.value
+        if attr in self.fields:
+            return self.fields[attr]
         return super(MockInstance, self).__getattr__(attr)
 
 
