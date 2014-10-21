@@ -879,7 +879,7 @@ class UpdateCommand(object):
         instance_kwargs = {field.attname:value for field, param, value in self.values}
         instance = MockInstance(**instance_kwargs)
         for field, param, value in self.values:
-            result[field.column] = get_prepared_db_value(self.connection, instance, field)
+            result[field.column] = get_prepared_db_value(self.connection, instance, field, raw=True)
             #Add special indexed fields
             for index in special_indexes_for_column(self.model, field.column):
                 indexer = REQUIRES_SPECIAL_INDEXES[index]

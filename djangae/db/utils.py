@@ -203,7 +203,7 @@ class MockInstance(object):
     def __getattr__(self, attr):
         if attr in self.fields:
             return self.fields[attr]
-        return super(MockInstance, self).__getattr__(attr)
+        raise AttributeError(attr)
 
 
 def key_exists(key):
