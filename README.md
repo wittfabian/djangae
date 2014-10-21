@@ -243,7 +243,7 @@ See the Google documentation for more information on connecting to Cloud SQL via
 **IMPORTANT: Make sure you read and understand this section before configuring your project**
 
 
-__tl;dr Constraint checking is costly, you might want to disable it globally using `settings.DJANGAE_DISABLE_CONSTRAINT_CHECKS` and re-enable on a per-model basis__
+_tl;dr Constraint checking is costly, you might want to disable it globally using `settings.DJANGAE_DISABLE_CONSTRAINT_CHECKS` and re-enable on a per-model basis_
 
 
 Djangae by default enforces the unique constraints that you define on your models. It does so by creating so called "unique markers" in the datastore.
