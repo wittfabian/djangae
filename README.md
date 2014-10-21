@@ -76,7 +76,7 @@ Django 1.6 is supported, but 1.7 support is in the pipeline.
    of your middleware classes. This middleware patches a number of insecure parts of the Python and App Engine libraries and warns if your
    Django settings aren't as secure as they could be.
  * If you wish to use the App Engine's Google Accounts-based authentication to authenticate your users, and/or you wish to use Django's permissions system with the Datastore as you DB, then see the section on **Authentication**.
- * **It is highly recommended that you read the section on [Unique Constraints](unique-constraint-checking)**
+ * **It is highly recommended that you read the section on [Unique Constraints](#unique-constraint-checking)**
 
 ## The Database Backend
 
@@ -243,7 +243,7 @@ See the Google documentation for more information on connecting to Cloud SQL via
 **IMPORTANT: Make sure you read and understand this section before configuring your project**
 
 
-tl;dr Constraint checking is costly, you might want to disable it globally using `settings.DJANGAE_DISABLE_CONSTRAINT_CHECKS` and re-enable on a per-model basis
+__tl;dr Constraint checking is costly, you might want to disable it globally using `settings.DJANGAE_DISABLE_CONSTRAINT_CHECKS` and re-enable on a per-model basis__
 
 
 Djangae by default enforces the unique constraints that you define on your models. It does so by creating so called "unique markers" in the datastore.
