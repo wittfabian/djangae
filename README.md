@@ -75,7 +75,8 @@ Django 1.6 is supported, but 1.7 support is in the pipeline.
  * It is recommended that for improved security you add `djangae.contrib.security.middleware.AppEngineSecurityMiddleware` as the first
    of your middleware classes. This middleware patches a number of insecure parts of the Python and App Engine libraries and warns if your
    Django settings aren't as secure as they could be.
-* If you wish to use the App Engine's Google Accounts-based authentication to authenticate your users, and/or you wish to use Django's permissions system with the Datastore as you DB, then see the section on **Authentication**.
+ * If you wish to use the App Engine's Google Accounts-based authentication to authenticate your users, and/or you wish to use Django's permissions system with the Datastore as you DB, then see the section on **Authentication**.
+ * **It is highly recommended that you read the section on [Unique Constraints](unique-constraint-checking)**
 
 ## The Database Backend
 
@@ -98,18 +99,13 @@ Here's the full list of magic:
 
 ## Roadmap
 
-1.0-alpha
-
- - Basic ancestor query support
- - All tests either passing or throwing NotSupportedError in the testapp
- - Configurable constraints
-
 1.0-beta
 
- - Support for 'infinite' descendents in the ancestor support. Lots of tests
+ - Support for ancestor queries. Lots of tests
  - Memcache backed caching by PK and unique constraints
  - Mapreduce handlers and utilities
  - All NotSupportedError tests being skipped, everything passes in the testapp
+ - Namespaces handled via the connection settings
 
 ### What Can't It Do?
 
@@ -245,6 +241,10 @@ See the Google documentation for more information on connecting to Cloud SQL via
 ## Unique Constraint Checking
 
 **IMPORTANT: Make sure you read and understand this section before configuring your project**
+
+
+tl;dr Constraint checking is costly, you might want to disable it globally using `settings.DJANGAE_DISABLE_CONSTRAINT_CHECKS` and re-enable on a per-model basis
+
 
 Djangae by default enforces the unique constraints that you define on your models. It does so by creating so called "unique markers" in the datastore.
 Unique constraint checks have the following caveats...
