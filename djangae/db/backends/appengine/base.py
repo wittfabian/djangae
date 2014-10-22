@@ -14,12 +14,14 @@ from django.db.backends import (
     BaseDatabaseFeatures,
     BaseDatabaseValidation
 )
+
 try:
     from django.db.backends.schema import BaseDatabaseSchemaEditor
 except ImportError:
-    #Django < 1.6 doesn't have BaseDatabaseSchemaEditor
+    #Django < 1.7 doesn't have BaseDatabaseSchemaEditor
     class BaseDatabaseSchemaEditor(object):
         pass
+
 from django.db.backends.creation import BaseDatabaseCreation
 from django.utils import timezone
 from google.appengine.api.datastore_types import Blob, Text
