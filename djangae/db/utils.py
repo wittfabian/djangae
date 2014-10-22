@@ -15,7 +15,7 @@ from google.appengine.api.datastore import Key, Query
 
 #DJANGAE
 from djangae.indexing import special_indexes_for_column, REQUIRES_SPECIAL_INDEXES
-from djangae.db.exceptions import CouldBeSupportedError
+from djangae.db.backends.appengine.dbapi import CouldBeSupportedError
 
 def make_timezone_naive(value):
     if value is None:

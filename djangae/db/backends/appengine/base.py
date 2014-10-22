@@ -21,7 +21,6 @@ except ImportError:
     class BaseDatabaseSchemaEditor(object):
         pass
 from django.db.backends.creation import BaseDatabaseCreation
-from django.db import IntegrityError
 from django.utils import timezone
 from google.appengine.api.datastore_types import Blob, Text
 from google.appengine.ext.db import metadata
@@ -30,7 +29,6 @@ from google.appengine.api.datastore import Key
 
 #DJANGAE
 from djangae.utils import find_project_root
-from djangae.db.exceptions import DatabaseError, NotSupportedError, CouldBeSupportedError
 from djangae.db.utils import (
     decimal_to_string,
     make_timezone_naive,
@@ -47,6 +45,7 @@ from .commands import (
     get_field_from_column
 )
 
+from djangae.db.backends.appengine import dbapi as Database
 
 class Connection(object):
     """ Dummy connection class """
@@ -170,18 +169,7 @@ class Cursor(object):
     def __iter__(self):
         return self
 
-class Database(object):
-    """ Fake DB API 2.0 for App engine """
 
-    Error = DatabaseError
-    DataError = DatabaseError
-    DatabaseError = DatabaseError
-    OperationalError = DatabaseError
-    IntegrityError = IntegrityError
-    InternalError = DatabaseError
-    ProgrammingError = DatabaseError
-    NotSupportedError = NotSupportedError
-    InterfaceError = DatabaseError
 
 
 class DatabaseOperations(BaseDatabaseOperations):

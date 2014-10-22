@@ -2,8 +2,9 @@ from itertools import  product
 from django.db.models.sql.where import Constraint
 from commands import parse_constraint, OPERATORS_MAP
 from django.db.models.sql.datastructures import EmptyResultSet
-from djangae.db.exceptions import NotSupportedError
+from djangae.db.backends.appengine.dbapi import NotSupportedError
 
+from google.appengine.api import datastore
 
 def process_literal(node, filtered_columns=[], negated=False):
     column, op, value = node[1]
