@@ -1,7 +1,6 @@
 #STANDARD LIB
 import datetime
 import decimal
-import sys
 import warnings
 
 #LIBRARIES
@@ -92,23 +91,7 @@ class Cursor(object):
             self.connection.queries.append(sql)
             self.returned_ids = sql.execute()
         else:
-            raise CouldBeSupportedError("Can't execute traditional SQL: '%s' (although perhaps we could make GQL work)", sql)
-
-    def fix_fk_null(self, query, constraint):
-        alias = constraint.alias
-        table_name = query.alias_map[alias][TABLE_NAME]
-        lhs_join_col, rhs_join_col = join_cols(query.alias_map[alias])
-        if table_name != constraint.field.rel.to._meta.db_table or \
-                rhs_join_col != constraint.field.rel.to._meta.pk.column or \
-                lhs_join_col != constraint.field.column:
-            return
-        next_alias = query.alias_map[alias][LHS_ALIAS]
-        if not next_alias:
-            return
-        self.unref_alias(query, alias)
-        alias = next_alias
-        constraint.col = constraint.field.column
-        constraint.alias = alias
+            raise Database.CouldBeSupportedError("Can't execute traditional SQL: '%s' (although perhaps we could make GQL work)", sql)
 
     def next(self):
         row = self.fetchone()
@@ -262,7 +245,7 @@ class DatabaseOperations(BaseDatabaseOperations):
                 try:
                     value = value.decode('utf-8')
                 except UnicodeDecodeError:
-                    raise DatabaseError("Bytestring is not encoded in utf-8")
+                    raise Database.DatabaseError("Bytestring is not encoded in utf-8")
 
             if db_type == 'text':
                 value = Text(value)
