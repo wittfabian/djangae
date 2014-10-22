@@ -407,9 +407,13 @@ class DatabaseCreation(BaseDatabaseCreation):
         self.testbed.init_capability_stub()
         self.testbed.init_channel_stub()
 
+        #We allow users to disable scattered IDs in tests. This primarily for running Django tests that
+        #assume implicit ordering (yeah, annoying)
+        use_scattered = not getattr(settings, "DJANGAE_SEQUENTIAL_IDS_IN_TESTS", False)
+
         self.testbed.init_datastore_v3_stub(
             use_sqlite=True,
-            auto_id_policy=testbed.AUTO_ID_POLICY_SCATTERED,
+            auto_id_policy=testbed.AUTO_ID_POLICY_SCATTERED if use_scattered else testbed.AUTO_ID_POLICY_SEQUENTIAL,
             consistency_policy=datastore_stub_util.PseudoRandomHRConsistencyPolicy(probability=1)
         )
         self.testbed.init_files_stub()
