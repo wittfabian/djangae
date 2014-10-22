@@ -19,7 +19,7 @@ from google.appengine.api.datastore import Query
 from google.appengine.ext import db
 
 #DJANGAE
-from djangae.db.exceptions import CouldBeSupportedError, NotSupportedError
+from djangae.db.backends.appengine.dbapi import CouldBeSupportedError, NotSupportedError
 from djangae.db.utils import (
     get_datastore_key,
     django_instance_to_entity,

@@ -7,7 +7,7 @@ from google.appengine.datastore.datastore_rpc import TransactionOptions
 
 from .unique_utils import unique_identifiers_from_entity
 from .utils import key_exists
-from .exceptions import IntegrityError
+from djangae.db.backends.appengine.dbapi import IntegrityError
 
 from django.conf import settings
 

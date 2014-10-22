@@ -2,8 +2,9 @@ from itertools import  product
 from django.db.models.sql.where import Constraint
 from commands import parse_constraint, OPERATORS_MAP
 from django.db.models.sql.datastructures import EmptyResultSet
-from djangae.db.exceptions import NotSupportedError
+from djangae.db.backends.appengine.dbapi import NotSupportedError
 
+from google.appengine.api import datastore
 
 def process_literal(node, filtered_columns=[], negated=False):
     column, op, value = node[1]
@@ -60,8 +61,16 @@ def parse_dnf(node, connection):
     if tree and tree[0] != 'OR':
         tree = ('OR', [tree])
 
+    #If there are more than 30 filters, and not all filters are PK filters
     if tree and len(tree[-1]) > 30:
-        raise NotSupportedError("The datastore doesn't support this query, more than 30 filters were needed")
+
+        for and_branch in tree[-1]:
+            for lit in and_branch: #Go through each literal tuple
+                if isinstance(lit[-1], datastore.Key): #If the value is a key, then break the loop
+                    break
+            else:
+                #If we didn't find a literal with a datastore Key, then raise unsupported
+                raise NotSupportedError("The datastore doesn't support this query, more than 30 filters were needed")
 
     return tree, filtered_columns
 
