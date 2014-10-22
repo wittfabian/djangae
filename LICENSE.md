@@ -1,4 +1,4 @@
-Copyright (c) Luke Benstead, and all contributors.
+Copyright (c) Luke Benstead 2014, Potato London Ltd. 2014-, and all contributors.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
