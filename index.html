@@ -39,9 +39,11 @@
 <p>Djangae (djan-gee) is a Django app that allows you to run Django applications on Google App Engine, including (if you
 want to) using Django's models with the App Engine Datastore as the underlying database.</p>
 
-<p><a href="https://potatolondon.github.io/djangae/">https://potatolondon.github.io/djangae/</a></p>
+<p>Google Group: <a href="https://groups.google.com/forum/#!forum/djangae-users">https://groups.google.com/forum/#!forum/djangae-users</a></p>
 
-<p><a href="https://github.com/potatolondon/djangae">https://github.com/potatolondon/djangae</a></p>
+<p>Website: <a href="https://potatolondon.github.io/djangae/">https://potatolondon.github.io/djangae/</a></p>
+
+<p>GitHub: <a href="https://github.com/potatolondon/djangae">https://github.com/potatolondon/djangae</a></p>
 
 <p><strong>Note: Djangae is under heavy development, stability is not guaranteed. A 1.0 release will happen when it's ready</strong></p>
 
@@ -112,15 +114,11 @@ default settings.</li>
 </pre></div>
 </li>
 <li><p>Add the following to your URL handler: <code>url(r'^_ah/', include('djangae.urls'))</code></p></li>
-<li>
-<p>It is recommended that for improved security you add <code>djangae.contrib.security.middleware.AppEngineSecurityMiddleware</code> as the first
+<li><p>It is recommended that for improved security you add <code>djangae.contrib.security.middleware.AppEngineSecurityMiddleware</code> as the first
 of your middleware classes. This middleware patches a number of insecure parts of the Python and App Engine libraries and warns if your
-Django settings aren't as secure as they could be.</p>
-
-<ul>
+Django settings aren't as secure as they could be.</p></li>
 <li>If you wish to use the App Engine's Google Accounts-based authentication to authenticate your users, and/or you wish to use Django's permissions system with the Datastore as you DB, then see the section on <strong>Authentication</strong>.</li>
-</ul>
-</li>
+<li><strong>It is highly recommended that you read the section on <a href="#unique-constraint-checking">Unique Constraints</a></strong></li>
 </ul>
 
 <h2>
@@ -148,21 +146,14 @@ work out of the box. These index fields are created automatically when you use t
 <h2>
 <a name="roadmap" class="anchor" href="#roadmap"><span class="octicon octicon-link"></span></a>Roadmap</h2>
 
-<p>1.0-alpha</p>
-
-<ul>
-<li>Basic ancestor query support</li>
-<li>All tests either passing or throwing NotSupportedError in the testapp</li>
-<li>Configurable constraints</li>
-</ul>
-
 <p>1.0-beta</p>
 
 <ul>
-<li>Support for 'infinite' descendents in the ancestor support. Lots of tests</li>
+<li>Support for ancestor queries. Lots of tests</li>
 <li>Memcache backed caching by PK and unique constraints</li>
 <li>Mapreduce handlers and utilities</li>
 <li>All NotSupportedError tests being skipped, everything passes in the testapp</li>
+<li>Namespaces handled via the connection settings</li>
 </ul>
 
 <h3>
@@ -183,7 +174,7 @@ that in the future.</li>
 on the primary key field though.</li>
 <li>More than one inequality filter, i.e. you can't do <code>.exclude(a=1, b=2)</code>.  This is a limitation of the Datastore.</li>
 <li>Transactions.  The Datastore has transactions, but they are not "normal" transactions in the SQL sense. Transactions
-should be done using <code>google.appengine.api.datastore.RunInTransaction</code>.</li>
+should be done using <code>djangae.db.transactional.atomic</code>.</li>
 </ul>
 
 <h3>
@@ -218,7 +209,7 @@ remotely, by specifying a <code>--sandbox</code>. Eg.</p>
 <li>Add <code>'djangae.contrib.gauth'</code> to <code>INSTALLED_APPS</code> probably after <code>'django.contrib.auth'</code>.</li>
 <li>At the bottom of your settings.py add: <code>from djangae.contrib.gauth.settings import *</code>.  This sets up the auth backend,
 login url and sets <code>AUTH_USER_MODEL</code> to <code>'djangae.GaeDatastoreUser'</code>.</li>
-<li>Replace 'django.contrib.auth.middleware.AuthenticationMiddleware' with <code>'djangae.contrib.auth.middleware.AuthenticationMiddleware'</code>.</li>
+<li>Replace 'django.contrib.auth.middleware.AuthenticationMiddleware' with <code>'djangae.contrib.gauth.middleware.AuthenticationMiddleware'</code>.</li>
 </ul>
 
 <h3>
@@ -257,17 +248,22 @@ login url and sets <code>AUTH_USER_MODEL</code> to <code>'djangae.GaeDatastoreUs
 </li>
 </ol>
 
+<h4>
+<a name="permissions" class="anchor" href="#permissions"><span class="octicon octicon-link"></span></a>Permissions</h4>
+
+<p>If you're using the Datastore for your User model (i.e. case <em>3.</em> or <em>4.</em> from above) then the permissions work slightly differently.  The Datastore-based user models have a <code>user_permissions</code> list field, which takes the place of the usual many-to-many relationship to a <code>Permission</code> model.  For groups, Djangae provides <code>djangae.contrib.gauth.Group</code>, which again has a list field for storing the permissions.  This <code>Group</code> model is registered with the Django admin automatically for you in cases <em>3.</em> and <em>4.</em> from above.</p>
+
 <h3>
 <a name="user-pre-creation" class="anchor" href="#user-pre-creation"><span class="octicon octicon-link"></span></a>User Pre-Creation</h3>
 
-<p>When using Google Accounts-based authentication, the <code>username</code> field of the user model is populated with the <code>user_id</code> which is provided by Google Accounts.  This is populated when the user object is created on the user's first log in, and is then used as the authentication check for subsequent log ins.  Because it's impossible to know what this ID is going to be before the user logs in, that creates an issue that you can't create users and assign permission to them until they have authenticated.</p>
+<p>When using Google Accounts-based authentication, the <code>username</code> field of the user model is populated with the <code>user_id</code> which is provided by Google Accounts.  This is populated when the user object is created on the user's first log in, and is then used as the authentication check for subsequent log ins.  It is impossible to know what this ID is going to be before the user logs in, which creates an issue if you want to create users and assign permissions to them before they have authenticated.</p>
 
 <p>Djangae allows you to pre-create users by specifying their email address.  First, you need to set <code>ALLOW_USER_PRE_CREATION</code> to <code>True</code> in settings, and then you can create user objects which have an email address and a <code>username</code> of <code>None</code>.  Djangae then recognises these as pre-created users, and will populate the <code>username</code> with their Google <code>user_id</code> when they first log in.</p>
 
 <h3>
 <a name="usernamepassword-authentication" class="anchor" href="#usernamepassword-authentication"><span class="octicon octicon-link"></span></a>Username/password authentication</h3>
 
-<p>As well as using Djangae's Google Accounts-based authnetication, you can also use the standard authentication backend from django.contrib.auth.  They can work alongside each other.  Simply include both, like this:</p>
+<p>As well as using Djangae's Google Accounts-based authentication, you can also use the standard authentication backend from django.contrib.auth.  They can work alongside each other.  Simply include both, like this:</p>
 
 <pre><code>AUTHENTICATION_BACKENDS = (
     'djangae.contrib.gauth.backends.AppEngineUserAPI',
@@ -322,6 +318,8 @@ live database!</p>
 <a name="unique-constraint-checking" class="anchor" href="#unique-constraint-checking"><span class="octicon octicon-link"></span></a>Unique Constraint Checking</h2>
 
 <p><strong>IMPORTANT: Make sure you read and understand this section before configuring your project</strong></p>
+
+<p><em>tl;dr Constraint checking is costly, you might want to disable it globally using <code>settings.DJANGAE_DISABLE_CONSTRAINT_CHECKS</code> and re-enable on a per-model basis</em></p>
 
 <p>Djangae by default enforces the unique constraints that you define on your models. It does so by creating so called "unique markers" in the datastore.
 Unique constraint checks have the following caveats...</p>
