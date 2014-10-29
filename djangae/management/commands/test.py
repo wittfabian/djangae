@@ -38,7 +38,7 @@ def _monkey_patch_unsupported_tests():
         import django
         if django.VERSION[:2] == (1, 5):
             unsupported_tests.extend([
-                #These auth tests override the AUTH_USER_MODEL setting, which then uses M2M joins
+                # These auth tests override the AUTH_USER_MODEL setting, which then uses M2M joins
                 'django.contrib.auth.tests.auth_backends.CustomPermissionsUserModelBackendTest.test_custom_perms',
                 'django.contrib.auth.tests.auth_backends.CustomPermissionsUserModelBackendTest.test_get_all_superuser_permissions',
                 'django.contrib.auth.tests.auth_backends.CustomPermissionsUserModelBackendTest.test_has_no_object_perm',

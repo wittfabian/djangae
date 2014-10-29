@@ -1,6 +1,5 @@
-
-
 from djangae.contrib.common import _thread_locals
+
 
 class RequestStorageMiddleware:
     """ Middleware which allows us to get hold of the request object in places where Django doesn't give it to us, e.g. in model save methods.
@@ -11,10 +10,10 @@ class RequestStorageMiddleware:
         _thread_locals.request = request
 
     def process_response(self, request, response):
-        #Wipe out the request so that if the following request to this instance doesn't call the middleware (e.g. deferred tasks) we don't end up with randomness
+        # Wipe out the request so that if the following request to this instance doesn't call the middleware (e.g. deferred tasks) we don't end up with randomness
         _thread_locals.request = None
         return response
 
     def process_exception(self, request, exception):
         _thread_locals.request = None
-        return None #Allow default exception handling to take over
+        return None  # Allow default exception handling to take over

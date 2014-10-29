@@ -1,4 +1,3 @@
-
 DEFAULT_FILE_STORAGE = 'djangae.storage.BlobstoreStorage'
 FILE_UPLOAD_MAX_MEMORY_SIZE = 1024 * 1024
 FILE_UPLOAD_HANDLERS = (
@@ -48,7 +47,7 @@ LOGGING = {
 TEST_RUNNER = 'djangae.test_runner.DjangaeTestSuiteRunner'
 EMAIL_BACKEND = 'djangae.mail.AsyncEmailBackend'
 
-#Setting to *.appspot.com is OK, because GAE takes care of domain routing
-#it needs to be like this because of the syntax of addressing non-default versions
+# Setting to *.appspot.com is OK, because GAE takes care of domain routing
+# it needs to be like this because of the syntax of addressing non-default versions
 # (e.g. -dot-)
 ALLOWED_HOSTS = (".appspot.com", )

@@ -1,6 +1,7 @@
 from hashlib import md5
 from google.appengine.api import datastore
 
+
 def _unique_combinations(model, ignore_pk=False):
     unique_names = [ [ model._meta.get_field(y).name for y in x ] for x in model._meta.unique_together ]
 
@@ -13,10 +14,12 @@ def _unique_combinations(model, ignore_pk=False):
 
     return [ sorted(x) for x in unique_names ]
 
+
 def _format_value_for_identifier(value):
-    #AppEngine max key length is 500 chars, so if the value is a string we hexdigest it to reduce the length
-    #otherwise we str() it as it's probably an int or bool or something.
+    # AppEngine max key length is 500 chars, so if the value is a string we hexdigest it to reduce the length
+    # otherwise we str() it as it's probably an int or bool or something.
     return md5(value.encode("utf-8")).hexdigest() if isinstance(value, basestring) else str(value)
+
 
 def unique_identifiers_from_entity(model, entity, ignore_pk=False, ignore_null_values=True):
     """
@@ -48,7 +51,7 @@ def unique_identifiers_from_entity(model, entity, ignore_pk=False, ignore_null_v
             if field.primary_key:
                 value = entity.key().id_or_name()
             else:
-                value = entity.get(field.column) #Get the value from the entity
+                value = entity.get(field.column)  # Get the value from the entity
 
             if value is None and ignore_null_values:
                 include_combination = False
@@ -60,6 +63,7 @@ def unique_identifiers_from_entity(model, entity, ignore_pk=False, ignore_null_v
 
     return identifiers
 
+
 def query_is_unique(model, query):
     """
         If the query is entirely on unique constraints then return the unique identifier for
@@ -67,7 +71,7 @@ def query_is_unique(model, query):
     """
 
     if isinstance(query, datastore.MultiQuery):
-        #By definition, a multiquery is not unique
+        # By definition, a multiquery is not unique
         return False
 
     combinations = _unique_combinations(model)
@@ -80,8 +84,8 @@ def query_is_unique(model, query):
             if field == model._meta.pk.column:
                 field = "__key__"
 
-            #We don't match this combination if the field didn't exist in the queried fields
-            #or if it was, but the value was None (you can have multiple NULL values, they aren't unique)
+            # We don't match this combination if the field didn't exist in the queried fields
+            # or if it was, but the value was None (you can have multiple NULL values, they aren't unique)
             key = "{} =".format(field)
             if key not in queried_fields or query[key] is None:
                 unique_match = False

@@ -1,6 +1,6 @@
 #LIBRARIES
 from django.db.models.sql import compiler
-#Following two ImportError blocks are for < 1.6 compatibility
+# Following two ImportError blocks are for < 1.6 compatibility
 try:
     from django.db.models.sql.compiler import SQLDateCompiler as DateCompiler
 except ImportError:
@@ -15,7 +15,6 @@ except ImportError:
 #DJANGAE
 from djangae.db.backends.appengine.query import Query
 from .commands import InsertCommand, SelectCommand, UpdateCommand, DeleteCommand
-
 
 
 class SQLCompiler(compiler.SQLCompiler):
@@ -37,9 +36,11 @@ class SQLInsertCompiler(compiler.SQLInsertCompiler, SQLCompiler):
     def as_sql(self):
         return [ (InsertCommand(self.connection, self.query.model, self.query.objs, self.query.fields, self.query.raw), []) ]
 
+
 class SQLDeleteCompiler(compiler.SQLDeleteCompiler, SQLCompiler):
     def as_sql(self):
         return (DeleteCommand(self.connection, self.query), [])
+
 
 class SQLUpdateCompiler(compiler.SQLUpdateCompiler, SQLCompiler):
 
@@ -48,7 +49,6 @@ class SQLUpdateCompiler(compiler.SQLUpdateCompiler, SQLCompiler):
 
     def as_sql(self):
         return (UpdateCommand(self.connection, self.query), [])
-
 
 
 class SQLAggregateCompiler(compiler.SQLAggregateCompiler, SQLCompiler):

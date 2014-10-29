@@ -49,7 +49,7 @@ class BackendTests(TestCase):
         backend = AppEngineUserAPI()
         email = '1@example.com'
         # Pre-create our user
-        user = User.objects.pre_create_google_user(email)
+        User.objects.pre_create_google_user(email)
         # Now authenticate this user via the Google Accounts API
         google_user = users.User(email=email, _user_id='111111111100000000001')
         user = backend.authenticate(google_user=google_user)
@@ -93,5 +93,3 @@ class MiddlewareTests(TestCase):
         self.assertTrue(user.is_authenticated())
         self.assertEqual(user.email, '1@example.com')
         self.assertEqual(user.username, '111111111100000000001')
-
-

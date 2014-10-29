@@ -15,6 +15,7 @@ from django.db.models.loading import get_model
 from djangae.db import transaction
 from djangae.models import CounterShard
 
+
 class _FakeModel(object):
     """
     An object of this class can pass itself off as a model instance
@@ -39,6 +40,7 @@ class RawField(models.Field):
         get the same internal type, rather than their own class name.
         """
         return 'RawField'
+
 
 class TrueOrNullField(models.NullBooleanField):
     """A Field only storing `Null` or `True` values.
@@ -162,7 +164,7 @@ class IterableField(models.Field):
         Applies get_db_prep_save of item_field on value items.
         """
 
-        #If the value is an empty iterable, store None
+        # If the value is an empty iterable, store None
         if value == self._iterable_type([]):
             return None
 
@@ -237,8 +239,8 @@ class IterableField(models.Field):
                 defaults['initial'] = self.get_default()
 
         if getattr(self, "fk_model", None):
-            #The type passed into this ListField was a ForeignKey, set the form field and
-            #queryset appropriately
+            # The type passed into this ListField was a ForeignKey, set the form field and
+            # queryset appropriately
             form_field_class = IterableFieldModelChoiceFormField
             defaults['queryset'] = self.fk_model.objects.all()
         elif self.choices:
@@ -272,6 +274,7 @@ class ListField(IterableField):
     @property
     def _iterable_type(self):
         return list
+
 
 class SetField(IterableField):
     def get_internal_type(self):
@@ -341,7 +344,7 @@ class ShardedCounter(list):
             shard.save()
 
     def decrement(self):
-        #Find a non-empty shard and decrement it
+        # Find a non-empty shard and decrement it
         shards = self[:]
         random.shuffle(shards)
         for shard_id in shards:
@@ -357,6 +360,7 @@ class ShardedCounter(list):
     def value(self):
         shards = CounterShard.objects.filter(pk__in=self).values_list('count', flat=True)
         return sum(shards)
+
 
 class ShardedCounterField(ListField):
     __metaclass__ = models.SubfieldBase

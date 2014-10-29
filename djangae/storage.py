@@ -1,5 +1,4 @@
 import mimetypes
-import os
 import re
 
 try:
@@ -7,15 +6,12 @@ try:
 except ImportError:
     from StringIO import StringIO
 
-from django.conf import settings
 from django.core.files.base import File
 from django.core.files.storage import Storage
 from django.core.files.uploadedfile import UploadedFile
 from django.core.files.uploadhandler import FileUploadHandler, \
     StopFutureHandlers
-from django.core.exceptions import ImproperlyConfigured
 from django.http import HttpResponse
-from django.http.multipartparser import ChunkIter, Parser, LazyStream, FILE
 from django.utils.encoding import smart_str, force_unicode
 
 from google.appengine.api import files
@@ -105,8 +101,8 @@ class BlobstoreStorage(Storage):
 
     def url(self, name):
         try:
-            #return a protocol-less URL, because django can't/won't pass
-            #down an argument saying whether it should be secure or not
+            # Return a protocol-less URL, because django can't/won't pass
+            # down an argument saying whether it should be secure or not
             url = get_serving_url(self._get_blobinfo(name))
             return re.sub("http://", "//", url)
         except NotImageError:
@@ -162,7 +158,7 @@ class BlobstoreFileUploadHandler(FileUploadHandler):
         """
             We can kill a lot of this hackery in Django 1.7 when content_type_extra is actually passed in!
         """
-        self.data.seek(0) #Rewind
+        self.data.seek(0)  # Rewind
         data = self.data.read()
 
         parts = data.split(self.boundary)
@@ -174,11 +170,11 @@ class BlobstoreFileUploadHandler(FileUploadHandler):
             if not blob_key:
                 continue
 
-            #OK, we have a blob key, but is it the one for the field?
+            # OK, we have a blob key, but is it the one for the field?
             match = re.search('\sname="?(?P<field_name>[a-zA-Z0-9_-]+)', part)
             name = match.groupdict().get('field_name') if match else None
             if name != field_name:
-                #Nope, not for this field
+                # Nope, not for this field
                 continue
 
             self.blobkey = blob_key
@@ -197,7 +193,7 @@ class BlobstoreFileUploadHandler(FileUploadHandler):
         """
         self.boundary = boundary
         if hasattr(input_data, "body"):
-            self.data = StringIO(input_data.body) #Create a string IO object
+            self.data = StringIO(input_data.body)  # Create a string IO object
         else:
             self.data = input_data
         return None #Pass back to Django

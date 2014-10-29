@@ -11,6 +11,7 @@ from google.appengine.datastore.datastore_rpc import TransactionOptions
 
 from djangae.db.backends.appengine import caching
 
+
 class AtomicDecorator(object):
     def __init__(self, *args, **kwargs):
         self.func = None
@@ -31,25 +32,25 @@ class AtomicDecorator(object):
         if IsInTransaction() and not self.independent:
             raise RuntimeError("Nested transactions are not supported")
         elif self.independent:
-            #If we're running an independent transaction, pop the current one
+            # If we're running an independent transaction, pop the current one
             self.parent_conn = _PopConnection()
 
-        #Push a new connection, start a new transaction
+        # Push a new connection, start a new transaction
         conn = _GetConnection()
         _PushConnection(None)
         _SetConnection(conn.new_transaction(options))
 
-        #Clear the context cache at the start of a transaction
+        # Clear the context cache at the start of a transaction
         caching.clear_context_cache()
 
     def _finalize(self):
-        _PopConnection() #Pop the transaction connection
+        _PopConnection()  # Pop the transaction connection
         if self.parent_conn:
-            #If there was a parent transaction, now put that back
+            # If there was a parent transaction, now put that back
             _PushConnection(self.parent_conn)
             self.parent_conn = None
 
-        #Clear the context cache at the end of a transaction
+        # Clear the context cache at the end of a transaction
         caching.clear_context_cache()
 
     def __call__(self, *args, **kwargs):
@@ -75,18 +76,17 @@ class AtomicDecorator(object):
         if self.func:
             return call_func(*args, **kwargs)
 
-
     def __enter__(self):
         self._begin()
 
     def __exit__(self, *args, **kwargs):
         if len(args) > 1 and isinstance(args[1], Exception):
-            _GetConnection().rollback() #If an exception happens, rollback
+            _GetConnection().rollback()  # If an exception happens, rollback
         else:
-            _GetConnection().commit() #Otherwise commit
+            _GetConnection().commit()  # Otherwise commit
 
         self._finalize()
 
 
 atomic = AtomicDecorator
-commit_on_success = AtomicDecorator #Alias to the old Django name for this kinda thing
+commit_on_success = AtomicDecorator  # Alias to the old Django name for this kinda thing
