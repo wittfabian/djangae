@@ -8,7 +8,6 @@ import getpass
 
 import djangae.utils as utils
 
-
 _SCRIPT_NAME = 'dev_appserver.py'
 
 

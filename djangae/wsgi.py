@@ -19,7 +19,8 @@ class DjangaeApplication(object):
         # TODO: Remove support for the subprocess module.
         warnings.warn(
             (
-                "Subprocess support on dev_appserver will be removed soon. Mediagenerator/assetpipe users should find "
+                "Subprocess support on dev_appserver will be removed soon. "
+                "Mediagenerator/assetpipe users should find "
                 "alternatives which run in a separate process."
             ),
             DeprecationWarning
@@ -85,7 +86,6 @@ class DjangaeApplication(object):
 
         #Fix up the subprocess module
         self.fix_subprocess_module()
-
 
     def __init__(self, application):
         from django.conf import settings

@@ -12,9 +12,11 @@ from google.appengine.api import urlfetch
 
 from django.conf import settings
 
+
 class ApiSecurityException(Exception):
-  """Error when attempting to call an unsafe API."""
-  pass
+    """Error when attempting to call an unsafe API."""
+    pass
+
 
 def find_argument_index(function, argument):
     args = function.func_code.co_varnames[:function.func_code.co_argcount]
@@ -49,6 +51,7 @@ _JSON_CHARACTER_REPLACEMENT_MAPPING = [
     ('&', '\\u%04x' % ord('&')),
 ]
 
+
 class _JsonEncoderForHtml(json.JSONEncoder):
     def encode(self, o):
         chunks = self.iterencode(o, _one_shot=True)
@@ -62,6 +65,7 @@ class _JsonEncoderForHtml(json.JSONEncoder):
             for (character, replacement) in _JSON_CHARACTER_REPLACEMENT_MAPPING:
                 chunk = chunk.replace(character, replacement)
             yield chunk
+
 
 # Pickle.  See http://www.cs.jhu.edu/~s/musings/pickle.html for more info.
 # Whitelist of module name => (module, [list of safe names])
@@ -90,6 +94,7 @@ _PICKLE_CLASS_WHITELIST = {
     ]),
 }
 
+
 # See https://docs.python.org/3/library/pickle.html#restricting-globals.
 class RestrictedUnpickler(pickle.Unpickler):
 
@@ -99,8 +104,10 @@ class RestrictedUnpickler(pickle.Unpickler):
             return getattr(module, name)
         raise ApiSecurityException('%s.%s forbidden in unpickling' % (module, name))
 
+
 def _SafePickleLoad(f):
     return RestrictedUnpickler(f).load()
+
 
 def _SafePickleLoads(string):
     return RestrictedUnpickler(io.BytesIO(string)).load()
@@ -129,6 +136,7 @@ def _HttpUrlLoggingWrapper(func):
 
 _PATCHES_APPLIED = False
 
+
 class AppEngineSecurityMiddleware(object):
     """
         This middleware patches over some more insecure parts of the Python and AppEngine libraries.
@@ -145,12 +153,11 @@ class AppEngineSecurityMiddleware(object):
             replace_default_argument(json.dump, 'cls', _JsonEncoderForHtml)
             replace_default_argument(json.dumps, 'cls', _JsonEncoderForHtml)
 
-            #Make pickle safe
+            # Make pickle safe
             pickle.load = _SafePickleLoad
             pickle.loads = _SafePickleLoads
             cPickle.load = _SafePickleLoad
             cPickle.loads = _SafePickleLoads
-
 
             # YAML.  The Python tag scheme allows arbitrary code execution:
             # yaml.load('!!python/object/apply:os.system ["ls"]')
@@ -160,7 +167,6 @@ class AppEngineSecurityMiddleware(object):
             replace_default_argument(yaml.load_all, 'Loader', yaml.loader.SafeLoader)
             replace_default_argument(yaml.parse, 'Loader', yaml.loader.SafeLoader)
             replace_default_argument(yaml.scan, 'Loader', yaml.loader.SafeLoader)
-
 
             # AppEngine urlfetch.
             # Does not validate certificates by default.

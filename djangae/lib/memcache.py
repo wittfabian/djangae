@@ -1,5 +1,6 @@
 from google.appengine.api.memcache import *
 
+
 def set_wrapper(func):
     """
         Apparently App Engine's memcache.set can't deal with a negative time, but some Django

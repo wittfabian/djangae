@@ -2,7 +2,6 @@ from email.MIMEBase import MIMEBase
 
 from django.core.mail.backends.base import BaseEmailBackend
 from django.core.mail import EmailMultiAlternatives
-from django.core.exceptions import ImproperlyConfigured
 
 from google.appengine.api import mail as aeemail
 from google.appengine.runtime import apiproxy_errors

@@ -6,14 +6,17 @@ import datetime
 _special_indexes = {}
 _last_loaded_time = None
 
+
 def _get_index_file():
     from djangae.utils import find_project_root
     index_file = os.path.join(find_project_root(), "djangaeidx.yaml")
 
     return index_file
 
+
 def _get_table_from_model(model_class):
     return model_class._meta.db_table.encode("utf-8")
+
 
 def load_special_indexes():
     global _special_indexes
@@ -22,7 +25,7 @@ def load_special_indexes():
     index_file = _get_index_file()
 
     if not os.path.exists(index_file):
-        #No file, no special index
+        # No file, no special index
         logging.info("Not loading any special indexes")
         return
 
@@ -30,7 +33,7 @@ def load_special_indexes():
     if _last_loaded_time and _last_loaded_time == mtime:
         return
 
-    #Load any existing indexes
+    # Load any existing indexes
     with open(index_file, "r") as stream:
         data = yaml.load(stream)
 
@@ -44,11 +47,14 @@ def special_index_exists(model_class, field_name, index_type):
     table = _get_table_from_model(model_class)
     return index_type in _special_indexes.get(table, {}).get(field_name, [])
 
+
 def special_indexes_for_model(model_class):
     return _special_indexes.get(_get_table_from_model(model_class))
 
+
 def special_indexes_for_column(model_class, column):
     return _special_indexes.get(_get_table_from_model(model_class), {}).get(column, [])
+
 
 def write_special_indexes():
     index_file = _get_index_file()
@@ -56,11 +62,12 @@ def write_special_indexes():
     with open(index_file, "w") as stream:
         stream.write(yaml.dump(_special_indexes))
 
+
 def add_special_index(model_class, field_name, index_type):
     from djangae.utils import on_production, in_testing
     from django.conf import settings
 
-    field_name = field_name.encode("utf-8") #Make sure we are working with strings
+    field_name = field_name.encode("utf-8")  # Make sure we are working with strings
 
     load_special_indexes()
 
@@ -97,6 +104,7 @@ class Indexer(object):
         value = value.replace("\\\\", "\\")
         return value
 
+
 class IExactIndexer(Indexer):
     def validate_can_be_indexed(self, value):
         return len(value) < 500
@@ -109,6 +117,7 @@ class IExactIndexer(Indexer):
 
     def indexed_column_name(self, field_column):
         return "_idx_iexact_{0}".format(field_column)
+
 
 class DayIndexer(Indexer):
     def validate_can_be_indexed(self, value):
@@ -129,6 +138,7 @@ class DayIndexer(Indexer):
 
     def indexed_column_name(self, field_column):
         return "_idx_day_{0}".format(field_column)
+
 
 class YearIndexer(Indexer):
     def validate_can_be_indexed(self, value):
@@ -151,6 +161,7 @@ class YearIndexer(Indexer):
     def indexed_column_name(self, field_column):
         return "_idx_year_{0}".format(field_column)
 
+
 class MonthIndexer(Indexer):
     def validate_can_be_indexed(self, value):
         return isinstance(value, (datetime.datetime, datetime.date))
@@ -172,6 +183,7 @@ class MonthIndexer(Indexer):
     def indexed_column_name(self, field_column):
         return "_idx_month_{0}".format(field_column)
 
+
 class WeekDayIndexer(Indexer):
     def validate_can_be_indexed(self, value):
         return isinstance(value, (datetime.datetime, datetime.date))
@@ -179,8 +191,8 @@ class WeekDayIndexer(Indexer):
     def prep_value_for_database(self, value):
         if value:
             zero_based_weekday = value.weekday()
-            if zero_based_weekday == 6: #Sunday
-                return 1 #Django treats the week as starting at Sunday, but 1 based
+            if zero_based_weekday == 6:  # Sunday
+                return 1  # Django treats the week as starting at Sunday, but 1 based
             else:
                 return zero_based_weekday + 2
 
@@ -192,6 +204,7 @@ class WeekDayIndexer(Indexer):
     def indexed_column_name(self, field_column):
         return "_idx_week_day_{0}".format(field_column)
 
+
 class ContainsIndexer(Indexer):
     def validate_can_be_indexed(self, value):
         return isinstance(value, basestring) and len(value) < 500
@@ -200,7 +213,7 @@ class ContainsIndexer(Indexer):
         result = []
         if value:
             length = len(value)
-            result = [value[i:j+1] for i in xrange(length) for j in xrange(i,length)]
+            result = [value[i:j + 1] for i in xrange(length) for j in xrange(i, length)]
             if len(result) > 500:
                 raise ValueError("Can't index for contains query, this value has too many permuatations")
 
@@ -215,12 +228,14 @@ class ContainsIndexer(Indexer):
     def indexed_column_name(self, field_column):
         return "_idx_contains_{0}".format(field_column)
 
+
 class IContainsIndexer(ContainsIndexer):
     def prep_value_for_database(self, value):
-        return [ x.lower() for x in super(IContainsIndexer, self).prep_value_for_database(value) ]
+        return [x.lower() for x in super(IContainsIndexer, self).prep_value_for_database(value)]
 
     def indexed_column_name(self, field_column):
         return "_idx_icontains_{0}".format(field_column)
+
 
 class EndsWithIndexer(Indexer):
     """
@@ -248,6 +263,7 @@ class EndsWithIndexer(Indexer):
     def indexed_column_name(self, field_column):
         return "_idx_endswith_{0}".format(field_column)
 
+
 class IEndsWithIndexer(EndsWithIndexer):
     """
         Same as above, just all lower cased
@@ -260,6 +276,7 @@ class IEndsWithIndexer(EndsWithIndexer):
 
     def indexed_column_name(self, field_column):
         return "_idx_iendswith_{0}".format(field_column)
+
 
 class StartsWithIndexer(Indexer):
     """
@@ -291,6 +308,7 @@ class StartsWithIndexer(Indexer):
     def indexed_column_name(self, field_column):
         return "_idx_startswith_{0}".format(field_column)
 
+
 class IStartsWithIndexer(StartsWithIndexer):
     """
         Same as above, just all lower cased
@@ -303,6 +321,7 @@ class IStartsWithIndexer(StartsWithIndexer):
 
     def indexed_column_name(self, field_column):
         return "_idx_istartswith_{0}".format(field_column)
+
 
 REQUIRES_SPECIAL_INDEXES = {
     "iexact": IExactIndexer(),

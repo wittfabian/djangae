@@ -33,11 +33,13 @@ def _evaluate_path(target):
         thing = _dot_lookup(thing, comp, import_path)
     return thing
 
+
 def _patch(path, replacement):
     thing = _evaluate_path(
         ".".join(path.split(".")[:-1])
     )
     setattr(thing, path.split(".")[-1], replacement)
+
 
 class Watch(object):
     """

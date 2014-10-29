@@ -8,6 +8,7 @@ from subprocess import Popen
 import signal
 from datetime import datetime
 
+
 class Command(BaseRunserverCommand):
     """
     Overrides the default Django runserver command.
@@ -29,7 +30,7 @@ class Command(BaseRunserverCommand):
         shutdown_message = options.get('shutdown_message', '')
         do_reload = options.get('use_reloader', True)
 
-        #We use the old dev appserver if threading is disabled or --old was passed
+        # We use the old dev appserver if threading is disabled or --old was passed
         use_old_dev_appserver = options.get('use_old_dev_appserver') or not options.get("use_threading")
         quit_command = 'CTRL-BREAK' if sys.platform == 'win32' else 'CONTROL-C'
 
@@ -39,7 +40,7 @@ class Command(BaseRunserverCommand):
         from django.conf import settings
         from django.utils import translation
 
-        #Check for app.yaml
+        # Check for app.yaml
         expected_path = os.path.join(find_project_root(), "app.yaml")
         if not os.path.exists(expected_path):
             sys.stderr.write("Unable to find app.yaml at '%s'\n" % expected_path)
@@ -68,7 +69,7 @@ class Command(BaseRunserverCommand):
         # in the "--noreload" case).
         translation.activate(settings.LANGUAGE_CODE)
 
-        #Will have been set by setup_paths
+        # Will have been set by setup_paths
         sdk_path = _find_sdk_from_python_path()
 
         if use_old_dev_appserver:
@@ -109,15 +110,15 @@ class Command(BaseRunserverCommand):
             cwd=find_project_root()
         )
 
-        #This makes sure that dev_appserver gets killed on reload
+        # This makes sure that dev_appserver gets killed on reload
         import atexit
         atexit.register(process.kill)
 
         try:
             process.wait()
         except KeyboardInterrupt:
-            #Tell the dev appserver to shutdown and forcibly kill
-            #if it takes too long
+            # Tell the dev appserver to shutdown and forcibly kill
+            # if it takes too long
             process.send_signal(signal.SIGTERM)
             time.sleep(2)
             process.kill()
@@ -125,6 +126,6 @@ class Command(BaseRunserverCommand):
             if shutdown_message:
                 sys.stdout.write(shutdown_message)
 
-        #Some weird race condition crazy sometimes makes this None...
+        # Some weird race condition crazy sometimes makes this None...
         if sys:
             sys.exit(process.returncode)

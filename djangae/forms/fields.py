@@ -2,11 +2,13 @@ from django import forms
 from django.forms.models import ModelChoiceIterator
 from django.utils.encoding import smart_unicode
 
+
 class TrueOrNullFormField(forms.Field):
     def clean(self, value):
         if value:
             return True
         return None
+
 
 class ListWidget(forms.TextInput):
     """ A widget for being able to display a ListField. """
@@ -23,6 +25,7 @@ class ListWidget(forms.TextInput):
         value = data.get(name, '')
         return [v.strip() for v in value.split(',') if len(v.strip()) > 0]
 
+
 class ListFormField(forms.Field):
     """ A form field for being able to display a ListField. """
 
@@ -38,9 +41,10 @@ class ListFormField(forms.Field):
         return None
 
     def _check_values_against_delimiter(self, values):
-        delimiter = self.delimiter #faster
+        delimiter = self.delimiter  # faster
         for value in values:
             assert delimiter not in value
+
 
 class IterableFieldModelChoiceFormField(forms.Field):
     """
