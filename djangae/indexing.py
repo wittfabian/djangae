@@ -207,13 +207,13 @@ class WeekDayIndexer(Indexer):
 
 class ContainsIndexer(Indexer):
     def validate_can_be_indexed(self, value):
-        return isinstance(value, basestring) and len(value) < 500
+        return isinstance(value, basestring) and len(value) <= 500
 
     def prep_value_for_database(self, value):
         result = []
         if value:
             length = len(value)
-            result = [value[i:j + 1] for i in xrange(length) for j in xrange(i, length)]
+            result = list(set([value[i:j + 1] for i in xrange(length) for j in xrange(i, length)]))
             if len(result) > 500:
                 raise ValueError("Can't index for contains query, this value has too many permuatations")
 
