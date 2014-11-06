@@ -8,10 +8,8 @@ from djangae.db.backends.appengine.dbapi import NotSupportedError, CouldBeSuppor
 class SkipUnsupportedTestResult(TextTestResult):
 
     def addError(self, test, err):
-        if err[0] == NotSupportedError:
+        if err[0] in (NotSupportedError, CouldBeSupportedError):
             self.addExpectedFailure(test, err)
-        elif err[0] == CouldBeSupportedError:
-            self.addSkip(test, "This test could be supported by Djangae, but currently isn't")
         else:
             super(SkipUnsupportedTestResult, self).addError(test, err)
 
