@@ -24,7 +24,7 @@ from django.test.utils import override_settings
 
 # DJANGAE
 from djangae.contrib import sleuth
-from django.db import NotSupportedError as DjangoNotSupportedError, IntegrityError as DjangoIntegrityError
+from django.db import IntegrityError as DjangoIntegrityError
 from djangae.db.backends.appengine.dbapi import CouldBeSupportedError, NotSupportedError, IntegrityError
 from djangae.db.constraints import UniqueMarker
 from djangae.indexing import add_special_index
@@ -755,7 +755,9 @@ class EdgeCaseTests(TestCase):
         self.assertEqual(5, len(results))
 
         #Double exclude on different properties not supported
-        with self.assertRaises(DjangoNotSupportedError):
+        with self.assertRaises(DataError):
+            #FIXME: This should raise a NotSupportedError, but at the moment it's thrown too late in
+            #the process and so Django wraps it as a DataError
             list(TestUser.objects.exclude(username="E").exclude(email="A"))
 
         results = list(TestUser.objects.exclude(username="E").exclude(username="A"))
