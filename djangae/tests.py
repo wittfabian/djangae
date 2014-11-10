@@ -836,11 +836,11 @@ class EdgeCaseTests(TestCase):
         self.assertFalse(count)
 
     def test_insert_with_existing_key(self):
-        user = TestUser.objects.create(id=1, username="test1", last_login=datetime.datetime.now().date())
-        self.assertEqual(1, user.pk)
+        user = TestUser.objects.create(id=999, username="test1", last_login=datetime.datetime.now().date())
+        self.assertEqual(999, user.pk)
 
         with self.assertRaises(DjangoIntegrityError):
-            TestUser.objects.create(id=1, username="test2", last_login=datetime.datetime.now().date())
+            TestUser.objects.create(id=999, username="test2", last_login=datetime.datetime.now().date())
 
     def test_included_pks(self):
         ids = [ TestUser.objects.get(username="B").pk, TestUser.objects.get(username="A").pk ]

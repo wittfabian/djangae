@@ -812,6 +812,16 @@ class InsertCommand(object):
                             constraints.release_markers(markers)
                             raise
 
+                # Make sure we notify app engine that we are using this ID
+                # FIXME: Copy ancestor across to the template key
+                id_or_name = key.id_or_name()
+                if isinstance(id_or_name, (int, long)):
+                    try:
+                        db.allocate_id_range(datastore.Key.from_path(key.kind(), 1), id_or_name, id_or_name)
+                    except:
+                        # We don't re-raise because it's not terminal, but if this happens we need to know why
+                        logging.exception("An error occurred when notifying app engine that an ID has been used. Please report.")
+
                 txn()
 
             return results
