@@ -522,11 +522,20 @@ class SelectCommand(object):
                 direction = datastore.Query.ASCENDING if order == 1 else datastore.Query.DESCENDING
                 order = self.queried_fields[0]
             else:
-                direction = datastore.Query.DESCENDING if order.startswith("-") else datastore.Query.ASCENDING
-                order = order.lstrip("-")
+                if order != "?":
+                    direction = datastore.Query.DESCENDING if order.startswith("-") else datastore.Query.ASCENDING
+                    order = order.lstrip("-")
+                else:
+                    logging.warning("Random ordering is not supported, no ordering will be applied")
+                    continue
 
             if order == self.model._meta.pk.column or order == "pk":
                 order = "__key__"
+
+            #Flip the ordering if someone called reverse() on the queryset
+            if not self.original_query.standard_ordering:
+                direction = datastore.Query.DESCENDING if direction == datastore.Query.ASCENDING else datastore.Query.ASCENDING
+
             ordering.append((order, direction))
 
         def process_and_branch(query, and_branch):
