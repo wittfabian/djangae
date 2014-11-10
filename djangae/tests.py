@@ -43,6 +43,7 @@ try:
 except ImportError:
     webtest = NotImplemented
 
+
 class TestUser(models.Model):
     username = models.CharField(max_length=32)
     email = models.EmailField()
@@ -51,6 +52,7 @@ class TestUser(models.Model):
 
     def __unicode__(self):
         return self.username
+
 
 class UniqueModel(models.Model):
     unique_field = models.CharField(max_length=100, unique=True)
@@ -64,9 +66,11 @@ class UniqueModel(models.Model):
             ("unique_combo_one", "unique_combo_two")
         ]
 
+
 class TestFruit(models.Model):
     name = models.CharField(primary_key=True, max_length=32)
     color = models.CharField(max_length=32)
+
 
 class Permission(models.Model):
     user = models.ForeignKey(TestUser)
@@ -94,12 +98,15 @@ class MultiTableChildOne(MultiTableParent):
 class MultiTableChildTwo(MultiTableParent):
     child_two_field = models.CharField(max_length=32)
 
+
 class Relation(models.Model):
     pass
+
 
 class Related(models.Model):
     headline = models.CharField(max_length=500)
     relation = models.ForeignKey(Relation)
+
 
 class CachingTests(TestCase):
     def test_query_is_unique(self):
@@ -151,16 +158,16 @@ class CachingTests(TestCase):
         self.assertFalse(caching.context.cache)
 
     def test_insert_then_unique_query_returns_from_cache(self):
-        UniqueModel.objects.create(unique_field="test") #Create an instance
+        UniqueModel.objects.create(unique_field="test")  # Create an instance
 
-        #With the context cache enabled, make sure we don't hit the DB
+        # With the context cache enabled, make sure we don't hit the DB
         with sleuth.watch("google.appengine.api.datastore.Query.Run") as rpc_wrapper:
             with sleuth.watch("djangae.db.backends.appengine.caching.get_from_cache") as cache_hit:
                 instance_from_cache = UniqueModel.objects.get(unique_field="test")
                 self.assertTrue(cache_hit.called)
                 self.assertFalse(rpc_wrapper.called)
 
-        #Disable the context cache, make sure that we hit the database
+        # Disable the context cache, make sure that we hit the database
         with caching.disable_context_cache():
             with sleuth.watch("google.appengine.api.datastore.Query.Run") as rpc_wrapper:
                 with sleuth.watch("djangae.db.backends.appengine.caching.get_from_cache") as cache_hit:
@@ -190,7 +197,6 @@ class CachingTests(TestCase):
             self.assertEqual(query.call_count, 2)
 
 
-
 class BackendTests(TestCase):
     def test_entity_matches_query(self):
         entity = datastore.Entity("test_model")
@@ -216,17 +222,16 @@ class BackendTests(TestCase):
         query["name ="] = "Fred"
         self.assertFalse(entity_matches_query(entity, query))
 
-        #If the entity has a list field, then if any of them match the
-        #query then it's a match
+        # If the entity has a list field, then if any of them match the
+        # query then it's a match
         entity["name"] = [ "Bob", "Fred", "Dave" ]
-        self.assertTrue(entity_matches_query(entity, query)) #ListField test
-
+        self.assertTrue(entity_matches_query(entity, query))  # ListField test
 
     def test_gae_conversion(self):
-        #A PK IN query should result in a single get by key
+        # A PK IN query should result in a single get by key
 
         with sleuth.switch("djangae.db.backends.appengine.commands.datastore.Get", lambda *args, **kwargs: []) as get_mock:
-            list(TestUser.objects.filter(pk__in=[1, 2, 3])) #Force the query to run
+            list(TestUser.objects.filter(pk__in=[1, 2, 3]))  # Force the query to run
             self.assertEqual(1, get_mock.call_count)
 
         with sleuth.switch("djangae.db.backends.appengine.commands.datastore.Query.Run", lambda *args, **kwargs: []) as query_mock:
@@ -246,6 +251,7 @@ class BackendTests(TestCase):
             with sleuth.switch("djangae.db.backends.appengine.commands.datastore.MultiQuery.Run", lambda *args, **kwargs: []) as query_mock:
                 list(TestUser.objects.exclude(username__startswith="test"))
                 self.assertEqual(1, query_mock.call_count)
+
 
 class ModelFormsetTest(TestCase):
     def test_reproduce_index_error(self):
@@ -474,15 +480,18 @@ class QueryNormalizationTests(TestCase):
 class ModelWithUniques(models.Model):
     name = models.CharField(max_length=64, unique=True)
 
+
 class ModelWithDates(models.Model):
     start = models.DateField()
     end = models.DateField()
+
 
 class ModelWithUniquesAndOverride(models.Model):
     name = models.CharField(max_length=64, unique=True)
 
     class Djangae:
         disable_constraint_checks = False
+
 
 class ConstraintTests(TestCase):
     """
@@ -499,8 +508,9 @@ class ConstraintTests(TestCase):
         qry = datastore.Query(UniqueMarker.kind())
         qry.Order(("created", datastore.Query.DESCENDING))
 
-        marker = [ x for x in qry.Run()][0]
-        self.assertEqual(datastore.Key(marker["instance"]), datastore.Key.from_path(instance._meta.db_table, instance.pk)) #Make sure we assigned the instance
+        marker = [x for x in qry.Run()][0]
+        # Make sure we assigned the instance
+        self.assertEqual(datastore.Key(marker["instance"]), datastore.Key.from_path(instance._meta.db_table, instance.pk))
 
         expected_marker = "{}|name:{}".format(ModelWithUniques._meta.db_table, md5("One").hexdigest())
         self.assertEqual(expected_marker, marker.key().id_or_name())
@@ -509,8 +519,9 @@ class ConstraintTests(TestCase):
         instance.save()
 
         self.assertEqual(1, datastore.Query(UniqueMarker.kind()).Count() - initial_count)
-        marker = [ x for x in qry.Run()][0]
-        self.assertEqual(datastore.Key(marker["instance"]), datastore.Key.from_path(instance._meta.db_table, instance.pk)) #Make sure we assigned the instance
+        marker = [x for x in qry.Run()][0]
+        # Make sure we assigned the instance
+        self.assertEqual(datastore.Key(marker["instance"]), datastore.Key.from_path(instance._meta.db_table, instance.pk))
 
         expected_marker = "{}|name:{}".format(ModelWithUniques._meta.db_table, md5("Two").hexdigest())
         self.assertEqual(expected_marker, marker.key().id_or_name())
@@ -540,16 +551,15 @@ class ConstraintTests(TestCase):
         qry.Order(("created", datastore.Query.DESCENDING))
 
         marker = [ x for x in qry.Run()][0]
-        self.assertEqual(datastore.Key(marker["instance"]), datastore.Key.from_path(instance._meta.db_table, instance.pk)) #Make sure we assigned the instance
+        # Make sure we assigned the instance
+        self.assertEqual(datastore.Key(marker["instance"]), datastore.Key.from_path(instance._meta.db_table, instance.pk))
 
         expected_marker = "{}|name:{}".format(ModelWithUniques._meta.db_table, md5("One").hexdigest())
         self.assertEqual(expected_marker, marker.key().id_or_name())
 
         instance.name = "Two"
 
-
         from djangae.db.backends.appengine.commands import datastore as to_patch
-
 
         try:
             original = to_patch.Put
@@ -570,8 +580,9 @@ class ConstraintTests(TestCase):
             to_patch.Put = original
 
         self.assertEqual(1, datastore.Query(UniqueMarker.kind()).Count() - initial_count)
-        marker = [ x for x in qry.Run()][0]
-        self.assertEqual(datastore.Key(marker["instance"]), datastore.Key.from_path(instance._meta.db_table, instance.pk)) #Make sure we assigned the instance
+        marker = [x for x in qry.Run()][0]
+        # Make sure we assigned the instance
+        self.assertEqual(datastore.Key(marker["instance"]), datastore.Key.from_path(instance._meta.db_table, instance.pk))
 
         expected_marker = "{}|name:{}".format(ModelWithUniques._meta.db_table, md5("One").hexdigest())
         self.assertEqual(expected_marker, marker.key().id_or_name())
@@ -625,11 +636,9 @@ class ConstraintTests(TestCase):
     def test_constraints_can_be_enabled_per_model(self):
 
         initial_count = datastore.Query(UniqueMarker.kind()).Count()
-
-        instance1 = ModelWithUniquesAndOverride.objects.create(name="One")
+        ModelWithUniquesAndOverride.objects.create(name="One")
 
         self.assertEqual(1, datastore.Query(UniqueMarker.kind()).Count() - initial_count)
-
 
 
 class EdgeCaseTests(TestCase):
@@ -645,7 +654,6 @@ class EdgeCaseTests(TestCase):
         self.apple = TestFruit.objects.create(name="apple", color="red")
         self.banana = TestFruit.objects.create(name="banana", color="yellow")
 
-
     def test_querying_by_date(self):
         instance1 = ModelWithDates.objects.create(start=datetime.date(2014, 1, 1), end=datetime.date(2014, 1, 20))
         instance2 = ModelWithDates.objects.create(start=datetime.date(2014, 2, 1), end=datetime.date(2014, 2, 20))
@@ -655,7 +663,6 @@ class EdgeCaseTests(TestCase):
 
         self.assertEqual(instance2, ModelWithDates.objects.get(start__gt=datetime.date(2014, 1, 2)))
         self.assertEqual(instance2, ModelWithDates.objects.get(start__gte=datetime.date(2014, 2, 1)))
-
 
     def test_double_starts_with(self):
         qs = TestUser.objects.filter(username__startswith='Hello') |  TestUser.objects.filter(username__startswith='Goodbye')
@@ -710,7 +717,6 @@ class EdgeCaseTests(TestCase):
 
         self.assertEqual(child2, MultiTableChildTwo.objects.get(pk=child2.pk))
         self.assertTrue(MultiTableParent.objects.filter(pk=child2.pk).exists())
-
 
     def test_anding_pks(self):
         results = TestUser.objects.filter(id__exact=self.u1.pk).filter(id__exact=self.u2.pk)
@@ -808,7 +814,6 @@ class EdgeCaseTests(TestCase):
         results = TestUser.objects.all().extra(select={'truthy': True})
         self.assertEqual(all([x.truthy for x in results]), True)
 
-
     def test_counts(self):
         self.assertEqual(5, TestUser.objects.count())
         self.assertEqual(2, TestUser.objects.filter(email="test3@example.com").count())
@@ -818,21 +823,16 @@ class EdgeCaseTests(TestCase):
 
     def test_deletion(self):
         count = TestUser.objects.count()
-
         self.assertTrue(count)
 
         TestUser.objects.filter(username="A").delete()
-
         self.assertEqual(count - 1, TestUser.objects.count())
 
         TestUser.objects.filter(username="B").exclude(username="B").delete() #Should do nothing
-
         self.assertEqual(count - 1, TestUser.objects.count())
 
         TestUser.objects.all().delete()
-
         count = TestUser.objects.count()
-
         self.assertFalse(count)
 
     def test_insert_with_existing_key(self):
@@ -1003,6 +1003,7 @@ class BlobstoreFileUploadHandlerTest(TestCase):
         )
         self.assertIsNotNone(self.uploader.blobkey)
 
+
 class ApplicationTests(TestCase):
 
     @unittest.skipIf(webtest is NotImplemented, "pip install webtest to run functional tests")
@@ -1053,6 +1054,7 @@ class ComputedFieldTests(TestCase):
 class ModelWithCounter(models.Model):
     counter = ShardedCounterField()
 
+
 class ShardedCounterTest(TestCase):
     def test_basic_usage(self):
         instance = ModelWithCounter.objects.create()
@@ -1082,6 +1084,7 @@ class ShardedCounterTest(TestCase):
 class IterableFieldModel(models.Model):
     set_field = SetField(models.CharField(max_length=1))
     list_field = ListField(models.CharField(max_length=1))
+
 
 class IterableFieldTests(TestCase):
     def test_empty_iterable_fields(self):

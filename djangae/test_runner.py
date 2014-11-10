@@ -1,5 +1,32 @@
-
 from django.test.simple import DjangoTestSuiteRunner
 
+import unittest
+from unittest import TextTestResult
+
+from djangae.db.backends.appengine.dbapi import NotSupportedError, CouldBeSupportedError
+
+class SkipUnsupportedTestResult(TextTestResult):
+
+    def addError(self, test, err):
+        if err[0] in (NotSupportedError, CouldBeSupportedError):
+            self.addExpectedFailure(test, err)
+        else:
+            super(SkipUnsupportedTestResult, self).addError(test, err)
+
 class DjangaeTestSuiteRunner(DjangoTestSuiteRunner):
-    pass
+    def run_suite(self, suite, **kwargs):
+        try:
+            from django.contrib.contenttypes import models
+
+            class Djangae:
+                disable_constraint_checks = True
+
+            setattr(models.ContentType, "Djangae", Djangae)
+
+            return unittest.TextTestRunner(
+                verbosity=self.verbosity,
+                failfast=self.failfast,
+                resultclass=SkipUnsupportedTestResult
+            ).run(suite)
+        finally:
+            delattr(models.ContentType, "Djangae")

@@ -13,6 +13,7 @@ from django.conf import settings
 
 DJANGAE_LOG = logging.getLogger("djangae")
 
+
 def constraint_checks_enabled(model_or_instance):
     """
         Returns true if constraint checking is enabled on the model
@@ -37,27 +38,27 @@ class UniqueMarker(db.Model):
     def kind():
         return "__unique_marker"
 
+
 def acquire_identifiers(identifiers, entity_key):
     @db.transactional(propagation=TransactionOptions.INDEPENDENT, xg=True)
     def acquire_marker(identifier):
         identifier_key = Key.from_path(UniqueMarker.kind(), identifier)
 
-
         marker = UniqueMarker.get(identifier_key)
         if marker:
-            #If the marker instance is None, and the marker is older then 5 seconds then we wipe it out
-            #and assume that it's stale.
+            # If the marker instance is None, and the marker is older then 5 seconds then we wipe it out
+            # and assume that it's stale.
             if not marker.instance and (datetime.datetime.utcnow() - marker.created).seconds > 5:
                 marker.delete()
             elif marker.instance and Key(marker.instance) != entity_key and key_exists(Key(marker.instance)):
                 raise IntegrityError("Unable to acquire marker for %s" % identifier)
             else:
-                #The marker is ours anyway
+                # The marker is ours anyway
                 return marker
 
         marker = UniqueMarker(
             key=identifier_key,
-            instance=str(entity_key) if entity_key.id_or_name() else None, #May be None if unsaved
+            instance=str(entity_key) if entity_key.id_or_name() else None,  # May be None if unsaved
             created=datetime.datetime.utcnow()
         )
         marker.put()
@@ -89,6 +90,7 @@ def get_markers_for_update(model, old_entity, new_entity):
 
     return to_acquire, to_release
 
+
 def update_instance_on_markers(entity, markers):
 
     @db.transactional(propagation=TransactionOptions.INDEPENDENT)
@@ -104,6 +106,7 @@ def update_instance_on_markers(entity, markers):
     for marker in markers:
         update(marker, instance)
 
+
 def acquire_bulk(model, entities):
     markers = []
     try:
@@ -115,6 +118,7 @@ def acquire_bulk(model, entities):
             release_markers(m)
         raise
     return markers
+
 
 def acquire(model, entity):
     """
@@ -131,17 +135,19 @@ def release_markers(markers):
     def delete(marker):
         Delete(marker.key())
 
-    [ delete(x) for x in markers ]
+    [delete(x) for x in markers]
+
 
 def release_identifiers(identifiers):
 
     @db.non_transactional
     def delete():
-        keys = [ Key.from_path(UniqueMarker.kind(), x) for x in identifiers ]
+        keys = [Key.from_path(UniqueMarker.kind(), x) for x in identifiers]
         Delete(keys)
 
     delete()
     DJANGAE_LOG.debug("Deleted markers with identifiers: %s", identifiers)
+
 
 def release(model, entity):
     identifiers = unique_identifiers_from_entity(model, entity, ignore_pk=True)

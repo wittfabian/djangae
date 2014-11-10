@@ -6,12 +6,13 @@ from djangae.db.backends.appengine.dbapi import NotSupportedError
 
 from google.appengine.api import datastore
 
+
 def process_literal(node, filtered_columns=[], negated=False):
     column, op, value = node[1]
     if filtered_columns is not None:
         assert isinstance(filtered_columns, set)
         filtered_columns.add(column)
-    if op == 'in': # Explode INs into OR
+    if op == 'in':  # Explode INs into OR
         if not isinstance(value, (list, tuple, set)):
             raise ValueError("IN queries must be supplied a list of values")
         if negated:
@@ -32,7 +33,7 @@ def process_literal(node, filtered_columns=[], negated=False):
         raise NotSupportedError("Unsupported operator %s" % op)
     _op = OPERATORS_MAP[op]
 
-    if negated and _op == '=': # Explode
+    if negated and _op == '=':  # Explode
         return ('OR', [('LIT', (column, '>', value)), ('LIT', (column, '<', value))]), filtered_columns
     return ('LIT', (column, _op, value)), filtered_columns
 
@@ -54,22 +55,22 @@ def parse_dnf(node, connection):
         tree = tripled(tree)
 
     elif filtered_columns:
-        #If there was no tree returned, but we did filter on something
-        #then we must have an empty result set (e.g. we filtered on an empty list)
+        # If there was no tree returned, but we did filter on something
+        # then we must have an empty result set (e.g. we filtered on an empty list)
         raise EmptyResultSet()
 
     if tree and tree[0] != 'OR':
         tree = ('OR', [tree])
 
-    #If there are more than 30 filters, and not all filters are PK filters
+    # If there are more than 30 filters, and not all filters are PK filters
     if tree and len(tree[-1]) > 30:
 
         for and_branch in tree[-1]:
-            for lit in and_branch: #Go through each literal tuple
-                if isinstance(lit[-1], datastore.Key): #If the value is a key, then break the loop
+            for lit in and_branch:  # Go through each literal tuple
+                if isinstance(lit[-1], datastore.Key):  # If the value is a key, then break the loop
                     break
             else:
-                #If we didn't find a literal with a datastore Key, then raise unsupported
+                # If we didn't find a literal with a datastore Key, then raise unsupported
                 raise NotSupportedError("The datastore doesn't support this query, more than 30 filters were needed")
 
     return tree, filtered_columns
@@ -126,7 +127,7 @@ def tripled(node):
                     new_children.append(x)
             else:
                 new_children.append(child)
-        if is_reduction == True:
+        if is_reduction:
             return tripled(('AND', new_children))
         else:
             is_or = False
@@ -150,7 +151,7 @@ def tripled(node):
                     product_pipe.append([child])
             if is_or == False:
                 # If there are only literals then there is nothing we can do
-                return ('AND', children)
+                return 'AND', children
             else:
                 # If there is an OR then we can do crazy product
                 def flatten(container):
@@ -163,7 +164,7 @@ def tripled(node):
                                 yield j
                         else:
                             yield i
-                return ('OR', [('AND', list(flatten(x))) for x in product(*product_pipe)])
+                return 'OR', [('AND', list(flatten(x))) for x in product(*product_pipe)]
     elif node[0] == 'OR':
         children = []
         for child in node[1]:
@@ -173,4 +174,4 @@ def tripled(node):
                     children.append(child)
             else:
                 children.append(_proc)
-        return ('OR', children)
+        return 'OR', children

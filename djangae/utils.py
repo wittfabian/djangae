@@ -35,7 +35,7 @@ def application_id():
         result = None
 
     if not result:
-        #Apparently we aren't running live, probably inside a management command
+        # Apparently we aren't running live, probably inside a management command
         from google.appengine.api import appinfo
 
         info = appinfo.LoadSingleAppInfo(open(os.path.join(find_project_root(), "app.yaml")))
@@ -50,7 +50,7 @@ def application_id():
 def appengine_on_path():
     try:
         from google.appengine.api import apiproxy_stub_map
-        apiproxy_stub_map #Silence pylint
+        apiproxy_stub_map  # Silence pylint
         return True
     except ImportError:
         return False

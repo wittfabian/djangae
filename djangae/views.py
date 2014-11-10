@@ -8,6 +8,7 @@ from django.views.decorators.csrf import csrf_exempt
 
 from djangae.utils import on_production
 
+
 def warmup(request):
     """
         Provides default procedure for handling warmup requests on App
@@ -21,6 +22,7 @@ def warmup(request):
                 pass
     content_type = 'text/plain; charset=%s' % settings.DEFAULT_CHARSET
     return HttpResponse("Warmup done.", content_type=content_type)
+
 
 @csrf_exempt
 def deferred(request):

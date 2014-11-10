@@ -170,7 +170,7 @@ class GaeUserManager(UserManager):
 
     def pre_create_google_user(self, email, **extra_fields):
         """ Pre-create a User object for a user who will later log in via Google Accounts. """
-        values  = dict(
+        values = dict(
             # defaults which can be overriden
             is_active=True,
         )
@@ -211,7 +211,6 @@ class GaeAbstractUser(AbstractBaseUser):
         )
     )
     date_joined = models.DateTimeField(_('date joined'), default=timezone.now)
-
 
     USERNAME_FIELD = 'username'
     REQUIRED_FIELDS = ['email']
