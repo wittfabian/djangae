@@ -15,18 +15,8 @@ class SkipUnsupportedTestResult(TextTestResult):
 
 class DjangaeTestSuiteRunner(DjangoTestSuiteRunner):
     def run_suite(self, suite, **kwargs):
-        try:
-            from django.contrib.contenttypes import models
-
-            class Djangae:
-                disable_constraint_checks = True
-
-            setattr(models.ContentType, "Djangae", Djangae)
-
-            return unittest.TextTestRunner(
-                verbosity=self.verbosity,
-                failfast=self.failfast,
-                resultclass=SkipUnsupportedTestResult
-            ).run(suite)
-        finally:
-            delattr(models.ContentType, "Djangae")
+        return unittest.TextTestRunner(
+            verbosity=self.verbosity,
+            failfast=self.failfast,
+            resultclass=SkipUnsupportedTestResult
+        ).run(suite)
