@@ -13,15 +13,13 @@ except ImportError:
         pass
 
 #DJANGAE
-from djangae.db.backends.appengine.query import Query
 from .commands import InsertCommand, SelectCommand, UpdateCommand, DeleteCommand
 
 
 class SQLCompiler(compiler.SQLCompiler):
-    query_class = Query
-
     def as_sql(self):
         self.pre_sql_setup()
+        self.refcounts_before = self.query.alias_refcount.copy()
         select = SelectCommand(
             self.connection,
             self.query
@@ -41,7 +39,6 @@ class SQLInsertCompiler(compiler.SQLInsertCompiler, SQLCompiler):
 
 class SQLDeleteCompiler(compiler.SQLDeleteCompiler, SQLCompiler):
     def as_sql(self):
-        self.pre_sql_setup()
         return (DeleteCommand(self.connection, self.query), [])
 
 
