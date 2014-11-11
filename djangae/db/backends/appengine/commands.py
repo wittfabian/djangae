@@ -13,6 +13,7 @@ from django.db.models import Field
 from django.db.models.sql.datastructures import EmptyResultSet
 from django.db.models.sql.where import AND, OR, Constraint
 from django.db.models.sql.where import EmptyWhere
+from django.db.models.query_utils import InvalidQuery
 from django import dispatch
 from google.appengine.api import datastore, datastore_errors
 from google.appengine.api.datastore import Query
