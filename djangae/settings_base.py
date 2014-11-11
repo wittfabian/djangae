@@ -43,8 +43,6 @@ LOGGING = {
     }
 }
 
-
-TEST_RUNNER = 'djangae.test_runner.DjangaeTestSuiteRunner'
 EMAIL_BACKEND = 'djangae.mail.AsyncEmailBackend'
 
 # Setting to *.appspot.com is OK, because GAE takes care of domain routing
