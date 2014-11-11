@@ -327,6 +327,9 @@ class SelectCommand(object):
                     log_once(DJANGAE_LOG.warning, "The following orderings were ignored as cross-table orderings are not supported on the datastore: %s", diff)
                 self.ordering = ordering
 
+        if "?" in self.ordering:
+            raise NotSupportedError("Random ordering is not supported on the datastore")
+
         # If the query uses defer()/only() then we need to process deferred. We have to get all deferred columns
         # for all (concrete) inherited models and then only include columns if they appear in that list
         deferred_columns = {}
@@ -518,16 +521,12 @@ class SelectCommand(object):
 
         ordering = []
         for order in self.ordering:
-            if isinstance(order, int):
+            if isinstance(order, (long, int)):
                 direction = datastore.Query.ASCENDING if order == 1 else datastore.Query.DESCENDING
                 order = self.queried_fields[0]
             else:
-                if order != "?":
-                    direction = datastore.Query.DESCENDING if order.startswith("-") else datastore.Query.ASCENDING
-                    order = order.lstrip("-")
-                else:
-                    logging.warning("Random ordering is not supported, no ordering will be applied")
-                    continue
+                direction = datastore.Query.DESCENDING if order.startswith("-") else datastore.Query.ASCENDING
+                order = order.lstrip("-")
 
             if order == self.model._meta.pk.column or order == "pk":
                 order = "__key__"
