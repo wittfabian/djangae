@@ -21,6 +21,7 @@ class SQLCompiler(compiler.SQLCompiler):
     query_class = Query
 
     def as_sql(self):
+        self.pre_sql_setup()
         select = SelectCommand(
             self.connection,
             self.query
@@ -34,11 +35,13 @@ class SQLInsertCompiler(compiler.SQLInsertCompiler, SQLCompiler):
         super(SQLInsertCompiler, self).__init__(*args, **kwargs)
 
     def as_sql(self):
+        self.pre_sql_setup()
         return [ (InsertCommand(self.connection, self.query.model, self.query.objs, self.query.fields, self.query.raw), []) ]
 
 
 class SQLDeleteCompiler(compiler.SQLDeleteCompiler, SQLCompiler):
     def as_sql(self):
+        self.pre_sql_setup()
         return (DeleteCommand(self.connection, self.query), [])
 
 
@@ -48,6 +51,7 @@ class SQLUpdateCompiler(compiler.SQLUpdateCompiler, SQLCompiler):
         super(SQLUpdateCompiler, self).__init__(*args, **kwargs)
 
     def as_sql(self):
+        self.pre_sql_setup()
         return (UpdateCommand(self.connection, self.query), [])
 
 
