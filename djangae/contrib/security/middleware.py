@@ -11,7 +11,7 @@ import yaml
 from google.appengine.api import urlfetch
 
 from django.conf import settings
-
+from django.core.exceptions import MiddlewareNotUsed
 
 class ApiSecurityException(Exception):
     """Error when attempting to call an unsafe API."""
@@ -134,8 +134,6 @@ def _HttpUrlLoggingWrapper(func):
         return func(*args, **kwargs)
     return _CheckAndLog
 
-_PATCHES_APPLIED = False
-
 
 class AppEngineSecurityMiddleware(object):
     """
@@ -145,38 +143,36 @@ class AppEngineSecurityMiddleware(object):
 
         You should add this middleware first in your middleware classes
     """
-    def process_request(self, request):
-        global _PATCHES_APPLIED
 
-        if not _PATCHES_APPLIED:
-            # json module does not escape HTML metacharacters by default.
-            replace_default_argument(json.dump, 'cls', _JsonEncoderForHtml)
-            replace_default_argument(json.dumps, 'cls', _JsonEncoderForHtml)
+    def __init__(self, *args, **kwargs):
+        # json module does not escape HTML metacharacters by default.
+        replace_default_argument(json.dump, 'cls', _JsonEncoderForHtml)
+        replace_default_argument(json.dumps, 'cls', _JsonEncoderForHtml)
 
-            # Make pickle safe
-            pickle.load = _SafePickleLoad
-            pickle.loads = _SafePickleLoads
-            cPickle.load = _SafePickleLoad
-            cPickle.loads = _SafePickleLoads
+        # Make pickle safe
+        pickle.load = _SafePickleLoad
+        pickle.loads = _SafePickleLoads
+        cPickle.load = _SafePickleLoad
+        cPickle.loads = _SafePickleLoads
 
-            # YAML.  The Python tag scheme allows arbitrary code execution:
-            # yaml.load('!!python/object/apply:os.system ["ls"]')
-            replace_default_argument(yaml.compose, 'Loader', yaml.loader.SafeLoader)
-            replace_default_argument(yaml.compose_all, 'Loader', yaml.loader.SafeLoader)
-            replace_default_argument(yaml.load, 'Loader', yaml.loader.SafeLoader)
-            replace_default_argument(yaml.load_all, 'Loader', yaml.loader.SafeLoader)
-            replace_default_argument(yaml.parse, 'Loader', yaml.loader.SafeLoader)
-            replace_default_argument(yaml.scan, 'Loader', yaml.loader.SafeLoader)
+        # YAML.  The Python tag scheme allows arbitrary code execution:
+        # yaml.load('!!python/object/apply:os.system ["ls"]')
+        replace_default_argument(yaml.compose, 'Loader', yaml.loader.SafeLoader)
+        replace_default_argument(yaml.compose_all, 'Loader', yaml.loader.SafeLoader)
+        replace_default_argument(yaml.load, 'Loader', yaml.loader.SafeLoader)
+        replace_default_argument(yaml.load_all, 'Loader', yaml.loader.SafeLoader)
+        replace_default_argument(yaml.parse, 'Loader', yaml.loader.SafeLoader)
+        replace_default_argument(yaml.scan, 'Loader', yaml.loader.SafeLoader)
 
-            # AppEngine urlfetch.
-            # Does not validate certificates by default.
-            replace_default_argument(urlfetch.fetch, 'validate_certificate', True)
-            replace_default_argument(urlfetch.make_fetch_call, 'validate_certificate', True)
-            urlfetch.fetch = _HttpUrlLoggingWrapper(urlfetch.fetch)
-            urlfetch.make_fetch_call = _HttpUrlLoggingWrapper(urlfetch.make_fetch_call)
+        # AppEngine urlfetch.
+        # Does not validate certificates by default.
+        replace_default_argument(urlfetch.fetch, 'validate_certificate', True)
+        replace_default_argument(urlfetch.make_fetch_call, 'validate_certificate', True)
+        urlfetch.fetch = _HttpUrlLoggingWrapper(urlfetch.fetch)
+        urlfetch.make_fetch_call = _HttpUrlLoggingWrapper(urlfetch.make_fetch_call)
 
-            for setting in ("CSRF_COOKIE_SECURE", "SESSION_COOKIE_HTTPONLY", "SESSION_COOKIE_SECURE"):
-                if not getattr(settings, setting, False):
-                    logging.warning("settings.%s is not set to True, this is insecure", setting)
+        for setting in ("CSRF_COOKIE_SECURE", "SESSION_COOKIE_HTTPONLY", "SESSION_COOKIE_SECURE"):
+            if not getattr(settings, setting, False):
+                logging.warning("settings.%s is not set to True, this is insecure", setting)
 
-            _PATCHES_APPLIED = True
+        raise MiddlewareNotUsed()
