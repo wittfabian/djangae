@@ -290,6 +290,28 @@ class UniqueQuery(object):
             return self._gae_query.Count(limit=limit, offset=offset)
         return 1
 
+def _convert_ordering(query):
+    if not query.default_ordering:
+        result = query.order_by
+    else:
+        result = query.order_by or query.get_meta().ordering
+
+    if result:
+        # We factor out cross-table orderings (rather than raising NotSupportedError) otherwise we'll break
+        # the admin which uses them. We log a warning when this happens though
+        ordering = [ x for x in result if not (isinstance(x, basestring) and "__" in x) ]
+        if len(ordering) < len(result):
+            diff = set(result) - set(ordering)
+            log_once(
+                DJANGAE_LOG.warning if not on_production() else DJANGAE_LOG.debug,
+                "The following orderings were ignored as cross-table orderings are not supported on the datastore: %s", diff
+            )
+        result = ordering
+
+    if "?" in result:
+        raise NotSupportedError("Random ordering is not supported on the datastore")
+
+    return result
 
 class SelectCommand(object):
     def __init__(self, connection, query, keys_only=False):
@@ -313,22 +335,7 @@ class SelectCommand(object):
         self._set_db_table()
 
         self._validate_query_is_possible(query)
-
-        if not query.default_ordering:
-            self.ordering = query.order_by
-        else:
-            self.ordering = query.order_by or opts.ordering
-
-        if self.ordering:
-            ordering = [ x for x in self.ordering if not (isinstance(x, basestring) and "__" in x) ]
-            if len(ordering) < len(self.ordering):
-                if not on_production() and not in_testing():
-                    diff = set(self.ordering) - set(ordering)
-                    log_once(DJANGAE_LOG.warning, "The following orderings were ignored as cross-table orderings are not supported on the datastore: %s", diff)
-                self.ordering = ordering
-
-        if "?" in self.ordering:
-            raise NotSupportedError("Random ordering is not supported on the datastore")
+        self.ordering = _convert_ordering(query)
 
         # If the query uses defer()/only() then we need to process deferred. We have to get all deferred columns
         # for all (concrete) inherited models and then only include columns if they appear in that list
