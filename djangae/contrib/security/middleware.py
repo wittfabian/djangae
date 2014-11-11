@@ -1,11 +1,7 @@
 import __builtin__
-
-import cPickle
 import functools
-import io
 import json
 import logging
-import pickle
 import yaml
 
 from google.appengine.api import urlfetch
@@ -66,53 +62,6 @@ class _JsonEncoderForHtml(json.JSONEncoder):
                 chunk = chunk.replace(character, replacement)
             yield chunk
 
-
-# Pickle.  See http://www.cs.jhu.edu/~s/musings/pickle.html for more info.
-# Whitelist of module name => (module, [list of safe names])
-_PICKLE_CLASS_WHITELIST = {
-    '__builtin__': (__builtin__, [
-        'basestring',
-        'bool',
-        'buffer',
-        'bytearray',
-        'bytes',
-        'complex',
-        'dict',
-        'enumerate',
-        'float',
-        'frozenset',
-        'int',
-        'list',
-        'long',
-        'reversed',
-        'set',
-        'slice',
-        'str',
-        'tuple',
-        'unicode',
-        'xrange'
-    ]),
-}
-
-
-# See https://docs.python.org/3/library/pickle.html#restricting-globals.
-class RestrictedUnpickler(pickle.Unpickler):
-
-    def find_class(self, module_name, name):
-        (module, safe_names) = _PICKLE_CLASS_WHITELIST.get(module_name, (None, []))
-        if name in safe_names:
-            return getattr(module, name)
-        raise ApiSecurityException('%s.%s forbidden in unpickling' % (module, name))
-
-
-def _SafePickleLoad(f):
-    return RestrictedUnpickler(f).load()
-
-
-def _SafePickleLoads(string):
-    return RestrictedUnpickler(io.BytesIO(string)).load()
-
-
 def _HttpUrlLoggingWrapper(func):
     """Decorates func, logging when 'url' params do not start with https://."""
     @functools.wraps(func)
@@ -148,12 +97,6 @@ class AppEngineSecurityMiddleware(object):
         # json module does not escape HTML metacharacters by default.
         replace_default_argument(json.dump, 'cls', _JsonEncoderForHtml)
         replace_default_argument(json.dumps, 'cls', _JsonEncoderForHtml)
-
-        # Make pickle safe
-        pickle.load = _SafePickleLoad
-        pickle.loads = _SafePickleLoads
-        cPickle.load = _SafePickleLoad
-        cPickle.loads = _SafePickleLoads
 
         # YAML.  The Python tag scheme allows arbitrary code execution:
         # yaml.load('!!python/object/apply:os.system ["ls"]')
