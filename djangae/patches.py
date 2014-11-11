@@ -32,13 +32,6 @@ class SimulatedContentTypeManager(Manager):
             model = model._meta.proxy_for_model
         return model._meta
 
-    def __init__(self, *args, **kwargs):
-        self._store.queried_models = set()
-        self._store.constructed_instances = {}
-
-        self._repopulate_if_necessary()
-        super(SimulatedContentTypeManager, self).__init__(*args, **kwargs)
-
     def _update_queries(self, models):
         """
             This is just to satisfy the contenttypes tests which check that queries are executed at certain
@@ -55,6 +48,12 @@ class SimulatedContentTypeManager(Manager):
         self._store.queried_models |= set(models or [])
 
     def _repopulate_if_necessary(self, models=None):
+        if not hasattr(self._store, "queried_models"):
+            self._store.queried_models = set()
+
+        if not hasattr(self._store, "constructed_instances"):
+            self._store.constructed_instances = {}
+
         self._update_queries(models)
 
         if not hasattr(self._store, "content_types"):
@@ -116,7 +115,7 @@ class SimulatedContentTypeManager(Manager):
             del kwargs["pk"]
 
         if "id" in kwargs:
-            dic = self._get_from_store(kwargs["id"])
+            dic = self._get_from_store(int(kwargs["id"]))
         else:
             for ct in self._store.content_types.values():
                 for k, v in kwargs.items():
@@ -166,6 +165,13 @@ class SimulatedContentTypeManager(Manager):
     def filter(self, **kwargs):
         raise NotImplementedError()
 
+    def all(self, **kwargs):
+        result = []
+
+        for ct in self._store.content_types.keys():
+            result.append(self.get(id=ct))
+        return result
+
 
 def update_contenttypes(app, created_models, verbosity=2, db=DEFAULT_DB_ALIAS, **kwargs):
     """
@@ -179,12 +185,6 @@ def update_contenttypes(app, created_models, verbosity=2, db=DEFAULT_DB_ALIAS, *
     try:
         get_model('contenttypes', 'ContentType')
     except UnavailableApp:
-        return
-
-    from django.conf import settings
-    if getattr(settings, "DJANGAE_SIMULATE_CONTENTTYPES", False):
-        from django.contrib.contenttypes import models
-        models.ContentType.objects = SimulatedContentTypeManager()
         return
 
     if not router.allow_syncdb(db, ContentType):
@@ -270,4 +270,12 @@ If you're unsure, answer 'no'.
 
 from django.contrib.contenttypes.management import update_contenttypes as original
 signals.post_syncdb.disconnect(original)
-signals.post_syncdb.connect(update_contenttypes)
+
+from django.conf import settings
+if getattr(settings, "DJANGAE_SIMULATE_CONTENTTYPES", False):
+    from django.contrib.contenttypes import models
+
+    if not isinstance(models.ContentType.objects, SimulatedContentTypeManager):
+        models.ContentType.objects = SimulatedContentTypeManager()
+else:
+    signals.post_syncdb.connect(update_contenttypes)
