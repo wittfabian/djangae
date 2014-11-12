@@ -490,7 +490,10 @@ class SelectCommand(object):
         # Check for joins, we ignore select related tables as they aren't actually used (the connector marks select
         # related as unsupported in its features)
         tables = [ k for k, v in query.alias_refcount.items() if v ]
-        tables = [ x for x in tables if x not in [ y[0][0] for y in query.related_select_cols ]]
+        inherited_tables = set([x._meta.db_table for x in query.model._meta.parents ])
+        select_related_tables = set([y[0][0] for y in query.related_select_cols ])
+        tables = set(tables) - inherited_tables - select_related_tables
+
         if len(tables) > 1:
             raise NotSupportedError("""
                 The appengine database connector does not support JOINs. The requested join map follows\n
