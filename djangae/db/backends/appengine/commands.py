@@ -437,6 +437,10 @@ class SelectCommand(object):
             # Empty where means return nothing!
             raise EmptyResultSet()
         else:
+            where_tables = list(set([x[0] for x in query.where.get_cols() if x[0] ]))
+            if where_tables and where_tables != [ query.model._meta.db_table ]:
+                raise NotSupportedError("Cross-join WHERE constraints aren't supported: %s" % query.where.get_cols())
+
             from dnf import parse_dnf
             self.where, columns = parse_dnf(query.where, self.connection)
 
@@ -487,8 +491,14 @@ class SelectCommand(object):
             - The query does no joins
             - The query ordering is compatible with the filters
         """
-        # Check for joins
-        if query.count_active_tables() > 1:
+        # Check for joins, we ignore select related tables as they aren't actually used (the connector marks select
+        # related as unsupported in its features)
+        tables = [ k for k, v in query.alias_refcount.items() if v ]
+        inherited_tables = set([x._meta.db_table for x in query.model._meta.parents ])
+        select_related_tables = set([y[0][0] for y in query.related_select_cols ])
+        tables = set(tables) - inherited_tables - select_related_tables
+
+        if len(tables) > 1:
             raise NotSupportedError("""
                 The appengine database connector does not support JOINs. The requested join map follows\n
                 %s
