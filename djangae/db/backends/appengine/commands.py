@@ -437,6 +437,10 @@ class SelectCommand(object):
             # Empty where means return nothing!
             raise EmptyResultSet()
         else:
+            where_tables = list(set([x[0] for x in query.where.get_cols() if x[0] ]))
+            if where_tables and where_tables != [ query.model._meta.db_table ]:
+                raise NotSupportedError("Cross-join WHERE constraints aren't supported: %s" % query.where.get_cols())
+
             from dnf import parse_dnf
             self.where, columns = parse_dnf(query.where, self.connection)
 
