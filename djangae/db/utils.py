@@ -72,7 +72,7 @@ def normalise_field_value(value):
 
 
 def get_datastore_kind(model):
-    return model._meta.db_table
+    return get_top_concrete_parent(model)._meta.db_table
 
 
 def get_prepared_db_value(connection, instance, field, raw=False):

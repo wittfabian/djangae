@@ -892,7 +892,7 @@ class DeleteCommand(object):
         # sending it to delete, but I think this is the sacrifice to make for the unique caching layer
         keys = []
         for entity in QueryByKeys(
-                Query(self.select.model._meta.db_table),
+                Query(self.select.db_table),
                 [x.key() for x in self.select.results],
                 []
             ).Run():
