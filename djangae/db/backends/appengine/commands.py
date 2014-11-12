@@ -206,7 +206,7 @@ def _convert_entity_based_on_query_options(entity, opts):
 
     if opts.projection:
         for k in entity.keys()[:]:
-            if k not in opts.projection:
+            if k not in list(opts.projection) + ["class"]:
                 del entity[k]
 
     return entity
@@ -629,7 +629,7 @@ class SelectCommand(object):
 
             if all_queries_same_except_key(queries):
                 included_pks = [ qry["__key__ ="] for qry in queries ]
-                return QueryByKeys(queries[0], included_pks, ordering)  # Just use whatever query to determine the matches
+                return QueryByKeys(queries[0], included_pks, ordering) # Just use whatever query to determine the matches
             else:
                 if len(queries) > 1:
                     # Disable keys only queries for MultiQuery
