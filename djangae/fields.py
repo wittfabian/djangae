@@ -5,12 +5,11 @@ import random
 
 from django.db import models, router
 from django.utils.translation import ugettext_lazy as _
-from django.core.exceptions import ValidationError
+from django.core.exceptions import ValidationError, ImproperlyConfigured
 from django.db.models.fields.subclassing import Creator
 from django.utils.text import capfirst
 from django import forms
-from djangae.forms.fields import TrueOrNullFormField, IterableFieldModelChoiceFormField, ListFormField
-from django.db.models.loading import get_model
+from djangae.forms.fields import TrueOrNullFormField, ListFormField
 
 from djangae.db import transaction
 from djangae.models import CounterShard
@@ -108,17 +107,8 @@ class IterableField(models.Field):
 
         item_field_type = item_field_type or RawField()
 
-        self.fk_model = None
         if isinstance(item_field_type, models.ForeignKey):
-            self.fk_model = item_field_type.rel.to
-
-            if isinstance(self.fk_model, basestring):
-                self.fk_model = get_model(*self.fk_model.split("."))
-
-            if isinstance(self.fk_model._meta.pk, models.AutoField):
-                item_field_type = models.PositiveIntegerField()
-            else:
-                raise NotImplementedError("No-autofield related PKs not yet supported")
+            raise ImproperlyConfigured("Lists of ForeignKeys aren't supported, use RelatedSetField instead")
 
         self.item_field_type = item_field_type
 
@@ -238,12 +228,7 @@ class IterableField(models.Field):
             else:
                 defaults['initial'] = self.get_default()
 
-        if getattr(self, "fk_model", None):
-            # The type passed into this ListField was a ForeignKey, set the form field and
-            # queryset appropriately
-            form_field_class = IterableFieldModelChoiceFormField
-            defaults['queryset'] = self.fk_model.objects.all()
-        elif self.choices:
+        if self.choices:
             form_field_class = forms.MultipleChoiceField
             defaults['choices'] = self.get_choices(include_blank=False) #no empty value on a multi-select
         else:
