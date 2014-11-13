@@ -1111,9 +1111,12 @@ class ISOther(models.Model):
     def __unicode__(self):
         return "%s:%s" % (self.pk, self.name)
 
+class RelationWithoutReverse(models.Model):
+    name = models.CharField(max_length=500)
+
 class ISModel(models.Model):
     related_things = RelatedSetField(ISOther)
-    limted_related = RelatedSetField(ISOther, limit_choices_to={'name': 'banana'}, related_name="+")
+    limted_related = RelatedSetField(RelationWithoutReverse, limit_choices_to={'name': 'banana'}, related_name="+")
     children = RelatedSetField("self", related_name="+")
 
 class InstanceSetFieldTests(TestCase):
@@ -1139,3 +1142,6 @@ class InstanceSetFieldTests(TestCase):
 
         with self.assertRaises(AttributeError):
             other.ismodel_set = {main}
+
+        without_reverse = RelationWithoutReverse.objects.create(name="test3")
+        self.assertFalse(hasattr(without_reverse, "ismodel_set"))
