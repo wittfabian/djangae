@@ -394,6 +394,7 @@ class RelatedSetRel(object):
         self.to = to
         self.related_name = related_name
         self.related_query_name = None
+        self.field_name = None
 
         if limit_choices_to is None:
             limit_choices_to = {}
@@ -403,6 +404,9 @@ class RelatedSetRel(object):
     def is_hidden(self):
         "Should the related object be hidden?"
         return self.related_name and self.related_name[-1] == '+'
+
+    def set_field_name(self):
+        self.field_name = self.field_name or self.to._meta.pk.name
 
     def get_related_field(self):
         """
@@ -416,23 +420,34 @@ def create_related_set_manager(superclass, rel):
 
     class RelatedSetManager(superclass):
         def __init__(self, model, field, instance, reverse):
+            super(RelatedSetManager, self).__init__()
             self.model = model
             self.instance = instance
             self.field = field
-            self.core_filters= {'%s__exact' % field.name: instance}
+
+            if reverse:
+                self.core_filters = { '%s__exact' % self.field.name: instance.pk }
+            else:
+                self.core_filters= {'pk__in': field.value_from_object(instance) }
 
         def get_queryset(self):
             db = self._db or router.db_for_read(self.instance.__class__, instance=self.instance)
             return super(RelatedSetManager, self).get_queryset().using(db)._next_is_sticky().filter(**self.core_filters)
 
         def add(self, value):
-            raise NotImplementedError()
+            if not isinstance(value, self.model):
+                raise TypeError("'%s' instance expected, got %r" % (self.model._meta.object_name, value))
+
+            if not value.pk:
+                raise ValueError("Model instances must be saved before they can be added to a related set")
+
+            self.field.value_from_object(self.instance).add(value.pk)
 
         def remove(self, value):
-            raise NotImplementedError()
+            self.field.value_from_object(self.instance).discard(value.pk)
 
         def clear(self):
-            raise NotImplementedError()
+            setattr(self.instance, self.field.attname, set())
 
 
     return RelatedSetManager
@@ -472,14 +487,8 @@ class RelatedSetObjectsDescriptor(object):
 
         return manager
 
-    def __set__(self, instance, value):
-        if not self.related.field.rel.through._meta.auto_created:
-            opts = self.related.field.rel.through._meta
-            raise AttributeError("Cannot set values on a ManyToManyField which specifies an intermediary model. Use %s.%s's Manager instead." % (opts.app_label, opts.object_name))
-
-        manager = self.__get__(instance)
-        manager.clear()
-        manager.add(*value)
+    def __set__(self, obj, value):
+        raise AttributeError("You can't set the reverse relation directly")
 
 class ReverseRelatedSetObjectsDescriptor(object):
     # This class provides the functionality that makes the related-object
@@ -497,7 +506,7 @@ class ReverseRelatedSetObjectsDescriptor(object):
         # default manager.
         return create_related_set_manager(
             self.field.rel.to._default_manager.__class__,
-            self.field.rel
+            self.field.rel.to
         )
 
     def __get__(self, instance, instance_type=None):
@@ -513,17 +522,19 @@ class ReverseRelatedSetObjectsDescriptor(object):
 
         return manager
 
-    def __set__(self, instance, value):
-        manager = self.__get__(instance)
-        # clear() can change expected output of 'value' queryset, we force evaluation
-        # of queryset before clear; ticket #19816
-        value = tuple(value)
-        manager.clear()
-        manager.add(*value)
+    def __set__(self, obj, value):
+        obj.__dict__[self.field.attname] = self.field.to_python([x.pk for x in value])
 
 class RelatedSetField(RelatedField):
     requires_unique_target = False
     generate_reverse_relation = True
+    empty_strings_allowed = False
+
+    def db_type(self, connection):
+        models.Field.db_type(self, connection)
+
+    def get_internal_type(self):
+        return 'SetField'
 
     def __init__(self, model, limit_choices_to=None, related_name=None):
         kwargs = {}
@@ -533,14 +544,10 @@ class RelatedSetField(RelatedField):
             limit_choices_to=limit_choices_to
         )
 
+        kwargs["default"] = set
+        kwargs["null"] = True
+
         super(RelatedSetField, self).__init__(**kwargs)
-
-    def value_from_object(self, obj):
-        "Returns the value of this field in the given model instance."
-        return getattr(obj, self.attname)
-
-    def set_attributes_from_rel(self):
-        pass
 
     def get_attname(self):
         return '%s_ids' % self.name
@@ -566,3 +573,36 @@ class RelatedSetField(RelatedField):
         # and swapped models don't get a related descriptor.
         if not self.rel.is_hidden() and not related.model._meta.swapped:
             setattr(cls, related.get_accessor_name(), RelatedSetObjectsDescriptor(related))
+
+    def to_python(self, value):
+        if value is None:
+            return set()
+
+        return set(value)
+
+    def get_db_prep_save(self, *args, **kwargs):
+        ret = super(RelatedSetField, self).get_db_prep_save(*args, **kwargs)
+
+        if not ret:
+            return None
+
+        if isinstance(ret, set):
+            ret = list(ret)
+        return ret
+
+    def get_db_prep_lookup(self, *args, **kwargs):
+        ret =  super(RelatedSetField, self).get_db_prep_lookup(*args, **kwargs)
+
+        if not ret:
+            return None
+
+        if isinstance(ret, set):
+            ret = list(ret)
+        return ret
+
+    def value_to_string(self, obj):
+        """
+        Custom method for serialization, as JSON doesn't support
+        serializing sets.
+        """
+        return str(list(self._get_val_from_obj(obj)))
