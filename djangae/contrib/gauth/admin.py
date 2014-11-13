@@ -23,5 +23,5 @@ if user_model in (GaeUser, GaeDatastoreUser):
 # Only register the Group model if the User model is one of the Datastore-based ones (i.e. one
 # which uses the Datastore permissions)
 
-if isinstance(user_model, PermissionsMixin):
+if issubclass(user_model, PermissionsMixin):
     admin.site.register(Group)

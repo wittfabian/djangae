@@ -21,7 +21,7 @@ from django.utils.translation import ugettext_lazy as _
 from django.db.models.loading import get_apps, get_models
 from django.contrib.auth import get_permission_codename
 
-from djangae.fields import ListField
+from djangae.fields import ListField, RelatedSetField
 
 
 PERMISSIONS_LIST = None
@@ -92,8 +92,9 @@ class PermissionsMixin(models.Model):
         help_text=_('Designates that this user has all permissions without '
                     'explicitly assigning them.')
     )
-    groups = ListField(
-        models.ForeignKey(Group), verbose_name=_('groups'),
+    groups = RelatedSetField(
+        Group,
+        verbose_name=_('groups'),
         blank=True, help_text=_('The groups this user belongs to. A user will '
                                 'get all permissions granted to each of '
                                 'his/her group.')
