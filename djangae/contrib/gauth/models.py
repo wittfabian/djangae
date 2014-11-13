@@ -205,7 +205,7 @@ class GaeAbstractUser(AbstractBaseUser):
     )
     is_superuser = models.BooleanField(
         _('superuser status'), default=False,
-        help_text=_('Designates whether the user can log into this admin site.')
+        help_text=_('Designates that this user has all permissions without explicitly assigning them.')
     )
     is_active = models.BooleanField(
         _('active'), default=True,
