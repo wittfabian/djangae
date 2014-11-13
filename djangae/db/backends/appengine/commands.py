@@ -423,7 +423,7 @@ class SelectCommand(object):
                 assert f  # If this happens, we have a cross-table select going on! #FIXME
                 db_type = f.db_type(connection)
 
-                if db_type in ("bytes", "text"):
+                if db_type in ("bytes", "text", "list", "set"):
                     projection_fields = []
                     break
 
