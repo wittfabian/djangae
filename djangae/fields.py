@@ -3,7 +3,7 @@
 
 import random
 
-from django.db import models
+from django.db import models, router
 from django.utils.translation import ugettext_lazy as _
 from django.core.exceptions import ValidationError
 from django.db.models.fields.subclassing import Creator
@@ -14,7 +14,7 @@ from django.db.models.loading import get_model
 
 from djangae.db import transaction
 from djangae.models import CounterShard
-
+from django.utils.functional import cached_property
 
 class _FakeModel(object):
     """
@@ -386,3 +386,183 @@ class ShardedCounterField(ListField):
 
     def get_prep_value(self, value):
         return value
+
+from django.db.models.fields.related import RelatedField
+
+class RelatedSetRel(object):
+    def __init__(self, to, related_name=None, limit_choices_to=None):
+        self.to = to
+        self.related_name = related_name
+        self.related_query_name = None
+
+        if limit_choices_to is None:
+            limit_choices_to = {}
+        self.limit_choices_to = limit_choices_to
+        self.multiple = True
+
+    def is_hidden(self):
+        "Should the related object be hidden?"
+        return self.related_name and self.related_name[-1] == '+'
+
+    def get_related_field(self):
+        """
+        Returns the field in the to' object to which this relationship is tied
+        (this is always the primary key on the target model). Provided for
+        symmetry with ManyToOneRel.
+        """
+        return self.to._meta.pk
+
+def create_related_set_manager(superclass, rel):
+
+    class RelatedSetManager(superclass):
+        def __init__(self, model, field, instance, reverse):
+            self.model = model
+            self.instance = instance
+            self.field = field
+            self.core_filters= {'%s__exact' % field.name: instance}
+
+        def get_queryset(self):
+            db = self._db or router.db_for_read(self.instance.__class__, instance=self.instance)
+            return super(RelatedSetManager, self).get_queryset().using(db)._next_is_sticky().filter(**self.core_filters)
+
+        def add(self, value):
+            raise NotImplementedError()
+
+        def remove(self, value):
+            raise NotImplementedError()
+
+        def clear(self):
+            raise NotImplementedError()
+
+
+    return RelatedSetManager
+
+class RelatedSetObjectsDescriptor(object):
+    # This class provides the functionality that makes the related-object
+    # managers available as attributes on a model class, for fields that have
+    # multiple "remote" values and have a ManyToManyField pointed at them by
+    # some other model (rather than having a ManyToManyField themselves).
+    # In the example "publication.article_set", the article_set attribute is a
+    # ManyRelatedObjectsDescriptor instance.
+    def __init__(self, related):
+        self.related = related   # RelatedObject instance
+
+    @cached_property
+    def related_manager_cls(self):
+        # Dynamically create a class that subclasses the related
+        # model's default manager.
+        return create_related_set_manager(
+            self.related.model._default_manager.__class__,
+            self.related.field.rel
+        )
+
+    def __get__(self, instance, instance_type=None):
+        if instance is None:
+            return self
+
+        rel_model = self.related.model
+        rel_field = self.related.field
+
+        manager = self.related_manager_cls(
+            model=rel_model,
+            field=rel_field,
+            instance=instance,
+            reverse=True
+        )
+
+        return manager
+
+    def __set__(self, instance, value):
+        if not self.related.field.rel.through._meta.auto_created:
+            opts = self.related.field.rel.through._meta
+            raise AttributeError("Cannot set values on a ManyToManyField which specifies an intermediary model. Use %s.%s's Manager instead." % (opts.app_label, opts.object_name))
+
+        manager = self.__get__(instance)
+        manager.clear()
+        manager.add(*value)
+
+class ReverseRelatedSetObjectsDescriptor(object):
+    # This class provides the functionality that makes the related-object
+    # managers available as attributes on a model class, for fields that have
+    # multiple "remote" values and have a ManyToManyField defined in their
+    # model (rather than having another model pointed *at* them).
+    # In the example "article.publications", the publications attribute is a
+    # ReverseManyRelatedObjectsDescriptor instance.
+    def __init__(self, m2m_field):
+        self.field = m2m_field
+
+    @cached_property
+    def related_manager_cls(self):
+        # Dynamically create a class that subclasses the related model's
+        # default manager.
+        return create_related_set_manager(
+            self.field.rel.to._default_manager.__class__,
+            self.field.rel
+        )
+
+    def __get__(self, instance, instance_type=None):
+        if instance is None:
+            return self
+
+        manager = self.related_manager_cls(
+            model=self.field.rel.to,
+            field=self.field,
+            instance=instance,
+            reverse=False
+        )
+
+        return manager
+
+    def __set__(self, instance, value):
+        manager = self.__get__(instance)
+        # clear() can change expected output of 'value' queryset, we force evaluation
+        # of queryset before clear; ticket #19816
+        value = tuple(value)
+        manager.clear()
+        manager.add(*value)
+
+class RelatedSetField(RelatedField):
+    requires_unique_target = False
+    generate_reverse_relation = True
+
+    def __init__(self, model, limit_choices_to=None, related_name=None):
+        kwargs = {}
+        kwargs["rel"] = RelatedSetRel(
+            model,
+            related_name=related_name,
+            limit_choices_to=limit_choices_to
+        )
+
+        super(RelatedSetField, self).__init__(**kwargs)
+
+    def value_from_object(self, obj):
+        "Returns the value of this field in the given model instance."
+        return getattr(obj, self.attname)
+
+    def set_attributes_from_rel(self):
+        pass
+
+    def get_attname(self):
+        return '%s_ids' % self.name
+
+    def contribute_to_class(self, cls, name):
+        # To support multiple relations to self, it's useful to have a non-None
+        # related name on symmetrical relations for internal reasons. The
+        # concept doesn't make a lot of sense externally ("you want me to
+        # specify *what* on my non-reversible relation?!"), so we set it up
+        # automatically. The funky name reduces the chance of an accidental
+        # clash.
+        if (self.rel.to == "self" or self.rel.to == cls._meta.object_name):
+            self.rel.related_name = "%s_rel_+" % name
+
+        super(RelatedSetField, self).contribute_to_class(cls, name)
+
+        # Add the descriptor for the m2m relation
+        setattr(cls, self.name, ReverseRelatedSetObjectsDescriptor(self))
+
+
+    def contribute_to_related_class(self, cls, related):
+        # Internal M2Ms (i.e., those with a related name ending with '+')
+        # and swapped models don't get a related descriptor.
+        if not self.rel.is_hidden() and not related.model._meta.swapped:
+            setattr(cls, related.get_accessor_name(), RelatedSetObjectsDescriptor(related))

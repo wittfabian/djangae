@@ -1101,3 +1101,28 @@ class IterableFieldTests(TestCase):
         # When getting it from the db
         self.assertEqual(instance.set_field, set())
         self.assertEqual(instance.list_field, [])
+
+
+from djangae.fields import RelatedSetField
+
+class ISOther(models.Model):
+    name = models.CharField(max_length=500)
+
+class ISModel(models.Model):
+    related = RelatedSetField(ISOther)
+    limted_related = RelatedSetField(ISOther, limit_choices_to={'name': 'banana'}, related_name="+")
+    children = RelatedSetField("self", related_name="+")
+
+class InstanceSetFieldTests(TestCase):
+
+    def test_basic_usage(self):
+        main = ISModel.objects.create()
+        other = ISOther.objects.create(name="test")
+
+        main.related.add(other)
+
+        self.assertEqual([ other.pk ], main.related_ids)
+        self.assertQuerySetEqual(ISOther.objects.filter(id__in=main.related_ids), main.related.all())
+
+        main.related.remove(other)
+        self.assertFalse(main.related_ids)
