@@ -536,8 +536,7 @@ class RelatedSetField(RelatedField):
     def get_internal_type(self):
         return 'SetField'
 
-    def __init__(self, model, limit_choices_to=None, related_name=None):
-        kwargs = {}
+    def __init__(self, model, limit_choices_to=None, related_name=None, **kwargs):
         kwargs["rel"] = RelatedSetRel(
             model,
             related_name=related_name,
@@ -606,3 +605,22 @@ class RelatedSetField(RelatedField):
         serializing sets.
         """
         return str(list(self._get_val_from_obj(obj)))
+
+    def save_form_data(self, instance, data):
+        setattr(instance, self.attname, set([x.pk for x in data]))
+
+    def formfield(self, **kwargs):
+        db = kwargs.pop('using', None)
+        defaults = {
+            'form_class': forms.ModelMultipleChoiceField,
+            'queryset': self.rel.to._default_manager.using(db).complex_filter(self.rel.limit_choices_to)
+        }
+        defaults.update(kwargs)
+        # If initial is passed in, it's a list of related objects, but the
+        # MultipleChoiceField takes a list of IDs.
+        if defaults.get('initial') is not None:
+            initial = defaults['initial']
+            if callable(initial):
+                initial = initial()
+            defaults['initial'] = [i._get_pk_val() for i in initial]
+        return super(RelatedSetField, self).formfield(**defaults)
