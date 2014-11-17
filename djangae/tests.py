@@ -1102,6 +1102,50 @@ class IterableFieldTests(TestCase):
         self.assertEqual(instance.set_field, set())
         self.assertEqual(instance.list_field, [])
 
+    def test_list_field(self):
+        instance = IterableFieldModel.objects.create()
+        self.assertEqual([], instance.list_field)
+        instance.list_field.append("One")
+        self.assertEqual(["One"], instance.list_field)
+        instance.save()
+
+        self.assertEqual(["One"], instance.list_field)
+
+        instance = IterableFieldModel.objects.get(pk=instance.pk)
+        self.assertEqual(["One"], instance.list_field)
+
+        instance.list_field = None
+
+        # Or anything else for that matter!
+        with self.assertRaises(ValueError):
+            instance.list_field = "Bananas"
+            instance.save()
+
+        with self.assertRaises(ValueError):
+            instance.list_field = set([1])
+
+    def test_set_field(self):
+        instance = IterableFieldModel.objects.create()
+        self.assertEqual(set(), instance.set_field)
+        instance.set_field.add("One")
+        self.assertEqual(set(["One"]), instance.set_field)
+        instance.save()
+
+        self.assertEqual(set(["One"]), instance.set_field)
+
+        instance = IterableFieldModel.objects.get(pk=instance.pk)
+        self.assertEqual(set(["One"]), instance.set_field)
+
+        instance.set_field = None
+
+        # Or anything else for that matter!
+        with self.assertRaises(ValueError):
+            instance.set_field = "Bananas"
+            instance.save()
+
+        # Assigning a list to a set
+        with self.assertRaises(ValueError):
+            instance.set_field = [1]
 
 from djangae.fields import RelatedSetField
 

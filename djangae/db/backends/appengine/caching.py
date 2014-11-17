@@ -30,7 +30,8 @@ def remove_entity_from_context_cache(entity):
 
 def remove_entity_from_context_cache_by_key(key):
     for identifier in context.reverse_cache.get(key, []):
-        del context.cache[identifier]
+        if identifier in context.cache:
+            del context.cache[identifier]
 
 
 def cache_entity(model, entity):

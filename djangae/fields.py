@@ -26,21 +26,6 @@ class _FakeModel(object):
         setattr(self, field.attname, value)
 
 
-class RawField(models.Field):
-    """
-    Generic field to store anything your database backend allows you
-    to. No validation or conversions are done for this field.
-    """
-
-    def get_internal_type(self):
-        """
-        Returns this field's kind. Nonrel fields are meant to extend
-        the set of standard fields, so fields subclassing them should
-        get the same internal type, rather than their own class name.
-        """
-        return 'RawField'
-
-
 class TrueOrNullField(models.NullBooleanField):
     """A Field only storing `Null` or `True` values.
 
@@ -87,13 +72,31 @@ class IterableField(models.Field):
     @property
     def _iterable_type(self): raise NotImplementedError()
 
-    def __init__(self, item_field_type=None, *args, **kwargs):
+    def db_type(self, connection):
+        return 'list'
+
+    def get_prep_value(self, value):
+        if value is None:
+            raise ValueError("You can't set a {} to None (did you mean {}?)".format(
+                self.__class__.__name__, str(self._iterable_type())
+            ))
+
+        if isinstance(value, basestring):
+            # Catch accidentally assigning a string to a ListField
+            raise ValueError("Tried to assign a string to a {}".format(self.__class__.__name__))
+
+        return super(IterableField, self).get_prep_value(value)
+
+    def __init__(self, item_field_type, *args, **kwargs):
 
         # This seems bonkers, we shout at people for specifying null=True, but then do it ourselves. But this is because
         # *we* abuse None values for our own purposes (to represent an empty iterable) if someone else tries to then
         # all hell breaks loose
         if kwargs.get("null", False):
             raise RuntimeError("IterableFields cannot be set as nullable (as the datastore doesn't differentiate None vs []")
+
+        if not item_field_type:
+            raise ImproperlyConfigured("You must specify the type of the iterable field")
 
         kwargs["null"] = True
 
@@ -104,8 +107,6 @@ class IterableField(models.Field):
 
         if callable(item_field_type):
             item_field_type = item_field_type()
-
-        item_field_type = item_field_type or RawField()
 
         if isinstance(item_field_type, models.ForeignKey):
             raise ImproperlyConfigured("Lists of ForeignKeys aren't supported, use RelatedSetField instead")
@@ -136,6 +137,9 @@ class IterableField(models.Field):
         if value is None:
             return self._iterable_type([])
 
+        if not isinstance(value, self._iterable_type):
+            raise ValueError("Tried to assign a {} to a {}".format(value.__class__.__name__, self.__class__.__name__))
+
         return self._map(self.item_field_type.to_python, value)
 
     def pre_save(self, model_instance, add):
@@ -145,14 +149,15 @@ class IterableField(models.Field):
         """
         value = getattr(model_instance, self.attname)
         if value is None:
-            return self._iterable_type([])
+            return None
 
         return self._map(lambda item: self.item_field_type.pre_save(_FakeModel(self.item_field_type, item), add), value)
 
-    def get_db_prep_save(self, value, connection):
-        """
-        Applies get_db_prep_save of item_field on value items.
-        """
+    def get_db_prep_value(self, value, connection, prepared=False):
+        if not prepared:
+            value = self.get_prep_value(value)
+            if value is None:
+                return None
 
         # If the value is an empty iterable, store None
         if value == self._iterable_type([]):
@@ -161,18 +166,12 @@ class IterableField(models.Field):
         return self._map(self.item_field_type.get_db_prep_save, value,
                          connection=connection)
 
+
     def get_db_prep_lookup(self, lookup_type, value, connection,
                            prepared=False):
         """
         Passes the value through get_db_prep_lookup of item_field.
         """
-
-        # TODO/XXX: Remove as_lookup_value() once we have a cleaner
-        # solution for dot-notation queries.
-        # See: https://groups.google.com/group/django-non-relational/browse_thread/thread/6056f8384c9caf04/89eeb9fb22ad16f3).
-        if hasattr(value, 'as_lookup_value'):
-            value = value.as_lookup_value(self, lookup_type, connection)
-
         return self.item_field_type.get_db_prep_lookup(
             lookup_type, value, connection=connection, prepared=prepared)
 
@@ -245,9 +244,6 @@ class ListField(IterableField):
                             "not of type %r." % type(self.ordering))
         super(ListField, self).__init__(*args, **kwargs)
 
-    def get_internal_type(self):
-        return 'ListField'
-
     def pre_save(self, model_instance, add):
         value = super(ListField, self).pre_save(model_instance, add)
 
@@ -262,12 +258,12 @@ class ListField(IterableField):
 
 
 class SetField(IterableField):
-    def get_internal_type(self):
-        return 'SetField'
-
     @property
     def _iterable_type(self):
         return set
+
+    def db_type(self, connection):
+        return 'set'
 
     def get_db_prep_save(self, *args, **kwargs):
         ret = super(SetField, self).get_db_prep_save(*args, **kwargs)
@@ -318,59 +314,6 @@ class ComputedTextField(ComputedFieldMixin, models.TextField):
 class ComputedPositiveIntegerField(ComputedFieldMixin, models.PositiveIntegerField):
     __metaclass__ = models.SubfieldBase
 
-
-class ShardedCounter(list):
-    def increment(self):
-        idx = random.randint(0, len(self) - 1)
-
-        with transaction.atomic():
-            shard = CounterShard.objects.get(pk=self[idx])
-            shard.count += 1
-            shard.save()
-
-    def decrement(self):
-        # Find a non-empty shard and decrement it
-        shards = self[:]
-        random.shuffle(shards)
-        for shard_id in shards:
-            with transaction.atomic():
-                shard = CounterShard.objects.get(pk=shard_id)
-                if not shard.count:
-                    continue
-                else:
-                    shard.count -= 1
-                    shard.save()
-                    break
-
-    def value(self):
-        shards = CounterShard.objects.filter(pk__in=self).values_list('count', flat=True)
-        return sum(shards)
-
-
-class ShardedCounterField(ListField):
-    __metaclass__ = models.SubfieldBase
-
-    def __init__(self, shard_count=30, *args, **kwargs):
-        self.shard_count = shard_count
-        super(ShardedCounterField, self).__init__(*args, **kwargs)
-
-    def pre_save(self, model_instance, add):
-        value = super(ShardedCounterField, self).pre_save(model_instance, add)
-        current_length = len(value)
-
-        for i in xrange(current_length, self.shard_count):
-            value.append(CounterShard.objects.create(count=0).pk)
-
-        ret = ShardedCounter(value)
-        setattr(model_instance, self.attname, ret)
-        return ret
-
-    def to_python(self, value):
-        value = super(ShardedCounterField, self).to_python(value)
-        return ShardedCounter(value)
-
-    def get_prep_value(self, value):
-        return value
 
 from django.db.models.fields.related import RelatedField
 
@@ -518,9 +461,6 @@ class RelatedSetField(RelatedField):
     def db_type(self, connection):
         models.Field.db_type(self, connection)
 
-    def get_internal_type(self):
-        return 'SetField'
-
     def __init__(self, model, limit_choices_to=None, related_name=None, **kwargs):
         kwargs["rel"] = RelatedSetRel(
             model,
@@ -609,3 +549,57 @@ class RelatedSetField(RelatedField):
                 initial = initial()
             defaults['initial'] = [i._get_pk_val() for i in initial]
         return super(RelatedSetField, self).formfield(**defaults)
+
+
+class ShardedCounter(list):
+    def increment(self):
+        idx = random.randint(0, len(self) - 1)
+
+        with transaction.atomic():
+            shard = CounterShard.objects.get(pk=self[idx])
+            shard.count += 1
+            shard.save()
+
+    def decrement(self):
+        # Find a non-empty shard and decrement it
+        shards = self[:]
+        random.shuffle(shards)
+        for shard_id in shards:
+            with transaction.atomic():
+                shard = CounterShard.objects.get(pk=shard_id)
+                if not shard.count:
+                    continue
+                else:
+                    shard.count -= 1
+                    shard.save()
+                    break
+
+    def value(self):
+        shards = CounterShard.objects.filter(pk__in=self).values_list('count', flat=True)
+        return sum(shards)
+
+
+class ShardedCounterField(ListField):
+    __metaclass__ = models.SubfieldBase
+
+    def __init__(self, shard_count=30, *args, **kwargs):
+        self.shard_count = shard_count
+        super(ShardedCounterField, self).__init__(models.PositiveIntegerField, *args, **kwargs)
+
+    def pre_save(self, model_instance, add):
+        value = super(ShardedCounterField, self).pre_save(model_instance, add)
+        current_length = len(value)
+
+        for i in xrange(current_length, self.shard_count):
+            value.append(CounterShard.objects.create(count=0).pk)
+
+        ret = ShardedCounter(value)
+        setattr(model_instance, self.attname, ret)
+        return ret
+
+    def to_python(self, value):
+        value = super(ShardedCounterField, self).to_python(value)
+        return ShardedCounter(value)
+
+    def get_prep_value(self, value):
+        return value
