@@ -178,6 +178,14 @@ class DatabaseOperations(BaseDatabaseOperations):
             value = self.connection.ops.value_from_db_time(value)
         elif db_type == "decimal":
             value = self.connection.ops.value_from_db_decimal(value)
+        elif db_type == 'list':
+            if not value:
+                value = [] # Convert None back to an empty list
+        elif db_type == 'set':
+            if not value:
+                value = set()
+            else:
+                value = set(value)
 
         return value
 
@@ -228,6 +236,12 @@ class DatabaseOperations(BaseDatabaseOperations):
             return self.prep_lookup_date(model, value, field)
         elif db_type == 'time':
             return self.prep_lookup_time(model, value, field)
+        elif db_type in ('list', 'set'):
+            if not value:
+                value = None #Convert empty lists to None
+            elif db_type == 'set':
+                # Convert sets to lists
+                value = list(value)
 
         return value
 
@@ -257,6 +271,12 @@ class DatabaseOperations(BaseDatabaseOperations):
             value = self.value_to_db_time(value)
         elif db_type == 'decimal':
             value = self.value_to_db_decimal(value, field.max_digits, field.decimal_places)
+        elif db_type in ('list', 'set'):
+            if not value:
+                value = None #Make sure we always convert empty lists to None
+            elif db_type == 'set':
+                # Convert sets to lists
+                value = list(value)
 
         return value
 
@@ -355,15 +375,8 @@ class DatabaseCreation(BaseDatabaseCreation):
         'SmallIntegerField':          'integer',
         'TimeField':                  'time',
         'URLField':                   'string',
-        'AbstractIterableField':      'list',
-        'ListField':                  'list',
-        'RawField':                   'raw',
-        'BlobField':                  'bytes',
         'TextField':                  'text',
         'XMLField':                   'text',
-        'SetField':                   'list',
-        'DictField':                  'bytes',
-        'EmbeddedModelField':         'bytes'
     }
 
     def __init__(self, *args, **kwargs):
