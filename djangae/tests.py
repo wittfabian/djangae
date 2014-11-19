@@ -197,6 +197,11 @@ class CachingTests(TestCase):
             self.assertEqual(query.call_count, 2)
 
 
+class NullDate(models.Model):
+    date = models.DateField(null=True, default=None)
+    datetime = models.DateTimeField(null=True, default=None)
+    time = models.TimeField(null=True, default=None)
+
 class BackendTests(TestCase):
     def test_entity_matches_query(self):
         entity = datastore.Entity("test_model")
@@ -251,6 +256,15 @@ class BackendTests(TestCase):
             with sleuth.switch("djangae.db.backends.appengine.commands.datastore.MultiQuery.Run", lambda *args, **kwargs: []) as query_mock:
                 list(TestUser.objects.exclude(username__startswith="test"))
                 self.assertEqual(1, query_mock.call_count)
+
+    def test_null_date_field(self):
+        null_date = NullDate()
+        null_date.save()
+
+        null_date = NullDate.objects.get()
+        self.assertIsNone(null_date.date)
+        self.assertIsNone(null_date.time)
+        self.assertIsNone(null_date.datetime)
 
 
 class ModelFormsetTest(TestCase):

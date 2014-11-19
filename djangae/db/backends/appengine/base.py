@@ -301,7 +301,9 @@ class DatabaseOperations(BaseDatabaseOperations):
             # App Engine Query's don't return datetime fields (unlike Get) I HAVE NO IDEA WHY, APP ENGINE SUCKS MONKEY BALLS
             value = datetime.datetime.fromtimestamp(float(value) / 1000000.0)
 
-        return value.date()
+        if value:
+            value = value.date()
+        return value
 
     def value_from_db_time(self, value):
         if isinstance(value, (int, long)):
@@ -310,7 +312,10 @@ class DatabaseOperations(BaseDatabaseOperations):
 
         if value is not None and settings.USE_TZ and timezone.is_naive(value):
             value = value.replace(tzinfo=timezone.utc)
-        return value.time()
+
+        if value:
+            value = value.time()
+        return value
 
     def value_from_db_decimal(self, value):
         if value:
