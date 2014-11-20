@@ -1159,3 +1159,42 @@ class InstanceSetFieldTests(TestCase):
 
         without_reverse = RelationWithoutReverse.objects.create(name="test3")
         self.assertFalse(hasattr(without_reverse, "ismodel_set"))
+
+    def test_save_and_load_empty(self):
+        """
+        Create a main object with no related items,
+        get a copy of it back from the db and try to read items.
+        """
+        main = ISModel.objects.create()
+        main_from_db = ISModel.objects.get(pk=main.pk)
+
+        # Fetch the container from the database and read its items
+        self.assertItemsEqual(main_from_db.related_things.all(), [])
+
+    def test_add_to_empty(self):
+        """
+        Create a main object with no related items,
+        get a copy of it back from the db and try to add items.
+        """
+        main = ISModel.objects.create()
+        main_from_db = ISModel.objects.get(pk=main.pk)
+
+        other = ISOther.objects.create()
+        main_from_db.related_things.add(other)
+        main_from_db.save()
+
+    def test_add_another(self):
+        """
+        Create a main object with related items,
+        get a copy of it back from the db and try to add more.
+        """
+        main = ISModel.objects.create()
+        other1 = ISOther.objects.create()
+        main.related_things.add(other1)
+        main.save()
+
+        main_from_db = ISModel.objects.get(pk=main.pk)
+        other2 = ISOther.objects.create()
+
+        main_from_db.related_things.add(other2)
+        main_from_db.save()
