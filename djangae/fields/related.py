@@ -1,8 +1,12 @@
 from django import forms
-from django.db import router
+from django.db import router, models
 from django.db.models.fields.related import RelatedField
 from django.utils.functional import cached_property
 
+from djangae.forms.fields import (
+    encode_pk,
+    GenericRelationFormfield
+)
 
 class RelatedSetRel(object):
     def __init__(self, to, related_name=None, limit_choices_to=None):
@@ -236,3 +240,105 @@ class RelatedSetField(RelatedField):
                 initial = initial()
             defaults['initial'] = [i._get_pk_val() for i in initial]
         return super(RelatedSetField, self).formfield(**defaults)
+
+
+class GRCreator(property):
+
+    """
+    This is like django.db.models.fields.subclassing.Creator, but does its
+    magic on get instead of set.
+    """
+
+    def __init__(self, field):
+        self.field = field
+        self.attname = field.get_attname()
+        super(GRCreator, self).__init__(self.get, self.set)
+
+    def get(self, obj):
+        cache_attr = "_{}_cache".format(self.attname)
+        if getattr(obj, cache_attr, None) is None:
+            setattr(obj, cache_attr, self.field.to_python(obj.__dict__[self.attname]))
+        return getattr(obj, cache_attr)
+
+    def set(self, obj, value):
+        obj.__dict__[self.attname] = self.field.get_prep_value(value)
+        if isinstance(value, models.Model):
+            setattr(obj, "_{}_cache".format(self.attname), value)
+
+
+class GRReverseCreator(property):
+
+    """Prevent forms setting whatever_id to an object"""
+
+    def __init__(self, field):
+        self.field = field
+        self.attname = field.get_attname()
+        super(GRReverseCreator, self).__init__(self.get, self.set)
+
+    def get(self, obj):
+        return obj.__dict__[self.attname]
+
+    def set(self, obj, value):
+        if not isinstance(value, basestring):
+            value = self.field.get_prep_value(value)
+        obj.__dict__[self.attname] = value
+
+
+
+class GenericRelationField(models.Field):
+    """ Similar to django.contrib.contenttypes.generic.GenericForeignKey, but
+        doesn't require all of the contenttypes cruft.
+
+        Empty NULL values are specifically encoded so they can also be unique, this is different
+        from Django's FK behaviour.
+    """
+    description = "Generic one-way relation field"
+    form_class = GenericRelationFormfield
+
+    def __init__(self, *args, **kwargs):
+        self.vc_encoded = True
+
+        kwargs.update(
+            max_length=255,
+            blank=True,
+            null=True
+        )
+
+        if 'db_index' not in kwargs:
+            kwargs['db_index'] = True
+
+        super(GenericRelationField, self).__init__(*args, **kwargs)
+
+    def contribute_to_class(self, cls, name):
+        super(GenericRelationField, self).contribute_to_class(cls, name)
+        setattr(cls, self.name, GRCreator(self))
+        setattr(cls, self.attname, GRReverseCreator(self))
+
+    def get_attname(self):
+        return "{}_id".format(self.name)
+
+    def set_attributes_from_name(self, name):
+        super(GenericRelationField, self).set_attributes_from_name(name)
+
+    @classmethod
+    def encode_pk(cls, pk, obj_cls):
+        return encode_pk(pk, obj_cls)
+
+    def get_internal_type(self):
+        return "CharField"
+
+    def get_prep_value(cls, value):
+        return cls.form_class.to_string(value)
+
+    def to_python(self, value):
+        return self.form_class.to_python(value)
+
+    def formfield(self, **kwargs):
+        defaults = {
+            'form_class': self.form_class,
+        }
+        defaults.update(kwargs)
+        return super(GenericRelationField, self).formfield(**defaults)
+
+    def get_validator_unique_lookup_type(self):
+        raise NotImplementedError()
