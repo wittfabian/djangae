@@ -145,7 +145,7 @@ class SimulatedContentTypeManager(Manager):
 
     def create(self, **kwargs):
         try:
-            self.get(**kwargs)
+            return self.get(**kwargs)
         except ContentType.DoesNotExist:
             logging.warning("Created simulated content type, this will not persist and will remain thread-local")
             new_id = self._get_id(kwargs["app_label"], kwargs["model"])
