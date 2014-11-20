@@ -354,7 +354,7 @@ def create_related_set_manager(superclass, rel):
             self.field = field
 
             if reverse:
-                self.core_filters = { '%s__exact' % self.field.name: instance.pk }
+                self.core_filters = { '%s__exact' % self.field.column: instance.pk }
             else:
                 self.core_filters= {'pk__in': field.value_from_object(instance) }
 
@@ -459,7 +459,7 @@ class RelatedSetField(RelatedField):
     empty_strings_allowed = False
 
     def db_type(self, connection):
-        models.Field.db_type(self, connection)
+        return 'set'
 
     def __init__(self, model, limit_choices_to=None, related_name=None, **kwargs):
         kwargs["rel"] = RelatedSetRel(

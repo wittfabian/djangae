@@ -237,9 +237,9 @@ class DatabaseOperations(BaseDatabaseOperations):
         elif db_type == 'time':
             return self.prep_lookup_time(model, value, field)
         elif db_type in ('list', 'set'):
-            if not value:
+            if hasattr(value, "__len__") and not value:
                 value = None #Convert empty lists to None
-            elif db_type == 'set':
+            elif hasattr(value, "__iter__"):
                 # Convert sets to lists
                 value = list(value)
 
@@ -272,9 +272,9 @@ class DatabaseOperations(BaseDatabaseOperations):
         elif db_type == 'decimal':
             value = self.value_to_db_decimal(value, field.max_digits, field.decimal_places)
         elif db_type in ('list', 'set'):
-            if not value:
-                value = None #Make sure we always convert empty lists to None
-            elif db_type == 'set':
+            if hasattr(value, "__len__") and not value:
+                value = None #Convert empty lists to None
+            elif hasattr(value, "__iter__"):
                 # Convert sets to lists
                 value = list(value)
 
