@@ -21,6 +21,7 @@ from django.db.models.sql.datastructures import EmptyResultSet
 from google.appengine.api.datastore_errors import EntityNotFoundError
 from google.appengine.api import datastore
 from django.test.utils import override_settings
+from django.contrib.contenttypes.models import ContentType
 
 # DJANGAE
 from djangae.contrib import sleuth
@@ -32,7 +33,7 @@ from djangae.db.utils import entity_matches_query
 from djangae.db.backends.appengine import caching
 from djangae.db.unique_utils import query_is_unique
 from djangae.db import transaction
-from djangae.fields import ComputedCharField, ShardedCounterField, SetField, ListField
+from djangae.fields import ComputedCharField, ShardedCounterField, SetField, ListField, GenericRelationField
 from djangae.models import CounterShard
 from djangae.db.backends.appengine.dnf import parse_dnf
 from .storage import BlobstoreFileUploadHandler
@@ -1242,3 +1243,39 @@ class InstanceSetFieldTests(TestCase):
 
         main_from_db.related_things.add(other2)
         main_from_db.save()
+
+
+class RelationWithOverriddenDbTable(models.Model):
+    class Meta:
+        db_table = "bananarama"
+
+class GenericRelationModel(models.Model):
+    relation_to_content_type = GenericRelationField(ContentType, null=True)
+    relation_to_weird = GenericRelationField(RelationWithOverriddenDbTable, null=True)
+
+class TestGenericRelationField(TestCase):
+    def test_basic_usage(self):
+        instance = GenericRelationModel.objects.create()
+        self.assertIsNone(instance.relation_to_content_type)
+
+        ct = ContentType.objects.create()
+        instance.relation_to_content_type = ct
+        instance.save()
+
+        self.assertTrue(instance.relation_to_content_type_id)
+
+        instance = GenericRelationModel.objects.get()
+        self.assertEqual(ct, instance.relation_to_content_type)
+
+    def test_overridden_dbtable(self):
+        instance = GenericRelationModel.objects.create()
+        self.assertIsNone(instance.relation_to_weird)
+
+        ct = ContentType.objects.create()
+        instance.relation_to_weird = ct
+        instance.save()
+
+        self.assertTrue(instance.relation_to_weird_id)
+
+        instance = GenericRelationModel.objects.get()
+        self.assertEqual(ct, instance.relation_to_weird)
