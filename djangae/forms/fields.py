@@ -100,16 +100,15 @@ class GenericRelationWidget(forms.MultiWidget):
         super(GenericRelationWidget, self).__init__(widgets=widgets, *args, **kwargs)
 
     def decompress(self, value):
-        if isinstance(value, basestring) and value != 'n':
+        if isinstance(value, basestring):
             return decode_pk(value)
-        if value and value != 'n':
+        if value:
             return [value._meta.db_table, value.pk]
         return [None, None]
 
 
 class GenericFKInput(forms.TextInput):
     def __init__(self, *args, **kwargs):
-        self.vc_encoded = kwargs.pop("vc_encoded", True)
         super(GenericFKInput, self).__init__(*args, **kwargs)
 
     def render(self, name, value, attrs):
@@ -144,7 +143,7 @@ def model_from_db_table(db_table):
                 return model
     raise ValueError("Couldn't find model class for %s" % db_table)
 
-_CHOICES = {True: None, False: None}
+_CHOICES = None
 
 @memoized
 def get_all_model_choices():
@@ -160,7 +159,9 @@ class GenericRelationFormfield(forms.MultiValueField):
     def __init__(self, fields=None, widget=None, choices=None, *args, **kwargs):
         fields = (
             forms.ChoiceField(),
-            forms.CharField(max_length=30))
+            forms.CharField(max_length=30)
+        )
+
         super(GenericRelationFormfield, self).__init__(fields=fields, widget=GenericRelationWidget(), *args, **kwargs)
         self.widget.widgets[0].choices = self.fields[0].choices = choices or get_all_model_choices()
 
