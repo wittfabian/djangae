@@ -8,6 +8,7 @@ from djangae.db import transaction
 from .iterable import *
 from .related import *
 from .computed import *
+from .json import *
 
 class TrueOrNullField(models.NullBooleanField):
     """A Field only storing `Null` or `True` values.
