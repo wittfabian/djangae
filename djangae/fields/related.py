@@ -14,6 +14,7 @@ class RelatedSetRel(object):
         self.related_name = related_name
         self.related_query_name = None
         self.field_name = None
+        self.on_delete = models.DO_NOTHING
 
         if limit_choices_to is None:
             limit_choices_to = {}
