@@ -11,6 +11,7 @@ from django.contrib.auth.models import (
     _user_has_perm,
     _user_has_module_perms,
     urlquote,
+    PermissionsMixin as DjangoPermissionsMixin,
 )
 from django.core.mail import send_mail
 from django.core import validators
@@ -242,7 +243,15 @@ class GaeAbstractBaseUser(AbstractBaseUser):
         send_mail(subject, message, from_email, [self.email])
 
 
-class GaeUser(GaeAbstractBaseUser):
+class GaeAbstractUser(GaeAbstractBaseUser, DjangoPermissionsMixin):
+    """
+    Abstract user class for SQL databases.
+    """
+    class Meta:
+        abstract = True
+
+
+class GaeUser(GaeAbstractBaseUser, DjangoPermissionsMixin):
     """ A basic user model which can be used with GAE authentication.
         Essentially the equivalent of django.contrib.auth.models.User.
         Cannot be used with permissions when using the Datastore, because it
