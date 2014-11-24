@@ -6,7 +6,7 @@ from django.contrib.auth.backends import ModelBackend
 from django.utils import timezone
 
 # DJANGAE
-from djangae.contrib.gauth.models import GaeAbstractUser
+from djangae.contrib.gauth.models import GaeAbstractBaseUser
 
 
 class AppEngineUserAPI(ModelBackend):
@@ -26,10 +26,10 @@ class AppEngineUserAPI(ModelBackend):
 
         User = get_user_model()
 
-        if not issubclass(User, GaeAbstractUser):
+        if not issubclass(User, GaeAbstractBaseUser):
             raise ImproperlyConfigured(
                 "djangae.contrib.auth.backends.AppEngineUserAPI requires AUTH_USER_MODEL to be a "
-                " subclass of djangae.contrib.auth.models.GaeAbstractUser."
+                " subclass of djangae.contrib.auth.models.GaeAbstractBaseUser."
             )
 
         if len(credentials) != 1:

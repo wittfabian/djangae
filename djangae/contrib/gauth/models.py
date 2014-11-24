@@ -186,7 +186,7 @@ class GaeUserManager(UserManager):
         return self.create(**values)
 
 
-class GaeAbstractUser(AbstractBaseUser):
+class GaeAbstractBaseUser(AbstractBaseUser):
     """ Absract base class for creating a User model which works with the App Engine users API. """
 
     username = models.CharField(
@@ -242,7 +242,7 @@ class GaeAbstractUser(AbstractBaseUser):
         send_mail(subject, message, from_email, [self.email])
 
 
-class GaeUser(GaeAbstractUser):
+class GaeUser(GaeAbstractBaseUser):
     """ A basic user model which can be used with GAE authentication.
         Essentially the equivalent of django.contrib.auth.models.User.
         Cannot be used with permissions when using the Datastore, because it
@@ -256,7 +256,7 @@ class GaeUser(GaeAbstractUser):
         verbose_name_plural = _('users')
 
 
-class GaeAbstractDatastoreUser(GaeAbstractUser, PermissionsMixin):
+class GaeAbstractDatastoreUser(GaeAbstractBaseUser, PermissionsMixin):
     """ Base class for a user model which can be used with GAE authentication
         and permissions on the Datastore.
     """
@@ -265,7 +265,7 @@ class GaeAbstractDatastoreUser(GaeAbstractUser, PermissionsMixin):
         abstract = True
 
 
-class GaeDatastoreUser(GaeAbstractUser, PermissionsMixin):
+class GaeDatastoreUser(GaeAbstractBaseUser, PermissionsMixin):
     """ A basic user model which can be used with GAE authentication and allows
         permissions to work on the Datastore backend.
     """
