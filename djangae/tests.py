@@ -1244,6 +1244,17 @@ class InstanceSetFieldTests(TestCase):
         main_from_db.related_things.add(other2)
         main_from_db.save()
 
+    def test_deletion(self):
+        """
+        Delete one of the objects referred to by the related field
+        """
+        main = ISModel.objects.create()
+        other = ISOther.objects.create()
+        main.related_things.add(other)
+        main.save()
+
+        other.delete()
+        self.assertEqual(main.related_things.count(), 0)
 
 class RelationWithOverriddenDbTable(models.Model):
     class Meta:
