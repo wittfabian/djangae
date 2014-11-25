@@ -104,11 +104,12 @@ SANDBOXES = {
 
 
 @contextlib.contextmanager
-def activate(sandbox_name, add_sdk_to_path=False):
+def activate(sandbox_name, add_sdk_to_path=False, options_override=None):
     """Context manager for command-line scripts started outside of dev_appserver.
 
     :param sandbox_name: str, one of 'local', 'remote' or 'test'
     :param add_sdk_to_path: bool, optionally adds the App Engine SDK to sys.path
+    :param options_override: an options structure to pass down to dev_appserver setup
 
     Available sandboxes:
 
@@ -165,7 +166,12 @@ def activate(sandbox_name, add_sdk_to_path=False):
     import google.appengine.api.apiproxy_stub_map as apiproxy_stub_map
 
     # The argparser is the easiest way to get the default options.
-    options = devappserver2.PARSER.parse_args([project_root])
+    options = options_override or devappserver2.PARSER.parse_args([project_root])
+    if not options_override:
+        # If the user didn't override the options, set the default storage location to something
+        # that isn't in the temp directory
+        options.storage_path = os.path.join(project_root, ".storage")
+
     configuration = application_configuration.ApplicationConfiguration(options.config_paths)
 
     # Take dev_appserver paths off sys.path - GAE apps cannot access these
