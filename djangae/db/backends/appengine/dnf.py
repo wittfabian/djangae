@@ -62,6 +62,9 @@ def parse_dnf(node, connection):
     if tree and tree[0] != 'OR':
         tree = ('OR', [tree])
 
+
+    # Filter out impossible branches of the where, if that then results in an empty tree then
+    # raise an EmptyResultSet, otherwise replace the tree with the now simpler query
     if tree:
         final = []
         for and_branch in tree[-1]:
