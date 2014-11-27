@@ -1,8 +1,17 @@
+import os
 import sys
 import argparse
 
 import djangae.sandbox as sandbox
+from djangae.utils import find_project_root
 
+# Set some Django-y defaults
+DJANGO_DEFAULTS = {
+    "storage_path": os.path.join(find_project_root(), ".storage"),
+    "port": 8000,
+    "admin_port": 8001,
+    "automatic_restart": "False"
+}
 
 
 def _execute_from_command_line(sandbox_name, argv, **sandbox_overrides):
@@ -25,7 +34,7 @@ def execute_from_command_line(argv=None, **sandbox_overrides):
     parser.add_argument('args', nargs=argparse.REMAINDER)
     namespace = parser.parse_args(argv[1:])
 
-    overrides = {}
+    overrides = DJANGO_DEFAULTS
     overrides.update(sandbox_overrides)
 
     return _execute_from_command_line(namespace.sandbox, ['manage.py'] + namespace.args, **overrides)
