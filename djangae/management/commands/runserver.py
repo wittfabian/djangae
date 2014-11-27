@@ -72,6 +72,20 @@ class Command(BaseRunserverCommand):
         # Will have been set by setup_paths
         sdk_path = _find_sdk_from_python_path()
 
+
+        from google.appengine.tools.devappserver2 import devappserver2
+        from google.appengine.tools.devappserver2 import api_server
+        from djangae import sandbox
+
+        class NoConfigDevServer(devappserver2.DevelopmentServer):
+            @staticmethod
+            def _create_api_server(request_data, storage_path, options, configuration):
+                return api_server.APIServer(options.api_host, options.api_port, configuration.app_id)
+
+        devappserver = NoConfigDevServer()
+        devappserver.start(sandbox._OPTIONS)
+        return
+
         if use_old_dev_appserver:
             dev_appserver = os.path.join(sdk_path, "old_dev_appserver.py")
             command = [
