@@ -4,13 +4,14 @@ import argparse
 import djangae.sandbox as sandbox
 
 
-def _execute_from_command_line(sandbox_name, argv):
-    with sandbox.activate(sandbox_name, add_sdk_to_path=True):
+
+def _execute_from_command_line(sandbox_name, argv, **sandbox_overrides):
+    with sandbox.activate(sandbox_name, add_sdk_to_path=True, **sandbox_overrides):
         import django.core.management as django_management  # Now on the path
         return django_management.execute_from_command_line(argv)
 
 
-def execute_from_command_line(argv=None):
+def execute_from_command_line(argv=None, **sandbox_overrides):
     """Wraps Django's `execute_from_command_line` to initialize a djangae
     sandbox before running a management command.
 
@@ -23,19 +24,23 @@ def execute_from_command_line(argv=None):
         '--sandbox', default=sandbox.LOCAL, choices=sandbox.SANDBOXES.keys())
     parser.add_argument('args', nargs=argparse.REMAINDER)
     namespace = parser.parse_args(argv[1:])
-    return _execute_from_command_line(namespace.sandbox, ['manage.py'] + namespace.args)
+
+    overrides = {}
+    overrides.update(sandbox_overrides)
+
+    return _execute_from_command_line(namespace.sandbox, ['manage.py'] + namespace.args, **overrides)
 
 
-def remote_execute_from_command_line(argv=None):
+def remote_execute_from_command_line(argv=None, **sandbox_overrides):
     """Execute commands in the remote sandbox"""
-    return _execute_from_command_line(sandbox.REMOTE, argv or sys.argv)
+    return _execute_from_command_line(sandbox.REMOTE, argv or sys.argv, **sandbox_overrides)
 
 
-def local_execute_from_command_line(argv=None):
+def local_execute_from_command_line(argv=None, **sandbox_overrides):
     """Execute commands in the local sandbox"""
-    return _execute_from_command_line(sandbox.LOCAL, argv or sys.argv)
+    return _execute_from_command_line(sandbox.LOCAL, argv or sys.argv, **sandbox_overrides)
 
 
-def test_execute_from_command_line(argv=None):
+def test_execute_from_command_line(argv=None, **sandbox_overrides):
     """Execute commands in the test sandbox"""
-    return _execute_from_command_line(sandbox.TEST, argv or sys.argv)
+    return _execute_from_command_line(sandbox.TEST, argv or sys.argv, **sandbox_overrides)

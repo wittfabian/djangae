@@ -104,7 +104,7 @@ SANDBOXES = {
 
 
 @contextlib.contextmanager
-def activate(sandbox_name, add_sdk_to_path=False, options_override=None):
+def activate(sandbox_name, add_sdk_to_path=False, **overrides):
     """Context manager for command-line scripts started outside of dev_appserver.
 
     :param sandbox_name: str, one of 'local', 'remote' or 'test'
@@ -166,11 +166,13 @@ def activate(sandbox_name, add_sdk_to_path=False, options_override=None):
     import google.appengine.api.apiproxy_stub_map as apiproxy_stub_map
 
     # The argparser is the easiest way to get the default options.
-    options = options_override or devappserver2.PARSER.parse_args([project_root])
-    if not options_override:
-        # If the user didn't override the options, set the default storage location to something
-        # that isn't in the temp directory
-        options.storage_path = os.path.join(project_root, ".storage")
+    options = devappserver2.PARSER.parse_args([project_root])
+
+    for option in overrides:
+        if not hasattr(options, option):
+            raise ValueError("Unrecognized sandbox option: {}".format(option))
+
+        setattr(options, option, overrides[option])
 
     configuration = application_configuration.ApplicationConfiguration(options.config_paths)
 
