@@ -75,6 +75,7 @@ class Command(BaseRunserverCommand):
 
         from google.appengine.tools.devappserver2 import devappserver2
         from google.appengine.tools.devappserver2 import api_server
+        from google.appengine.tools.devappserver2 import python_runtime
         from djangae import sandbox
 
         class NoConfigDevServer(devappserver2.DevelopmentServer):
@@ -82,6 +83,8 @@ class Command(BaseRunserverCommand):
             def _create_api_server(request_data, storage_path, options, configuration):
                 return api_server.APIServer(options.api_host, options.api_port, configuration.app_id)
 
+        python_runtime._RUNTIME_PATH = os.path.join(sdk_path, '_python_runtime.py')
+        python_runtime._RUNTIME_ARGS = [sys.executable, python_runtime._RUNTIME_PATH]
         devappserver = NoConfigDevServer()
         devappserver.start(sandbox._OPTIONS)
         return
