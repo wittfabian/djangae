@@ -102,6 +102,7 @@ SANDBOXES = {
     TEST: _test,
 }
 
+_OPTIONS = None
 
 @contextlib.contextmanager
 def activate(sandbox_name, add_sdk_to_path=False, **overrides):
@@ -185,6 +186,8 @@ def activate(sandbox_name, add_sdk_to_path=False, **overrides):
         sys.path.insert(0, l)
 
     try:
+        global _OPTIONS
+        _OPTIONS = options # Store the options globally so they can be accessed later
         kwargs = dict(
             devappserver2=devappserver2,
             configuration=configuration,
