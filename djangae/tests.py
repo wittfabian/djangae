@@ -38,6 +38,7 @@ from djangae.models import CounterShard
 from djangae.db.backends.appengine.dnf import parse_dnf
 from .storage import BlobstoreFileUploadHandler
 from .wsgi import DjangaeApplication
+from djangae.core import paginator
 
 try:
     import webtest
@@ -1293,3 +1294,52 @@ class TestGenericRelationField(TestCase):
 
         instance = GenericRelationModel.objects.get()
         self.assertEqual(ct, instance.relation_to_weird)
+
+
+class PaginatorModel(models.Model):
+    foo = models.IntegerField()
+
+
+class DatastorePaginatorTest(TestCase):
+
+    def setUp(self):
+        for i in range(15):
+            PaginatorModel.objects.create(foo=i)
+
+    def test_basic_usage(self):
+        def qs():
+            return PaginatorModel.objects.all().order_by('foo')
+
+        p1 = paginator.DatastorePaginator(qs(), 5).page(1)
+        self.assertFalse(p1.has_previous())
+        self.assertTrue(p1.has_next())
+        self.assertEqual(p1.start_index(), 1)
+        self.assertEqual(p1.end_index(), 5)
+        self.assertEqual(p1.next_page_number(), 2)
+        self.assertEqual([x.foo for x in p1], [0, 1, 2, 3, 4])
+
+        p2 = paginator.DatastorePaginator(qs(), 5).page(2)
+        self.assertTrue(p2.has_previous())
+        self.assertTrue(p2.has_next())
+        self.assertEqual(p2.start_index(), 6)
+        self.assertEqual(p2.end_index(), 10)
+        self.assertEqual(p2.previous_page_number(), 1)
+        self.assertEqual(p2.next_page_number(), 3)
+        self.assertEqual([x.foo for x in p2], [5, 6, 7, 8, 9])
+
+        p3 = paginator.DatastorePaginator(qs(), 5).page(3)
+        self.assertTrue(p3.has_previous())
+        self.assertFalse(p3.has_next())
+        self.assertEqual(p3.start_index(), 11)
+        self.assertEqual(p3.end_index(), 15)
+        self.assertEqual(p3.previous_page_number(), 2)
+        self.assertEqual([x.foo for x in p3], [10, 11, 12, 13, 14])
+
+    def test_empty(self):
+        qs = PaginatorModel.objects.none()
+        p1 = paginator.DatastorePaginator(qs, 5).page(1)
+        self.assertFalse(p1.has_previous())
+        self.assertFalse(p1.has_next())
+        self.assertEqual(p1.start_index(), 0)
+        self.assertEqual(p1.end_index(), 0)
+        self.assertEqual([x for x in p1], [])
