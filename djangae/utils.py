@@ -88,4 +88,4 @@ def find_project_root():
             else:
                 path = parent
 
-    raise RuntimeError("Unable to locate app.yaml")
+    raise RuntimeError("Unable to locate app.yaml. Did you add it to skip_files?")
