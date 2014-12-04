@@ -47,7 +47,6 @@ def _local(devappserver2=None, configuration=None, options=None, wsgi_request_in
 
     apis = devappserver2.DevelopmentServer._create_api_server(
         request_data, storage_path, options, configuration)
-    apis.start()
 
     try:
         yield
