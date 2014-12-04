@@ -26,7 +26,7 @@ def load_special_indexes():
 
     if not os.path.exists(index_file):
         # No file, no special index
-        logging.info("Not loading any special indexes")
+        logging.debug("Not loading any special indexes")
         return
 
     mtime = os.path.getmtime(index_file)
@@ -40,7 +40,7 @@ def load_special_indexes():
     _special_indexes = data
     _last_loaded_time = mtime
 
-    logging.info("Loaded special indexes for {0} models".format(len(_special_indexes)))
+    logging.debug("Loaded special indexes for {0} models".format(len(_special_indexes)))
 
 
 def special_index_exists(model_class, field_name, index_type):
