@@ -10,6 +10,7 @@ DJANGO_DEFAULTS = {
     "storage_path": os.path.join(find_project_root(), ".storage"),
     "port": 8000,
     "admin_port": 8001,
+    "api_port": 8002,
     "automatic_restart": "False"
 }
 
