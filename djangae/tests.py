@@ -1364,3 +1364,7 @@ class BlobFieldTests(TestCase):
         with self.assertRaises(DataError):
             instance.field1 = u"This is some unicode"
             instance.save()
+
+        with self.assertRaises(DataError):
+            instance.field1 = 1
+            instance.save()

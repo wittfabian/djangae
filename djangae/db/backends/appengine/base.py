@@ -261,8 +261,8 @@ class DatabaseOperations(BaseDatabaseOperations):
             if db_type == 'text':
                 value = Text(value)
         elif db_type == 'bytes':
-            if isinstance(value, unicode):
-                raise Database.DatabaseError("Tried to store unicode string as byte data (use 'str' instead)")
+            if not isinstance(value, str):
+                raise Database.DatabaseError("Tried to store non-string data as a blob (use 'str' instead)")
 
             # Store BlobField as Blobs.
             value = Blob(value)
