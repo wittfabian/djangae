@@ -261,7 +261,10 @@ class DatabaseOperations(BaseDatabaseOperations):
             if db_type == 'text':
                 value = Text(value)
         elif db_type == 'bytes':
-            # Store BlobField, DictField and EmbeddedModelField values as Blobs.
+            if isinstance(value, unicode):
+                raise Database.DatabaseError("Tried to store unicode string as byte data (use 'str' instead)")
+
+            # Store BlobField as Blobs.
             value = Blob(value)
         elif db_type == 'date':
             value = self.value_to_db_date(value)

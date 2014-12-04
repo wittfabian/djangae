@@ -1,5 +1,5 @@
 import os
-
+import pickle
 from cStringIO import StringIO
 import datetime
 import unittest
@@ -33,7 +33,7 @@ from djangae.db.utils import entity_matches_query
 from djangae.db.backends.appengine import caching
 from djangae.db.unique_utils import query_is_unique
 from djangae.db import transaction
-from djangae.fields import ComputedCharField, ShardedCounterField, SetField, ListField, GenericRelationField
+from djangae.fields import ComputedCharField, ShardedCounterField, SetField, ListField, GenericRelationField, BlobField
 from djangae.models import CounterShard
 from djangae.db.backends.appengine.dnf import parse_dnf
 from .storage import BlobstoreFileUploadHandler
@@ -1343,3 +1343,24 @@ class DatastorePaginatorTest(TestCase):
         self.assertEqual(p1.start_index(), 0)
         self.assertEqual(p1.end_index(), 0)
         self.assertEqual([x for x in p1], [])
+
+
+class BlobModel(models.Model):
+    field1 = BlobField(blank=True)
+    field2 = models.IntegerField(default=1)
+
+class BlobFieldTests(TestCase):
+
+    def test_basic_usage(self):
+        instance = BlobModel.objects.create()
+        instance.field1 = pickle.dumps(instance)
+        instance.save()
+
+        instance = BlobModel.objects.get()
+
+        self.assertTrue(isinstance(instance.field1, str))
+        self.assertEqual(1, pickle.loads(instance.field1).field2)
+
+        with self.assertRaises(DataError):
+            instance.field1 = u"This is some unicode"
+            instance.save()

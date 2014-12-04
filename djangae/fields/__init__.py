@@ -9,6 +9,7 @@ from .iterable import *
 from .related import *
 from .computed import *
 from .json import *
+from .blob import *
 
 class TrueOrNullField(models.NullBooleanField):
     """A Field only storing `Null` or `True` values.
