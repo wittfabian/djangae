@@ -21,6 +21,7 @@ from django.db.models.sql.datastructures import EmptyResultSet
 from google.appengine.api.datastore_errors import EntityNotFoundError
 from google.appengine.api import datastore
 from django.test.utils import override_settings
+from django.contrib.contenttypes.models import ContentType
 
 # DJANGAE
 from djangae.contrib import sleuth
@@ -32,11 +33,12 @@ from djangae.db.utils import entity_matches_query
 from djangae.db.backends.appengine import caching
 from djangae.db.unique_utils import query_is_unique
 from djangae.db import transaction
-from djangae.fields import ComputedCharField, ShardedCounterField, SetField, ListField
+from djangae.fields import ComputedCharField, ShardedCounterField, SetField, ListField, GenericRelationField
 from djangae.models import CounterShard
 from djangae.db.backends.appengine.dnf import parse_dnf
 from .storage import BlobstoreFileUploadHandler
 from .wsgi import DjangaeApplication
+from djangae.core import paginator
 
 try:
     import webtest
@@ -197,6 +199,11 @@ class CachingTests(TestCase):
             self.assertEqual(query.call_count, 2)
 
 
+class NullDate(models.Model):
+    date = models.DateField(null=True, default=None)
+    datetime = models.DateTimeField(null=True, default=None)
+    time = models.TimeField(null=True, default=None)
+
 class BackendTests(TestCase):
     def test_entity_matches_query(self):
         entity = datastore.Entity("test_model")
@@ -251,6 +258,15 @@ class BackendTests(TestCase):
             with sleuth.switch("djangae.db.backends.appengine.commands.datastore.MultiQuery.Run", lambda *args, **kwargs: []) as query_mock:
                 list(TestUser.objects.exclude(username__startswith="test"))
                 self.assertEqual(1, query_mock.call_count)
+
+    def test_null_date_field(self):
+        null_date = NullDate()
+        null_date.save()
+
+        null_date = NullDate.objects.get()
+        self.assertIsNone(null_date.date)
+        self.assertIsNone(null_date.time)
+        self.assertIsNone(null_date.datetime)
 
 
 class ModelFormsetTest(TestCase):
@@ -785,6 +801,9 @@ class EdgeCaseTests(TestCase):
         results = list(TestUser.objects.all().exclude(username__in=["A"]))
         self.assertItemsEqual(["B", "C", "D", "E"], [x.username for x in results ])
 
+        results = list(TestFruit.objects.filter(name='apple', color__in=[]))
+        self.assertItemsEqual([], results)
+
     def test_or_queryset(self):
         """
             This constructs an OR query, this is currently broken in the parse_where_and_check_projection
@@ -1189,3 +1208,138 @@ class InstanceSetFieldTests(TestCase):
 
         without_reverse = RelationWithoutReverse.objects.create(name="test3")
         self.assertFalse(hasattr(without_reverse, "ismodel_set"))
+
+    def test_save_and_load_empty(self):
+        """
+        Create a main object with no related items,
+        get a copy of it back from the db and try to read items.
+        """
+        main = ISModel.objects.create()
+        main_from_db = ISModel.objects.get(pk=main.pk)
+
+        # Fetch the container from the database and read its items
+        self.assertItemsEqual(main_from_db.related_things.all(), [])
+
+    def test_add_to_empty(self):
+        """
+        Create a main object with no related items,
+        get a copy of it back from the db and try to add items.
+        """
+        main = ISModel.objects.create()
+        main_from_db = ISModel.objects.get(pk=main.pk)
+
+        other = ISOther.objects.create()
+        main_from_db.related_things.add(other)
+        main_from_db.save()
+
+    def test_add_another(self):
+        """
+        Create a main object with related items,
+        get a copy of it back from the db and try to add more.
+        """
+        main = ISModel.objects.create()
+        other1 = ISOther.objects.create()
+        main.related_things.add(other1)
+        main.save()
+
+        main_from_db = ISModel.objects.get(pk=main.pk)
+        other2 = ISOther.objects.create()
+
+        main_from_db.related_things.add(other2)
+        main_from_db.save()
+
+    def test_deletion(self):
+        """
+        Delete one of the objects referred to by the related field
+        """
+        main = ISModel.objects.create()
+        other = ISOther.objects.create()
+        main.related_things.add(other)
+        main.save()
+
+        other.delete()
+        self.assertEqual(main.related_things.count(), 0)
+
+class RelationWithOverriddenDbTable(models.Model):
+    class Meta:
+        db_table = "bananarama"
+
+class GenericRelationModel(models.Model):
+    relation_to_content_type = GenericRelationField(ContentType, null=True)
+    relation_to_weird = GenericRelationField(RelationWithOverriddenDbTable, null=True)
+
+class TestGenericRelationField(TestCase):
+    def test_basic_usage(self):
+        instance = GenericRelationModel.objects.create()
+        self.assertIsNone(instance.relation_to_content_type)
+
+        ct = ContentType.objects.create()
+        instance.relation_to_content_type = ct
+        instance.save()
+
+        self.assertTrue(instance.relation_to_content_type_id)
+
+        instance = GenericRelationModel.objects.get()
+        self.assertEqual(ct, instance.relation_to_content_type)
+
+    def test_overridden_dbtable(self):
+        instance = GenericRelationModel.objects.create()
+        self.assertIsNone(instance.relation_to_weird)
+
+        ct = ContentType.objects.create()
+        instance.relation_to_weird = ct
+        instance.save()
+
+        self.assertTrue(instance.relation_to_weird_id)
+
+        instance = GenericRelationModel.objects.get()
+        self.assertEqual(ct, instance.relation_to_weird)
+
+
+class PaginatorModel(models.Model):
+    foo = models.IntegerField()
+
+
+class DatastorePaginatorTest(TestCase):
+
+    def setUp(self):
+        for i in range(15):
+            PaginatorModel.objects.create(foo=i)
+
+    def test_basic_usage(self):
+        def qs():
+            return PaginatorModel.objects.all().order_by('foo')
+
+        p1 = paginator.DatastorePaginator(qs(), 5).page(1)
+        self.assertFalse(p1.has_previous())
+        self.assertTrue(p1.has_next())
+        self.assertEqual(p1.start_index(), 1)
+        self.assertEqual(p1.end_index(), 5)
+        self.assertEqual(p1.next_page_number(), 2)
+        self.assertEqual([x.foo for x in p1], [0, 1, 2, 3, 4])
+
+        p2 = paginator.DatastorePaginator(qs(), 5).page(2)
+        self.assertTrue(p2.has_previous())
+        self.assertTrue(p2.has_next())
+        self.assertEqual(p2.start_index(), 6)
+        self.assertEqual(p2.end_index(), 10)
+        self.assertEqual(p2.previous_page_number(), 1)
+        self.assertEqual(p2.next_page_number(), 3)
+        self.assertEqual([x.foo for x in p2], [5, 6, 7, 8, 9])
+
+        p3 = paginator.DatastorePaginator(qs(), 5).page(3)
+        self.assertTrue(p3.has_previous())
+        self.assertFalse(p3.has_next())
+        self.assertEqual(p3.start_index(), 11)
+        self.assertEqual(p3.end_index(), 15)
+        self.assertEqual(p3.previous_page_number(), 2)
+        self.assertEqual([x.foo for x in p3], [10, 11, 12, 13, 14])
+
+    def test_empty(self):
+        qs = PaginatorModel.objects.none()
+        p1 = paginator.DatastorePaginator(qs, 5).page(1)
+        self.assertFalse(p1.has_previous())
+        self.assertFalse(p1.has_next())
+        self.assertEqual(p1.start_index(), 0)
+        self.assertEqual(p1.end_index(), 0)
+        self.assertEqual([x for x in p1], [])

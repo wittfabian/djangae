@@ -7,6 +7,8 @@ from djangae.db.backends.appengine.dbapi import NotSupportedError
 from google.appengine.api import datastore
 
 
+IMPOSSIBLE_FILTER = ('__key__', '<', datastore.Key.from_path('', 1))
+
 def process_literal(node, filtered_columns=[], negated=False):
     column, op, value = node[1]
     if filtered_columns is not None:
@@ -23,7 +25,9 @@ def process_literal(node, filtered_columns=[], negated=False):
             return ('OR', lits), filtered_columns
         else:
             if not value:
-                return None, filtered_columns
+                # Add an impossible filter when someone queries on an empty list, which should never return anything for
+                # this branch. We can't just raise an EmptyResultSet because another branch might return something
+                return ('AND', [('LIT', IMPOSSIBLE_FILTER)]), filtered_columns
             return ('OR', [('LIT', (column, '=', x)) for x in value]), filtered_columns
     elif op == "isnull":
         op = "exact"
@@ -54,13 +58,26 @@ def parse_dnf(node, connection):
     if tree:
         tree = tripled(tree)
 
-    elif filtered_columns:
-        # If there was no tree returned, but we did filter on something
-        # then we must have an empty result set (e.g. we filtered on an empty list)
-        raise EmptyResultSet()
 
     if tree and tree[0] != 'OR':
         tree = ('OR', [tree])
+
+
+    # Filter out impossible branches of the where, if that then results in an empty tree then
+    # raise an EmptyResultSet, otherwise replace the tree with the now simpler query
+    if tree:
+        final = []
+        for and_branch in tree[-1]:
+            if and_branch[0] == 'LIT' and and_branch[-1] == IMPOSSIBLE_FILTER:
+                continue
+            elif and_branch[0] == 'AND' and IMPOSSIBLE_FILTER in [x[-1] for x in and_branch[-1] ]:
+                continue
+
+            final.append(and_branch)
+        if not final:
+            raise EmptyResultSet()
+        else:
+            tree = (tree[0], final)
 
     # If there are more than 30 filters, and not all filters are PK filters
     if tree and len(tree[-1]) > 30:

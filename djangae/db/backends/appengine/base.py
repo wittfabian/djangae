@@ -237,9 +237,9 @@ class DatabaseOperations(BaseDatabaseOperations):
         elif db_type == 'time':
             return self.prep_lookup_time(model, value, field)
         elif db_type in ('list', 'set'):
-            if not value:
+            if hasattr(value, "__len__") and not value:
                 value = None #Convert empty lists to None
-            elif db_type == 'set':
+            elif hasattr(value, "__iter__"):
                 # Convert sets to lists
                 value = list(value)
 
@@ -272,9 +272,9 @@ class DatabaseOperations(BaseDatabaseOperations):
         elif db_type == 'decimal':
             value = self.value_to_db_decimal(value, field.max_digits, field.decimal_places)
         elif db_type in ('list', 'set'):
-            if not value:
-                value = None #Make sure we always convert empty lists to None
-            elif db_type == 'set':
+            if hasattr(value, "__len__") and not value:
+                value = None #Convert empty lists to None
+            elif hasattr(value, "__iter__"):
                 # Convert sets to lists
                 value = list(value)
 
@@ -321,7 +321,9 @@ class DatabaseOperations(BaseDatabaseOperations):
             # App Engine Query's don't return datetime fields (unlike Get) I HAVE NO IDEA WHY, APP ENGINE SUCKS MONKEY BALLS
             value = datetime.datetime.fromtimestamp(float(value) / 1000000.0)
 
-        return value.date()
+        if value:
+            value = value.date()
+        return value
 
     def value_from_db_time(self, value):
         if isinstance(value, (int, long)):
@@ -330,7 +332,10 @@ class DatabaseOperations(BaseDatabaseOperations):
 
         if value is not None and settings.USE_TZ and timezone.is_naive(value):
             value = value.replace(tzinfo=timezone.utc)
-        return value.time()
+
+        if value:
+            value = value.time()
+        return value
 
     def value_from_db_decimal(self, value):
         if value:
