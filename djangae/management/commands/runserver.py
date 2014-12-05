@@ -61,7 +61,6 @@ class Command(BaseRunserverCommand):
         sdk_path = _find_sdk_from_python_path()
 
         from google.appengine.tools.devappserver2 import devappserver2
-        from google.appengine.tools.devappserver2 import api_server
         from google.appengine.tools.devappserver2 import python_runtime
         from djangae import sandbox
 
@@ -71,7 +70,7 @@ class Command(BaseRunserverCommand):
         class NoConfigDevServer(devappserver2.DevelopmentServer):
             @staticmethod
             def _create_api_server(request_data, storage_path, options, configuration):
-                return api_server.APIServer(options.api_host, options.api_port, configuration.app_id)
+                return sandbox._API_SERVER
 
         python_runtime._RUNTIME_PATH = os.path.join(sdk_path, '_python_runtime.py')
         python_runtime._RUNTIME_ARGS = [sys.executable, python_runtime._RUNTIME_PATH]

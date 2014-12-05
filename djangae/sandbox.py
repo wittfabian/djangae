@@ -10,6 +10,7 @@ import djangae.utils as utils
 
 _SCRIPT_NAME = 'dev_appserver.py'
 
+_API_SERVER = None
 
 def _find_sdk_from_python_path():
     import google.appengine
@@ -38,6 +39,8 @@ def _find_sdk_from_path():
 
 @contextlib.contextmanager
 def _local(devappserver2=None, configuration=None, options=None, wsgi_request_info=None, **kwargs):
+    global _API_SERVER
+
     original_environ = os.environ.copy()
 
     devappserver2._setup_environ(configuration.app_id)
@@ -45,13 +48,13 @@ def _local(devappserver2=None, configuration=None, options=None, wsgi_request_in
     dispatcher = None
     request_data = wsgi_request_info.WSGIRequestInfo(dispatcher)
 
-    apis = devappserver2.DevelopmentServer._create_api_server(
+    _API_SERVER = devappserver2.DevelopmentServer._create_api_server(
         request_data, storage_path, options, configuration)
 
     try:
         yield
     finally:
-        apis.quit()
+        _API_SERVER.quit()
         os.environ = original_environ
 
 
