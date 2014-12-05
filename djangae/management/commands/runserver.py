@@ -20,7 +20,6 @@ class Command(BaseRunserverCommand):
 
         shutdown_message = options.get('shutdown_message', '')
 
-        # We use the old dev appserver if threading is disabled or --old was passed
         quit_command = 'CTRL-BREAK' if sys.platform == 'win32' else 'CONTROL-C'
 
         from djangae.utils import find_project_root
@@ -61,11 +60,13 @@ class Command(BaseRunserverCommand):
         # Will have been set by setup_paths
         sdk_path = _find_sdk_from_python_path()
 
-
         from google.appengine.tools.devappserver2 import devappserver2
         from google.appengine.tools.devappserver2 import api_server
         from google.appengine.tools.devappserver2 import python_runtime
         from djangae import sandbox
+
+        sandbox._OPTIONS.port = int(self.port) if self.port else sandbox._OPTIONS.port
+        sandbox._OPTIONS.host = self.addr if self.addr else sandbox._OPTIONS.host
 
         class NoConfigDevServer(devappserver2.DevelopmentServer):
             @staticmethod
