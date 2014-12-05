@@ -10,6 +10,7 @@ import djangae.utils as utils
 
 _SCRIPT_NAME = 'dev_appserver.py'
 
+_API_SERVER = None
 
 def _find_sdk_from_python_path():
     import google.appengine
@@ -38,6 +39,8 @@ def _find_sdk_from_path():
 
 @contextlib.contextmanager
 def _local(devappserver2=None, configuration=None, options=None, wsgi_request_info=None, **kwargs):
+    global _API_SERVER
+
     original_environ = os.environ.copy()
 
     devappserver2._setup_environ(configuration.app_id)
@@ -45,14 +48,13 @@ def _local(devappserver2=None, configuration=None, options=None, wsgi_request_in
     dispatcher = None
     request_data = wsgi_request_info.WSGIRequestInfo(dispatcher)
 
-    apis = devappserver2.DevelopmentServer._create_api_server(
+    _API_SERVER = devappserver2.DevelopmentServer._create_api_server(
         request_data, storage_path, options, configuration)
-    apis.start()
 
     try:
         yield
     finally:
-        apis.quit()
+        _API_SERVER.quit()
         os.environ = original_environ
 
 
@@ -102,13 +104,15 @@ SANDBOXES = {
     TEST: _test,
 }
 
+_OPTIONS = None
 
 @contextlib.contextmanager
-def activate(sandbox_name, add_sdk_to_path=False):
+def activate(sandbox_name, add_sdk_to_path=False, **overrides):
     """Context manager for command-line scripts started outside of dev_appserver.
 
     :param sandbox_name: str, one of 'local', 'remote' or 'test'
     :param add_sdk_to_path: bool, optionally adds the App Engine SDK to sys.path
+    :param options_override: an options structure to pass down to dev_appserver setup
 
     Available sandboxes:
 
@@ -166,6 +170,13 @@ def activate(sandbox_name, add_sdk_to_path=False):
 
     # The argparser is the easiest way to get the default options.
     options = devappserver2.PARSER.parse_args([project_root])
+
+    for option in overrides:
+        if not hasattr(options, option):
+            raise ValueError("Unrecognized sandbox option: {}".format(option))
+
+        setattr(options, option, overrides[option])
+
     configuration = application_configuration.ApplicationConfiguration(options.config_paths)
 
     # Take dev_appserver paths off sys.path - GAE apps cannot access these
@@ -177,6 +188,8 @@ def activate(sandbox_name, add_sdk_to_path=False):
         sys.path.insert(0, l)
 
     try:
+        global _OPTIONS
+        _OPTIONS = options # Store the options globally so they can be accessed later
         kwargs = dict(
             devappserver2=devappserver2,
             configuration=configuration,

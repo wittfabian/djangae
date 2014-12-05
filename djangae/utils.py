@@ -1,31 +1,6 @@
 import os
 import sys
 
-
-def find_project_root():
-    """Traverse the filesystem upwards and return the directory containing app.yaml"""
-    path = os.path.dirname(os.path.abspath(__file__))
-
-    while True:
-        if os.path.exists(os.path.join(path, "app.yaml")):
-            return path
-        else:
-            parent = os.path.dirname(path)
-            if parent == path:  # Filesystem root
-                break
-            else:
-                path = parent
-
-    raise RuntimeError("Unable to locate app.yaml")
-
-
-def data_root():
-    path = os.path.join(find_project_root(), ".gaedata")
-    if not os.path.exists(path):
-        os.makedirs(path)
-    return path
-
-
 def application_id():
     from google.appengine.api import app_identity
 
@@ -97,3 +72,20 @@ class memoized(object):
    def __get__(self, obj, objtype):
       '''Support instance methods.'''
       return functools.partial(self.__call__, obj)
+
+@memoized
+def find_project_root():
+    """Traverse the filesystem upwards and return the directory containing app.yaml"""
+    path = os.path.dirname(os.path.abspath(__file__))
+
+    while True:
+        if os.path.exists(os.path.join(path, "app.yaml")):
+            return path
+        else:
+            parent = os.path.dirname(path)
+            if parent == path:  # Filesystem root
+                break
+            else:
+                path = parent
+
+    raise RuntimeError("Unable to locate app.yaml. Did you add it to skip_files?")

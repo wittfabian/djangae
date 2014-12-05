@@ -1,11 +1,7 @@
 import os
-import time
-from optparse import make_option
 
 from django.core.management.commands.runserver import BaseRunserverCommand
 
-from subprocess import Popen
-import signal
 from datetime import datetime
 
 
@@ -19,22 +15,14 @@ class Command(BaseRunserverCommand):
     will be deployed to.
     """
 
-    option_list = BaseRunserverCommand.option_list + (
-        make_option('--old', '-o', action='store_true', dest='use_old_dev_appserver',
-            default=False, help='Tells GAE to use the old dev_appserver.'),
-    )
-
     def inner_run(self, *args, **options):
         import sys
 
         shutdown_message = options.get('shutdown_message', '')
-        do_reload = options.get('use_reloader', True)
 
-        # We use the old dev appserver if threading is disabled or --old was passed
-        use_old_dev_appserver = options.get('use_old_dev_appserver') or not options.get("use_threading")
         quit_command = 'CTRL-BREAK' if sys.platform == 'win32' else 'CONTROL-C'
 
-        from djangae.utils import find_project_root, data_root
+        from djangae.utils import find_project_root
         from djangae.sandbox import _find_sdk_from_python_path
 
         from django.conf import settings
@@ -72,60 +60,24 @@ class Command(BaseRunserverCommand):
         # Will have been set by setup_paths
         sdk_path = _find_sdk_from_python_path()
 
-        if use_old_dev_appserver:
-            dev_appserver = os.path.join(sdk_path, "old_dev_appserver.py")
-            command = [
-                dev_appserver,
-                find_project_root(),
-                "-p",
-                self.port,
-                "-h",
-                self.addr,
-                "--use_sqlite",
-                "--high_replication",
-                "--allow_skipped_files",
-            ]
-        else:
-            dev_appserver = os.path.join(sdk_path, "dev_appserver.py")
-            command = [
-                dev_appserver,
-                find_project_root(),
-                "--port",
-                self.port,
-                "--host",
-                self.addr,
-                "--admin_port",
-                str(int(self.port) + 1),
-                "--automatic_restart",
-                "True" if do_reload else "False",
-                "--allow_skipped_files",
-                "--skip_sdk_update_check"
-            ]
+        from google.appengine.tools.devappserver2 import devappserver2
+        from google.appengine.tools.devappserver2 import python_runtime
+        from djangae import sandbox
 
+        sandbox._OPTIONS.port = int(self.port) if self.port else sandbox._OPTIONS.port
+        sandbox._OPTIONS.host = self.addr if self.addr else sandbox._OPTIONS.host
 
-        process = Popen(
-            command,
-            stdout=sys.__stdout__,
-            stderr=sys.__stderr__,
-            cwd=find_project_root()
-        )
+        class NoConfigDevServer(devappserver2.DevelopmentServer):
+            @staticmethod
+            def _create_api_server(request_data, storage_path, options, configuration):
+                return sandbox._API_SERVER
 
-        # This makes sure that dev_appserver gets killed on reload
-        import atexit
-        atexit.register(process.kill)
+        python_runtime._RUNTIME_PATH = os.path.join(sdk_path, '_python_runtime.py')
+        python_runtime._RUNTIME_ARGS = [sys.executable, python_runtime._RUNTIME_PATH]
+        devappserver = NoConfigDevServer()
+        devappserver.start(sandbox._OPTIONS)
 
-        try:
-            process.wait()
-        except KeyboardInterrupt:
-            # Tell the dev appserver to shutdown and forcibly kill
-            # if it takes too long
-            process.send_signal(signal.SIGTERM)
-            time.sleep(2)
-            process.kill()
+        if shutdown_message:
+            sys.stdout.write(shutdown_message)
 
-            if shutdown_message:
-                sys.stdout.write(shutdown_message)
-
-        # Some weird race condition crazy sometimes makes this None...
-        if sys:
-            sys.exit(process.returncode)
+        return
