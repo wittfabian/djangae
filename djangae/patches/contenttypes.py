@@ -12,6 +12,7 @@ from django.utils.six.moves import input
 
 from djangae.crc64 import CRC64
 
+
 class SimulatedContentTypeManager(Manager):
     """
         Simulates content types without actually hitting the datastore.
@@ -268,14 +269,15 @@ If you're unsure, answer 'no'.
                 print("Stale content types remain.")
 
 
-from django.contrib.contenttypes.management import update_contenttypes as original
-signals.post_syncdb.disconnect(original)
+def patch():
+    from django.contrib.contenttypes.management import update_contenttypes as original
+    signals.post_syncdb.disconnect(original)
 
-from django.conf import settings
-if getattr(settings, "DJANGAE_SIMULATE_CONTENTTYPES", False):
-    from django.contrib.contenttypes import models
+    from django.conf import settings
+    if getattr(settings, "DJANGAE_SIMULATE_CONTENTTYPES", False):
+        from django.contrib.contenttypes import models
 
-    if not isinstance(models.ContentType.objects, SimulatedContentTypeManager):
-        models.ContentType.objects = SimulatedContentTypeManager()
-else:
-    signals.post_syncdb.connect(update_contenttypes)
+        if not isinstance(models.ContentType.objects, SimulatedContentTypeManager):
+            models.ContentType.objects = SimulatedContentTypeManager()
+    else:
+        signals.post_syncdb.connect(update_contenttypes)
