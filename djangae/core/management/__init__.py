@@ -11,7 +11,8 @@ DJANGO_DEFAULTS = {
     "port": 8000,
     "admin_port": 8001,
     "api_port": 8002,
-    "automatic_restart": "False"
+    "automatic_restart": "False",
+    "allow_skipped_files": "True",
 }
 
 
