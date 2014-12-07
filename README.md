@@ -206,7 +206,7 @@ MIDDLEWARE_CLASSES = (
 
 You can use Google Cloud SQL or sqlite (locally) instead of or along side the Datastore.
 
-Note that the Database backend and settings for the Datastore remain the same whether you're in local development on on
+Note that the Database backend and settings for the Datastore remain the same whether you're in local development or on
 App Engine Production, djanagae switches between the SDK and the production datastore appropriately.  However, with
 Cloud SQL you will need to switch the settings yourself, otherwise you could find yourself developing on your
 live database!
