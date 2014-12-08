@@ -1,4 +1,4 @@
-import __builtin__
+import copy
 import functools
 import json
 import logging
@@ -14,30 +14,30 @@ class ApiSecurityException(Exception):
     pass
 
 
-def find_argument_index(function, argument):
-    args = function.func_code.co_varnames[:function.func_code.co_argcount]
-    return args.index(argument)
+def override_default_kwargs(**overrides):
+    """ Wraps a function to set different default values for some/all of the keyword arguments. """
+    def decorator(function):
+        @functools.wraps(function)
+        def replacement(*args, **kwargs):
+            # Allow our default kwargs to be overriden if specified
+            final_kwargs = copy.deepcopy(overrides)
+            final_kwargs.update(**kwargs)
+            return function(*args, **final_kwargs)
+        return replacement
+    return decorator
 
 
-def get_default_argument(function, argument):
-    argument_index = find_argument_index(function, argument)
-    num_positional_args = (function.func_code.co_argcount - len(function.func_defaults))
-    default_position = argument_index - num_positional_args
-    if default_position < 0:
-        return None
-    return function.func_defaults[default_position]
-
-
-def replace_default_argument(function, argument, replacement):
-    argument_index = find_argument_index(function, argument)
-    num_positional_args = (function.func_code.co_argcount -
-                         len(function.func_defaults))
-    default_position = argument_index - num_positional_args
-    if default_position < 0:
-        raise ApiSecurityException('Attempt to modify positional default value')
-    new_defaults = list(function.func_defaults)
-    new_defaults[default_position] = replacement
-    function.func_defaults = tuple(new_defaults)
+def check_url_kwarg_for_http(function):
+    """ A decorator which checks calls to the given function, and if the `url` kwarg contains a
+        string starting with "http://" logs an error.  Function still executes as normal.
+    """
+    @functools.wraps(function)
+    def replacement(*args, **kwargs):
+        url = kwargs.get('url')
+        if url and url.startswith("http://"):
+            logging.warn('SECURITY : fetching non-HTTPS url %s' % url)
+        return function(*args, **kwargs)
+    return replacement
 
 
 # JSON.
@@ -62,28 +62,9 @@ class _JsonEncoderForHtml(json.JSONEncoder):
                 chunk = chunk.replace(character, replacement)
             yield chunk
 
-def _HttpUrlLoggingWrapper(func):
-    """Decorates func, logging when 'url' params do not start with https://."""
-    @functools.wraps(func)
-    def _CheckAndLog(*args, **kwargs):
-        try:
-            arg_index = find_argument_index(func, 'url')
-        except ValueError:
-            return func(*args, **kwargs)
-
-        if arg_index < len(args):
-            arg_value = args[arg_index]
-        elif 'url' in kwargs:
-            arg_value = kwargs['url']
-        elif 'url' not in kwargs:
-            arg_value = get_default_argument(func, 'url')
-
-        if arg_value and not arg_value.startswith('https://'):
-            logging.warn('SECURITY : fetching non-HTTPS url %s' % (arg_value))
-        return func(*args, **kwargs)
-    return _CheckAndLog
 
 PATCHES_APPLIED = False
+
 
 class AppEngineSecurityMiddleware(object):
     """
@@ -98,24 +79,27 @@ class AppEngineSecurityMiddleware(object):
         global PATCHES_APPLIED
         if not PATCHES_APPLIED:
             # json module does not escape HTML metacharacters by default.
-            replace_default_argument(json.dump, 'cls', _JsonEncoderForHtml)
-            replace_default_argument(json.dumps, 'cls', _JsonEncoderForHtml)
+            use_json_html_encoder = override_default_kwargs(cls=_JsonEncoderForHtml)
+            json.dump = use_json_html_encoder(json.dump)
+            json.dumps = use_json_html_encoder(json.dumps)
 
             # YAML.  The Python tag scheme allows arbitrary code execution:
             # yaml.load('!!python/object/apply:os.system ["ls"]')
-            replace_default_argument(yaml.compose, 'Loader', yaml.loader.SafeLoader)
-            replace_default_argument(yaml.compose_all, 'Loader', yaml.loader.SafeLoader)
-            replace_default_argument(yaml.load, 'Loader', yaml.loader.SafeLoader)
-            replace_default_argument(yaml.load_all, 'Loader', yaml.loader.SafeLoader)
-            replace_default_argument(yaml.parse, 'Loader', yaml.loader.SafeLoader)
-            replace_default_argument(yaml.scan, 'Loader', yaml.loader.SafeLoader)
+            use_safe_loader = override_default_kwargs(Loader=yaml.loader.SafeLoader)
+            yaml.compose = use_safe_loader(yaml.compose)
+            yaml.compose_all = use_safe_loader(yaml.compose_all)
+            yaml.load = use_safe_loader(yaml.load)
+            yaml.load_all = use_safe_loader(yaml.load_all)
+            yaml.parse = use_safe_loader(yaml.parse)
+            yaml.scan = use_safe_loader(yaml.scan)
 
             # AppEngine urlfetch.
             # Does not validate certificates by default.
-            replace_default_argument(urlfetch.fetch, 'validate_certificate', True)
-            replace_default_argument(urlfetch.make_fetch_call, 'validate_certificate', True)
-            urlfetch.fetch = _HttpUrlLoggingWrapper(urlfetch.fetch)
-            urlfetch.make_fetch_call = _HttpUrlLoggingWrapper(urlfetch.make_fetch_call)
+            validate_cert = override_default_kwargs(validate_certificate=True)
+            urlfetch.fetch = validate_cert(urlfetch.fetch)
+            urlfetch.make_fetch_call = validate_cert(urlfetch.make_fetch_call)
+            urlfetch.fetch = check_url_kwarg_for_http(urlfetch.fetch)
+            urlfetch.make_fetch_call = check_url_kwarg_for_http(urlfetch.make_fetch_call)
 
             for setting in ("CSRF_COOKIE_SECURE", "SESSION_COOKIE_HTTPONLY", "SESSION_COOKIE_SECURE"):
                 if not getattr(settings, setting, False):
