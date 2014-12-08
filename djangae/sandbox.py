@@ -45,7 +45,16 @@ def _local(devappserver2=None, configuration=None, options=None, wsgi_request_in
 
     devappserver2._setup_environ(configuration.app_id)
     storage_path = devappserver2._get_storage_path(options.storage_path, configuration.app_id)
-    dispatcher = None
+
+    from google.appengine.tools.devappserver2 import dispatcher
+    from google.appengine.tools.devappserver2.devappserver2 import _LOG_LEVEL_TO_RUNTIME_CONSTANT
+
+    dispatcher = dispatcher.Dispatcher(
+        configuration, options.host, options.port, options.auth_domain, _LOG_LEVEL_TO_RUNTIME_CONSTANT[options.log_level],
+        None, None, None, None, #Default all the language configs
+        None, None, None, None, None # Default all the other stuff (apparently Google can't use default arguments :/)
+    )
+
     request_data = wsgi_request_info.WSGIRequestInfo(dispatcher)
 
     _API_SERVER = devappserver2.DevelopmentServer._create_api_server(
