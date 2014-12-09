@@ -4,6 +4,7 @@ from django.core.management.commands.runserver import BaseRunserverCommand
 
 from datetime import datetime
 
+from google.appengine.tools.devappserver2 import shutdown
 
 class Command(BaseRunserverCommand):
     """
@@ -62,6 +63,7 @@ class Command(BaseRunserverCommand):
 
         from google.appengine.tools.devappserver2 import devappserver2
         from google.appengine.tools.devappserver2 import python_runtime
+
         from djangae import sandbox
 
         sandbox._OPTIONS.port = int(self.port) if self.port else sandbox._OPTIONS.port
@@ -70,12 +72,19 @@ class Command(BaseRunserverCommand):
         class NoConfigDevServer(devappserver2.DevelopmentServer):
             @staticmethod
             def _create_api_server(request_data, storage_path, options, configuration):
+                self._dispatcher = sandbox._create_dispatcher(configuration, options)
+                request_data._dispatcher = self._dispatcher
                 return sandbox._API_SERVER
 
         python_runtime._RUNTIME_PATH = os.path.join(sdk_path, '_python_runtime.py')
         python_runtime._RUNTIME_ARGS = [sys.executable, python_runtime._RUNTIME_PATH]
-        devappserver = NoConfigDevServer()
-        devappserver.start(sandbox._OPTIONS)
+        dev_server = NoConfigDevServer()
+
+        try:
+            dev_server.start(sandbox._OPTIONS)
+            shutdown.wait_until_shutdown()
+        finally:
+            dev_server.stop()
 
         if shutdown_message:
             sys.stdout.write(shutdown_message)
