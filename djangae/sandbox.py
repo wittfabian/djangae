@@ -54,6 +54,7 @@ def _create_dispatcher(configuration, options):
         _LOG_LEVEL_TO_RUNTIME_CONSTANT[options.log_level],
         DevelopmentServer._create_php_config(options),
         DevelopmentServer._create_python_config(options),
+        DevelopmentServer._create_java_config(options),
         DevelopmentServer._create_cloud_sql_config(options),
         DevelopmentServer._create_vm_config(options),
         DevelopmentServer._create_module_to_setting(options.max_module_instances,
