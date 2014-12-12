@@ -15,6 +15,10 @@ class Command(BaseRunserverCommand):
     dev_appserver that emulates the live environment your application
     will be deployed to.
     """
+    def run(self, *args, **options):
+        self.use_reloader = options.get("use_reloader")
+        options["use_reloader"] = False
+        return super(Command, self).run(*args, **options)
 
     def inner_run(self, *args, **options):
         import sys
@@ -68,23 +72,28 @@ class Command(BaseRunserverCommand):
 
         sandbox._OPTIONS.port = int(self.port) if self.port else sandbox._OPTIONS.port
         sandbox._OPTIONS.host = self.addr if self.addr else sandbox._OPTIONS.host
+        sandbox._OPTIONS.automatic_restart = self.use_reloader
 
         class NoConfigDevServer(devappserver2.DevelopmentServer):
-            @staticmethod
-            def _create_api_server(request_data, storage_path, options, configuration):
+            def _create_api_server(self, request_data, storage_path, options, configuration):
                 self._dispatcher = sandbox._create_dispatcher(configuration, options)
                 request_data._dispatcher = self._dispatcher
                 return sandbox._API_SERVER
 
         python_runtime._RUNTIME_PATH = os.path.join(sdk_path, '_python_runtime.py')
         python_runtime._RUNTIME_ARGS = [sys.executable, python_runtime._RUNTIME_PATH]
+
         dev_server = NoConfigDevServer()
 
         try:
             dev_server.start(sandbox._OPTIONS)
-            shutdown.wait_until_shutdown()
+            try:
+                shutdown.wait_until_shutdown()
+            except KeyboardInterrupt:
+                pass
         finally:
             dev_server.stop()
+
 
         if shutdown_message:
             sys.stdout.write(shutdown_message)

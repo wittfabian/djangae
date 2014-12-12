@@ -79,14 +79,12 @@ def _local(devappserver2=None, configuration=None, options=None, wsgi_request_in
     dispatcher = _create_dispatcher(configuration, options)
     request_data = wsgi_request_info.WSGIRequestInfo(dispatcher)
 
-    print("Setting up api server with dispatcher: %s" % id(dispatcher))
     _API_SERVER = devappserver2.DevelopmentServer._create_api_server(
         request_data, storage_path, options, configuration)
 
     try:
         yield
     finally:
-        _API_SERVER.quit()
         os.environ = original_environ
 
 
