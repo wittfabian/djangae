@@ -37,6 +37,36 @@ def _find_sdk_from_path():
         return sdk_dir
 
 
+def _create_dispatcher(configuration, options):
+    from google.appengine.tools.devappserver2 import dispatcher
+    from google.appengine.tools.devappserver2.devappserver2 import (
+        DevelopmentServer, _LOG_LEVEL_TO_RUNTIME_CONSTANT
+    )
+
+    if hasattr(_create_dispatcher, "singleton"):
+        return _create_dispatcher.singleton
+
+    _create_dispatcher.singleton = dispatcher.Dispatcher(
+        configuration,
+        options.host,
+        options.port,
+        options.auth_domain,
+        _LOG_LEVEL_TO_RUNTIME_CONSTANT[options.log_level],
+        DevelopmentServer._create_php_config(options),
+        DevelopmentServer._create_python_config(options),
+        DevelopmentServer._create_cloud_sql_config(options),
+        DevelopmentServer._create_vm_config(options),
+        DevelopmentServer._create_module_to_setting(options.max_module_instances,
+                                       configuration, '--max_module_instances'),
+        options.use_mtime_file_watcher,
+        options.automatic_restart,
+        options.allow_skipped_files,
+        DevelopmentServer._create_module_to_setting(options.threadsafe_override,
+                                       configuration, '--threadsafe_override')
+    )
+
+    return _create_dispatcher.singleton
+
 @contextlib.contextmanager
 def _local(devappserver2=None, configuration=None, options=None, wsgi_request_info=None, **kwargs):
     global _API_SERVER
@@ -45,7 +75,8 @@ def _local(devappserver2=None, configuration=None, options=None, wsgi_request_in
 
     devappserver2._setup_environ(configuration.app_id)
     storage_path = devappserver2._get_storage_path(options.storage_path, configuration.app_id)
-    dispatcher = None
+
+    dispatcher = _create_dispatcher(configuration, options)
     request_data = wsgi_request_info.WSGIRequestInfo(dispatcher)
 
     _API_SERVER = devappserver2.DevelopmentServer._create_api_server(
@@ -54,7 +85,6 @@ def _local(devappserver2=None, configuration=None, options=None, wsgi_request_in
     try:
         yield
     finally:
-        _API_SERVER.quit()
         os.environ = original_environ
 
 
