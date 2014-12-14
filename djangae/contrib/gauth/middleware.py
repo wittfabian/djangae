@@ -19,7 +19,6 @@ class AuthenticationMiddleware(DjangoMiddleware):
             # If we are logged in with django, but not longer logged in with Google
             # then log out
             logout(request)
-            django_user = request.user
 
         request.user = django_user
 
