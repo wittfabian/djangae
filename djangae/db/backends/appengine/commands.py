@@ -784,6 +784,15 @@ class FlushCommand(object):
         from .caching import clear_context_cache
         clear_context_cache()
 
+@db.non_transactional
+def reserve_id(kind, id_or_name):
+    if isinstance(id_or_name, (int, long)):
+        try:
+            db.allocate_id_range(datastore.Key.from_path(kind, 1), id_or_name, id_or_name)
+        except:
+            # We don't re-raise because it's not terminal, but if this happens we need to know why
+            logging.exception("An error occurred when notifying app engine that an ID has been used. Please report.")
+
 class InsertCommand(object):
     def __init__(self, connection, model, objs, fields, raw):
         self.has_pk = any([x.primary_key for x in fields])
@@ -840,13 +849,7 @@ class InsertCommand(object):
 
                 # Make sure we notify app engine that we are using this ID
                 # FIXME: Copy ancestor across to the template key
-                id_or_name = key.id_or_name()
-                if isinstance(id_or_name, (int, long)):
-                    try:
-                        db.allocate_id_range(datastore.Key.from_path(key.kind(), 1), id_or_name, id_or_name)
-                    except:
-                        # We don't re-raise because it's not terminal, but if this happens we need to know why
-                        logging.exception("An error occurred when notifying app engine that an ID has been used. Please report.")
+                reserve_id(key.kind(), key.id_or_name())
 
                 txn()
 
@@ -918,7 +921,13 @@ class UpdateCommand(object):
     def _update_entity(self, key):
         caching.remove_entity_from_context_cache_by_key(key)
 
-        result = datastore.Get(key)
+        try:
+            result = datastore.Get(key)
+        except datastore_errors.EntityNotFoundError:
+            reserve_id(key.kind(), key.id_or_name())
+            result = datastore.Entity(key.kind(), id=key.id_or_name())
+
+
         original = copy.deepcopy(result)
 
         instance_kwargs = {field.attname:value for field, param, value in self.values}
