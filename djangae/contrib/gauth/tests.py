@@ -6,9 +6,13 @@ from django.contrib.sessions.middleware import SessionMiddleware
 from django.http import HttpRequest
 from django.test import TestCase
 from django.test.utils import override_settings
+from django.contrib.auth.models import AnonymousUser
+from django.contrib.auth.hashers import make_password
+from django.contrib.auth.tests.test_auth_backends import BaseModelBackendTest
 from google.appengine.api import users
 
 # DJANGAE
+from djangae.contrib.gauth.models import GaeDatastoreUser, Group, get_permission_choices
 from djangae.contrib.gauth.backends import AppEngineUserAPI
 from djangae.contrib.gauth.middleware import AuthenticationMiddleware
 from djangae.contrib.gauth.settings import AUTHENTICATION_BACKENDS
@@ -93,3 +97,100 @@ class MiddlewareTests(TestCase):
         self.assertTrue(user.is_authenticated())
         self.assertEqual(user.email, '1@example.com')
         self.assertEqual(user.username, '111111111100000000001')
+
+
+@override_settings(AUTH_USER_MODEL='djangae.GaeDatastoreUser', AUTHENTICATION_BACKENDS=('djangae.contrib.gauth.backends.AppEngineUserAPI',))
+class CustomPermissionsUserModelBackendTest(TestCase):
+    """
+    Tests for the ModelBackend using the CustomPermissionsUser model.
+
+    As with the ExtensionUser test, this isn't a perfect test, because both
+    the User and CustomPermissionsUser are synchronized to the database,
+    which wouldn't ordinary happen in production.
+    """
+    UserModel = GaeDatastoreUser
+
+    def setUp(self):
+        self.user = GaeDatastoreUser._default_manager.create(
+            username='test1',
+            email='test@example.com',
+            password=make_password(None),
+            is_active=True,
+        )
+        self.superuser = GaeDatastoreUser._default_manager.create(
+            username='test2',
+            email='test2@example.com',
+            is_superuser=True,
+            password=make_password(None),
+            is_active=True,
+        )
+
+    def test_has_perm(self):
+        user = self.UserModel._default_manager.get(pk=self.user.pk)
+        self.assertEqual(user.has_perm('auth.test'), False)
+        user.is_staff = True
+        user.save()
+        self.assertEqual(user.has_perm('auth.test'), False)
+        user.is_superuser = True
+        user.save()
+        self.assertEqual(user.has_perm('auth.test'), True)
+        user.is_staff = False
+        user.is_superuser = False
+        user.save()
+        self.assertEqual(user.has_perm('auth.test'), False)
+        user.is_staff = True
+        user.is_superuser = True
+        user.is_active = False
+        user.save()
+        self.assertEqual(user.has_perm('auth.test'), False)
+
+    def test_custom_perms(self):
+        user = self.UserModel._default_manager.get(pk=self.user.pk)
+        user.user_permissions = ['auth.test']
+        user.save()
+
+        # reloading user to purge the _perm_cache
+        user = self.UserModel._default_manager.get(pk=self.user.pk)
+        self.assertEqual(user.get_all_permissions() == set(['auth.test']), True)
+        self.assertEqual(user.get_group_permissions(), set([]))
+        self.assertEqual(user.has_module_perms('Group'), False)
+        self.assertEqual(user.has_module_perms('auth'), True)
+        user.user_permissions.extend(['auth.test2', 'auth.test3'])
+        user.save()
+        user = self.UserModel._default_manager.get(pk=self.user.pk)
+        self.assertEqual(user.get_all_permissions(), set(['auth.test2', 'auth.test', 'auth.test3']))
+        self.assertEqual(user.has_perm('test'), False)
+        self.assertEqual(user.has_perm('auth.test'), True)
+        self.assertEqual(user.has_perms(['auth.test2', 'auth.test3']), True)
+
+        group = Group.objects.create(name='test_group')
+        group.permissions = ['auth.test_group']
+        group.save()
+        user.groups = [group]
+        user.save()
+
+        user = self.UserModel._default_manager.get(pk=self.user.pk)
+        exp = set(['auth.test2', 'auth.test', 'auth.test3', 'auth.test_group'])
+        self.assertEqual(user.get_all_permissions(), exp)
+        self.assertEqual(user.get_group_permissions(), set(['auth.test_group']))
+        self.assertEqual(user.has_perms(['auth.test3', 'auth.test_group']), True)
+
+        user = AnonymousUser()
+        self.assertEqual(user.has_perm('test'), False)
+        self.assertEqual(user.has_perms(['auth.test2', 'auth.test3']), False)
+
+    def test_has_no_object_perm(self):
+        """Regressiontest for #12462"""
+        user = self.UserModel._default_manager.get(pk=self.user.pk)
+        user.user_permissions = ['auth.test']
+        user.save()
+
+        self.assertEqual(user.has_perm('auth.test', 'object'), False)
+        self.assertEqual(user.get_all_permissions('object'), set([]))
+        self.assertEqual(user.has_perm('auth.test'), True)
+        self.assertEqual(user.get_all_permissions(), set(['auth.test']))
+
+    def test_get_all_superuser_permissions(self):
+        """A superuser has all permissions. Refs #14795."""
+        user = self.UserModel._default_manager.get(pk=self.superuser.pk)
+        self.assertEqual(len(user.get_all_permissions()), len(get_permission_choices()))
