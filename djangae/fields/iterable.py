@@ -45,9 +45,6 @@ class IterableField(models.Field):
         if kwargs.get("null", False):
             raise RuntimeError("IterableFields cannot be set as nullable (as the datastore doesn't differentiate None vs []")
 
-        if not item_field_type:
-            raise ImproperlyConfigured("You must specify the type of the iterable field")
-
         kwargs["null"] = True
 
         default = kwargs.get("default", [])
