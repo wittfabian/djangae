@@ -21,6 +21,7 @@ from django.utils import timezone
 from django.utils.translation import ugettext_lazy as _
 from django.db.models.loading import get_apps, get_models
 from django.contrib.auth import get_permission_codename
+from django.contrib.contenttypes.models import ContentType
 
 from djangae.fields import ListField, RelatedSetField
 
@@ -52,7 +53,10 @@ def get_permission_choices():
         for model in get_models(app):
             for action in AUTO_PERMISSIONS:
                 opts = model._meta
-                result.append((get_permission_codename(action, opts), 'Can %s %s' % (action, opts.verbose_name_raw)))
+                result.append((
+                    '%s.%s' % (opts.app_label, get_permission_codename(action, opts)),
+                    'Can %s %s' % (action, opts.verbose_name_raw)
+                ))
 
     PERMISSIONS_LIST = sorted(result)
     return PERMISSIONS_LIST
