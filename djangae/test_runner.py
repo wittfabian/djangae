@@ -43,7 +43,6 @@ def testbed_wrap(test):
 
 
 class SkipUnsupportedTestResult(TextTestResult):
-
     def addError(self, test, err):
         if err[0] in (NotSupportedError, CouldBeSupportedError):
             self.addExpectedFailure(test, err)

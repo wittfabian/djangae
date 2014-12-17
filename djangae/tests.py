@@ -259,6 +259,14 @@ class BackendTests(TestCase):
                 list(TestUser.objects.exclude(username__startswith="test"))
                 self.assertEqual(1, query_mock.call_count)
 
+        with sleuth.switch("djangae.db.backends.appengine.commands.datastore.Get", lambda *args, **kwargs: []) as get_mock:
+            list(TestUser.objects.filter(pk__in=[1, 2, 3, 4, 5, 6, 7, 8]).
+                filter(username__in=["test", "test2", "test3"]).filter(email__in=["test@example.com", "test2@example.com"]))
+
+            self.assertEqual(1, get_mock.call_count)
+
+
+
     def test_null_date_field(self):
         null_date = NullDate()
         null_date.save()

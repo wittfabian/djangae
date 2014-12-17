@@ -81,10 +81,11 @@ def parse_dnf(node, connection):
 
     # If there are more than 30 filters, and not all filters are PK filters
     if tree and len(tree[-1]) > 30:
-
         for and_branch in tree[-1]:
-            for lit in and_branch:  # Go through each literal tuple
-                if isinstance(lit[-1], datastore.Key):  # If the value is a key, then break the loop
+            if and_branch[0] == 'LIT':
+                and_branch = [and_branch]
+            for lit in and_branch[-1] if and_branch[0] == 'AND' else and_branch:  # Go through each literal tuple
+                if isinstance(lit[-1], datastore.Key) or isinstance(lit[-1][-1], datastore.Key):  # If the value is a key, then break the loop
                     break
             else:
                 # If we didn't find a literal with a datastore Key, then raise unsupported

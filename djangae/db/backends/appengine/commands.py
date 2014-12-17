@@ -3,7 +3,7 @@ from datetime import datetime, date
 import logging
 import copy
 from functools import partial
-from itertools import chain, product
+from itertools import chain, groupby
 
 #LIBRARIES
 from django.core.cache import cache
@@ -212,33 +212,37 @@ def _convert_entity_based_on_query_options(entity, opts):
     return entity
 
 
+def _get_key(query):
+    return query["__key__ ="]
+
 class QueryByKeys(object):
-    def __init__(self, query, keys, ordering):
-        self.query = query
-        self.keys = keys
+    def __init__(self, queries, ordering):
+        self.queries = queries
+        self.queries_by_key = { a: list(b) for a, b in groupby(queries, lambda x: _get_key(x)) }
         self.ordering = ordering
-        self._Query__kind = query._Query__kind
+        self._Query__kind = queries[0]._Query__kind
 
     def Run(self, limit=None, offset=None):
-        assert not self.query._Query__ancestor_pb #FIXME: We don't handle this yet
+        assert not self.queries[0]._Query__ancestor_pb #FIXME: We don't handle this yet
 
-        opts = self.query._Query__query_options
+        # FIXME: What if the query options differ?
+        opts = self.queries[0]._Query__query_options
 
         results = None
 
         # If we have a single key lookup going on, just hit the cache
-        if len(self.keys) == 1:
-            ret = caching.get_from_cache_by_key(self.keys[0])
+        if len(self.queries_by_key) == 1:
+            ret = caching.get_from_cache_by_key(self.queries_by_key.keys()[0])
             if ret is not None:
                 results = [ret]
 
         # If there was nothing in the cache, or we had more than one key, then use Get()
         if results is None:
-            results = sorted((x for x in datastore.Get(self.keys) if x is not None), cmp=partial(utils.django_ordering_comparison, self.ordering))
+            results = sorted((x for x in datastore.Get(self.queries_by_key.keys()) if x is not None), cmp=partial(utils.django_ordering_comparison, self.ordering))
 
         results = [
             _convert_entity_based_on_query_options(x, opts)
-            for x in results if utils.entity_matches_query(x, self.query)
+            for x in results if any([ utils.entity_matches_query(x, qry) for qry in self.queries_by_key[x.key()]])
         ]
 
         if offset:
@@ -602,34 +606,10 @@ class SelectCommand(object):
                     else:
                         queries.pop()
 
-            def all_queries_same_except_key(_queries):
-                """
-                    Returns True if all queries in the list of queries filter on the same thing
-                    except for "__key__ =". Determine if we can do a Get basically.
-                """
-                test = _queries[0]
 
-                for qry in _queries:
-                    if "__key__ =" not in qry.keys():
-                        return False
-
-                    if qry._Query__kind != test._Query__kind:
-                        return False
-
-                    if qry.keys() != test.keys():
-                        return False
-
-                    for k, v in qry.items():
-                        if k.startswith("__key__"):
-                            continue
-
-                        if v != test[k]:
-                            return False
-                return True
-
-            if all_queries_same_except_key(queries):
-                included_pks = [ qry["__key__ ="] for qry in queries ]
-                return QueryByKeys(queries[0], included_pks, ordering) # Just use whatever query to determine the matches
+            included_pks = [ qry["__key__ ="] for qry in queries if "__key__ =" in qry ]
+            if len(included_pks) == len(queries): # If all queries have a key, we can perform a Get
+                return QueryByKeys(queries, ordering) # Just use whatever query to determine the matches
             else:
                 if len(queries) > 1:
                     # Disable keys only queries for MultiQuery
@@ -894,12 +874,17 @@ class DeleteCommand(object):
         # This is a little bit more inefficient than just doing a keys_only query and
         # sending it to delete, but I think this is the sacrifice to make for the unique caching layer
         keys = []
-        for entity in QueryByKeys(
-                Query(self.select.db_table),
-                [x.key() for x in self.select.results],
-                []
-            ).Run():
 
+        def spawn_query(kind, key):
+            qry = Query(kind)
+            qry["__key__ ="] = key
+            return qry
+
+        queries = [spawn_query(self.select.db_table, x.key()) for x in self.select.results]
+        if not queries:
+            return
+
+        for entity in QueryByKeys(queries, []).Run():
             keys.append(entity.key())
 
             # Delete constraints if that's enabled
