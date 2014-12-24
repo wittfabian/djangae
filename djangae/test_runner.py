@@ -10,30 +10,36 @@ from djangae.utils import find_project_root
 from google.appengine.ext import testbed
 from google.appengine.datastore import datastore_stub_util
 
+
+def init_testbed():
+    # We allow users to disable scattered IDs in tests. This primarily for running Django tests that
+    # assume implicit ordering (yeah, annoying)
+    use_scattered = not getattr(settings, "DJANGAE_SEQUENTIAL_IDS_IN_TESTS", False)
+
+    stub_kwargs = {
+        "init_datastore_v3_stub": {
+            "use_sqlite": True,
+            "auto_id_policy": testbed.AUTO_ID_POLICY_SCATTERED if use_scattered else testbed.AUTO_ID_POLICY_SEQUENTIAL,
+            "consistency_policy": datastore_stub_util.PseudoRandomHRConsistencyPolicy(probability=1)
+        },
+        "init_taskqueue_stub": {
+            "root_path": find_project_root()
+        }
+    }
+    bed = testbed.Testbed()
+    bed.activate()
+    for init_name in testbed.INIT_STUB_METHOD_NAMES.values():
+        getattr(bed, init_name)(**stub_kwargs.get(init_name, {}))
+
+    return bed
+
+
 def testbed_wrap(test):
     def _wrapped(*args, **kwargs):
-        # We allow users to disable scattered IDs in tests. This primarily for running Django tests that
-        # assume implicit ordering (yeah, annoying)
-        use_scattered = not getattr(settings, "DJANGAE_SEQUENTIAL_IDS_IN_TESTS", False)
-
-        stub_kwargs = {
-            "init_datastore_v3_stub": {
-                "use_sqlite": True,
-                "auto_id_policy": testbed.AUTO_ID_POLICY_SCATTERED if use_scattered else testbed.AUTO_ID_POLICY_SEQUENTIAL,
-                "consistency_policy": datastore_stub_util.PseudoRandomHRConsistencyPolicy(probability=1)
-            },
-            "init_taskqueue_stub": {
-                "root_path": find_project_root()
-            }
-        }
 
         try:
             # Init test stubs
-            bed = testbed.Testbed()
-            bed.activate()
-
-            for init_name in testbed.INIT_STUB_METHOD_NAMES.values():
-                getattr(bed, init_name)(**stub_kwargs.get(init_name, {}))
+            bed = init_testbed()
 
             return test(*args, **kwargs)
         finally:
