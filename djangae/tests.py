@@ -276,6 +276,20 @@ class BackendTests(TestCase):
         self.assertIsNone(null_date.time)
         self.assertIsNone(null_date.datetime)
 
+    def test_convert_unicode_subclasses_to_unicode(self):
+        # The App Engine SDK raises BadValueError if you try saving a SafeText
+        # string to a CharField. Djangae explicitly converts it to unicode.
+        from django.template.defaultfilters import slugify
+
+        grue = slugify(u'grue')
+
+        self.assertIsInstance(grue, unicode)
+        self.assertNotEqual(type(grue), unicode)
+
+        obj = TestFruit.objects.create(name=u'foo', color=grue)
+
+        self.assertEqual(type(obj.color), unicode)
+
 
 class ModelFormsetTest(TestCase):
     def test_reproduce_index_error(self):
