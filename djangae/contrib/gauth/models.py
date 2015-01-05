@@ -13,7 +13,6 @@ from django.contrib.auth.models import (
     urlquote,
     PermissionsMixin as DjangoPermissionsMixin,
 )
-from django.contrib.auth.management import create_permissions
 from django.core.mail import send_mail
 from django.core import validators
 from django.db import models
@@ -291,11 +290,8 @@ class GaeDatastoreUser(GaeAbstractBaseUser, PermissionsMixin):
         verbose_name_plural = _('users')
 
 
-def wrap_create_permissions(sender, **kwargs):
-    if not issubclass(auth.get_user_model(), PermissionsMixin):
-        # re-connect the django.contrib.auth signal
-        create_permissions(sender, **kwargs)
-
-dispatch_uid = "django.contrib.auth.management.create_permissions"
-signals.post_syncdb.disconnect(dispatch_uid=dispatch_uid)
-signals.post_syncdb.connect(wrap_create_permissions, dispatch_uid=dispatch_uid)
+from django.contrib.auth import get_user_model
+if issubclass(get_user_model(), PermissionsMixin):
+    from django.contrib.auth.management import *
+    # Disconnect the django.contrib.auth signal
+    signals.post_syncdb.disconnect(dispatch_uid="django.contrib.auth.management.create_permissions")
