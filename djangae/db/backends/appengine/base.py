@@ -262,6 +262,9 @@ class DatabaseOperations(BaseDatabaseOperations):
                     # construction, not on execution.
                     raise DatabaseError("Bytestring is not encoded in utf-8")
 
+            # The SDK raises BadValueError for unicode sub-classes like SafeText.
+            value = unicode(value)
+
             if db_type == 'text':
                 value = Text(value)
         elif db_type == 'bytes':
