@@ -21,7 +21,6 @@ from django.utils import timezone
 from django.utils.translation import ugettext_lazy as _
 from django.db.models.loading import get_apps, get_models
 from django.contrib.auth import get_permission_codename
-from django.contrib.contenttypes.models import ContentType
 
 from djangae.fields import ListField, RelatedSetField
 
@@ -288,10 +287,3 @@ class GaeDatastoreUser(GaeAbstractBaseUser, PermissionsMixin):
         swappable = 'AUTH_USER_MODEL'
         verbose_name = _('user')
         verbose_name_plural = _('users')
-
-
-from django.contrib.auth import get_user_model
-if issubclass(get_user_model(), PermissionsMixin):
-    from django.contrib.auth.management import *
-    # Disconnect the django.contrib.auth signal
-    signals.post_syncdb.disconnect(dispatch_uid="django.contrib.auth.management.create_permissions")
