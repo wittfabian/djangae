@@ -27,10 +27,10 @@ from django.utils import timezone
 from google.appengine.api.datastore_types import Blob, Text
 from google.appengine.ext.db import metadata
 from google.appengine.ext import testbed
+from google.appengine.datastore import datastore_stub_util
 from google.appengine.api.datastore import Key
 
 #DJANGAE
-from djangae.utils import find_project_root
 from djangae.db.utils import (
     decimal_to_string,
     make_timezone_naive,
@@ -191,15 +191,12 @@ class DatabaseOperations(BaseDatabaseOperations):
         return value
 
     def sql_flush(self, style, tables, seqs, allow_cascade=False):
-
-        creation = self.connection.creation
-        if creation.testbed:
-            creation._destroy_test_db(':memory:', verbosity=1)
-            creation._create_test_db(':memory:', autoclobber=True)
+        try:
+             return [ FlushCommand(table) for table in tables ]
+        finally:
+            # FIXME: We should only delete the markers from the associated tables!
+            FlushCommand("__unique_marker").execute()
             caching.clear_all_caches()
-            return []
-        else:
-            return [ FlushCommand(table) for table in tables ]
 
     def prep_lookup_key(self, model, value, field):
         if isinstance(value, basestring):
@@ -400,10 +397,29 @@ class DatabaseCreation(BaseDatabaseCreation):
         return []
 
     def _create_test_db(self, verbosity, autoclobber):
-        return ':memory:'
+        assert not self.testbed
+
+        # We allow users to disable scattered IDs in tests. This primarily for running Django tests that
+        # assume implicit ordering (yeah, annoying)
+        use_scattered = not getattr(settings, "DJANGAE_SEQUENTIAL_IDS_IN_TESTS", False)
+
+        kwargs = {
+            "use_sqlite": True,
+            "auto_id_policy": testbed.AUTO_ID_POLICY_SCATTERED if use_scattered else testbed.AUTO_ID_POLICY_SEQUENTIAL,
+            "consistency_policy": datastore_stub_util.PseudoRandomHRConsistencyPolicy(probability=1)
+        }
+
+        self.testbed = testbed.Testbed()
+        self.testbed.activate()
+        self.testbed.init_datastore_v3_stub(**kwargs)
+        self.testbed.init_memcache_stub()
+        caching.clear_all_caches()
 
     def _destroy_test_db(self, name, verbosity):
-        pass
+        if self.testbed:
+            caching.clear_all_caches()
+            self.testbed.deactivate()
+            self.testbed = None
 
 
 class DatabaseIntrospection(BaseDatabaseIntrospection):
