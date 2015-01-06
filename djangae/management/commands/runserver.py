@@ -78,6 +78,13 @@ class Command(BaseRunserverCommand):
             def _create_api_server(self, request_data, storage_path, options, configuration):
                 self._dispatcher = sandbox._create_dispatcher(configuration, options)
                 request_data._dispatcher = self._dispatcher
+
+                from google.appengine.api import apiproxy_stub_map
+                task_queue = apiproxy_stub_map.apiproxy.GetStub('taskqueue')
+                # Make sure task running is enabled (it's disabled in the sandbox by default)
+                if not task_queue._auto_task_running:
+                    task_queue._auto_task_running = True
+                    task_queue.StartBackgroundExecution()
                 return sandbox._API_SERVER
 
         python_runtime._RUNTIME_PATH = os.path.join(sdk_path, '_python_runtime.py')

@@ -74,6 +74,9 @@ def _local(devappserver2=None, configuration=None, options=None, wsgi_request_in
 
     original_environ = os.environ.copy()
 
+    # Silence warnings about this being unset, localhost:8080 is the dev_appserver default
+    os.environ.setdefault("HTTP_HOST", "localhost:8080")
+
     devappserver2._setup_environ(configuration.app_id)
     storage_path = devappserver2._get_storage_path(options.storage_path, configuration.app_id)
 
@@ -201,6 +204,7 @@ def activate(sandbox_name, add_sdk_to_path=False, **overrides):
 
     # The argparser is the easiest way to get the default options.
     options = devappserver2.PARSER.parse_args([project_root])
+    options.enable_task_running = False # Disable task running by default, it won't work without a running server
 
     for option in overrides:
         if not hasattr(options, option):
