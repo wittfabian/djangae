@@ -70,13 +70,27 @@ class Command(BaseRunserverCommand):
 
         from djangae import sandbox
 
-        sandbox._OPTIONS.port = int(self.port) if self.port else sandbox._OPTIONS.port
-        sandbox._OPTIONS.host = self.addr if self.addr else sandbox._OPTIONS.host
+
+        if int(self.port) != sandbox._OPTIONS.port:
+            # Override the port numbers
+            sandbox._OPTIONS.port = int(self.port)
+            sandbox._OPTIONS.admin_port = int(self.port) + 1
+            sandbox._OPTIONS.apis_port = int(self.port) + 2
+
+        if self.addr != sandbox._OPTIONS.host:
+            sandbox._OPTIONS.host = sandbox._OPTIONS.admin_host = sandbox._OPTIONS.apis_host = self.addr
+
         sandbox._OPTIONS.automatic_restart = self.use_reloader
 
         class NoConfigDevServer(devappserver2.DevelopmentServer):
             def _create_api_server(self, request_data, storage_path, options, configuration):
                 self._dispatcher = sandbox._create_dispatcher(configuration, options)
+                self._dispatcher._port = options.port
+                self._dispatcher._host = options.host
+
+                sandbox._API_SERVER._host = options.apis_host
+                sandbox._API_SERVER.bind_addr = (options.apis_host, options.apis_port)
+
                 request_data._dispatcher = self._dispatcher
 
                 from google.appengine.api import apiproxy_stub_map
@@ -85,6 +99,7 @@ class Command(BaseRunserverCommand):
                 if not task_queue._auto_task_running:
                     task_queue._auto_task_running = True
                     task_queue.StartBackgroundExecution()
+
                 return sandbox._API_SERVER
 
         python_runtime._RUNTIME_PATH = os.path.join(sdk_path, '_python_runtime.py')
