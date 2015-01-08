@@ -1165,6 +1165,9 @@ class IterableFieldTests(TestCase):
         with self.assertRaises(ValueError):
             instance.list_field = set([1])
 
+        results = IterableFieldModel.objects.filter(list_field="One")
+        self.assertEqual([instance], list(results))
+
     def test_set_field(self):
         instance = IterableFieldModel.objects.create()
         self.assertEqual(set(), instance.set_field)
