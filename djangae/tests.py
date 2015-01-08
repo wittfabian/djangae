@@ -1369,3 +1369,51 @@ class DatastorePaginatorTest(TestCase):
         self.assertEqual(p1.start_index(), 0)
         self.assertEqual(p1.end_index(), 0)
         self.assertEqual([x for x in p1], [])
+
+
+class SpecialIndexesModel(models.Model):
+    name = models.CharField(max_length=255)
+
+    def __unicode__(self):
+        return self.name
+
+class TestSpecialIndexers(TestCase):
+
+    def setUp(self):
+        self.names = ['Ola', 'Adam', 'Luke', 'rob', 'Daniel', 'Ela', 'Olga', 'olek', 'ola', 'Olaaa', 'OlaaA']
+        for name in self.names:
+            SpecialIndexesModel.objects.create(name=name)
+
+        self.qry = SpecialIndexesModel.objects.all()
+
+    def test_iexact_lookup(self):
+        for name in self.names:
+            qry = self.qry.filter(name__iexact=name)
+            self.assertEqual(len(qry), len([x for x in self.names if x.lower() == name.lower()]))
+
+    def test_contains_lookup_and_icontains_lookup(self):
+        tests = self.names + ['o', 'O', 'la']
+        for name in tests:
+            qry = self.qry.filter(name__contains=name)
+            self.assertEqual(len(qry), len([x for x in self.names if name in x]))
+
+            qry = self.qry.filter(name__icontains=name)
+            self.assertEqual(len(qry), len([x for x in self.names if name.lower() in x.lower()]))
+
+    def test_endswith_lookup_and_iendswith_lookup(self):
+        tests = self.names + ['a', 'A', 'aa']
+        for name in tests:
+            qry = self.qry.filter(name__endswith=name)
+            self.assertEqual(len(qry), len([x for x in self.names if x.endswith(name)]))
+
+            qry = self.qry.filter(name__iendswith=name)
+            self.assertEqual(len(qry), len([x for x in self.names if x.lower().endswith(name.lower())]))
+
+    def test_startswith_lookup_and_istartswith_lookup(self):
+        tests = self.names + ['O', 'o', 'ola']
+        for name in tests:
+            qry = self.qry.filter(name__startswith=name)
+            self.assertEqual(len(qry), len([x for x in self.names if x.startswith(name)]))
+
+            qry = self.qry.filter(name__istartswith=name)
+            self.assertEqual(len(qry), len([x for x in self.names if x.lower().startswith(name.lower())]))
