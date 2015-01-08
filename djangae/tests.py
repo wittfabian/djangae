@@ -287,6 +287,7 @@ class BackendTests(TestCase):
         self.assertNotEqual(type(grue), unicode)
 
         obj = TestFruit.objects.create(name=u'foo', color=grue)
+        obj = TestFruit.objects.get(pk=obj.pk)
 
         self.assertEqual(type(obj.color), unicode)
 
