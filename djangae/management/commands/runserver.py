@@ -70,15 +70,14 @@ class Command(BaseRunserverCommand):
 
         from djangae import sandbox
 
-
         if int(self.port) != sandbox._OPTIONS.port:
             # Override the port numbers
             sandbox._OPTIONS.port = int(self.port)
             sandbox._OPTIONS.admin_port = int(self.port) + 1
-            sandbox._OPTIONS.apis_port = int(self.port) + 2
+            sandbox._OPTIONS.api_port = int(self.port) + 2
 
         if self.addr != sandbox._OPTIONS.host:
-            sandbox._OPTIONS.host = sandbox._OPTIONS.admin_host = sandbox._OPTIONS.apis_host = self.addr
+            sandbox._OPTIONS.host = sandbox._OPTIONS.admin_host = sandbox._OPTIONS.api_host = self.addr
 
         sandbox._OPTIONS.automatic_restart = self.use_reloader
 
@@ -88,8 +87,8 @@ class Command(BaseRunserverCommand):
                 self._dispatcher._port = options.port
                 self._dispatcher._host = options.host
 
-                sandbox._API_SERVER._host = options.apis_host
-                sandbox._API_SERVER.bind_addr = (options.apis_host, options.apis_port)
+                sandbox._API_SERVER._host = options.api_host
+                sandbox._API_SERVER.bind_addr = (options.api_host, options.api_port)
 
                 request_data._dispatcher = self._dispatcher
 
