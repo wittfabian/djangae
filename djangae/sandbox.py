@@ -243,6 +243,8 @@ def activate(sandbox_name, add_sdk_to_path=False, **overrides):
 @contextlib.contextmanager
 def allow_mode_write():
     original_modes = stubs.FakeFile.ALLOWED_MODES
-    stubs.FakeFile.ALLOWED_MODES = frozenset(['r', 'rb', 'U', 'rU', 'w'])
+    new_modes = set(stubs.FakeFile.ALLOWED_MODES)
+    new_modes.add('w')
+    stubs.FakeFile.ALLOWED_MODES = frozenset(new_modes)
     yield
     stubs.FakeFile.ALLOWED_MODES = original_modes
