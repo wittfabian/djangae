@@ -3,6 +3,8 @@ import yaml
 import os
 import datetime
 
+from djangae.sandbox import allow_mode_write
+
 _special_indexes = {}
 _last_loaded_time = None
 
@@ -59,8 +61,9 @@ def special_indexes_for_column(model_class, column):
 def write_special_indexes():
     index_file = _get_index_file()
 
-    with open(index_file, "w") as stream:
-        stream.write(yaml.dump(_special_indexes))
+    with allow_mode_write():
+        with open(index_file, "w") as stream:
+            stream.write(yaml.dump(_special_indexes))
 
 
 def add_special_index(model_class, field_name, index_type):
