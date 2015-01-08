@@ -238,3 +238,9 @@ def activate(sandbox_name, add_sdk_to_path=False, **overrides):
 
     finally:
         sys.path = original_path
+
+@contextlib.contextmanager
+def allow_mode_write(FakeFile):
+    FakeFile.ALLOWED_MODES = frozenset(['r', 'rb', 'U', 'rU', 'w'])
+    yield FakeFile
+    FakeFile.ALLOWED_MODES = frozenset(['r', 'rb', 'U', 'rU'])
