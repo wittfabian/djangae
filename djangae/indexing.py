@@ -3,7 +3,6 @@ import yaml
 import os
 import datetime
 
-from google.appengine.tools.devappserver2.python import stubs
 from djangae.sandbox import allow_mode_write
 
 _special_indexes = {}
@@ -62,7 +61,7 @@ def special_indexes_for_column(model_class, column):
 def write_special_indexes():
     index_file = _get_index_file()
 
-    with allow_mode_write(stubs.FakeFile):
+    with allow_mode_write():
         with open(index_file, "w") as stream:
             stream.write(yaml.dump(_special_indexes))
 
