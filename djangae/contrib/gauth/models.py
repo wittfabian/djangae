@@ -1,5 +1,6 @@
 import re
 
+from django.utils.functional import lazy
 from django.contrib import auth
 from django.contrib.auth.hashers import make_password
 from django.contrib.auth.models import (
@@ -68,9 +69,8 @@ class Group(models.Model):
         uses the permission names
     """
     name = models.CharField(_('name'), max_length=80, unique=True)
-    permissions = ListField(models.CharField(max_length=500, choices=get_permission_choices()),
-        verbose_name=_('permissions'), blank=True,
-        choices=get_permission_choices()
+    permissions = ListField(models.CharField(max_length=500),
+        verbose_name=_('permissions'), blank=True
     )
 
     objects = GroupManager()
@@ -86,6 +86,14 @@ class Group(models.Model):
     def natural_key(self):
         return (self.name,)
 
+    def __init__(self, *args, **kwargs):
+        """We need to override this to make the choices lazy and prevent import madness"""
+        super(Group, self).__init__(*args, **kwargs)
+
+        field = self._meta.get_field_by_name('permissions')[0]
+        field._choices = lazy(get_permission_choices, list)()
+        field.item_field_type._choices = lazy(get_permission_choices, list)()
+
 
 class PermissionsMixin(models.Model):
     """
@@ -96,6 +104,7 @@ class PermissionsMixin(models.Model):
         help_text=_('Designates that this user has all permissions without '
                     'explicitly assigning them.')
     )
+
     groups = RelatedSetField(
         Group,
         verbose_name=_('groups'),
@@ -103,15 +112,20 @@ class PermissionsMixin(models.Model):
                                 'get all permissions granted to each of '
                                 'his/her group.')
     )
+
     user_permissions = ListField(
         models.CharField(max_length=500),
         verbose_name=_('user permissions'), blank=True,
-        help_text='Specific permissions for this user.',
-        choices=get_permission_choices()
+        help_text='Specific permissions for this user.'
     )
 
     class Meta:
         abstract = True
+
+    def __init__(self, *args, **kwargs):
+        """We need to override this to make the choices lazy and prevent import madness"""
+        super(PermissionsMixin, self).__init__(*args, **kwargs)
+        self._meta.get_field_by_name('user_permissions')[0]._choices = lazy(get_permission_choices, list)()
 
     def get_group_permissions(self, obj=None):
         """
