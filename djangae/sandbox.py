@@ -6,7 +6,6 @@ import contextlib
 import subprocess
 import getpass
 
-from google.appengine.tools.devappserver2.python import stubs
 import djangae.utils as utils
 
 _SCRIPT_NAME = 'dev_appserver.py'
@@ -242,6 +241,8 @@ def activate(sandbox_name, add_sdk_to_path=False, **overrides):
 
 @contextlib.contextmanager
 def allow_mode_write():
+    from google.appengine.tools.devappserver2.python import stubs
+
     original_modes = stubs.FakeFile.ALLOWED_MODES
     new_modes = set(stubs.FakeFile.ALLOWED_MODES)
     new_modes.add('w')
