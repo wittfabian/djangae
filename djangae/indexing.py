@@ -239,6 +239,8 @@ class IContainsIndexer(ContainsIndexer):
     def indexed_column_name(self, field_column):
         return "_idx_icontains_{0}".format(field_column)
 
+    def prep_value_for_query(self, value):
+        return super(IContainsIndexer, self).prep_value_for_query(value).lower()
 
 class EndsWithIndexer(Indexer):
     """
