@@ -1175,6 +1175,38 @@ class IterableFieldModel(models.Model):
 
 
 class IterableFieldTests(TestCase):
+    def test_filtering_on_iterable_fields(self):
+        list1 = IterableFieldModel.objects.create(
+            list_field=['A', 'B', 'C', 'D', 'E', 'F', 'G'],
+            set_field=set(['A', 'B', 'C', 'D', 'E', 'F', 'G']))
+        list2 = IterableFieldModel.objects.create(
+            list_field=['A', 'B', 'C', 'H', 'I', 'J'],
+            set_field=set(['A', 'B', 'C', 'H', 'I', 'J']))
+
+        # filtering using exact lookup with ListField:
+        qry = IterableFieldModel.objects.filter(list_field='A')
+        self.assertEqual(sorted(x.pk for x in qry), sorted([list1.pk, list2.pk]))
+        qry = IterableFieldModel.objects.filter(list_field='H')
+        self.assertEqual(sorted(x.pk for x in qry), [list2.pk,])
+
+        # filtering using exact lookup with SetField:
+        qry = IterableFieldModel.objects.filter(set_field='A')
+        self.assertEqual(sorted(x.pk for x in qry), sorted([list1.pk, list2.pk]))
+        qry = IterableFieldModel.objects.filter(set_field='H')
+        self.assertEqual(sorted(x.pk for x in qry), [list2.pk,])
+
+        # filtering using in lookup with ListField:
+        qry = IterableFieldModel.objects.filter(list_field__in=['A', 'B', 'C'])
+        self.assertEqual(sorted(x.pk for x in qry), sorted([list1.pk, list2.pk,]))
+        qry = IterableFieldModel.objects.filter(list_field__in=['H', 'I', 'J'])
+        self.assertEqual(sorted(x.pk for x in qry), sorted([list2.pk,]))
+
+        # filtering using in lookup with SetField:
+        qry = IterableFieldModel.objects.filter(set_field__in=set(['A', 'B']))
+        self.assertEqual(sorted(x.pk for x in qry), sorted([list1.pk, list2.pk]))
+        qry = IterableFieldModel.objects.filter(set_field__in=set(['H']))
+        self.assertEqual(sorted(x.pk for x in qry), [list2.pk,])
+
     def test_empty_iterable_fields(self):
         """ Test that an empty set field always returns set(), not None """
         instance = IterableFieldModel()
