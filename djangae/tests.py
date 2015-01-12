@@ -721,6 +721,9 @@ class ConstraintTests(TestCase):
 
         instance2.save()
 
+        instance2.unique_set_field = set()
+        instance2.save() # You can have two fields with empty sets
+
 class EdgeCaseTests(TestCase):
     def setUp(self):
         add_special_index(TestUser, "username", "iexact")

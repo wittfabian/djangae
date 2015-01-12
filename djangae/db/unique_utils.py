@@ -45,7 +45,9 @@ def unique_identifiers_from_entity(model, entity, ignore_pk=False, ignore_null_v
             else:
                 value = entity.get(field.column)  # Get the value from the entity
 
-            if value is None and ignore_null_values:
+            # If ignore_null_values is True, then we don't include combinations where the value is None
+            # or if the field is a multivalue field where None means no value (you can't store None in a list)
+            if value is None and (ignore_null_values or isinstance(value, (list, set))):
                 include_combination = False
 
             if isinstance(value, (list, set)):
