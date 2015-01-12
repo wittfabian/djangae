@@ -39,6 +39,7 @@ from djangae.db.backends.appengine.dnf import parse_dnf
 from .storage import BlobstoreFileUploadHandler
 from .wsgi import DjangaeApplication
 from djangae.core import paginator
+from django.template import Template, Context
 
 try:
     import webtest
@@ -1046,6 +1047,11 @@ class BlobstoreFileUploadHandlerTest(TestCase):
             self.uploader.new_file, file_field_name, 'file_name', None, None
         )
         self.assertIsNotNone(self.uploader.blobkey)
+
+    def test_blobstore_upload_url_templatetag(self):
+        template = """{% load storage %}{% blobstore_upload_url '/something/' %}"""
+        response = Template(template).render(Context({}))
+        self.assertTrue(response.startswith("http://localhost:8080/_ah/upload/"))
 
 
 class ApplicationTests(TestCase):
