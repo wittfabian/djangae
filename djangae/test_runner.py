@@ -31,14 +31,16 @@ def init_testbed():
 
 def testbed_wrap(test):
     def _wrapped(*args, **kwargs):
-
+        bed = None
         try:
             # Init test stubs
             bed = init_testbed()
 
             return test(*args, **kwargs)
         finally:
-            bed.deactivate()
+            if bed:
+                bed.deactivate()
+                bed = None
 
     return _wrapped
 
