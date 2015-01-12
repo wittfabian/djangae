@@ -26,40 +26,40 @@ def unique_identifiers_from_entity(model, entity, ignore_pk=False, ignore_null_v
         Given an instance, this function returns a list of identifiers that represent
         unique field/value combinations.
     """
-
-    UNSUPPORTED_DB_TYPES = {
-        'ListField',
-        'SetField',
-        'DictField'
-    }
-
     unique_combinations = _unique_combinations(model, ignore_pk)
 
     meta = model._meta
 
     identifiers = []
     for combination in unique_combinations:
+        combo_identifiers = []
         identifier = []
 
         include_combination = True
 
         for field_name in combination:
             field = meta.get_field(field_name)
-            if field.get_internal_type() in UNSUPPORTED_DB_TYPES:
-                raise TypeError("Unique support for {} is not yet implemented".format(field.get_internal_type()))
 
             if field.primary_key:
                 value = entity.key().id_or_name()
             else:
                 value = entity.get(field.column)  # Get the value from the entity
 
-            if value is None and ignore_null_values:
+            # If ignore_null_values is True, then we don't include combinations where the value is None
+            # or if the field is a multivalue field where None means no value (you can't store None in a list)
+            if value is None and (ignore_null_values or isinstance(value, (list, set))):
                 include_combination = False
 
-            identifier.append("{}:{}".format(field_name, _format_value_for_identifier(value)))
+            if isinstance(value, (list, set)):
+                for v in value:
+                    combo_identifiers.append(identifier + ["{}:{}".format(field_name, _format_value_for_identifier(v))])
+            else:
+                identifier.append("{}:{}".format(field_name, _format_value_for_identifier(value)))
+                combo_identifiers.append(identifier)
 
         if include_combination:
-            identifiers.append(model._meta.db_table + "|" + "|".join(identifier))
+            for identifier in combo_identifiers:
+                identifiers.append(model._meta.db_table + "|" + "|".join(identifier))
 
     return identifiers
 

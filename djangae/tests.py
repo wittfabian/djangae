@@ -64,9 +64,15 @@ class UniqueModel(models.Model):
 
     unique_relation = models.ForeignKey('self', null=True, blank=True, unique=True)
 
+    unique_set_field = SetField(models.CharField(max_length=500), unique=True)
+    unique_list_field = ListField(models.CharField(max_length=500), unique=True)
+
+    unique_together_list_field = ListField(models.IntegerField())
+
     class Meta:
         unique_together = [
-            ("unique_combo_one", "unique_combo_two")
+            ("unique_combo_one", "unique_combo_two"),
+            ("unique_together_list_field", "unique_combo_one")
         ]
 
 
@@ -680,6 +686,44 @@ class ConstraintTests(TestCase):
 
         self.assertEqual(1, datastore.Query(UniqueMarker.kind()).Count() - initial_count)
 
+    def test_list_field_unique_constaints(self):
+        instance1 = UniqueModel.objects.create(unique_field=1, unique_combo_one=1, unique_list_field=["A", "C"])
+
+        with self.assertRaises((IntegrityError, DataError)):
+            UniqueModel.objects.create(unique_field=2, unique_combo_one=2, unique_list_field=["A"])
+
+        instance2 = UniqueModel.objects.create(unique_field=2, unique_combo_one=2, unique_list_field=["B"])
+
+        instance2.unique_list_field = instance1.unique_list_field
+
+        with self.assertRaises((IntegrityError, DataError)):
+            instance2.save()
+
+        instance1.unique_list_field = []
+        instance1.save()
+
+        instance2.save()
+
+    def test_set_field_unique_constraints(self):
+        instance1 = UniqueModel.objects.create(unique_field=1, unique_combo_one=1, unique_set_field={"A", "C"})
+
+        with self.assertRaises((IntegrityError, DataError)):
+            UniqueModel.objects.create(unique_field=2, unique_combo_one=2, unique_set_field={"A"})
+
+        instance2 = UniqueModel.objects.create(unique_field=2, unique_combo_one=2, unique_set_field={"B"})
+
+        instance2.unique_set_field = instance1.unique_set_field
+
+        with self.assertRaises((IntegrityError, DataError)):
+            instance2.save()
+
+        instance1.unique_set_field = set()
+        instance1.save()
+
+        instance2.save()
+
+        instance2.unique_set_field = set()
+        instance2.save() # You can have two fields with empty sets
 
 class EdgeCaseTests(TestCase):
     def setUp(self):
@@ -1137,6 +1181,38 @@ class IterableFieldModel(models.Model):
 
 
 class IterableFieldTests(TestCase):
+    def test_filtering_on_iterable_fields(self):
+        list1 = IterableFieldModel.objects.create(
+            list_field=['A', 'B', 'C', 'D', 'E', 'F', 'G'],
+            set_field=set(['A', 'B', 'C', 'D', 'E', 'F', 'G']))
+        list2 = IterableFieldModel.objects.create(
+            list_field=['A', 'B', 'C', 'H', 'I', 'J'],
+            set_field=set(['A', 'B', 'C', 'H', 'I', 'J']))
+
+        # filtering using exact lookup with ListField:
+        qry = IterableFieldModel.objects.filter(list_field='A')
+        self.assertEqual(sorted(x.pk for x in qry), sorted([list1.pk, list2.pk]))
+        qry = IterableFieldModel.objects.filter(list_field='H')
+        self.assertEqual(sorted(x.pk for x in qry), [list2.pk,])
+
+        # filtering using exact lookup with SetField:
+        qry = IterableFieldModel.objects.filter(set_field='A')
+        self.assertEqual(sorted(x.pk for x in qry), sorted([list1.pk, list2.pk]))
+        qry = IterableFieldModel.objects.filter(set_field='H')
+        self.assertEqual(sorted(x.pk for x in qry), [list2.pk,])
+
+        # filtering using in lookup with ListField:
+        qry = IterableFieldModel.objects.filter(list_field__in=['A', 'B', 'C'])
+        self.assertEqual(sorted(x.pk for x in qry), sorted([list1.pk, list2.pk,]))
+        qry = IterableFieldModel.objects.filter(list_field__in=['H', 'I', 'J'])
+        self.assertEqual(sorted(x.pk for x in qry), sorted([list2.pk,]))
+
+        # filtering using in lookup with SetField:
+        qry = IterableFieldModel.objects.filter(set_field__in=set(['A', 'B']))
+        self.assertEqual(sorted(x.pk for x in qry), sorted([list1.pk, list2.pk]))
+        qry = IterableFieldModel.objects.filter(set_field__in=set(['H']))
+        self.assertEqual(sorted(x.pk for x in qry), [list2.pk,])
+
     def test_empty_iterable_fields(self):
         """ Test that an empty set field always returns set(), not None """
         instance = IterableFieldModel()

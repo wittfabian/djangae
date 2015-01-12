@@ -34,9 +34,12 @@ class IterableField(models.Field):
         if value is None:
             raise ValueError("You can't query an iterable field with None")
 
-        if lookup_type != 'exact':
-            raise ValueError("You can only query for exact values on iterable fields")
+        if lookup_type != 'exact' and lookup_type != 'in':
+            raise ValueError("You can only query using exact and in lookups on iterable fields")
 
+        if isinstance(value, (list, set)):
+            return [ self.item_field_type.to_python(x) for x in value ]
+            
         return self.item_field_type.to_python(value)
 
     def get_prep_value(self, value):
