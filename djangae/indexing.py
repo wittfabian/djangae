@@ -246,7 +246,7 @@ class EndsWithIndexer(Indexer):
     """
         dbindexer originally reversed the string and did a startswith on it.
         However, this is problematic as it uses an inequality and therefore
-        limits the queries you can perform. Instead, we store all permuatations
+        limits the queries you can perform. Instead, we store all permutations
         of the last characters in a list field. Then we can just do an exact lookup on
         the value. Which isn't as nice, but is more flexible.
     """
