@@ -63,9 +63,15 @@ class UniqueModel(models.Model):
 
     unique_relation = models.ForeignKey('self', null=True, blank=True, unique=True)
 
+    unique_set_field = SetField(models.CharField(max_length=500), unique=True)
+    unique_list_field = ListField(models.CharField(max_length=500), unique=True)
+
+    unique_together_list_field = ListField(models.IntegerField())
+
     class Meta:
         unique_together = [
-            ("unique_combo_one", "unique_combo_two")
+            ("unique_combo_one", "unique_combo_two"),
+            ("unique_together_list_field", "unique_combo_one")
         ]
 
 
@@ -679,6 +685,41 @@ class ConstraintTests(TestCase):
 
         self.assertEqual(1, datastore.Query(UniqueMarker.kind()).Count() - initial_count)
 
+    def test_list_field_unique_constaints(self):
+        instance1 = UniqueModel.objects.create(unique_field=1, unique_combo_one=1, unique_list_field=["A", "C"])
+
+        with self.assertRaises((IntegrityError, DataError)):
+            UniqueModel.objects.create(unique_field=2, unique_combo_one=2, unique_list_field=["A"])
+
+        instance2 = UniqueModel.objects.create(unique_field=2, unique_combo_one=2, unique_list_field=["B"])
+
+        instance2.unique_list_field = instance1.unique_list_field
+
+        with self.assertRaises((IntegrityError, DataError)):
+            instance2.save()
+
+        instance1.unique_list_field = []
+        instance1.save()
+
+        instance2.save()
+
+    def test_set_field_unique_constraints(self):
+        instance1 = UniqueModel.objects.create(unique_field=1, unique_combo_one=1, unique_set_field={"A", "C"})
+
+        with self.assertRaises((IntegrityError, DataError)):
+            UniqueModel.objects.create(unique_field=2, unique_combo_one=2, unique_set_field={"A"})
+
+        instance2 = UniqueModel.objects.create(unique_field=2, unique_combo_one=2, unique_set_field={"B"})
+
+        instance2.unique_set_field = instance1.unique_set_field
+
+        with self.assertRaises((IntegrityError, DataError)):
+            instance2.save()
+
+        instance1.unique_set_field = set()
+        instance1.save()
+
+        instance2.save()
 
 class EdgeCaseTests(TestCase):
     def setUp(self):
