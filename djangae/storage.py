@@ -16,35 +16,55 @@ from django.utils.encoding import smart_str, force_unicode
 
 from google.appengine.api import files
 from google.appengine.api.images import get_serving_url, NotImageError
-from google.appengine.ext.blobstore import BlobInfo, BlobKey, delete, \
-    create_upload_url, BLOB_KEY_HEADER, BLOB_RANGE_HEADER, BlobReader
+
+from google.appengine.ext.blobstore import (
+    BlobInfo,
+    BlobKey,
+    delete,
+    BLOB_KEY_HEADER,
+    BLOB_RANGE_HEADER,
+    BlobReader
+)
 
 
-def prepare_upload(request, url, **kwargs):
-    return create_upload_url(url), {}
+def serve_file(request, blob_key_or_info, as_download=False, content_type=None, filename=None, offset=None, size=None):
+    """
+        Serves a file from the blobstore, reads most of the data from the blobinfo by default but you can override stuff
+        by passing kwargs.
+    """
 
-
-def serve_file(request, file, save_as, content_type, **kwargs):
-    if isinstance(file, BlobKey):
-        blobkey = file
-    elif hasattr(file, 'file') and hasattr(file.file, 'blobstore_info'):
-        blobkey = file.file.blobstore_info.key()
-    elif hasattr(file, 'blobstore_info'):
-        blobkey = file.blobstore_info.key()
+    if isinstance(blob_key_or_info, BlobKey):
+        info = BlobInfo.get(blob_key_or_info)
+    elif isinstance(blob_key_or_info, basestring):
+        info = BlobInfo.get(BlobKey(blob_key_or_info))
+    elif isinstance(blob_key_or_info, BlobInfo):
+        info = blob_key_or_info
     else:
-        raise ValueError("The provided file can't be served via the "
-                         "Google App Engine Blobstore.")
-    response = HttpResponse(content_type=content_type)
-    response[BLOB_KEY_HEADER] = str(blobkey)
+        raise ValueError("Invalid type %s" % blob_key_or_info.__class__)
+
+    response = HttpResponse(content_type=content_type or info.content_type)
+    response[BLOB_KEY_HEADER] = str(info.key())
     response['Accept-Ranges'] = 'bytes'
     http_range = request.META.get('HTTP_RANGE')
+
+    if offset or size:
+        # Looks a little bonkers, but basically create the HTTP range string, we cast to int first to make sure
+        # nothing funky gets into the headers
+        http_range = "{}-{}".format(
+            str(int(offset)) if offset else "",
+            str(int(offset or 0) + size) if size else ""
+        )
+
     if http_range is not None:
         response[BLOB_RANGE_HEADER] = http_range
-    if save_as:
-        response['Content-Disposition'] = smart_str(
-            u'attachment; filename="%s"' % save_as)
 
-    info = BlobInfo.get(blobkey)
+    if as_download:
+        response['Content-Disposition'] = smart_str(
+            u'attachment; filename="%s"' % filename or info.filename
+        )
+    elif filename:
+        raise ValueError("You can't specify a filename without also specifying as_download")
+
     if info.size is not None:
         response['Content-Length'] = info.size
     return response
