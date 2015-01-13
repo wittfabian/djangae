@@ -1041,6 +1041,13 @@ class EdgeCaseTests(TestCase):
         obj2 = SelfRelatedModel.objects.create(related=obj)
         self.assertEqual(list(obj.selfrelatedmodel_set.all()), [obj2])
 
+    def test_special_indexes_for_empty_fields(self):
+        obj = TestFruit.objects.create(name='pear')
+        indexes = ['icontains', 'contains', 'iexact', 'iendswith', 'endswith', 'istartswith', 'startswith']
+        for index in indexes:
+            add_special_index(TestFruit, 'color', index)
+        obj.save()
+
 
 class BlobstoreFileUploadHandlerTest(TestCase):
     boundary = "===============7417945581544019063=="
