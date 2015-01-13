@@ -1245,9 +1245,6 @@ class IterableFieldTests(TestCase):
             instance.list_field = "Bananas"
             instance.save()
 
-        with self.assertRaises(ValueError):
-            instance.list_field = set([1])
-
         results = IterableFieldModel.objects.filter(list_field="One")
         self.assertEqual([instance], list(results))
 
@@ -1270,9 +1267,6 @@ class IterableFieldTests(TestCase):
             instance.set_field = "Bananas"
             instance.save()
 
-        # Assigning a list to a set
-        with self.assertRaises(ValueError):
-            instance.set_field = [1]
 
 from djangae.fields import RelatedSetField
 

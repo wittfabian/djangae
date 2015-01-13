@@ -101,7 +101,7 @@ class IterableField(models.Field):
         if value is None:
             return self._iterable_type([])
 
-        if not isinstance(value, self._iterable_type):
+        if not hasattr(value, "__iter__"): # Allows list/set, not string
             raise ValueError("Tried to assign a {} to a {}".format(value.__class__.__name__, self.__class__.__name__))
 
         return self._map(self.item_field_type.to_python, value)
