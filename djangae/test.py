@@ -12,7 +12,7 @@ from google.appengine.datastore import datastore_stub_util
 def inconsistent_db(probability=0, connection='default'):
     """
         A context manager that allows you to make the datastore inconsistent during testing.
-        This is vital for writing applications that deal with App Engine's eventual consistency
+        This is vital for writing applications that deal with the Datastore's eventual consistency
     """
 
     from django.db import connections
