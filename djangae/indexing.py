@@ -220,7 +220,7 @@ class ContainsIndexer(Indexer):
             if len(result) > 500:
                 raise ValueError("Can't index for contains query, this value has too many permuatations")
 
-        return result
+        return result or None
 
     def prep_value_for_query(self, value):
         value = self.unescape(value)
@@ -234,7 +234,8 @@ class ContainsIndexer(Indexer):
 
 class IContainsIndexer(ContainsIndexer):
     def prep_value_for_database(self, value):
-        return [x.lower() for x in super(IContainsIndexer, self).prep_value_for_database(value)]
+        result = super(IContainsIndexer, self).prep_value_for_database(value)
+        return result if result else None
 
     def indexed_column_name(self, field_column):
         return "_idx_icontains_{0}".format(field_column)
@@ -257,7 +258,7 @@ class EndsWithIndexer(Indexer):
         results = []
         for i in xrange(len(value)):
             results.append(value[i:])
-        return results
+        return results or None
 
     def prep_value_for_query(self, value):
         value = self.unescape(value)
@@ -274,7 +275,8 @@ class IEndsWithIndexer(EndsWithIndexer):
         Same as above, just all lower cased
     """
     def prep_value_for_database(self, value):
-        return super(IEndsWithIndexer, self).prep_value_for_database(value.lower())
+        result = super(IEndsWithIndexer, self).prep_value_for_database(value.lower())
+        return result or None
 
     def prep_value_for_query(self, value):
         return super(IEndsWithIndexer, self).prep_value_for_query(value.lower())
