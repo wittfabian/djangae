@@ -39,7 +39,7 @@ class IterableField(models.Field):
 
         if isinstance(value, (list, set)):
             return [ self.item_field_type.to_python(x) for x in value ]
-            
+
         return self.item_field_type.to_python(value)
 
     def get_prep_value(self, value):
@@ -101,6 +101,8 @@ class IterableField(models.Field):
         if value is None:
             return self._iterable_type([])
 
+        # Because a set cannot be defined in JSON, we must allow a list to be passed as the value
+        # of a SetField, as otherwise SetField data can't be loaded from fixtures
         if not hasattr(value, "__iter__"): # Allows list/set, not string
             raise ValueError("Tried to assign a {} to a {}".format(value.__class__.__name__, self.__class__.__name__))
 
