@@ -32,7 +32,7 @@
     <div id="main_content_wrap" class="outer">
       <section id="main_content" class="inner">
         <h1>
-<a name="djangae" class="anchor" href="#djangae"><span class="octicon octicon-link"></span></a>Djangae</h1>
+<a id="djangae" class="anchor" href="#djangae" aria-hidden="true"><span class="octicon octicon-link"></span></a>Djangae</h1>
 
 <p>The best way to run Django on Google App Engine.</p>
 
@@ -48,7 +48,7 @@ want to) using Django's models with the App Engine Datastore as the underlying d
 <p><strong>Note: Djangae is under heavy development, stability is not guaranteed. A 1.0 release will happen when it's ready</strong></p>
 
 <h2>
-<a name="features" class="anchor" href="#features"><span class="octicon octicon-link"></span></a>Features</h2>
+<a id="features" class="anchor" href="#features" aria-hidden="true"><span class="octicon octicon-link"></span></a>Features</h2>
 
 <ul>
 <li>A WSGI middleware that provides a clean way via which your Django app is plugged into App Engine.</li>
@@ -65,13 +65,13 @@ custom commands as well, see TODO.md).</li>
 </ul>
 
 <h2>
-<a name="supported-django-versions" class="anchor" href="#supported-django-versions"><span class="octicon octicon-link"></span></a>Supported Django Versions</h2>
+<a id="supported-django-versions" class="anchor" href="#supported-django-versions" aria-hidden="true"><span class="octicon octicon-link"></span></a>Supported Django Versions</h2>
 
 <p>The intention is always to support the last two versions of Django, although older versions may work. Currently only
 Django 1.6 is supported, but 1.7 support is in the pipeline.</p>
 
 <h1>
-<a name="installation" class="anchor" href="#installation"><span class="octicon octicon-link"></span></a>Installation</h1>
+<a id="installation" class="anchor" href="#installation" aria-hidden="true"><span class="octicon octicon-link"></span></a>Installation</h1>
 
 <p><strong>If you just want to get started on a fresh Django project, take a look at <a href="https://github.com/potatolondon/djangae-scaffold">djangae-scaffold</a></strong></p>
 
@@ -84,34 +84,31 @@ default settings.</li>
 <li>
 <p>In app.yaml add the following handlers:</p>
 
-<div class="highlight highlight-yml"><pre><span class="p-Indicator">-</span> <span class="l-Scalar-Plain">url</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">/_ah/(mapreduce|queue|warmup).*</span>
-  <span class="l-Scalar-Plain">script</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">YOUR_DJANGO_APP.wsgi.application</span>
-  <span class="l-Scalar-Plain">login</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">admin</span>
+<div class="highlight highlight-yml"><pre><span class="pl-s1">- <span class="pl-ent">url:</span> <span class="pl-s1">/_ah/(mapreduce|queue|warmup).*</span></span>
+  <span class="pl-s1"><span class="pl-ent">script:</span> <span class="pl-s1">YOUR_DJANGO_APP.wsgi.application</span></span>
+  <span class="pl-s1"><span class="pl-ent">login:</span> <span class="pl-s1">admin</span></span>
 
-<span class="p-Indicator">-</span> <span class="l-Scalar-Plain">url</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">/.*</span>
-  <span class="l-Scalar-Plain">script</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">YOUR_DJANGO_APP.wsgi.application</span>
-</pre></div>
+<span class="pl-s1">- <span class="pl-ent">url:</span> <span class="pl-s1">/.*</span></span>
+  <span class="pl-s1"><span class="pl-ent">script:</span> <span class="pl-s1">YOUR_DJANGO_APP.wsgi.application</span></span></pre></div>
 </li>
 <li>
 <p>Make your manage.py look something like this:</p>
 
-<div class="highlight highlight-python"><pre><span class="k">if</span> <span class="n">__name__</span> <span class="o">==</span> <span class="s">"__main__"</span><span class="p">:</span>
-    <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s">"DJANGO_SETTINGS_MODULE"</span><span class="p">,</span> <span class="s">"myapp.settings"</span><span class="p">)</span>
+<div class="highlight highlight-python"><pre><span class="pl-k">if</span> <span class="pl-sv">__name__</span> <span class="pl-k">==</span> <span class="pl-s1"><span class="pl-pds">"</span>__main__<span class="pl-pds">"</span></span>:
+    os.environ.setdefault(<span class="pl-s1"><span class="pl-pds">"</span>DJANGO_SETTINGS_MODULE<span class="pl-pds">"</span></span>, <span class="pl-s1"><span class="pl-pds">"</span>myapp.settings<span class="pl-pds">"</span></span>)
 
-    <span class="kn">from</span> <span class="nn">djangae.core.management</span> <span class="kn">import</span> <span class="n">execute_from_command_line</span>
+    <span class="pl-k">from</span> djangae.core.management <span class="pl-k">import</span> execute_from_command_line
 
-    <span class="n">execute_from_command_line</span><span class="p">(</span><span class="n">sys</span><span class="o">.</span><span class="n">argv</span><span class="p">)</span>
-</pre></div>
+    execute_from_command_line(sys.argv)</pre></div>
 </li>
 <li>
 <p>Use the Djangae WSGI handler in your wsgi.py, something like</p>
 
-<div class="highlight highlight-python"><pre><span class="kn">from</span> <span class="nn">django.core.wsgi</span> <span class="kn">import</span> <span class="n">get_wsgi_application</span>
+<div class="highlight highlight-python"><pre><span class="pl-k">from</span> django.core.wsgi <span class="pl-k">import</span> get_wsgi_application
 
-<span class="kn">from</span> <span class="nn">djangae.wsgi</span> <span class="kn">import</span> <span class="n">DjangaeApplication</span>
+<span class="pl-k">from</span> djangae.wsgi <span class="pl-k">import</span> DjangaeApplication
 
-<span class="n">application</span> <span class="o">=</span> <span class="n">DjangaeApplication</span><span class="p">(</span><span class="n">get_wsgi_application</span><span class="p">())</span>
-</pre></div>
+application <span class="pl-k">=</span> DjangaeApplication(get_wsgi_application())</pre></div>
 </li>
 <li><p>Add the following to your URL handler: <code>url(r'^_ah/', include('djangae.urls'))</code></p></li>
 <li><p>It is recommended that for improved security you add <code>djangae.contrib.security.middleware.AppEngineSecurityMiddleware</code> as the first
@@ -122,7 +119,7 @@ Django settings aren't as secure as they could be.</p></li>
 </ul>
 
 <h2>
-<a name="the-database-backend" class="anchor" href="#the-database-backend"><span class="octicon octicon-link"></span></a>The Database Backend</h2>
+<a id="the-database-backend" class="anchor" href="#the-database-backend" aria-hidden="true"><span class="octicon octicon-link"></span></a>The Database Backend</h2>
 
 <p>Previously, in order to use Django's ORM with the App Engine Datastore, django-nonrel was required, along with
 djangoappengine. That's now changed. With Djangae you can use vanilla Django with the Datastore. Heavily inspired by
@@ -144,7 +141,7 @@ work out of the box. These index fields are created automatically when you use t
 </ul>
 
 <h2>
-<a name="roadmap" class="anchor" href="#roadmap"><span class="octicon octicon-link"></span></a>Roadmap</h2>
+<a id="roadmap" class="anchor" href="#roadmap" aria-hidden="true"><span class="octicon octicon-link"></span></a>Roadmap</h2>
 
 <p>1.0-beta</p>
 
@@ -157,7 +154,7 @@ work out of the box. These index fields are created automatically when you use t
 </ul>
 
 <h3>
-<a name="what-cant-it-do" class="anchor" href="#what-cant-it-do"><span class="octicon octicon-link"></span></a>What Can't It Do?</h3>
+<a id="what-cant-it-do" class="anchor" href="#what-cant-it-do" aria-hidden="true"><span class="octicon octicon-link"></span></a>What Can't It Do?</h3>
 
 <p>Due to the limitations of the App Engine Datastore (it being a non-relational database for a start), there are some
 things which you still can't do with the Django ORM when using the djangae backend.  The easiest way to find these out
@@ -178,7 +175,7 @@ should be done using <code>djangae.db.transactional.atomic</code>.</li>
 </ul>
 
 <h3>
-<a name="other-considerations" class="anchor" href="#other-considerations"><span class="octicon octicon-link"></span></a>Other Considerations</h3>
+<a id="other-considerations" class="anchor" href="#other-considerations" aria-hidden="true"><span class="octicon octicon-link"></span></a>Other Considerations</h3>
 
 <p>When using the Datastore you should bear in mind its capabilities and limitations. While Djangae allows you to run
 Django on the Datastore, it doesn't turn the Datastore into a relational database. There are things which the
@@ -187,7 +184,7 @@ datastore is good at (e.g. handling huge bandwidth of reads and writes) and thin
 <a href="https://developers.google.com/appengine/docs/python/datastore/">Datastore</a>.</p>
 
 <h2>
-<a name="localremote-management-commands" class="anchor" href="#localremote-management-commands"><span class="octicon octicon-link"></span></a>Local/remote management commands</h2>
+<a id="localremote-management-commands" class="anchor" href="#localremote-management-commands" aria-hidden="true"><span class="octicon octicon-link"></span></a>Local/remote management commands</h2>
 
 <p>If you set your manage.py up as described above, djangae will allow you to run management commands locally or
 remotely, by specifying a <code>--sandbox</code>. Eg.</p>
@@ -199,7 +196,7 @@ remotely, by specifying a <code>--sandbox</code>. Eg.</p>
 <p>With no arguments, management commands are run locally.</p>
 
 <h2>
-<a name="authentication" class="anchor" href="#authentication"><span class="octicon octicon-link"></span></a>Authentication</h2>
+<a id="authentication" class="anchor" href="#authentication" aria-hidden="true"><span class="octicon octicon-link"></span></a>Authentication</h2>
 
 <p>Djangae includes 'djangae.contrib.gauth', which allows you to authenticate your users with App Engine's built-in Google Accounts functionality, and also allows use of Django's permisions system on the Datastore, despite it usually requiring many-to-many relationships, which are not supported on the Datstore.</p>
 
@@ -213,7 +210,7 @@ login url and sets <code>AUTH_USER_MODEL</code> to <code>'djangae.GaeDatastoreUs
 </ul>
 
 <h3>
-<a name="choosing-a-user-model" class="anchor" href="#choosing-a-user-model"><span class="octicon octicon-link"></span></a>Choosing A User Model</h3>
+<a id="choosing-a-user-model" class="anchor" href="#choosing-a-user-model" aria-hidden="true"><span class="octicon octicon-link"></span></a>Choosing A User Model</h3>
 
 <p>There are 4 possible ways in which you may want to set up your authentication and database.  Djangae provides 4 differnet user models which correspond to these cases:</p>
 
@@ -249,19 +246,19 @@ login url and sets <code>AUTH_USER_MODEL</code> to <code>'djangae.GaeDatastoreUs
 </ol>
 
 <h4>
-<a name="permissions" class="anchor" href="#permissions"><span class="octicon octicon-link"></span></a>Permissions</h4>
+<a id="permissions" class="anchor" href="#permissions" aria-hidden="true"><span class="octicon octicon-link"></span></a>Permissions</h4>
 
 <p>If you're using the Datastore for your User model (i.e. case <em>3.</em> or <em>4.</em> from above) then the permissions work slightly differently.  The Datastore-based user models have a <code>user_permissions</code> list field, which takes the place of the usual many-to-many relationship to a <code>Permission</code> model.  For groups, Djangae provides <code>djangae.contrib.gauth.Group</code>, which again has a list field for storing the permissions.  This <code>Group</code> model is registered with the Django admin automatically for you in cases <em>3.</em> and <em>4.</em> from above.</p>
 
 <h3>
-<a name="user-pre-creation" class="anchor" href="#user-pre-creation"><span class="octicon octicon-link"></span></a>User Pre-Creation</h3>
+<a id="user-pre-creation" class="anchor" href="#user-pre-creation" aria-hidden="true"><span class="octicon octicon-link"></span></a>User Pre-Creation</h3>
 
 <p>When using Google Accounts-based authentication, the <code>username</code> field of the user model is populated with the <code>user_id</code> which is provided by Google Accounts.  This is populated when the user object is created on the user's first log in, and is then used as the authentication check for subsequent log ins.  It is impossible to know what this ID is going to be before the user logs in, which creates an issue if you want to create users and assign permissions to them before they have authenticated.</p>
 
 <p>Djangae allows you to pre-create users by specifying their email address.  First, you need to set <code>ALLOW_USER_PRE_CREATION</code> to <code>True</code> in settings, and then you can create user objects which have an email address and a <code>username</code> of <code>None</code>.  Djangae then recognises these as pre-created users, and will populate the <code>username</code> with their Google <code>user_id</code> when they first log in.</p>
 
 <h3>
-<a name="usernamepassword-authentication" class="anchor" href="#usernamepassword-authentication"><span class="octicon octicon-link"></span></a>Username/password authentication</h3>
+<a id="usernamepassword-authentication" class="anchor" href="#usernamepassword-authentication" aria-hidden="true"><span class="octicon octicon-link"></span></a>Username/password authentication</h3>
 
 <p>As well as using Djangae's Google Accounts-based authentication, you can also use the standard authentication backend from django.contrib.auth.  They can work alongside each other.  Simply include both, like this:</p>
 
@@ -277,7 +274,7 @@ MIDDLEWARE_CLASSES = (
 </code></pre>
 
 <h2>
-<a name="using-other-databases" class="anchor" href="#using-other-databases"><span class="octicon octicon-link"></span></a>Using other databases</h2>
+<a id="using-other-databases" class="anchor" href="#using-other-databases" aria-hidden="true"><span class="octicon octicon-link"></span></a>Using other databases</h2>
 
 <p>You can use Google Cloud SQL or sqlite (locally) instead of or along side the Datastore.</p>
 
@@ -288,34 +285,33 @@ live database!</p>
 
 <p>Here's an example of how your <code>DATABASES</code> might look in settings.py if you're using both Cloud SQL and the Datastore.</p>
 
-<div class="highlight highlight-python"><pre>    <span class="kn">from</span> <span class="nn">djangae.utils</span> <span class="kn">import</span> <span class="n">on_production</span>
+<div class="highlight highlight-python"><pre>    <span class="pl-k">from</span> djangae.utils <span class="pl-k">import</span> on_production
 
-    <span class="n">DATABASES</span> <span class="o">=</span> <span class="p">{</span>
-        <span class="s">'default'</span><span class="p">:</span> <span class="p">{</span>
-            <span class="s">'ENGINE'</span><span class="p">:</span> <span class="s">'djangae.db.backends.appengine'</span>
-        <span class="p">}</span>
-    <span class="p">}</span>
+    DATABASES <span class="pl-k">=</span> {
+        <span class="pl-s1"><span class="pl-pds">'</span>default<span class="pl-pds">'</span></span>: {
+            <span class="pl-s1"><span class="pl-pds">'</span>ENGINE<span class="pl-pds">'</span></span>: <span class="pl-s1"><span class="pl-pds">'</span>djangae.db.backends.appengine<span class="pl-pds">'</span></span>
+        }
+    }
 
-    <span class="k">if</span> <span class="n">on_production</span><span class="p">():</span>
-        <span class="n">DATABASES</span><span class="p">[</span><span class="s">'sql'</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
-            <span class="s">'ENGINE'</span><span class="p">:</span> <span class="s">'django.db.backends.mysql'</span><span class="p">,</span>
-            <span class="s">'HOST'</span><span class="p">:</span> <span class="s">'/cloudsql/YOUR_GOOGLE_CLOUD_PROJECT:YOUR_INSTANCE_NAME'</span><span class="p">,</span>
-            <span class="s">'NAME'</span><span class="p">:</span> <span class="s">'YOUR_DATABASE_NAME'</span><span class="p">,</span>
-            <span class="s">'USER'</span><span class="p">:</span> <span class="s">'root'</span><span class="p">,</span>
-        <span class="p">}</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="n">DATABASES</span><span class="p">[</span><span class="s">'sql'</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
-            <span class="s">'ENGINE'</span><span class="p">:</span> <span class="s">'django.db.backends.sqlite3'</span><span class="p">,</span>
-            <span class="s">'NAME'</span><span class="p">:</span> <span class="s">'development.sqlite3'</span>
-        <span class="p">}</span>
-</pre></div>
+    <span class="pl-k">if</span> on_production():
+        DATABASES[<span class="pl-s1"><span class="pl-pds">'</span>sql<span class="pl-pds">'</span></span>] <span class="pl-k">=</span> {
+            <span class="pl-s1"><span class="pl-pds">'</span>ENGINE<span class="pl-pds">'</span></span>: <span class="pl-s1"><span class="pl-pds">'</span>django.db.backends.mysql<span class="pl-pds">'</span></span>,
+            <span class="pl-s1"><span class="pl-pds">'</span>HOST<span class="pl-pds">'</span></span>: <span class="pl-s1"><span class="pl-pds">'</span>/cloudsql/YOUR_GOOGLE_CLOUD_PROJECT:YOUR_INSTANCE_NAME<span class="pl-pds">'</span></span>,
+            <span class="pl-s1"><span class="pl-pds">'</span>NAME<span class="pl-pds">'</span></span>: <span class="pl-s1"><span class="pl-pds">'</span>YOUR_DATABASE_NAME<span class="pl-pds">'</span></span>,
+            <span class="pl-s1"><span class="pl-pds">'</span>USER<span class="pl-pds">'</span></span>: <span class="pl-s1"><span class="pl-pds">'</span>root<span class="pl-pds">'</span></span>,
+        }
+    <span class="pl-k">else</span>:
+        DATABASES[<span class="pl-s1"><span class="pl-pds">'</span>sql<span class="pl-pds">'</span></span>] <span class="pl-k">=</span> {
+            <span class="pl-s1"><span class="pl-pds">'</span>ENGINE<span class="pl-pds">'</span></span>: <span class="pl-s1"><span class="pl-pds">'</span>django.db.backends.sqlite3<span class="pl-pds">'</span></span>,
+            <span class="pl-s1"><span class="pl-pds">'</span>NAME<span class="pl-pds">'</span></span>: <span class="pl-s1"><span class="pl-pds">'</span>development.sqlite3<span class="pl-pds">'</span></span>
+        }</pre></div>
 
 <p>See the Google documentation for more information on connecting to Cloud SQL via the
 <a href="https://developers.google.com/cloud-sql/docs/mysql-client">MySQL client</a> and from
 <a href="https://developers.google.com/cloud-sql/docs/external">external applications</a>.</p>
 
 <h2>
-<a name="unique-constraint-checking" class="anchor" href="#unique-constraint-checking"><span class="octicon octicon-link"></span></a>Unique Constraint Checking</h2>
+<a id="unique-constraint-checking" class="anchor" href="#unique-constraint-checking" aria-hidden="true"><span class="octicon octicon-link"></span></a>Unique Constraint Checking</h2>
 
 <p><strong>IMPORTANT: Make sure you read and understand this section before configuring your project</strong></p>
 
@@ -354,7 +350,7 @@ use this functionality, you have the following options:</p>
 override on a per-model basis by setting <code>disable_constraint_checks = False</code> on models that require constraints.</p>
 
 <h2>
-<a name="contributing" class="anchor" href="#contributing"><span class="octicon octicon-link"></span></a>Contributing</h2>
+<a id="contributing" class="anchor" href="#contributing" aria-hidden="true"><span class="octicon octicon-link"></span></a>Contributing</h2>
 
 <p>Contributions are accepted via pull request and will be reviewed as soon as possible. If you have access to master, please do not commit directly! Pull requests only!</p>
       </section>
