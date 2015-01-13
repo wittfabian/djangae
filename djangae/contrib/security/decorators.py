@@ -12,7 +12,7 @@ def without_security_middleware(func):
     # This is sometimes useful in tests because if you patch something which is patched by the
     # middleware then usually the test patch is applied first, THEN the middleware runs (usually
     # as the result of a self.client.get/post call), thus applying a decorator to the patched
-    # function.  The decorator's nested function stores a reference to the orignal (patched)
+    # function.  The decorator's nested function stores a reference to the original (patched)
     # function, and so when the patch in the test is undone it is actually still being used because
     # the decorator in the middleware is still referencing it.  This decorator is for
     # use in tests where you are patching one of the things which is patched in the middleware,
