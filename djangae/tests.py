@@ -25,6 +25,8 @@ from django.contrib.contenttypes.models import ContentType
 
 # DJANGAE
 from djangae.contrib import sleuth
+from djangae.test import inconsistent_db
+
 from django.db import IntegrityError as DjangoIntegrityError
 from djangae.db.backends.appengine.dbapi import CouldBeSupportedError, NotSupportedError, IntegrityError
 from djangae.db.constraints import UniqueMarker
@@ -1500,3 +1502,12 @@ class TestSpecialIndexers(TestCase):
 
             qry = self.qry.filter(name__istartswith=name)
             self.assertEqual(len(qry), len([x for x in self.names if x.lower().startswith(name.lower())]))
+
+
+class TestHelperTests(TestCase):
+    def test_inconsistent_db(self):
+
+        with inconsistent_db():
+            fruit = TestFruit.objects.create(name="banana")
+            self.assertEqual(0, TestFruit.objects.count()) # Inconsistent query
+            self.assertEqual(1, TestFruit.objects.filter(pk=fruit.pk).count()) #Consistent query
