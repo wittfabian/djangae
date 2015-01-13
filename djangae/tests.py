@@ -15,17 +15,19 @@ from django.db import DataError, models
 from django.db.models.query import Q
 from django.forms import ModelForm
 from django.http import HttpRequest
-from django.test import TestCase, RequestFactory
+from django.test import RequestFactory
 from django.forms.models import modelformset_factory
 from django.db.models.sql.datastructures import EmptyResultSet
 from google.appengine.api.datastore_errors import EntityNotFoundError
 from google.appengine.api import datastore
+from google.appengine.ext import deferred
+from google.appengine.api import taskqueue
 from django.test.utils import override_settings
 from django.contrib.contenttypes.models import ContentType
 
 # DJANGAE
 from djangae.contrib import sleuth
-from djangae.test import inconsistent_db
+from djangae.test import inconsistent_db, TestCase
 
 from django.db import IntegrityError as DjangoIntegrityError
 from djangae.db.backends.appengine.dbapi import CouldBeSupportedError, NotSupportedError, IntegrityError
@@ -1503,11 +1505,30 @@ class TestSpecialIndexers(TestCase):
             qry = self.qry.filter(name__istartswith=name)
             self.assertEqual(len(qry), len([x for x in self.names if x.lower().startswith(name.lower())]))
 
+def deferred_func():
+    pass
 
 class TestHelperTests(TestCase):
     def test_inconsistent_db(self):
-
         with inconsistent_db():
             fruit = TestFruit.objects.create(name="banana")
             self.assertEqual(0, TestFruit.objects.count()) # Inconsistent query
             self.assertEqual(1, TestFruit.objects.filter(pk=fruit.pk).count()) #Consistent query
+
+    def test_processing_tasks(self):
+        self.assertNumTasksEquals(0) #No tasks
+
+        deferred.defer(deferred_func)
+
+        self.assertNumTasksEquals(1, queue_name='default')
+
+        deferred.defer(deferred_func, _queue='another')
+
+        self.assertNumTasksEquals(1, queue_name='another')
+
+        taskqueue.add(url='/')
+        self.assertNumTasksEquals(2, queue_name='default')
+
+        self.process_task_queues()
+
+        self.assertNumTasksEquals(0) #No tasks
