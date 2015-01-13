@@ -111,13 +111,13 @@ class CustomPermissionsUserModelBackendTest(TestCase):
     UserModel = GaeDatastoreUser
 
     def setUp(self):
-        self.user = GaeDatastoreUser._default_manager.create(
+        self.user = GaeDatastoreUser.objects.create(
             username='test1',
             email='test@example.com',
             password=make_password(None),
             is_active=True,
         )
-        self.superuser = GaeDatastoreUser._default_manager.create(
+        self.superuser = GaeDatastoreUser.objects.create(
             username='test2',
             email='test2@example.com',
             is_superuser=True,
@@ -126,7 +126,7 @@ class CustomPermissionsUserModelBackendTest(TestCase):
         )
 
     def test_has_perm(self):
-        user = self.UserModel._default_manager.get(pk=self.user.pk)
+        user = self.UserModel.objects.get(pk=self.user.pk)
         self.assertEqual(user.has_perm('auth.test'), False)
         user.is_staff = True
         user.save()
@@ -145,19 +145,19 @@ class CustomPermissionsUserModelBackendTest(TestCase):
         self.assertEqual(user.has_perm('auth.test'), False)
 
     def test_custom_perms(self):
-        user = self.UserModel._default_manager.get(pk=self.user.pk)
+        user = self.UserModel.objects.get(pk=self.user.pk)
         user.user_permissions = ['auth.test']
         user.save()
 
         # reloading user to purge the _perm_cache
-        user = self.UserModel._default_manager.get(pk=self.user.pk)
+        user = self.UserModel.objects.get(pk=self.user.pk)
         self.assertEqual(user.get_all_permissions() == set(['auth.test']), True)
         self.assertEqual(user.get_group_permissions(), set([]))
         self.assertEqual(user.has_module_perms('Group'), False)
         self.assertEqual(user.has_module_perms('auth'), True)
         user.user_permissions.extend(['auth.test2', 'auth.test3'])
         user.save()
-        user = self.UserModel._default_manager.get(pk=self.user.pk)
+        user = self.UserModel.objects.get(pk=self.user.pk)
         self.assertEqual(user.get_all_permissions(), set(['auth.test2', 'auth.test', 'auth.test3']))
         self.assertEqual(user.has_perm('test'), False)
         self.assertEqual(user.has_perm('auth.test'), True)
@@ -169,7 +169,7 @@ class CustomPermissionsUserModelBackendTest(TestCase):
         user.groups = [group]
         user.save()
 
-        user = self.UserModel._default_manager.get(pk=self.user.pk)
+        user = self.UserModel.objects.get(pk=self.user.pk)
         exp = set(['auth.test2', 'auth.test', 'auth.test3', 'auth.test_group'])
         self.assertEqual(user.get_all_permissions(), exp)
         self.assertEqual(user.get_group_permissions(), set(['auth.test_group']))
@@ -181,7 +181,7 @@ class CustomPermissionsUserModelBackendTest(TestCase):
 
     def test_has_no_object_perm(self):
         """Regressiontest for #12462"""
-        user = self.UserModel._default_manager.get(pk=self.user.pk)
+        user = self.UserModel.objects.get(pk=self.user.pk)
         user.user_permissions = ['auth.test']
         user.save()
 
@@ -192,5 +192,5 @@ class CustomPermissionsUserModelBackendTest(TestCase):
 
     def test_get_all_superuser_permissions(self):
         """A superuser has all permissions. Refs #14795."""
-        user = self.UserModel._default_manager.get(pk=self.superuser.pk)
+        user = self.UserModel.objects.get(pk=self.superuser.pk)
         self.assertEqual(len(user.get_all_permissions()), len(get_permission_choices()))
