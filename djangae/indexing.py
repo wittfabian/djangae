@@ -234,7 +234,7 @@ class ContainsIndexer(Indexer):
 
 class IContainsIndexer(ContainsIndexer):
     def prep_value_for_database(self, value):
-        result = super(IContainsIndexer, self).prep_value_for_database(value)
+        result = super(IContainsIndexer, self).prep_value_for_database(value.lower())
         return result if result else None
 
     def indexed_column_name(self, field_column):
