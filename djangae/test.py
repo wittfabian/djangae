@@ -1,10 +1,11 @@
 import contextlib
 import urlparse
-import base64
+
+from django import test
+from django.test import Client
 
 from google.appengine.api import apiproxy_stub_map
 from google.appengine.datastore import datastore_stub_util
-from django.test import Client
 
 
 @contextlib.contextmanager
@@ -84,8 +85,6 @@ def process_task_queues(queue_name=None):
         if not tasks:
             #The map reduce may have added more tasks, so refresh the list
             tasks = _get_queued_tasks(stub, queue_name)
-
-from django import test
 
 class TestCase(test.TestCase):
     def __init__(self, *args, **kwargs):
