@@ -879,6 +879,10 @@ class EdgeCaseTests(TestCase):
         results = list(TestUser.objects.all().exclude(username__in=[]).filter(username__in=["A", "B"]))
         self.assertEqual(2, len(results))
         self.assertItemsEqual(["A", "B"], [x.username for x in results])
+        
+        results = list(TestUser.objects.all().filter(username__in=["A", "B"]).exclude(username__in=[]))
+        self.assertEqual(2, len(results))
+        self.assertItemsEqual(["A", "B"], [x.username for x in results])
 
     def test_or_queryset(self):
         """
