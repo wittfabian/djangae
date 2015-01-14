@@ -298,7 +298,9 @@ class BackendTests(TestCase):
 
         obj = TestFruit.objects.create(name=u'foo', color=grue)
         obj = TestFruit.objects.get(pk=obj.pk)
+        self.assertEqual(type(obj.color), unicode)
 
+        obj = TestFruit.objects.filter(color=grue)[0]
         self.assertEqual(type(obj.color), unicode)
 
 
