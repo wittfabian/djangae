@@ -224,7 +224,6 @@ def activate(sandbox_name, add_sdk_to_path=False, **overrides):
 
     # Take dev_appserver paths off sys.path - GAE apps cannot access these
     sys.path = original_path[:]
-    import pdb; pdb.set_trace()
     # Enable built-in libraries from app.yaml without enabling the full sandbox.
     module = configuration.modules[0]
     for l in sandbox._enable_libraries(module.normalized_libraries):
