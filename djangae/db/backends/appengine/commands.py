@@ -578,7 +578,10 @@ class SelectCommand(object):
                 key = "%s %s" % (column, op)
                 try:
                     if key in query:
-                        query[key] = [ query[key], value ]
+                        if type(query[key]) == list:
+                            query[key].append(value)
+                        else:
+                            query[key] = [ query[key], value ]
                     else:
                         query[key] = value
                 except datastore_errors.BadFilterError as e:
