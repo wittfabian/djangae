@@ -16,6 +16,7 @@ from django.db.models.query import Q
 from django.forms import ModelForm
 from django.http import HttpRequest
 from django.test import RequestFactory
+from django.utils.safestring import SafeText
 from django.forms.models import modelformset_factory
 from django.db.models.sql.datastructures import EmptyResultSet
 from google.appengine.api.datastore_errors import EntityNotFoundError
@@ -290,9 +291,7 @@ class BackendTests(TestCase):
     def test_convert_unicode_subclasses_to_unicode(self):
         # The App Engine SDK raises BadValueError if you try saving a SafeText
         # string to a CharField. Djangae explicitly converts it to unicode.
-        from django.template.defaultfilters import slugify
-
-        grue = slugify(u'grue')
+        grue = SafeText(u'grue')
 
         self.assertIsInstance(grue, unicode)
         self.assertNotEqual(type(grue), unicode)
