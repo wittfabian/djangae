@@ -190,7 +190,7 @@ class GaeUserManager(UserManager):
     def pre_create_google_user(self, email, **extra_fields):
         """ Pre-create a User object for a user who will later log in via Google Accounts. """
         values = dict(
-            # defaults which can be overriden
+            # defaults which can be overridden
             is_active=True,
         )
         values.update(**extra_fields)

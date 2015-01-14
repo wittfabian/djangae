@@ -23,7 +23,7 @@ Contributions welcome, please get stuck in!
 * Add a mapreduce handler, and an API for creating and registering mapreduce tasks
 * Add support for Django 1.7
 * Implement a means to perform ancestor queries through the ORM. Need to think about the API
-* More tests! Especially for unique constraints, unique caching and model inheritence
+* More tests! Especially for unique constraints, unique caching and model inheritance
 * Add a UniqueSupportMixin for models so that form validation works as normal and doesn't just throw on save()
 * Write a lot of documentation on the datastore backend, complete with caveats, limitations, and how queries are translated
 * Implement an API/Mixin/Custom Field for "expando" models - needs some thought

@@ -423,7 +423,7 @@ class SelectCommand(object):
                 # projection query
                 f = get_field_from_column(self.model, field)
                 if not f:
-                    raise CouldBeSupportedError("Attemping a cross-table select or dates query, or something?!")
+                    raise CouldBeSupportedError("Attempting a cross-table select or dates query, or something?!")
                 assert f  # If this happens, we have a cross-table select going on! #FIXME
                 db_type = f.db_type(connection)
 
@@ -518,7 +518,7 @@ class SelectCommand(object):
                 raise NotSupportedError("Unsupported aggregate query")
 
     def _build_gae_query(self):
-        """ Build and return the Datstore Query object. """
+        """ Build and return the Datastore Query object. """
         query_kwargs = {
             "kind": str(self.db_table)
         }
@@ -692,7 +692,7 @@ class SelectCommand(object):
                 elif length == 1:
 
                     def lazy_assign(results, attr, value):
-                        """ Wraps a list or a generator, applys attribute assignment
+                        """ Wraps a list or a generator, applies attribute assignment
                         """
                         for result in results:
                             if result is None:
@@ -789,7 +789,7 @@ class InsertCommand(object):
                 if not self.model._meta.pk.blank and self.included_keys[-1] is None:
                     raise IntegrityError("You must specify a primary key value for {} instances".format(model))
             else:
-                # We zip() self.entities and self.included_keys in execute(), so they should be the same legnth
+                # We zip() self.entities and self.included_keys in execute(), so they should be the same length
                 self.included_keys.append(None)
 
             self.entities.append(

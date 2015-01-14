@@ -17,7 +17,7 @@ GitHub: https://github.com/potatolondon/djangae
 
 * A WSGI middleware that provides a clean way via which your Django app is plugged into App Engine.
 * A hook to allow App Engine's deferred tasks and mapreduce handlers to run through the same environment.
-* The ability to use use the Datastore as the database for Django's models.  See **The Database Backend** for details.
+* The ability to use the Datastore as the database for Django's models.  See **The Database Backend** for details.
   You can also use App Engine's NDB, or you can use Google Cloud SQL (via the standard django MySQL backend) instead of
   or along side the Datastore. Or use all 3!
 * `djangae.contrib.gauth` which provides user models (both concrete and extendable abstract versions), an auth backend, and a middleware; which allow you to authenticate users using the App Engine's built-in Google Accounts authentication, and also allow you to use Django's permissions system on the Datastore (i.e. without being caught out by the Many-To-Many relationships).
@@ -149,7 +149,7 @@ With no arguments, management commands are run locally.
 
 ## Authentication
 
-Djangae includes 'djangae.contrib.gauth', which allows you to authenticate your users with App Engine's built-in Google Accounts functionality, and also allows use of Django's permisions system on the Datastore, despite it usually requiring many-to-many relationships, which are not supported on the Datstore.
+Djangae includes 'djangae.contrib.gauth', which allows you to authenticate your users with App Engine's built-in Google Accounts functionality, and also allows use of Django's permissions system on the Datastore, despite it usually requiring many-to-many relationships, which are not supported on the Datstore.
 
 To set up Djangae's authentication system:
 
@@ -160,7 +160,7 @@ To set up Djangae's authentication system:
 
 ### Choosing A User Model
 
-There are 4 possible ways in which you may want to set up your authentication and database.  Djangae provides 4 differnet user models which correspond to these cases:
+There are 4 possible ways in which you may want to set up your authentication and database.  Djangae provides 4 different user models which correspond to these cases:
 
 1. Standard user model on a SQL database.
 	* Set `AUTH_USER_MODEL = 'djangae.GaeUser'`.
@@ -251,7 +251,7 @@ _tl;dr Constraint checking is costly, you might want to disable it globally usin
 Djangae by default enforces the unique constraints that you define on your models. It does so by creating so called "unique markers" in the datastore.
 Unique constraint checks have the following caveats...
 
- - Unique constraints drastically increase your datastore writes. Djange needs to create a marker for each unique constraint on each model, for each instance. This means if you have
+ - Unique constraints drastically increase your datastore writes. Djangae needs to create a marker for each unique constraint on each model, for each instance. This means if you have
    one unique field on your model, and you save() Djangae must do two datastore writes (one for the entity, one for the marker)
  - Unique constraints increase your datastore reads. Each time you save an object, Djangae needs to check for the existence of unique markers.
  - Unique constraints slow down your saves(). See above, each time you write a bunch of stuff needs to happen.
@@ -262,7 +262,7 @@ However, unique markers are very powerful when you need to enforce uniqueness. *
 use this functionality, you have the following options:
 
  1. Don't mark fields as unique, or in the meta unique_together - this only works for your models, contrib models will still use unique markers
- 2. Disable unique constaints on a per-model basis via the Djangae meta class (again, only works on the model you specify)
+ 2. Disable unique constraints on a per-model basis via the Djangae meta class (again, only works on the model you specify)
 
 ```
     class Djangae:
