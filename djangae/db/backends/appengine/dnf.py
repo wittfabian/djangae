@@ -18,6 +18,9 @@ def process_literal(node, filtered_columns=[], negated=False):
         if not isinstance(value, (list, tuple, set)):
             raise ValueError("IN queries must be supplied a list of values")
         if negated:
+            if len(value) == 0:
+                return None, set()
+                
             lits = []
             for x in value:
                 lits.append(('LIT', (column, '>', x)))
