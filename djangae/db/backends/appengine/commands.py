@@ -1,5 +1,5 @@
 #STANDARD LIB
-from datetime import datetime, date
+from datetime import datetime
 import logging
 import copy
 from functools import partial
@@ -8,14 +8,9 @@ from itertools import chain, groupby
 #LIBRARIES
 from django.db import DatabaseError
 from django.core.cache import cache
-from django.db.backends.mysql.compiler import SQLCompiler
 from django.db import IntegrityError
-from django.db.models import Field
 from django.db.models.sql.datastructures import EmptyResultSet
-from django.db.models.sql.where import AND, OR, Constraint
 from django.db.models.sql.where import EmptyWhere
-from django.db.models.query_utils import InvalidQuery
-from django import dispatch
 from google.appengine.api import datastore, datastore_errors
 from google.appengine.api.datastore import Query
 from google.appengine.ext import db
@@ -25,7 +20,6 @@ from djangae.db.backends.appengine.dbapi import CouldBeSupportedError, NotSuppor
 from djangae.db.utils import (
     get_datastore_key,
     django_instance_to_entity,
-    get_datastore_kind,
     get_prepared_db_value,
     MockInstance,
     get_top_concrete_parent,
@@ -33,7 +27,7 @@ from djangae.db.utils import (
     has_concrete_parents
 )
 from djangae.indexing import special_indexes_for_column, REQUIRES_SPECIAL_INDEXES, add_special_index
-from djangae.utils import on_production, in_testing
+from djangae.utils import on_production
 from djangae.db import constraints, utils
 from djangae.db.backends.appengine import caching
 from djangae.db.unique_utils import query_is_unique
