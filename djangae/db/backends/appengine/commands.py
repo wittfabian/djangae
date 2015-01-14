@@ -105,6 +105,19 @@ def ensure_datetime(value):
         return datetime.fromtimestamp(value / 1000000)
     return value
 
+def coerce_unicode(value):
+    if isinstance(value, str):
+        try:
+            value = value.decode('utf-8')
+        except UnicodeDecodeError:
+            # This must be a Django databaseerror, because the exception happens too
+            # early before Django's exception wrapping can take effect (e.g. it happens on SQL
+            # construction, not on execution.
+            raise DatabaseError("Bytestring is not encoded in utf-8")
+
+    # The SDK raises BadValueError for unicode sub-classes like SafeText.
+    return unicode(value)
+
 
 FILTER_CMP_FUNCTION_MAP = {
     'exact': lambda a, b: a == b,
@@ -580,6 +593,9 @@ class SelectCommand(object):
 
                 key = "%s %s" % (column, op)
                 try:
+                    if isinstance(value, basestring):
+                        value = coerce_unicode(value)
+
                     if key in query:
                         if type(query[key]) == list:
                             query[key].append(value)
