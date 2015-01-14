@@ -197,7 +197,10 @@ def convert_keys_to_entities(results):
             return self._key
 
     for result in results:
-        yield FakeEntity(result)
+        if isinstance(result, datastore.Key):
+            yield FakeEntity(result)
+        else:
+            yield FakeEntity(result.key())
 
 
 def _convert_entity_based_on_query_options(entity, opts):
