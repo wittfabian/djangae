@@ -6,6 +6,7 @@ from functools import partial
 from itertools import chain, groupby
 
 #LIBRARIES
+from django.db import DatabaseError
 from django.core.cache import cache
 from django.db.backends.mysql.compiler import SQLCompiler
 from django.db import IntegrityError
