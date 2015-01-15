@@ -80,7 +80,7 @@ def process_task_queues(queue_name=None):
             #Fixme: post data?
             client.post(task['url'], data=post_data, content_type=headers['HTTP_CONTENT_TYPE'], **headers)
         else:
-            client.get(task['url'], **task['headers'])
+            client.get(task['url'], **headers)
 
         if not tasks:
             #The map reduce may have added more tasks, so refresh the list
