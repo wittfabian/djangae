@@ -11,6 +11,7 @@ from django.core.cache import cache
 from django.db import IntegrityError
 from django.db.models.sql.datastructures import EmptyResultSet
 from django.db.models.sql.where import EmptyWhere
+from django.db.models.fields import AutoField
 from google.appengine.api import datastore, datastore_errors
 from google.appengine.api.datastore import Query
 from google.appengine.ext import db
@@ -150,6 +151,11 @@ def parse_constraint(child, connection, negated=False):
     packed, value = constraint.process(op, value, connection)
     alias, column, db_type = packed
 
+    if constraint.field.name == "id" and op == "iexact" and constraint.field.primary_key and isinstance(constraint.field, AutoField):
+        # When new instance is created, automatic primary key 'id' does not generate '_idx_iexact_id'.
+        # As the primary key 'id' (AutoField) is integer and is always case insensitive, we can deal with 'id_iexact=' query by using 'exact' rather than 'iexact'.
+        op = "exact"
+    
     if constraint.field.db_type(connection) in ("bytes", "text"):
         raise NotSupportedError("Text and Blob fields are not indexed by the datastore, so you can't filter on them")
 
