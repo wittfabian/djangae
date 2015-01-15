@@ -81,6 +81,10 @@ class UniqueModel(models.Model):
         ]
 
 
+class IntegerModel(models.Model):
+    integer_field = models.IntegerField()
+
+
 class TestFruit(models.Model):
     name = models.CharField(primary_key=True, max_length=32)
     color = models.CharField(max_length=32)
@@ -298,7 +302,9 @@ class BackendTests(TestCase):
 
         obj = TestFruit.objects.create(name=u'foo', color=grue)
         obj = TestFruit.objects.get(pk=obj.pk)
+        self.assertEqual(type(obj.color), unicode)
 
+        obj = TestFruit.objects.filter(color=grue)[0]
         self.assertEqual(type(obj.color), unicode)
 
 
@@ -875,6 +881,18 @@ class EdgeCaseTests(TestCase):
         results = list(TestFruit.objects.filter(name='apple', color__in=[]))
         self.assertItemsEqual([], results)
 
+        results = list(TestUser.objects.all().exclude(username__in=[]))
+        self.assertEqual(5, len(results))
+        self.assertItemsEqual(["A", "B", "C", "D", "E"], [x.username for x in results ])
+
+        results = list(TestUser.objects.all().exclude(username__in=[]).filter(username__in=["A", "B"]))
+        self.assertEqual(2, len(results))
+        self.assertItemsEqual(["A", "B"], [x.username for x in results])
+        
+        results = list(TestUser.objects.all().filter(username__in=["A", "B"]).exclude(username__in=[]))
+        self.assertEqual(2, len(results))
+        self.assertItemsEqual(["A", "B"], [x.username for x in results])
+
     def test_or_queryset(self):
         """
             This constructs an OR query, this is currently broken in the parse_where_and_check_projection
@@ -979,6 +997,14 @@ class EdgeCaseTests(TestCase):
     def test_iexact(self):
         user = TestUser.objects.get(username__iexact="a")
         self.assertEqual("A", user.username)
+
+        add_special_index(IntegerModel, "integer_field", "iexact")
+        IntegerModel.objects.create(integer_field=1000)
+        integer_model = IntegerModel.objects.get(integer_field__iexact=str(1000))
+        self.assertEqual(integer_model.integer_field, 1000)        
+
+        user = TestUser.objects.get(id__iexact=str(self.u1.id))
+        self.assertEqual("A", user.username)           
 
     def test_ordering(self):
         users = TestUser.objects.all().order_by("username")

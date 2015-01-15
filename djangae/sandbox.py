@@ -193,6 +193,14 @@ def activate(sandbox_name, add_sdk_to_path=False, **overrides):
     _PATHS = wrapper_util.Paths(sdk_path)
     sys.path = (_PATHS.script_paths(_SCRIPT_NAME) + _PATHS.scrub_path(_SCRIPT_NAME, sys.path))
 
+    # Gotta set the runtime properly otherwise it changes appengine imports, like wepapp
+    # when you are not runing dev_appserver
+    import yaml
+    with open(os.path.join(project_root, 'app.yaml'), 'r') as app_yaml:
+        app_yaml = yaml.load(app_yaml)
+        os.environ['APPENGINE_RUNTIME'] = app_yaml.get('runtime', '')
+
+
     # Initialize as though `dev_appserver.py` is about to run our app, using all the
     # configuration provided in app.yaml.
     import google.appengine.tools.devappserver2.application_configuration as application_configuration
@@ -216,7 +224,6 @@ def activate(sandbox_name, add_sdk_to_path=False, **overrides):
 
     # Take dev_appserver paths off sys.path - GAE apps cannot access these
     sys.path = original_path[:]
-
     # Enable built-in libraries from app.yaml without enabling the full sandbox.
     module = configuration.modules[0]
     for l in sandbox._enable_libraries(module.normalized_libraries):

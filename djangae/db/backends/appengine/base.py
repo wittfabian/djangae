@@ -5,7 +5,6 @@ import warnings
 
 #LIBRARIES
 from django.conf import settings
-from django.db import DatabaseError
 from django.db.backends import (
     BaseDatabaseOperations,
     BaseDatabaseClient,
@@ -44,6 +43,7 @@ from .commands import (
     FlushCommand,
     UpdateCommand,
     DeleteCommand,
+    coerce_unicode,
     get_field_from_column
 )
 
@@ -250,18 +250,7 @@ class DatabaseOperations(BaseDatabaseOperations):
         db_type = field.db_type(self.connection)
 
         if db_type == 'string' or db_type == 'text':
-            if isinstance(value, str):
-                try:
-                    value = value.decode('utf-8')
-                except UnicodeDecodeError:
-                    # This must be a Django databaseerror, because the exception happens too
-                    # early before Django's exception wrapping can take effect (e.g. it happens on SQL
-                    # construction, not on execution.
-                    raise DatabaseError("Bytestring is not encoded in utf-8")
-
-            # The SDK raises BadValueError for unicode sub-classes like SafeText.
-            value = unicode(value)
-
+            value = coerce_unicode(value)
             if db_type == 'text':
                 value = Text(value)
         elif db_type == 'bytes':

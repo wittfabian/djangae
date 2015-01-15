@@ -1,20 +1,17 @@
 #STANDARD LIB
-from datetime import datetime, date
+from datetime import datetime
 import logging
 import copy
 from functools import partial
 from itertools import chain, groupby
 
 #LIBRARIES
+from django.db import DatabaseError
 from django.core.cache import cache
-from django.db.backends.mysql.compiler import SQLCompiler
 from django.db import IntegrityError
-from django.db.models import Field
 from django.db.models.sql.datastructures import EmptyResultSet
-from django.db.models.sql.where import AND, OR, Constraint
 from django.db.models.sql.where import EmptyWhere
-from django.db.models.query_utils import InvalidQuery
-from django import dispatch
+from django.db.models.fields import AutoField
 from google.appengine.api import datastore, datastore_errors
 from google.appengine.api.datastore import Query
 from google.appengine.ext import db
@@ -24,7 +21,6 @@ from djangae.db.backends.appengine.dbapi import CouldBeSupportedError, NotSuppor
 from djangae.db.utils import (
     get_datastore_key,
     django_instance_to_entity,
-    get_datastore_kind,
     get_prepared_db_value,
     MockInstance,
     get_top_concrete_parent,
@@ -32,7 +28,7 @@ from djangae.db.utils import (
     has_concrete_parents
 )
 from djangae.indexing import special_indexes_for_column, REQUIRES_SPECIAL_INDEXES, add_special_index
-from djangae.utils import on_production, in_testing
+from djangae.utils import on_production
 from djangae.db import constraints, utils
 from djangae.db.backends.appengine import caching
 from djangae.db.unique_utils import query_is_unique
@@ -105,6 +101,19 @@ def ensure_datetime(value):
         return datetime.fromtimestamp(value / 1000000)
     return value
 
+def coerce_unicode(value):
+    if isinstance(value, str):
+        try:
+            value = value.decode('utf-8')
+        except UnicodeDecodeError:
+            # This must be a Django databaseerror, because the exception happens too
+            # early before Django's exception wrapping can take effect (e.g. it happens on SQL
+            # construction, not on execution.
+            raise DatabaseError("Bytestring is not encoded in utf-8")
+
+    # The SDK raises BadValueError for unicode sub-classes like SafeText.
+    return unicode(value)
+
 
 FILTER_CMP_FUNCTION_MAP = {
     'exact': lambda a, b: a == b,
@@ -142,6 +151,11 @@ def parse_constraint(child, connection, negated=False):
     packed, value = constraint.process(op, value, connection)
     alias, column, db_type = packed
 
+    if constraint.field.name == "id" and op == "iexact" and constraint.field.primary_key and isinstance(constraint.field, AutoField):
+        # When new instance is created, automatic primary key 'id' does not generate '_idx_iexact_id'.
+        # As the primary key 'id' (AutoField) is integer and is always case insensitive, we can deal with 'id_iexact=' query by using 'exact' rather than 'iexact'.
+        op = "exact"
+    
     if constraint.field.db_type(connection) in ("bytes", "text"):
         raise NotSupportedError("Text and Blob fields are not indexed by the datastore, so you can't filter on them")
 
@@ -197,7 +211,10 @@ def convert_keys_to_entities(results):
             return self._key
 
     for result in results:
-        yield FakeEntity(result)
+        if isinstance(result, datastore.Key):
+            yield FakeEntity(result)
+        else:
+            yield FakeEntity(result.key())
 
 
 def _convert_entity_based_on_query_options(entity, opts):
@@ -577,8 +594,14 @@ class SelectCommand(object):
 
                 key = "%s %s" % (column, op)
                 try:
+                    if isinstance(value, basestring):
+                        value = coerce_unicode(value)
+
                     if key in query:
-                        query[key] = [ query[key], value ]
+                        if type(query[key]) == list:
+                            query[key].append(value)
+                        else:
+                            query[key] = [ query[key], value ]
                     else:
                         query[key] = value
                 except datastore_errors.BadFilterError as e:
