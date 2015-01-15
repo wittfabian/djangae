@@ -81,6 +81,10 @@ class UniqueModel(models.Model):
         ]
 
 
+class IntegerModel(models.Model):
+    integer_field = models.IntegerField()
+
+
 class TestFruit(models.Model):
     name = models.CharField(primary_key=True, max_length=32)
     color = models.CharField(max_length=32)
@@ -993,6 +997,11 @@ class EdgeCaseTests(TestCase):
     def test_iexact(self):
         user = TestUser.objects.get(username__iexact="a")
         self.assertEqual("A", user.username)
+
+        add_special_index(IntegerModel, "integer_field", "iexact")
+        IntegerModel.objects.create(integer_field=1000)
+        integer_model = IntegerModel.objects.get(integer_field__iexact=str(1000))
+        self.assertEqual(integer_model.integer_field, 1000)        
 
     def test_ordering(self):
         users = TestUser.objects.all().order_by("username")
