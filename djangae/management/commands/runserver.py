@@ -87,6 +87,16 @@ class Command(BaseRunserverCommand):
                 self._dispatcher._port = options.port
                 self._dispatcher._host = options.host
 
+                # Make sure the dispatcher uses the WSGIRequestInfo object already instantiated in local sandbox.
+                # Without this, there will be references to two different request info objects, causing errors when trying
+                # to access a request in one that was started in the other.
+                def request_data_override(func, _request_data):
+                    def _wrapped(api_host, api_port, request_data):
+                        return func(api_host, api_port, _request_data)
+
+                    return _wrapped
+                self._dispatcher.start = request_data_override(self._dispatcher.start, self._dispatcher._request_data)
+
                 sandbox._API_SERVER._host = options.api_host
                 sandbox._API_SERVER.bind_addr = (options.api_host, options.api_port)
 
