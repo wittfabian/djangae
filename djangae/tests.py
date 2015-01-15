@@ -10,6 +10,7 @@ from hashlib import md5
 from django.core.files.uploadhandler import StopFutureHandlers
 from django.core.cache import cache
 from django.core.signals import request_finished, request_started
+from django.core.exceptions import ValidationError
 from django.db import connections
 from django.db import DataError, models
 from django.db.models.query import Q
@@ -19,7 +20,7 @@ from django.test import RequestFactory
 from django.utils.safestring import SafeText
 from django.forms.models import modelformset_factory
 from django.db.models.sql.datastructures import EmptyResultSet
-from google.appengine.api.datastore_errors import EntityNotFoundError
+from google.appengine.api.datastore_errors import EntityNotFoundError, BadValueError
 from google.appengine.api import datastore
 from google.appengine.ext import deferred
 from google.appengine.api import taskqueue
@@ -32,7 +33,7 @@ from djangae.test import inconsistent_db, TestCase
 
 from django.db import IntegrityError as DjangoIntegrityError
 from djangae.db.backends.appengine.dbapi import CouldBeSupportedError, NotSupportedError, IntegrityError
-from djangae.db.constraints import UniqueMarker
+from djangae.db.constraints import UniqueMarker, UniquenessMixin
 from djangae.indexing import add_special_index
 from djangae.db.utils import entity_matches_query
 from djangae.db.backends.appengine import caching
@@ -713,6 +714,31 @@ class ConstraintTests(TestCase):
 
         instance2.save()
 
+    def test_list_field_unique_constraints_validation(self):
+        instance1 = UniqueModel(
+            unique_set_field={"A"},
+            unique_together_list_field=[1],
+            unique_field=1,
+            unique_combo_one=1,
+            unique_list_field=["A", "C"]
+        )
+
+        # Without a custom mixin, Django can't construct a unique validation query for a list field
+        self.assertRaises(BadValueError, instance1.full_clean)
+        UniqueModel.__bases__ = (UniquenessMixin,) + UniqueModel.__bases__
+        instance1.full_clean()
+        instance1.save()
+
+        instance2 = UniqueModel(
+            unique_set_field={"B"},
+            unique_together_list_field=[2],
+            unique_field=2,
+            unique_combo_one=2,
+            unique_list_field=["B", "C"]  # duplicate value C!
+        )
+        self.assertRaises(ValidationError, instance2.full_clean)
+        UniqueModel.__bases__ = (models.Model,)
+
     def test_set_field_unique_constraints(self):
         instance1 = UniqueModel.objects.create(unique_field=1, unique_combo_one=1, unique_set_field={"A", "C"})
 
@@ -888,7 +914,7 @@ class EdgeCaseTests(TestCase):
         results = list(TestUser.objects.all().exclude(username__in=[]).filter(username__in=["A", "B"]))
         self.assertEqual(2, len(results))
         self.assertItemsEqual(["A", "B"], [x.username for x in results])
-        
+
         results = list(TestUser.objects.all().filter(username__in=["A", "B"]).exclude(username__in=[]))
         self.assertEqual(2, len(results))
         self.assertItemsEqual(["A", "B"], [x.username for x in results])
@@ -1001,10 +1027,10 @@ class EdgeCaseTests(TestCase):
         add_special_index(IntegerModel, "integer_field", "iexact")
         IntegerModel.objects.create(integer_field=1000)
         integer_model = IntegerModel.objects.get(integer_field__iexact=str(1000))
-        self.assertEqual(integer_model.integer_field, 1000)        
+        self.assertEqual(integer_model.integer_field, 1000)
 
         user = TestUser.objects.get(id__iexact=str(self.u1.id))
-        self.assertEqual("A", user.username)           
+        self.assertEqual("A", user.username)
 
     def test_ordering(self):
         users = TestUser.objects.all().order_by("username")
