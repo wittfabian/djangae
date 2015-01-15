@@ -1,5 +1,5 @@
 import contextlib
-import urlparse
+import logging
 
 from django import test
 from django.test import Client
@@ -70,7 +70,7 @@ def process_task_queues(queue_name=None):
         task = tasks.pop(0) # Get the first task
 
         decoded_body = task['body'].decode('base64')
-        post_data = urlparse.parse_qs(decoded_body) or decoded_body
+        post_data = decoded_body
         headers = { "HTTP_{}".format(x.replace("-", "_").upper()): y for x, y in task['headers'] }
 
         #FIXME: set headers like the queue name etc.
@@ -78,9 +78,12 @@ def process_task_queues(queue_name=None):
 
         if method.upper() == "POST":
             #Fixme: post data?
-            client.post(task['url'], data=post_data, content_type=headers['HTTP_CONTENT_TYPE'], **headers)
+            response = client.post(task['url'], data=post_data, content_type=headers['HTTP_CONTENT_TYPE'], **headers)
         else:
-            client.get(task['url'], **task['headers'])
+            response = client.get(task['url'], **headers)
+
+        if response.status_code != 200:
+            logging.info("Unexpected status ({}) while simulating task with url: {}".format(response.status_code, task['url']))
 
         if not tasks:
             #The map reduce may have added more tasks, so refresh the list

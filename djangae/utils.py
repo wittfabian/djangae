@@ -91,3 +91,35 @@ def find_project_root():
                 path = parent
 
     raise RuntimeError("Unable to locate app.yaml. Did you add it to skip_files?")
+
+
+def djangae_webapp(request_handler):
+    """ Decorator for wrapping a webapp2.RequestHandler to work with
+    the django wsgi hander"""
+
+    def request_handler_wrapper(request, *args, **kwargs):
+        from webapp2 import Request, Response, WSGIApplication
+        from django.http import HttpResponse
+
+        class Route:
+            handler_method = request.method.lower()
+
+        req = Request(request.environ)
+        req.route = Route()
+        req.route_args = args
+        req.route_kwargs = kwargs
+        req.app = WSGIApplication()
+        response = Response()
+        view_func = request_handler(req, response)
+        try:
+            view_func.dispatch()
+        except Exception as e:
+            raise e
+
+        django_response = HttpResponse(response.body, status=int(str(response.status).split(" ")[0]))
+        for header, value in response.headers.iteritems():
+            django_response[header] = value
+
+        return django_response
+
+    return request_handler_wrapper
