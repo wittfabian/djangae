@@ -1,6 +1,4 @@
-from mapreduce.mapreduce_pipeline import MapreducePipeline, MapPipeline
 from mapreduce.mapper_pipeline import MapperPipeline
-from queryset import QueryDef
 import cPickle
 
 
@@ -60,8 +58,7 @@ class MapReduceTask(object):
         # get passed down properly, and we don't want users to have to include an appengine_config.py
         # to make the absolutely bat-sh*t crazy lib_config stuff work. So here, we monkey patch it. Sigh.
         from mapreduce import parameters
-        parameters.config._defaults['BASE_PATH'] = '/_ah/mapreduce'
-        parameters._DEFAULT_PIPELINE_BASE_PATH = parameters.config.BASE_PATH + "/pipeline"
+        parameters.config.BASE_PATH  = '/_ah/mapreduce'
 
         params = {'querydef': str(cPickle.dumps(self.query_def))}
 
@@ -72,4 +69,4 @@ class MapReduceTask(object):
             params=params, # mapper_params: parameters to use for mapper phase.
             shards=self.shards, # shards: number of shards to use as int.
         )
-        pipeline.start()
+        pipeline.start(base_path='/_ah/mapreduce/pipeline')
