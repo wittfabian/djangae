@@ -94,7 +94,7 @@ class QueryDef(object):
         try:
             model = model_cache.get_model(*self.model_path.split('.'))
         except Exception as e:
-            import pdb; pdb.set_trace()
+            raise e
         qs = getattr(model, self.manager_name)
         for method, args, kwargs in self.method_spec:
             qs = getattr(qs, method)(*args, **dict(kwargs))
