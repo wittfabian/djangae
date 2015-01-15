@@ -1003,6 +1003,9 @@ class EdgeCaseTests(TestCase):
         integer_model = IntegerModel.objects.get(integer_field__iexact=str(1000))
         self.assertEqual(integer_model.integer_field, 1000)        
 
+        user = TestUser.objects.get(id__iexact=str(self.u1.id))
+        self.assertEqual("A", user.username)           
+
     def test_ordering(self):
         users = TestUser.objects.all().order_by("username")
 
