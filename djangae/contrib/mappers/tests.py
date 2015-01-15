@@ -3,9 +3,9 @@ import logging
 from django.test import TestCase, RequestFactory
 from django.db import models
 
-from djangae.contrib.mappers.pipes import start_django_orm_mapper
 from djangae.contrib.mappers.queryset import QueryDef
 from djangae.test import process_task_queues
+from djangae.contrib.mappers.pipes import MapReduceTask
 
 class TestNode(models.Model):
     data = models.CharField(max_length=32)
@@ -23,6 +23,16 @@ def test_mapper_delete_evens(entity):
         entity.delete()
 
 
+class TestMapperClass(MapReduceTask):
+
+    query_def = QueryDef('mappers.TestModel').all()
+    name = 'test_map'
+
+    @staticmethod
+    def map(entity):
+        logging.info("{0}============".format(entity))
+
+
 class MapReduceTestCase(TestCase):
 
     def setUp(self):
@@ -30,7 +40,6 @@ class MapReduceTestCase(TestCase):
             TestNode(data="TestNode{0}".format(x), couter=x).save()
 
     def test_all_models_split(self):
-        query_def = QueryDef('testapp.TestModel').all()
-        start_django_orm_mapper(query_def, 'testapp.urls.test_map_function', 'test_map')
+        TestMapperClass().start()
         process_task_queues()
         self.assertEqual(TestNode.objects.count(), 50)

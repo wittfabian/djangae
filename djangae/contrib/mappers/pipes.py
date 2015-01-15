@@ -8,12 +8,21 @@ class MapReduceTask(object):
     """
 
         Mapreduce base class
+
+        You must define a staticmethod 'map' which takes in an single arg
+
+        Optionally define a staticmethod 'reduce' for the reduce stage
     """
     shards = 3
     query_def = None
     pipeline = None
     pipeline_class = MapperPipeline
-    job_name = 'testmap'
+    job_name = None
+
+    def __init__(self, *args, **kwargs):
+        if not self.job_name:
+            # No job name then we will just use the class
+            self.job_name = self.get_class_path()
 
     def get_class_path(self):
         return '{mod}.{cls}'.format(
@@ -27,11 +36,17 @@ class MapReduceTask(object):
             func=self.map.__name__
         )
 
-    @classmethod
-    def map(cls, entity):
+    def get_reduce_path(self):
+        return '{cls}.{func}'.format(
+            cls=self.get_class_path(),
+            func=self.reduce.__name__
+        )
+
+    @staticmethod
+    def map(entity):
         raise NotImplementedError('You must supply a map function')
 
-    @classmethod
+    @staticmethod
     def reduce(key, values):
         raise NotImplementedError('No reduce function defined, just running map stage')
 
