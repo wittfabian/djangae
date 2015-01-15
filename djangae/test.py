@@ -70,7 +70,7 @@ def process_task_queues(queue_name=None):
         task = tasks.pop(0) # Get the first task
 
         decoded_body = task['body'].decode('base64')
-        post_data = urlparse.parse_qs(decoded_body) or decoded_body
+        post_data = decoded_body
         headers = { "HTTP_{}".format(x.replace("-", "_").upper()): y for x, y in task['headers'] }
 
         #FIXME: set headers like the queue name etc.
