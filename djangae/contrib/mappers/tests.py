@@ -12,17 +12,6 @@ class TestNode(models.Model):
     counter = models.IntegerField()
 
 
-class TestFruit(models.Model):
-    name = models.CharField(primary_key=True, max_length=32)
-    color = models.CharField(max_length=32)
-
-
-def test_mapper_delete_evens(entity):
-    if entity.couter % 2 == 0:
-        logging.info('---Deleteing---' + entity.counter)
-        entity.delete()
-
-
 class TestMapperClass(MapReduceTask):
 
     query_def = QueryDef('mappers.TestNode').all()
@@ -33,6 +22,16 @@ class TestMapperClass(MapReduceTask):
         if entity.counter % 2:
             entity.delete()
 
+class TestMapperClass2(MapReduceTask):
+
+    query_def = QueryDef('mappers.TestNode').all()
+    name = 'test_map_2'
+
+    @staticmethod
+    def map(entity):
+        entity.data = "hit"
+        entity.save()
+
 
 class MapReduceTestCase(TestCase):
 
@@ -40,7 +39,15 @@ class MapReduceTestCase(TestCase):
         for x in xrange(100):
             TestNode(data="TestNode{0}".format(x), counter=x).save()
 
-    def test_all_models_split(self):
+    def test_all_models_delete(self):
+        self.assertEqual(TestNode.objects.count(), 100)
         TestMapperClass().start()
         process_task_queues()
         self.assertEqual(TestNode.objects.count(), 50)
+
+    def test_map_fruit_update(self):
+        self.assertEqual(TestNode.objects.count(), 100)
+        TestMapperClass2().start()
+        process_task_queues()
+        nodes = TestNode.objects.all()
+        self.assertTrue(all(x.data == 'hit' for x in nodes))
