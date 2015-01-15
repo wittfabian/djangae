@@ -1,4 +1,6 @@
-from django.test import TestCase
+import logging
+
+from django.test import TestCase, RequestFactory
 from django.db import models
 
 from djangae.contrib.mappers.queryset import QueryDef
@@ -12,17 +14,20 @@ class TestNode(models.Model):
 
 class TestMapperClass(MapReduceTask):
 
-    query_def = QueryDef('mappers.TestNode').all()
+    model = TestNode
     name = 'test_map'
 
     @staticmethod
     def map(entity):
         if entity.counter % 2:
             entity.delete()
+            yield ('removed', [entity.pk])
+        else:
+            yield ('remains', [entity.pk])
 
 class TestMapperClass2(MapReduceTask):
 
-    query_def = QueryDef('mappers.TestNode').all()
+    model = TestNode
     name = 'test_map_2'
 
     @staticmethod
@@ -32,6 +37,7 @@ class TestMapperClass2(MapReduceTask):
 
 
 class MapReduceTestCase(TestCase):
+
     def setUp(self):
         for x in xrange(100):
             TestNode(data="TestNode{0}".format(x), counter=x).save()

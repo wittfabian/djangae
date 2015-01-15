@@ -2,16 +2,20 @@ from mapreduce import input_readers
 import copy
 import cPickle
 import logging
+import importlib
+from django.db.models.loading import cache as model_cache
 
 class DjangoInputReader(input_readers.InputReader):
 
-    REQUIRED_PARAMS = ('querydef',)
+    REQUIRED_PARAMS = ('model',)
 
-    def __init__(self, start_id, end_id, querydef, *args, **kwargs):
+    def __init__(self, start_id, end_id, model, *args, **kwargs):
         self.shard_id = 1
         self.start_id = start_id
         self.end_id = end_id
-        self.querydef = querydef
+        self.raw_model = model
+        app, model = self.raw_model.split('.')
+        self.model = model_cache.get_model(app, model)
         super(DjangoInputReader, self).__init__(*args, **kwargs)
 
 
@@ -21,7 +25,7 @@ class DjangoInputReader(input_readers.InputReader):
             # the shard size caused each previous shard to process an additional model
             return
 
-        query = self.querydef()
+        query = self.model.objects
 
         if self.start_id:
             query = query.filter(pk__gt=self.start_id).filter(pk__lte=self.end_id)
@@ -53,17 +57,18 @@ class DjangoInputReader(input_readers.InputReader):
         params = input_readers._get_params(mapper_spec)
         logging.info("Params: %s" % params)
         # Unpickle the query
-        querydef = cPickle.loads(str(params['querydef']))
+        app, model = params['model'].split('.')
+        model = model_cache.get_model(app, model)
 
         # Grab the lowest pk
-        query = querydef()
+        query = model.objects.all()
         query = query.order_by('pk')
         if not query:
-            return [DjangoInputReader(0,0, querydef)]
+            return [DjangoInputReader(0,0, params['model'])]
         first_id = query[0].id
 
         # Grab the highest pk
-        query = querydef()
+        query = model.objects.all()
         query = query.order_by('-pk')
         last_id = query[0].id
 
@@ -72,7 +77,7 @@ class DjangoInputReader(input_readers.InputReader):
         logging.info("Query range: %s - %s = %s" % (first_id, last_id, pk_range))
 
         if pk_range < shard_count or shard_count == 1:
-            return [DjangoInputReader(first_id-1, last_id, querydef)]
+            return [DjangoInputReader(first_id-1, last_id, params['model'])]
 
         readers = []
         max_shard_size = int(float(pk_range) / float(shard_count))
@@ -90,7 +95,7 @@ class DjangoInputReader(input_readers.InputReader):
                 shard_end_id = last_id
 
             logging.info("Creating shard: %s - %s" % (shard_start_id, shard_end_id))
-            reader = DjangoInputReader(shard_start_id, shard_end_id, querydef)
+            reader = DjangoInputReader(shard_start_id, shard_end_id, params['model'])
             reader.shard_id = shard_id
             readers.append(reader)
             shard_id += 1
@@ -102,9 +107,9 @@ class DjangoInputReader(input_readers.InputReader):
         start_id = input_shard_state['start']
         end_id = input_shard_state['end']
         shard_id = input_shard_state['shard_id']
-        querydef = cPickle.loads(str(input_shard_state['querydef']))
+        model = input_shard_state['model']
 
-        reader = DjangoInputReader(start_id, end_id, querydef)
+        reader = DjangoInputReader(start_id, end_id, model)
         reader.shard_id = shard_id
         return reader
 
@@ -114,7 +119,7 @@ class DjangoInputReader(input_readers.InputReader):
             'start': self.start_id,
             'end': self.end_id,
             'shard_id': self.shard_id,
-            'querydef': cPickle.dumps(self.querydef)
+            'model': self.raw_model
         }
 
 
