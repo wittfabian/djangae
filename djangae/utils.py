@@ -116,7 +116,7 @@ def djangae_webapp(request_handler):
         except Exception as e:
             raise e
 
-        django_response = HttpResponse(response.body, status=response.status)
+        django_response = HttpResponse(response.body, status=int(str(response.status).split(" ")[0]))
         for header, value in response.headers.iteritems():
             django_response[header] = value
 
