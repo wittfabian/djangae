@@ -82,6 +82,8 @@ def _local(devappserver2=None, configuration=None, options=None, wsgi_request_in
 
     dispatcher = _create_dispatcher(configuration, options)
     request_data = wsgi_request_info.WSGIRequestInfo(dispatcher)
+    # Remember the wsgi request info object so it can be reused to avoid duplication.
+    dispatcher._request_data = request_data
 
     _API_SERVER = devappserver2.DevelopmentServer._create_api_server(
         request_data, storage_path, options, configuration)
