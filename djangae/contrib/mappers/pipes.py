@@ -55,6 +55,14 @@ class MapReduceTask(object):
         pass
 
     def start(self):
+        # Horrible hack!
+        # The mapreduce library is horrific. The base_path override to start() doesn't
+        # get passed down properly, and we don't want users to have to include an appengine_config.py
+        # to make the absolutely bat-sh*t crazy lib_config stuff work. So here, we monkey patch it. Sigh.
+        from mapreduce import parameters
+        parameters.config._defaults['BASE_PATH'] = '/_ah/mapreduce'
+        parameters._DEFAULT_PIPELINE_BASE_PATH = parameters.config.BASE_PATH + "/pipeline"
+
         params = {'querydef': str(cPickle.dumps(self.query_def))}
 
         pipeline = self.pipeline_class(
@@ -62,6 +70,6 @@ class MapReduceTask(object):
             self.get_map_path(), # mapper_spec: specification of mapper to use.
             input_reader_spec="djangae.contrib.mappers.readers.DjangoInputReader", # input_reader_spec: specification of input reader to read data from.
             params=params, # mapper_params: parameters to use for mapper phase.
-            shards=3 # shards: number of shards to use as int.
+            shards=self.shards, # shards: number of shards to use as int.
         )
         pipeline.start()

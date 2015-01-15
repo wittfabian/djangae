@@ -1,5 +1,4 @@
-from django.conf.urls import patterns, include, url
-from django.http import HttpResponse
+from django.conf.urls import patterns
 from mapreduce.main import create_handlers_map
 from djangae.utils import djangae_webapp
 

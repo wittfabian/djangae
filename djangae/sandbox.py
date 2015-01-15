@@ -76,6 +76,8 @@ def _local(devappserver2=None, configuration=None, options=None, wsgi_request_in
 
     # Silence warnings about this being unset, localhost:8080 is the dev_appserver default
     os.environ.setdefault("HTTP_HOST", "localhost:8080")
+    os.environ['SERVER_NAME'] = os.environ['HTTP_HOST'].split(':', 1)[0]
+    os.environ['DEFAULT_VERSION_HOSTNAME'] = '%s:%s' % (os.environ['SERVER_NAME'], 8000)
 
     devappserver2._setup_environ(configuration.app_id)
     storage_path = devappserver2._get_storage_path(options.storage_path, configuration.app_id)

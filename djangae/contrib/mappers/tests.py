@@ -1,6 +1,4 @@
-import logging
-
-from django.test import TestCase, RequestFactory
+from django.test import TestCase
 from django.db import models
 
 from djangae.contrib.mappers.queryset import QueryDef
@@ -34,7 +32,6 @@ class TestMapperClass2(MapReduceTask):
 
 
 class MapReduceTestCase(TestCase):
-
     def setUp(self):
         for x in xrange(100):
             TestNode(data="TestNode{0}".format(x), counter=x).save()
