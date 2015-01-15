@@ -24,6 +24,23 @@ def generator(fields, instance):
     return NULL_CHARACTER.join(values)
 
 
+def _field_name_for_ordering(ordering):
+    names = []
+
+    # A single negated ordering can use the same field (we just flip the query)
+    # so we normalize that out here and use the same field in that case
+    if len(ordering) == 1 and ordering[0].startswith("-"):
+        ordering[0] = ordering[0].lstrip("-")
+
+    for field in ordering:
+        if field.startswith("-"):
+            names.append("neg_" + field[1:])
+        else:
+            names.append(field)
+
+    new_field_name = "pagination_{}".format("_".join(names))
+    return new_field_name
+
 class PaginatedModel(object):
     """
         A class decorator which automatically generates pre-calculated fields for pagination.
@@ -45,14 +62,7 @@ class PaginatedModel(object):
             the orderings you specify
         """
         for ordering in self.orderings:
-            names = []
-            for field in ordering:
-                if field.startswith("-"):
-                    names.append("neg_" + field[1:])
-                else:
-                    names.append(field)
-
-            new_field_name = "pagination_{}".format("_".join(names))
+            new_field_name = _field_name_for_ordering(ordering)
             ComputedCharField(partial(generator, ordering), max_length=500, editable=False).contribute_to_class(cls, new_field_name)
 
         return cls
