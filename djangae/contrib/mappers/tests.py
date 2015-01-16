@@ -12,6 +12,11 @@ class TestNode(models.Model):
     counter = models.IntegerField()
 
 
+class TestNode2(models.Model):
+    data = models.CharField(max_length=32)
+    counter = models.IntegerField()
+
+
 class TestMapperClass(MapReduceTask):
 
     model = TestNode
@@ -39,17 +44,28 @@ class TestMapperClass2(MapReduceTask):
 class MapReduceTestCase(TestCase):
 
     def setUp(self):
-        for x in xrange(100):
-            TestNode(data="TestNode{0}".format(x), counter=x).save()
+        for x in xrange(10):
+            TestNode(data="TestNode".format(x), counter=x).save()
 
     def test_all_models_delete(self):
-        self.assertEqual(TestNode.objects.count(), 100)
+        self.assertEqual(TestNode.objects.count(), 10)
         TestMapperClass().start()
         process_task_queues()
-        self.assertEqual(TestNode.objects.count(), 50)
+        self.assertEqual(TestNode.objects.count(), 5)
+
+    def test_model_init(self):
+        """
+            Test that overriding the model works
+        """
+        for x in xrange(10):
+            TestNode2(data="TestNode2".format(x), counter=x).save()
+        self.assertEqual(TestNode2.objects.count(), 10)
+        TestMapperClass(model=TestNode2).start()
+        process_task_queues()
+        self.assertEqual(TestNode2.objects.count(), 5)
 
     def test_map_fruit_update(self):
-        self.assertEqual(TestNode.objects.count(), 100)
+        self.assertEqual(TestNode.objects.count(), 10)
         TestMapperClass2().start()
         process_task_queues()
         nodes = TestNode.objects.all()
