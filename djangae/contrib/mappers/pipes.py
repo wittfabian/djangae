@@ -26,7 +26,9 @@ class MapReduceTask(object):
     model = None
 
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, model=None):
+        if model:
+            self.model = model
         if not self.job_name:
             # No job name then we will just use the class
             self.job_name = self.get_class_path()
