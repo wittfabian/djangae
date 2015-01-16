@@ -7,6 +7,9 @@ from itertools import chain, groupby
 
 #LIBRARIES
 from django.db import DatabaseError
+from django.core.exceptions import FieldError
+from django.db.models.fields import FieldDoesNotExist
+
 from django.core.cache import cache
 from django.db import IntegrityError
 from django.db.models.sql.datastructures import EmptyResultSet
@@ -155,7 +158,7 @@ def parse_constraint(child, connection, negated=False):
         # When new instance is created, automatic primary key 'id' does not generate '_idx_iexact_id'.
         # As the primary key 'id' (AutoField) is integer and is always case insensitive, we can deal with 'id_iexact=' query by using 'exact' rather than 'iexact'.
         op = "exact"
-    
+
     if constraint.field.db_type(connection) in ("bytes", "text"):
         raise NotSupportedError("Text and Blob fields are not indexed by the datastore, so you can't filter on them")
 
@@ -321,7 +324,29 @@ def _convert_ordering(query):
     if result:
         # We factor out cross-table orderings (rather than raising NotSupportedError) otherwise we'll break
         # the admin which uses them. We log a warning when this happens though
-        ordering = [ x for x in result if not (isinstance(x, basestring) and "__" in x) ]
+        try:
+            ordering = []
+            for name in result:
+                if name == "?":
+                    raise NotSupportedError("Random ordering is not supported on the datastore")
+
+                if not (isinstance(name, basestring) and "__" in name):
+                    if isinstance(name, basestring):
+                        if name.lstrip("-") == "pk":
+                            field_column = query.model._meta.pk.column
+                        else:
+                            field_column = query.model._meta.get_field(name.lstrip("-")).column
+                        ordering.append(field_column if not name.startswith("-") else "-{}".format(field_column))
+                    else:
+                        ordering.append(name)
+
+        except FieldDoesNotExist:
+            opts = query.model._meta
+            available = opts.get_all_field_names()
+            raise FieldError("Cannot resolve keyword %r into field. "
+                "Choices are: %s" % (name, ", ".join(available))
+            )
+
         if len(ordering) < len(result):
             diff = set(result) - set(ordering)
             log_once(
@@ -330,8 +355,6 @@ def _convert_ordering(query):
             )
         result = ordering
 
-    if "?" in result:
-        raise NotSupportedError("Random ordering is not supported on the datastore")
 
     return result
 

@@ -26,6 +26,7 @@ from google.appengine.ext import deferred
 from google.appengine.api import taskqueue
 from django.test.utils import override_settings
 from django.contrib.contenttypes.models import ContentType
+from django.core.exceptions import FieldError
 
 # DJANGAE
 from djangae.contrib import sleuth
@@ -1040,6 +1041,9 @@ class EdgeCaseTests(TestCase):
         users = TestUser.objects.all().order_by("-username")
 
         self.assertEqual(["A", "B", "C", "D", "E"][::-1], [x.username for x in users])
+
+        with self.assertRaises(FieldError):
+            users = list(TestUser.objects.order_by("bananas"))
 
     def test_dates_query(self):
         z_user = TestUser.objects.create(username="Z", email="z@example.com")
