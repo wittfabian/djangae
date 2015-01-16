@@ -88,7 +88,7 @@ class IntegerModel(models.Model):
 
 class TestFruit(models.Model):
     name = models.CharField(primary_key=True, max_length=32)
-    color = models.CharField(max_length=32)
+    color = models.CharField(max_length=100)
 
 
 class Permission(models.Model):
@@ -1102,6 +1102,32 @@ class EdgeCaseTests(TestCase):
         for index in indexes:
             add_special_index(TestFruit, 'color', index)
         obj.save()
+
+    def test_special_indexes_for_unusually_long_values(self):
+        obj = TestFruit.objects.create(name='pear', color='1234567890-=!@#$%^&*()_+qQWERwertyuiopasdfghjklzxcvbnm')
+        indexes = ['icontains', 'contains', 'iexact', 'iendswith', 'endswith', 'istartswith', 'startswith']
+        for index in indexes:
+            add_special_index(TestFruit, 'color', index)
+        obj.save()
+
+        qry = TestFruit.objects.filter(color__contains='1234567890-=!@#$%^&*()_+qQWERwertyuiopasdfghjklzxcvbnm')
+        self.assertEqual(len(list(qry)), 1)
+        qry = TestFruit.objects.filter(color__contains='890-=!@#$')
+        self.assertEqual(len(list(qry)), 1)
+        qry = TestFruit.objects.filter(color__contains='1234567890-=!@#$%^&*()_+qQWERwertyui')
+        self.assertEqual(len(list(qry)), 1)
+        qry = TestFruit.objects.filter(color__contains='8901')
+        self.assertEqual(len(list(qry)), 0)
+
+        qry = TestFruit.objects.filter(color__icontains='1234567890-=!@#$%^&*()_+qQWERWERTYuiopasdfghjklzxcvbnm')
+        self.assertEqual(len(list(qry)), 1)
+        qry = TestFruit.objects.filter(color__icontains='890-=!@#$')
+        self.assertEqual(len(list(qry)), 1)
+        qry = TestFruit.objects.filter(color__icontains='1234567890-=!@#$%^&*()_+qQWERwertyuI')
+        self.assertEqual(len(list(qry)), 1)
+        qry = TestFruit.objects.filter(color__icontains='8901')
+        self.assertEqual(len(list(qry)), 0)
+
 
 
 class BlobstoreFileUploadHandlerTest(TestCase):
