@@ -152,3 +152,48 @@ def release_identifiers(identifiers):
 def release(model, entity):
     identifiers = unique_identifiers_from_entity(model, entity, ignore_pk=True)
     release_identifiers(identifiers)
+
+
+class UniquenessMixin(object):
+    """ Mixin overriding the methods checking value uniqueness.
+
+    For models defining unique constraints this mixin should be inherited from.
+    When iterable (list or set) fields are marked as unique it must be used.
+    This is a copy of Django's implementation, save for the part marked by the comment.
+    """
+    def _perform_unique_checks(self, unique_checks):
+        errors = {}
+        for model_class, unique_check in unique_checks:
+            lookup_kwargs = {}
+            for field_name in unique_check:
+                f = self._meta.get_field(field_name)
+                lookup_value = getattr(self, f.attname)
+                if lookup_value is None:
+                    continue
+                if f.primary_key and not self._state.adding:
+                    continue
+
+                ##########################################################################
+                # This is the only modification to Django's native implementation of this method;
+                # we conditionally build a __in lookup if the value is an iterable.
+                lookup = str(field_name)
+                if isinstance(lookup_value, (list, set, tuple)):
+                    lookup = "%s__in" % lookup
+
+                lookup_kwargs[lookup] = lookup_value
+                ##########################################################################
+                # / end of changes
+
+            if len(unique_check) != len(lookup_kwargs):
+                continue
+            qs = model_class._default_manager.filter(**lookup_kwargs)
+            model_class_pk = self._get_pk_val(model_class._meta)
+            if not self._state.adding and model_class_pk is not None:
+                qs = qs.exclude(pk=model_class_pk)
+            if qs.exists():
+                if len(unique_check) == 1:
+                    key = unique_check[0]
+                else:
+                    key = NON_FIELD_ERRORS
+                errors.setdefault(key, []).append(self.unique_error_message(model_class, unique_check))
+        return errors
