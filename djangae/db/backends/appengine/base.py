@@ -486,5 +486,5 @@ class DatabaseWrapper(BaseDatabaseWrapper):
         return DatabaseSchemaEditor(self, *args, **kwargs)
 
     def _cursor(self):
-        # For < Django 1.6 compatiblity
+        # For < Django 1.6 compatibility
         return self.create_cursor()

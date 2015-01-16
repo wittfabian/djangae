@@ -198,7 +198,7 @@ def activate(sandbox_name, add_sdk_to_path=False, **overrides):
     sys.path = (_PATHS.script_paths(_SCRIPT_NAME) + _PATHS.scrub_path(_SCRIPT_NAME, sys.path))
 
     # Gotta set the runtime properly otherwise it changes appengine imports, like wepapp
-    # when you are not runing dev_appserver
+    # when you are not running dev_appserver
     import yaml
     with open(os.path.join(project_root, 'app.yaml'), 'r') as app_yaml:
         app_yaml = yaml.load(app_yaml)

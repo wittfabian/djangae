@@ -694,7 +694,7 @@ class SelectCommand(object):
                     fun = FILTER_CMP_FUNCTION_MAP[op]
 
                     def lazy_eval(results, attr, fun, token_a, token_b):
-                        """ Wraps a list or a generator, applys comparision function
+                        """ Wraps a list or a generator, applies comparison function
                         token_a is an attribute on the result, the lhs. token_b is the rhs
                         attr is the target attribute to store the result
                         """
