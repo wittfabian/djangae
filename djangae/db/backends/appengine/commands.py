@@ -365,6 +365,7 @@ class SelectCommand(object):
         self.connection = connection
 
         self.limits = (query.low_mark, query.high_mark)
+        self.results_returned = 0
 
         opts = query.get_meta()
 
@@ -486,7 +487,7 @@ class SelectCommand(object):
                 raise NotSupportedError("Cross-join WHERE constraints aren't supported: %s" % query.where.get_cols())
 
             from dnf import parse_dnf
-            self.where, columns = parse_dnf(query.where, self.connection)
+            self.where, columns, self.excluded_pks = parse_dnf(query.where, self.connection)
 
         # DISABLE PROJECTION IF WE ARE FILTERING ON ONE OF THE PROJECTION_FIELDS
         for field in self.projection or []:
@@ -685,11 +686,27 @@ class SelectCommand(object):
     def _do_fetch(self):
         assert not self.results
 
+        # If we're manually excluding PKs, and we've specified a limit to the results
+        # we need to make sure that we grab more than we were asked for otherwise we could filter
+        # out too many! These are again limited back to the original requeste limite
+        # while we're processing the results later
+        excluded_pk_count = 0
+        if self.excluded_pks and self.limits[1]:
+            excluded_pk_count = len(self.excluded_pks)
+            self.limits = tuple([self.limits[0], self.limits[1] + excluded_pk_count])
+
         self.results = self._run_query(
             aggregate_type=self.aggregate_type,
             start=self.limits[0],
             limit=None if self.limits[1] is None else (self.limits[1] - (self.limits[0] or 0))
         )
+
+        # Ensure that the results returned is reset
+        self.results_returned = 0
+
+        if excluded_pk_count:
+            # Reset the upper limit if we adjusted it above
+            self.limits = tuple([self.limits[0], self.limits[1] - excluded_pk_count])
 
         self.query_done = True
 
@@ -764,6 +781,10 @@ class SelectCommand(object):
         return results
 
     def next_result(self):
+        if self.limits[1]:
+            if self.results_returned >= self.limits[1] - (self.limits[0] or 0):
+                raise StopIteration()
+
         while True:
             x = self.results.next()
 
@@ -786,6 +807,8 @@ class SelectCommand(object):
                     # the correct value for this field. The alternative would be to call
                     # self.distinct_field_convertor again in Cursor.fetchone, but that's wasteful.
                     x[self.distinct_on_field] = value
+
+            self.results_returned += 1
             return x
 
 class FlushCommand(object):

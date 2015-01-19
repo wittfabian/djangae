@@ -9,7 +9,7 @@ from google.appengine.api import datastore
 
 IMPOSSIBLE_FILTER = ('__key__', '<', datastore.Key.from_path('', 1))
 
-def process_literal(node, filtered_columns=[], negated=False):
+def process_literal(node, is_pk_filter, excluded_pks, filtered_columns=None, negated=False):
     column, op, value = node[1]
     if filtered_columns is not None:
         assert isinstance(filtered_columns, set)
@@ -41,23 +41,28 @@ def process_literal(node, filtered_columns=[], negated=False):
     _op = OPERATORS_MAP[op]
 
     if negated and _op == '=':  # Explode
-        return ('OR', [('LIT', (column, '>', value)), ('LIT', (column, '<', value))]), filtered_columns
+        if is_pk_filter:
+            excluded_pks.add(value)
+            return None, filtered_columns
+        else:
+            return ('OR', [('LIT', (column, '>', value)), ('LIT', (column, '<', value))]), filtered_columns
     return ('LIT', (column, _op, value)), filtered_columns
 
 
 def process_node(node, connection, negated=False):
     if isinstance(node, tuple) and isinstance(node[0], Constraint):
-        return ('LIT', parse_constraint(node, connection, negated)), negated
+        is_pk = node[0].field.primary_key
+        return ('LIT', parse_constraint(node, connection, negated)), negated, is_pk
     if isinstance(node, tuple):
-        return node, negated
+        return node, negated, False
     if node.connector == 'AND' or 'OR':
         if node.negated:
             negated = True
-        return (node.connector, [child for child in node.children]), negated
+        return (node.connector, [child for child in node.children]), negated, False
 
 
 def parse_dnf(node, connection):
-    tree, filtered_columns = parse_tree(node, connection)
+    tree, filtered_columns, excluded_pks = parse_tree(node, connection)
     if tree:
         tree = tripled(tree)
 
@@ -94,22 +99,23 @@ def parse_dnf(node, connection):
                 # If we didn't find a literal with a datastore Key, then raise unsupported
                 raise NotSupportedError("The datastore doesn't support this query, more than 30 filters were needed")
 
-    return tree, filtered_columns
+    return tree, filtered_columns, excluded_pks
 
 
-def parse_tree(node, connection, filtered_columns=None, negated=False):
+def parse_tree(node, connection, filtered_columns=None, excluded_pks=None, negated=False):
     """
         Takes a django tree and parses all the nodes returning a new
         tree in the correct format for expansion
     """
     filtered_columns = filtered_columns or set()
+    excluded_pks = excluded_pks or set()
 
-    node, negated = process_node(node, connection, negated=negated)
+    node, negated, is_pk_filter = process_node(node, connection, negated=negated)
 
     if node[0] in ['AND', 'OR']:
         new_children = []
         for child in node[1]:
-            parsed_node, _columns = parse_tree(child, connection, filtered_columns, negated)
+            parsed_node, _columns, excluded_pks = parse_tree(child, connection, filtered_columns, excluded_pks, negated)
             if parsed_node:
                 new_children.append(parsed_node)
 
@@ -117,17 +123,17 @@ def parse_tree(node, connection, filtered_columns=None, negated=False):
                 filtered_columns.add(col)
 
         if not new_children:
-            return None, filtered_columns
+            return None, filtered_columns, excluded_pks
 
         if len(new_children) == 1:
-            return new_children[0], filtered_columns
-        return (node[0], new_children), filtered_columns
+            return new_children[0], filtered_columns, excluded_pks
+        return (node[0], new_children), filtered_columns, excluded_pks
     if node[0] == 'LIT':
-        parsed_lit, _columns = process_literal(node, filtered_columns=filtered_columns, negated=negated)
+        parsed_lit, _columns = process_literal(node, is_pk_filter, excluded_pks, filtered_columns=filtered_columns, negated=negated)
 
         for col in _columns:
             filtered_columns.add(col)
-        return parsed_lit, filtered_columns
+        return parsed_lit, filtered_columns, excluded_pks
 
 
 def tripled(node):
