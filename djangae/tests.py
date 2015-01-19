@@ -89,8 +89,15 @@ class IntegerModel(models.Model):
 
 class TestFruit(models.Model):
     name = models.CharField(primary_key=True, max_length=32)
+    origin = models.CharField(max_length=32, default="Unknown")
     color = models.CharField(max_length=32)
+    is_mouldy = models.BooleanField(default=False)
 
+    def __unicode__(self):
+        return self.name
+
+    def __repr__(self):
+        return "<TestFruit: name={}, color={}>".format(self.name, self.color)
 
 class Permission(models.Model):
     user = models.ForeignKey(TestUser)
@@ -310,7 +317,7 @@ class BackendTests(TestCase):
         self.assertEqual(type(obj.color), unicode)
 
     def test_notsupportederror_thrown_on_too_many_inequalities(self):
-        TestFruit.objects.create(name="Apple", color="Green")
+        TestFruit.objects.create(name="Apple", color="Green", origin="England")
         pear = TestFruit.objects.create(name="Pear", color="Green")
         banana = TestFruit.objects.create(name="Banana", color="Yellow")
 
@@ -319,15 +326,26 @@ class BackendTests(TestCase):
 
         # Excluding a field, and doing a > or < on another is not so fine
         with self.assertRaises(DataError):
-            self.assertEqual(pear, TestFruit.objects.exclude(name="Apple").filter(color__lt="Yellow").get())
+            self.assertEqual(pear, TestFruit.objects.exclude(origin="England").filter(color__lt="Yellow").get())
 
         # Same with excluding two fields
         with self.assertRaises(DataError):
-            list(TestFruit.objects.exclude(name="Apple").exclude(color="Yellow"))
+            list(TestFruit.objects.exclude(origin="England").exclude(color="Yellow"))
 
         # But apparently excluding the same field twice is OK
-        self.assertItemsEqual([banana], list(TestFruit.objects.exclude(name="Apple").exclude(name="Pear")))
+        self.assertItemsEqual([banana], list(TestFruit.objects.exclude(origin="England").exclude(name="Pear")))
 
+    def test_excluding_pks_is_emulated(self):
+        apple = TestFruit.objects.create(name="Apple", color="Green", is_mouldy=True, origin="England")
+        banana = TestFruit.objects.create(name="Banana", color="Yellow", is_mouldy=True, origin="Dominican Republic")
+        cherry = TestFruit.objects.create(name="Cherry", color="Red", is_mouldy=True, origin="Germany")
+        pear = TestFruit.objects.create(name="Pear", color="Green", origin="England")
+
+        self.assertEqual([apple, pear], list(TestFruit.objects.filter(origin__lt="Germany").exclude(pk=banana.pk).exclude(pk=cherry.pk).order_by("origin")))
+        self.assertEqual([apple, cherry], list(TestFruit.objects.exclude(origin="Dominican Republic").exclude(pk=pear.pk)))
+        self.assertEqual([], list(TestFruit.objects.filter(is_mouldy=True).filter(color="Green", origin__gt="England").exclude(pk=pear.pk).order_by("-origin")))
+        self.assertEqual([cherry, banana], list(TestFruit.objects.exclude(pk=pear.pk).order_by("-name")[:2]))
+        self.assertEqual([banana, apple], list(TestFruit.objects.exclude(pk=pear.pk).order_by("origin", "name")[:2]))
 
 class ModelFormsetTest(TestCase):
     def test_reproduce_index_error(self):
