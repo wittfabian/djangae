@@ -487,7 +487,7 @@ class SelectCommand(object):
                 raise NotSupportedError("Cross-join WHERE constraints aren't supported: %s" % query.where.get_cols())
 
             from dnf import parse_dnf
-            self.where, columns, self.excluded_pks = parse_dnf(query.where, self.connection)
+            self.where, columns, self.excluded_pks = parse_dnf(query.where, self.connection, ordering=query.order_by)
 
         # DISABLE PROJECTION IF WE ARE FILTERING ON ONE OF THE PROJECTION_FIELDS
         for field in self.projection or []:
@@ -664,6 +664,7 @@ class SelectCommand(object):
                     for query in queries:
                         qry = Query(query._Query__kind, projection=query._Query__query_options.projection)
                         qry.update(query)
+                        qry.Order(*ordering)
                         new_queries.append(qry)
 
                     query = datastore.MultiQuery(new_queries, ordering)

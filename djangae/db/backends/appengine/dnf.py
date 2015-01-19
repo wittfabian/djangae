@@ -9,6 +9,61 @@ from google.appengine.api import datastore
 
 IMPOSSIBLE_FILTER = ('__key__', '<', datastore.Key.from_path('', 1))
 
+class QueryContainsOR(Exception):
+    pass
+
+def check_for_inequalities(node, key=None, other=None):
+    """
+        Parses a query WHERE tree and logs which fields have inequalities.
+
+        If the WHERE tree includes an OR connector, we throw QueryContainsOR for efficiency
+        (because for our purposes we need to know quickly if the query contains an OR connector)
+    """
+
+    other = other or set()
+
+    if hasattr(node, "children"):
+        literals = [ x for x in node.children if not hasattr(x, "children") ]
+        branches = [ x for x in node.children if hasattr(x, "children") ]
+
+        if node.connector == 'OR':
+            raise QueryContainsOR
+
+        for literal in literals:
+            field_name = literal[0].field.column
+            if node.negated and literal[1] == "exact" and literal[0].field.primary_key:
+                key = field_name
+            elif ((node.negated and literal[1] == "exact") or (literal[1] in ("gt", "gte", "lt", "lte"))) and not literal[0].field.primary_key:
+                other.add(field_name)
+
+        for branch in branches:
+            k, o = check_for_inequalities(branch, key, other)
+            if k:
+                key = k
+            other.update(o)
+
+    return key, other
+
+def should_exclude_pks_in_memory(query, ordering):
+    """
+        We try to let the datastore do as much of the work as possible, however, there are times
+        when we can actually support two inequalities in a query, if one of them is on the key. Also,
+        we can support an inequality on a key, and an ordering by something else. This code literally
+        returns True in those cases, in which case the dnf parsing will keep track of the excluded PKs
+        and remove them from the tree, otherwise, it will add them to the tree as a > && < combo as
+        normal.
+    """
+    try:
+        key_inequality, other_inequalities = check_for_inequalities(query)
+    except QueryContainsOR:
+        return False
+
+    if len(other_inequalities) == 1 or (
+        key_inequality and not other_inequalities and ordering and ordering[0].lstrip("-") != key_inequality):
+        return True
+    else:
+        return False
+
 def process_literal(node, is_pk_filter, excluded_pks, filtered_columns=None, negated=False):
     column, op, value = node[1]
     if filtered_columns is not None:
@@ -41,11 +96,11 @@ def process_literal(node, is_pk_filter, excluded_pks, filtered_columns=None, neg
     _op = OPERATORS_MAP[op]
 
     if negated and _op == '=':  # Explode
-        if is_pk_filter:
+        if is_pk_filter and excluded_pks is not None: #Excluded pks is a set() if we should be using it
             excluded_pks.add(value)
             return None, filtered_columns
-        else:
-            return ('OR', [('LIT', (column, '>', value)), ('LIT', (column, '<', value))]), filtered_columns
+
+        return ('OR', [('LIT', (column, '>', value)), ('LIT', (column, '<', value))]), filtered_columns
     return ('LIT', (column, _op, value)), filtered_columns
 
 
@@ -61,8 +116,17 @@ def process_node(node, connection, negated=False):
         return (node.connector, [child for child in node.children]), negated, False
 
 
-def parse_dnf(node, connection):
-    tree, filtered_columns, excluded_pks = parse_tree(node, connection)
+def parse_dnf(node, connection, ordering=None):
+    should_in_memory_exclude = should_exclude_pks_in_memory(node, ordering)
+
+    tree, filtered_columns, excluded_pks = parse_tree(
+        node, connection,
+        excluded_pks = set() if should_in_memory_exclude else None
+    )
+
+    if not should_exclude_pks_in_memory:
+        assert excluded_pks is None
+
     if tree:
         tree = tripled(tree)
 
@@ -99,7 +163,7 @@ def parse_dnf(node, connection):
                 # If we didn't find a literal with a datastore Key, then raise unsupported
                 raise NotSupportedError("The datastore doesn't support this query, more than 30 filters were needed")
 
-    return tree, filtered_columns, excluded_pks
+    return tree, filtered_columns, excluded_pks or set()
 
 
 def parse_tree(node, connection, filtered_columns=None, excluded_pks=None, negated=False):
@@ -108,7 +172,6 @@ def parse_tree(node, connection, filtered_columns=None, excluded_pks=None, negat
         tree in the correct format for expansion
     """
     filtered_columns = filtered_columns or set()
-    excluded_pks = excluded_pks or set()
 
     node, negated, is_pk_filter = process_node(node, connection, negated=negated)
 
