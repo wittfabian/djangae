@@ -35,6 +35,7 @@ from djangae.test import inconsistent_db, TestCase
 from django.db import IntegrityError as DjangoIntegrityError
 from djangae.db.backends.appengine.dbapi import CouldBeSupportedError, NotSupportedError, IntegrityError
 from djangae.db.constraints import UniqueMarker, UniquenessMixin
+from djangae.db.unique_utils import _unique_combinations, unique_identifiers_from_entity
 from djangae.indexing import add_special_index
 from djangae.db.utils import entity_matches_query
 from djangae.db.backends.appengine import caching
@@ -574,6 +575,12 @@ class QueryNormalizationTests(TestCase):
 class ModelWithUniques(models.Model):
     name = models.CharField(max_length=64, unique=True)
 
+class ModelWithUniquesOnForeignKey(models.Model):
+    name = models.CharField(max_length=64, unique=True)
+    related_name = models.ForeignKey(ModelWithUniques, unique=True)
+
+    class Meta:
+        unique_together = [("name", "related_name")]
 
 class ModelWithDates(models.Model):
     start = models.DateField()
@@ -633,6 +640,33 @@ class ConstraintTests(TestCase):
         with self.assertRaises((IntegrityError, DataError)):
             instance.name = "One"
             instance.save()
+
+    def test_ignore_pk_on_unique_combinations_includes_fks(self):
+        combos_one = _unique_combinations(ModelWithUniquesOnForeignKey, ignore_pk=True)
+        combos_two = _unique_combinations(ModelWithUniquesOnForeignKey, ignore_pk=False)
+
+        self.assertEqual([['name', 'related_name'], ['name'], ['related_name']], combos_one)
+        self.assertEqual([['name', 'related_name'], ['id'], ['name'], ['related_name']], combos_two)
+
+        class Entity(dict):
+            def __init__(self, model, id):
+                self._key = datastore.Key.from_path(model, id)
+
+            def key(self):
+                return self._key
+
+        e1 = Entity(ModelWithUniquesOnForeignKey._meta.db_table, 1)
+        e1["name"] = "One"
+        e1["related_name_id"] = 1
+
+        ids_one = unique_identifiers_from_entity(ModelWithUniquesOnForeignKey, e1)
+
+        self.assertItemsEqual([
+            u'djangae_modelwithuniquesonforeignkey|id:1',
+            u'djangae_modelwithuniquesonforeignkey|name:06c2cea18679d64399783748fa367bdd',
+            u'djangae_modelwithuniquesonforeignkey|related_name_id:1',
+            u'djangae_modelwithuniquesonforeignkey|name:06c2cea18679d64399783748fa367bdd|related_name_id:1'
+        ], ids_one)
 
     def test_error_on_update_doesnt_change_markers(self):
         initial_count = datastore.Query(UniqueMarker.kind()).Count()
