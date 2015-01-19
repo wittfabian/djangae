@@ -341,7 +341,7 @@ class BackendTests(TestCase):
         cherry = TestFruit.objects.create(name="Cherry", color="Red", is_mouldy=True, origin="Germany")
         pear = TestFruit.objects.create(name="Pear", color="Green", origin="England")
 
-        self.assertItemsEqual([apple, pear], list(TestFruit.objects.filter(origin__lt="Germany").exclude(pk=banana.pk).exclude(pk=cherry.pk).order_by("origin")))
+        self.assertEqual([apple, pear], list(TestFruit.objects.filter(origin__lt="Germany").exclude(pk=banana.pk).exclude(pk=cherry.pk).order_by("origin")))
         self.assertEqual([apple, cherry], list(TestFruit.objects.exclude(origin="Dominican Republic").exclude(pk=pear.pk)))
         self.assertEqual([], list(TestFruit.objects.filter(is_mouldy=True).filter(color="Green", origin__gt="England").exclude(pk=pear.pk).order_by("-origin")))
         self.assertEqual([cherry, banana], list(TestFruit.objects.exclude(pk=pear.pk).order_by("-name")[:2]))
