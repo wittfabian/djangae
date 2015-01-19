@@ -155,7 +155,7 @@ def parse_constraint(child, connection, negated=False):
         # When new instance is created, automatic primary key 'id' does not generate '_idx_iexact_id'.
         # As the primary key 'id' (AutoField) is integer and is always case insensitive, we can deal with 'id_iexact=' query by using 'exact' rather than 'iexact'.
         op = "exact"
-    
+
     if constraint.field.db_type(connection) in ("bytes", "text"):
         raise NotSupportedError("Text and Blob fields are not indexed by the datastore, so you can't filter on them")
 
@@ -946,18 +946,20 @@ class UpdateCommand(object):
             for index in special_indexes_for_column(self.model, field.column):
                 indexer = REQUIRES_SPECIAL_INDEXES[index]
                 values = indexer.prep_value_for_database(value)
+                indexes_ready = False
 
                 if values:
-                    if type(values[0]) == list:
-                        # Here add field for each column of an index (icontains, contains)
-                        i = 0
-                        for v in values:
-                            result[indexer.indexed_column_name(field.column, number=i)] = v
-                            i += 1
-                    else:
-                        result[indexer.indexed_column_name(field.column)] = indexer.prep_value_for_database(value)
-                else:
-                    result[indexer.indexed_column_name(field.column)] = indexer.prep_value_for_database(value)
+                    if type(values) == list:
+                        if type(values[0]) == list:
+                            # Here add field for each column of an index (icontains, contains)
+                            i = 0
+                            indexes_ready = True
+                            for v in values:
+                                result[indexer.indexed_column_name(field.column, number=i)] = v
+                                i += 1
+
+                if not indexes_ready:
+                    result[indexer.indexed_column_name(field.column)] = values
 
         if not constraints.constraint_checks_enabled(self.model):
             # The fast path, no constraint checking
