@@ -309,6 +309,25 @@ class BackendTests(TestCase):
         obj = TestFruit.objects.filter(color=grue)[0]
         self.assertEqual(type(obj.color), unicode)
 
+    def test_notsupportederror_thrown_on_too_many_inequalities(self):
+        TestFruit.objects.create(name="Apple", color="Green")
+        pear = TestFruit.objects.create(name="Pear", color="Green")
+        banana = TestFruit.objects.create(name="Banana", color="Yellow")
+
+        # Excluding one field is fine
+        self.assertItemsEqual([pear, banana], list(TestFruit.objects.exclude(name="Apple")))
+
+        # Excluding a field, and doing a > or < on another is not so fine
+        with self.assertRaises(DataError):
+            self.assertEqual(pear, TestFruit.objects.exclude(name="Apple").filter(color__lt="Yellow").get())
+
+        # Same with excluding two fields
+        with self.assertRaises(DataError):
+            list(TestFruit.objects.exclude(name="Apple").exclude(color="Yellow"))
+
+        # But apparently excluding the same field twice is OK
+        self.assertItemsEqual([banana], list(TestFruit.objects.exclude(name="Apple").exclude(name="Pear")))
+
 
 class ModelFormsetTest(TestCase):
     def test_reproduce_index_error(self):
