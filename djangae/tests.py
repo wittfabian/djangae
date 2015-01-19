@@ -641,7 +641,7 @@ class ConstraintTests(TestCase):
             instance.name = "One"
             instance.save()
 
-    def test_ignore_pk_on_unique_combinations_includes_fks(self):
+    def test_unique_combinations_are_returned_correctly(self):
         combos_one = _unique_combinations(ModelWithUniquesOnForeignKey, ignore_pk=True)
         combos_two = _unique_combinations(ModelWithUniquesOnForeignKey, ignore_pk=False)
 
