@@ -220,7 +220,7 @@ class ContainsIndexer(Indexer):
             length = len(value)
             result = list(set([value[i:j + 1] for i in xrange(length) for j in xrange(i, length)]))
             if len(result) > 500:
-                raise ValueError("Can't index for contains query, this value has too many permuatations")
+                raise ValueError("Can't index for contains query, this value has too many permutations")
 
         return result or None
 
