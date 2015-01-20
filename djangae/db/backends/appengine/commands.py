@@ -191,8 +191,8 @@ def parse_constraint(child, connection, negated=False):
             )
 
         indexer = REQUIRES_SPECIAL_INDEXES[op]
-        column = indexer.indexed_column_name(column)
         value = indexer.prep_value_for_query(value)
+        column = indexer.indexed_column_name(column, value=value)
         op = indexer.prep_query_operator(op)
 
     return column, op, value
@@ -992,7 +992,21 @@ class UpdateCommand(object):
             # Add special indexed fields
             for index in special_indexes_for_column(self.model, field.column):
                 indexer = REQUIRES_SPECIAL_INDEXES[index]
-                result[indexer.indexed_column_name(field.column)] = indexer.prep_value_for_database(value)
+                values = indexer.prep_value_for_database(value)
+                indexes_ready = False
+
+                if values:
+                    if type(values) == list:
+                        if type(values[0]) == list:
+                            # Here add field for each column of an index (icontains, contains)
+                            i = 0
+                            indexes_ready = True
+                            for v in values:
+                                result[indexer.indexed_column_name(field.column, number=i)] = v
+                                i += 1
+
+                if not indexes_ready:
+                    result[indexer.indexed_column_name(field.column)] = values
 
         if not constraints.constraint_checks_enabled(self.model):
             # The fast path, no constraint checking
