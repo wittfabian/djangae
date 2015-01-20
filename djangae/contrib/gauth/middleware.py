@@ -1,6 +1,6 @@
 from django.contrib.auth import authenticate, login, logout, get_user, BACKEND_SESSION_KEY, load_backend
 from django.contrib.auth.middleware import AuthenticationMiddleware as DjangoMiddleware
-from django.contrib.auth.models import BaseUserManager
+from django.contrib.auth.models import BaseUserManager, AnonymousUser
 
 from djangae.contrib.gauth.backends import AppEngineUserAPI
 
@@ -22,6 +22,7 @@ class AuthenticationMiddleware(DjangoMiddleware):
             # If we are logged in with django, but not longer logged in with Google
             # then log out
             logout(request)
+            django_user = None
         elif not django_user.is_anonymous() and django_user.username != google_user.user_id():
             # If the Google user changed, we need to log in with the new one
             logout(request)
@@ -29,7 +30,7 @@ class AuthenticationMiddleware(DjangoMiddleware):
             if django_user:
                 login(request, django_user)
 
-        request.user = django_user
+        request.user = django_user or AnonymousUser()
 
         backend_str = request.session.get(BACKEND_SESSION_KEY)
 
