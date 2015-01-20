@@ -176,7 +176,7 @@ class IterableField(models.Field):
 
     def formfield(self, **kwargs):
         """ If this field has choices, then we can use a multiple choice field.
-            NB: The chioces must be set on *this* field, e.g. this_field = ListField(CharField(), choices=x)
+            NB: The choices must be set on *this* field, e.g. this_field = ListField(CharField(), choices=x)
             as opposed to: this_field = ListField(CharField(choices=x))
         """
         #Largely lifted straight from Field.formfield() in django.models.__init__.py

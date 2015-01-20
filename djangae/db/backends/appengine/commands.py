@@ -689,7 +689,7 @@ class SelectCommand(object):
 
         # If we're manually excluding PKs, and we've specified a limit to the results
         # we need to make sure that we grab more than we were asked for otherwise we could filter
-        # out too many! These are again limited back to the original requeste limite
+        # out too many! These are again limited back to the original request limit
         # while we're processing the results later
         excluded_pk_count = 0
         if self.excluded_pks and self.limits[1]:

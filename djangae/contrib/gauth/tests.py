@@ -79,7 +79,7 @@ class MiddlewareTests(TestCase):
         user = get_user(request)
         self.assertFalse(user.is_authenticated())
 
-        # Check that running the middelware when the Google users API doesn't know the current
+        # Check that running the middleware when the Google users API doesn't know the current
         # user still leaves us as an anonymous users.
         with sleuth.switch('djangae.contrib.gauth.middleware.users.get_current_user', lambda: None):
             middleware.process_request(request)
