@@ -22,6 +22,12 @@ class AuthenticationMiddleware(DjangoMiddleware):
             # If we are logged in with django, but not longer logged in with Google
             # then log out
             logout(request)
+        elif not django_user.is_anonymous() and django_user.username != google_user.user_id():
+            # If the Google user changed, we need to log in with the new one
+            logout(request)
+            django_user = authenticate(google_user=google_user)
+            if django_user:
+                login(request, django_user)
 
         request.user = django_user
 
