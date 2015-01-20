@@ -91,18 +91,11 @@ def process_task_queues(queue_name=None):
             tasks = _get_queued_tasks(stub, queue_name)
 
 class TestCase(test.TestCase):
-    def __init__(self, *args, **kwargs):
-        self.taskqueue_stub = None
-        super(TestCase, self).__init__(*args, **kwargs)
-
-    def setUp(self):
+    def _fixture_setup(self):
+        super(TestCase, self)._fixture_setup()
         self.taskqueue_stub = apiproxy_stub_map.apiproxy.GetStub("taskqueue")
-        super(TestCase, self).setUp()
-
-    def tearDown(self):
-        super(TestCase, self).tearDown()
         if self.taskqueue_stub:
-            _flush_tasks(self.taskqueue_stub) # Make sure we clear the queue after every test
+            _flush_tasks(self.taskqueue_stub) # Make sure we clear the queue before every test
 
     def assertNumTasksEquals(self, num, queue_name='default'):
         self.assertEqual(num, len(_get_queued_tasks(self.taskqueue_stub, queue_name, flush=False)))
