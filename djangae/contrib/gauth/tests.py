@@ -98,6 +98,26 @@ class MiddlewareTests(TestCase):
         self.assertEqual(user.email, '1@example.com')
         self.assertEqual(user.username, '111111111100000000001')
 
+    def test_account_switch(self):
+        def _get_user_one():
+            return users.User('1@example.com', _user_id='111111111100000000001')
+
+        def _get_user_two():
+            return users.User('2@example.com', _user_id='222222222200000000002')
+
+        request = HttpRequest()
+        SessionMiddleware().process_request(request) # Make the damn sessions work
+        middleware = AuthenticationMiddleware()
+
+        with sleuth.switch('djangae.contrib.gauth.middleware.users.get_current_user', _get_user_one):
+            middleware.process_request(request)
+
+        self.assertEqual(_get_user_one().user_id(), request.user.username)
+
+        with sleuth.switch('djangae.contrib.gauth.middleware.users.get_current_user', _get_user_two):
+            middleware.process_request(request)
+
+        self.assertEqual(_get_user_two().user_id(), request.user.username)
 
 @override_settings(AUTH_USER_MODEL='djangae.GaeDatastoreUser', AUTHENTICATION_BACKENDS=('djangae.contrib.gauth.backends.AppEngineUserAPI',))
 class CustomPermissionsUserModelBackendTest(TestCase):
