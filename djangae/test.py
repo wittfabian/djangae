@@ -26,12 +26,13 @@ def inconsistent_db(probability=0, connection='default'):
     stub = apiproxy_stub_map.apiproxy.GetStub('datastore_v3')
 
     # Set the probability of the datastore stub
+    original_policy = stub._consistency_policy
     stub.SetConsistencyPolicy(datastore_stub_util.PseudoRandomHRConsistencyPolicy(probability=probability))
-
-    yield
-
-    # Restore to consistent mode
-    stub.SetConsistencyPolicy(datastore_stub_util.PseudoRandomHRConsistencyPolicy(probability=1))
+    try:
+        yield
+    finally:
+        # Restore to consistent mode
+        stub.SetConsistencyPolicy(original_policy)
 
 
 def _get_queued_tasks(stub, queue_name=None, flush=True):
