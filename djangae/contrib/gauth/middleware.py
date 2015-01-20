@@ -1,6 +1,9 @@
-from django.contrib.auth import authenticate, login, logout, get_user, BACKEND_SESSION_KEY
+from django.contrib.auth import authenticate, login, logout, get_user, BACKEND_SESSION_KEY, load_backend
 from django.contrib.auth.middleware import AuthenticationMiddleware as DjangoMiddleware
 from django.contrib.auth.models import BaseUserManager
+
+from djangae.contrib.gauth.backends import AppEngineUserAPI
+
 from google.appengine.api import users
 
 
@@ -24,20 +27,25 @@ class AuthenticationMiddleware(DjangoMiddleware):
 
         backend_str = request.session.get(BACKEND_SESSION_KEY)
 
-        # Now make sure we update is_superuser and is_staff appropriately
-        if backend_str == 'djangae.contrib.gauth.backends.AppEngineUserAPI':
-            is_superuser = users.is_current_user_admin()
-            google_email = BaseUserManager.normalize_email(users.get_current_user().email())
-            resave = False
+        if backend_str:
+            backend = load_backend(backend_str)
 
-            if is_superuser != django_user.is_superuser:
-                django_user.is_superuser = django_user.is_staff = is_superuser
-                resave = True
+            # We only do this next bit if the user was authenticated with the AppEngineUserAPI
+            # backend, or one of its subclasses
+            if isinstance(backend, AppEngineUserAPI):
+                # Now make sure we update is_superuser and is_staff appropriately
+                is_superuser = users.is_current_user_admin()
+                google_email = BaseUserManager.normalize_email(users.get_current_user().email())
+                resave = False
 
-            # for users which already exist, we want to verify that their email is still correct
-            if django_user.email != google_email:
-                django_user.email = google_email
-                resave = True
+                if is_superuser != django_user.is_superuser:
+                    django_user.is_superuser = django_user.is_staff = is_superuser
+                    resave = True
 
-            if resave:
-                django_user.save()
+                # for users which already exist, we want to verify that their email is still correct
+                if django_user.email != google_email:
+                    django_user.email = google_email
+                    resave = True
+
+                if resave:
+                    django_user.save()
