@@ -7,8 +7,11 @@ class MapReduceTask(object):
         Mapreduce base class, inherit this in a statically defined class and
         use .start() to run a mapreduce task
 
-        You must define a staticmethod 'map' which takes in an single arg
-        Optionally define a staticmethod 'reduce' for the reduce stage (Not Implemented)
+        You must define a staticmethod 'map' which takes in an arg of the entity being mapped over.
+        Optionally define a staticmethod 'reduce' for the reduce stage (Not Implemented).
+
+        You can pass any additional args and/or kwargs to .start(), which will then be passed into
+        each call of .map() for you.
 
     """
     shard_count = 3
