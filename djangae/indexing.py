@@ -101,7 +101,7 @@ class Indexer(object):
 
     def prep_value_for_database(self, value): raise NotImplementedError()
     def prep_value_for_query(self, value): raise NotImplementedError()
-    def indexed_column_name(self, field_column, *args, **kwargs): raise NotImplementedError()
+    def indexed_column_name(self, field_column, value): raise NotImplementedError()
     def prep_query_operator(self, op): return "exact"
 
     def unescape(self, value):
@@ -123,7 +123,7 @@ class IExactIndexer(Indexer):
     def prep_value_for_query(self, value):
         return value.lower()
 
-    def indexed_column_name(self, field_column, *args, **kwargs):
+    def indexed_column_name(self, field_column, value):
         return "_idx_iexact_{0}".format(field_column)
 
 
@@ -144,7 +144,7 @@ class DayIndexer(Indexer):
             value = datetime.datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
         return value.day
 
-    def indexed_column_name(self, field_column, *args, **kwargs):
+    def indexed_column_name(self, field_column, value):
         return "_idx_day_{0}".format(field_column)
 
 
@@ -166,7 +166,7 @@ class YearIndexer(Indexer):
 
         return value.year
 
-    def indexed_column_name(self, field_column, *args, **kwargs):
+    def indexed_column_name(self, field_column, value):
         return "_idx_year_{0}".format(field_column)
 
 
@@ -188,7 +188,7 @@ class MonthIndexer(Indexer):
 
         return value.month
 
-    def indexed_column_name(self, field_column, *args, **kwargs):
+    def indexed_column_name(self, field_column, value):
         return "_idx_month_{0}".format(field_column)
 
 
@@ -209,7 +209,7 @@ class WeekDayIndexer(Indexer):
     def prep_value_for_query(self, value):
         return value
 
-    def indexed_column_name(self, field_column, *args, **kwargs):
+    def indexed_column_name(self, field_column, value):
         return "_idx_week_day_{0}".format(field_column)
 
 
@@ -231,18 +231,6 @@ class ContainsIndexer(Indexer):
 
             length = len(value)
             result = list(set([value[i:j + 1] for i in xrange(length) for j in xrange(i, length)]))
-            if len(result) > 500:
-                # Here we are dividing all combinations to spread them across columns (up to 500 results in each)
-                result.sort(key = lambda s: len(s))
-                chunks = [ [] for x in range(MAX_COLUMNS_PER_SPECIAL_INDEX) ]
-                current_chunk = 0
-                for s in result:
-                    if len(s) <= CHARACTERS_PER_COLUMN[current_chunk]:
-                        chunks[current_chunk].append(s)
-                    else:
-                        current_chunk += 1
-                        chunks[current_chunk].append(s)
-                result = chunks
 
         return result or None
 
@@ -252,19 +240,14 @@ class ContainsIndexer(Indexer):
             value = value[1:-1]
         return value
 
-    def indexed_column_name(self, field_column, *args, **kwargs):
+    def indexed_column_name(self, field_column, value):
+        # This we use when we actually query to return the right field for a given
+        # value length
+        length = len(value)
         column_number = 0
-        if kwargs.has_key('number'):
-            # This is if we want to force method to return field of given number
-            # We use it for creating fields in Datastore
-            column_number = kwargs['number']
-        elif kwargs.has_key('value'):
-            # This we use when we actually query to return the right field for a given
-            # value length
-            length = len(kwargs['value'])
-            for x in CHARACTERS_PER_COLUMN:
-                if length > x:
-                    column_number += 1
+        for x in CHARACTERS_PER_COLUMN:
+            if length > x:
+                column_number += 1
         return "_idx_contains_{0}_{1}".format(field_column, column_number)
 
 class IContainsIndexer(ContainsIndexer):
@@ -272,8 +255,8 @@ class IContainsIndexer(ContainsIndexer):
         result = super(IContainsIndexer, self).prep_value_for_database(value.lower())
         return result if result else None
 
-    def indexed_column_name(self, field_column, *args, **kwargs):
-        column_name = super(IContainsIndexer, self).indexed_column_name(field_column, *args, **kwargs)
+    def indexed_column_name(self, field_column, value):
+        column_name = super(IContainsIndexer, self).indexed_column_name(field_column, value)
         return column_name.replace('_idx_contains_', '_idx_icontains_')
 
     def prep_value_for_query(self, value):
@@ -303,7 +286,7 @@ class EndsWithIndexer(Indexer):
             value = value[1:]
         return value
 
-    def indexed_column_name(self, field_column, *args, **kwargs):
+    def indexed_column_name(self, field_column, value):
         return "_idx_endswith_{0}".format(field_column)
 
 
@@ -318,7 +301,7 @@ class IEndsWithIndexer(EndsWithIndexer):
     def prep_value_for_query(self, value):
         return super(IEndsWithIndexer, self).prep_value_for_query(value.lower())
 
-    def indexed_column_name(self, field_column, *args, **kwargs):
+    def indexed_column_name(self, field_column, value):
         return "_idx_iendswith_{0}".format(field_column)
 
 
@@ -349,7 +332,7 @@ class StartsWithIndexer(Indexer):
 
         return value
 
-    def indexed_column_name(self, field_column, *args, **kwargs):
+    def indexed_column_name(self, field_column, value):
         return "_idx_startswith_{0}".format(field_column)
 
 
@@ -363,7 +346,7 @@ class IStartsWithIndexer(StartsWithIndexer):
     def prep_value_for_query(self, value):
         return super(IStartsWithIndexer, self).prep_value_for_query(value.lower())
 
-    def indexed_column_name(self, field_column, *args, **kwargs):
+    def indexed_column_name(self, field_column, value):
         return "_idx_istartswith_{0}".format(field_column)
 
 

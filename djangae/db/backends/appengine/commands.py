@@ -988,25 +988,30 @@ class UpdateCommand(object):
         instance_kwargs = {field.attname:value for field, param, value in self.values}
         instance = MockInstance(**instance_kwargs)
         for field, param, value in self.values:
-            result[field.column] = get_prepared_db_value(self.connection, instance, field, raw=True)
+            column_value = get_prepared_db_value(self.connection, instance, field, raw=True)
+
+            result[field.column] = column_value
+
             # Add special indexed fields
             for index in special_indexes_for_column(self.model, field.column):
                 indexer = REQUIRES_SPECIAL_INDEXES[index]
-                values = indexer.prep_value_for_database(value)
-                indexes_ready = False
+                values = indexer.prep_value_for_database(column_value)
 
-                if values:
-                    if type(values) == list:
-                        if type(values[0]) == list:
-                            # Here add field for each column of an index (icontains, contains)
-                            i = 0
-                            indexes_ready = True
-                            for v in values:
-                                result[indexer.indexed_column_name(field.column, number=i)] = v
-                                i += 1
+                if values is None:
+                    continue
 
-                if not indexes_ready:
-                    result[indexer.indexed_column_name(field.column)] = values
+                if not hasattr(values, "__iter__"):
+                    values = [ values ]
+
+                for value in values:
+                    column = indexer.indexed_column_name(field.column, value)
+                    if column in result:
+                        if not isinstance(result[column], list):
+                            result[column] = [ result[column], value ]
+                        else:
+                            result[column].append(value)
+                    else:
+                        result[column] = value
 
         if not constraints.constraint_checks_enabled(self.model):
             # The fast path, no constraint checking
