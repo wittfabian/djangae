@@ -94,6 +94,9 @@ class TestFruit(models.Model):
     color = models.CharField(max_length=100)
     is_mouldy = models.BooleanField(default=False)
 
+    class Meta:
+        ordering = ("color",)
+
     def __unicode__(self):
         return self.name
 
@@ -334,7 +337,7 @@ class BackendTests(TestCase):
             list(TestFruit.objects.exclude(origin="England").exclude(color="Yellow"))
 
         # But apparently excluding the same field twice is OK
-        self.assertItemsEqual([banana], list(TestFruit.objects.exclude(origin="England").exclude(name="Pear")))
+        self.assertItemsEqual([banana], list(TestFruit.objects.exclude(origin="England").exclude(name="Pear").order_by("origin")))
 
     def test_excluding_pks_is_emulated(self):
         apple = TestFruit.objects.create(name="Apple", color="Green", is_mouldy=True, origin="England")
@@ -343,7 +346,7 @@ class BackendTests(TestCase):
         pear = TestFruit.objects.create(name="Pear", color="Green", origin="England")
 
         self.assertEqual([apple, pear], list(TestFruit.objects.filter(origin__lt="Germany").exclude(pk=banana.pk).exclude(pk=cherry.pk).order_by("origin")))
-        self.assertEqual([apple, cherry], list(TestFruit.objects.exclude(origin="Dominican Republic").exclude(pk=pear.pk)))
+        self.assertEqual([apple, cherry], list(TestFruit.objects.exclude(origin="Dominican Republic").exclude(pk=pear.pk).order_by("origin")))
         self.assertEqual([], list(TestFruit.objects.filter(is_mouldy=True).filter(color="Green", origin__gt="England").exclude(pk=pear.pk).order_by("-origin")))
         self.assertEqual([cherry, banana], list(TestFruit.objects.exclude(pk=pear.pk).order_by("-name")[:2]))
         self.assertEqual([banana, apple], list(TestFruit.objects.exclude(pk=pear.pk).order_by("origin", "name")[:2]))
