@@ -1430,6 +1430,20 @@ class IterableFieldTests(TestCase):
             instance.set_field = "Bananas"
             instance.save()
 
+    def test_empty_list_queryable_with_is_null(self):
+        instance = IterableFieldModel.objects.create()
+
+        self.assertTrue(IterableFieldModel.objects.filter(set_field__isnull=True).exists())
+
+        instance.set_field.add(1)
+        instance.save()
+
+        self.assertFalse(IterableFieldModel.objects.filter(set_field__isnull=True).exists())
+        self.assertTrue(IterableFieldModel.objects.filter(set_field__isnull=False).exists())
+
+        self.assertFalse(IterableFieldModel.objects.exclude(set_field__isnull=False).exists())
+        self.assertTrue(IterableFieldModel.objects.exclude(set_field__isnull=True).exists())
+
 
 from djangae.fields import RelatedSetField
 
