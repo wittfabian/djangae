@@ -34,6 +34,9 @@ class IterableField(models.Field):
         if value is None:
             raise ValueError("You can't query an iterable field with None")
 
+        if lookup_type == 'isnull' and value in (True, False):
+            return value
+
         if lookup_type != 'exact' and lookup_type != 'in':
             raise ValueError("You can only query using exact and in lookups on iterable fields")
 

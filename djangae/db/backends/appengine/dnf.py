@@ -88,8 +88,18 @@ def process_literal(node, is_pk_filter, excluded_pks, filtered_columns=None, neg
                 return ('AND', [('LIT', IMPOSSIBLE_FILTER)]), filtered_columns
             return ('OR', [('LIT', (column, '=', x)) for x in value]), filtered_columns
     elif op == "isnull":
-        op = "exact"
-        value = None
+        if negated:
+            value = not value
+            negated = not negated
+
+        if not value:
+            lits = []
+            lits.append(('LIT', (column, '>', None)))
+            lits.append(('LIT', (column, '<', None)))
+            return ('OR', lits), filtered_columns
+        else:
+            op = "exact"
+            value = None
 
     if not OPERATORS_MAP.get(op):
         raise NotSupportedError("Unsupported operator %s" % op)
