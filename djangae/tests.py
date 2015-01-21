@@ -206,7 +206,7 @@ class CachingTests(TestCase):
         self.assertEqual(instance_from_cache, instance_from_database)
 
     def test_context_cache_cleared_after_request(self):
-        """ The context cache should be cleared bewteen requests. """
+        """ The context cache should be cleared between requests. """
         UniqueModel.objects.create(unique_field="test")
         with sleuth.watch("google.appengine.api.datastore.Query.Run") as query:
             UniqueModel.objects.get(unique_field="test")
@@ -596,7 +596,7 @@ class ModelWithUniquesAndOverride(models.Model):
 
 class ConstraintTests(TestCase):
     """
-        Tests for unique constaint handling
+        Tests for unique constraint handling
     """
 
     def test_update_updates_markers(self):
