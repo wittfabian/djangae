@@ -487,7 +487,7 @@ class SelectCommand(object):
                 raise NotSupportedError("Cross-join WHERE constraints aren't supported: %s" % query.where.get_cols())
 
             from dnf import parse_dnf
-            self.where, columns, self.excluded_pks = parse_dnf(query.where, self.connection, ordering=query.order_by)
+            self.where, columns, self.excluded_pks = parse_dnf(query.where, self.connection, ordering=self.ordering)
 
         # DISABLE PROJECTION IF WE ARE FILTERING ON ONE OF THE PROJECTION_FIELDS
         for field in self.projection or []:
