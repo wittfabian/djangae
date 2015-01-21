@@ -207,7 +207,7 @@ MIDDLEWARE_CLASSES = (
 You can use Google Cloud SQL or sqlite (locally) instead of or along side the Datastore.
 
 Note that the Database backend and settings for the Datastore remain the same whether you're in local development or on
-App Engine Production, djanagae switches between the SDK and the production datastore appropriately.  However, with
+App Engine Production, djangae switches between the SDK and the production datastore appropriately.  However, with
 Cloud SQL you will need to switch the settings yourself, otherwise you could find yourself developing on your
 live database!
 
@@ -286,7 +286,7 @@ Instructions:
 1. Your class can also override attributes such as `shard_count`, `job_name`, and `queue_name` (see the code for all options).
 1. The model to map over can either be defined as a attribute on the class or can be passed in when you instantiate it.
 1. In your code, call `YourMapreduceClass().start()` to trigger the mapping of the `map` method over all of the instances of your model.
-1. You can optionally pass any additiona args and/or kwargs to the `.start()` method, which will then be passed into to each call of the `.map()` method for you.
+1. You can optionally pass any additional args and/or kwargs to the `.start()` method, which will then be passed into to each call of the `.map()` method for you.
 
 Note that currently only the 'map' stage is implemented.  There is currently no reduce stage, but you could contribute it :-).
  
