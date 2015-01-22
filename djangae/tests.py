@@ -841,9 +841,9 @@ class EdgeCaseTests(TestCase):
 
         self.u1 = TestUser.objects.create(username="A", email="test@example.com", last_login=datetime.datetime.now().date())
         self.u2 = TestUser.objects.create(username="B", email="test@example.com", last_login=datetime.datetime.now().date())
-        TestUser.objects.create(username="C", email="test2@example.com", last_login=datetime.datetime.now().date())
-        TestUser.objects.create(username="D", email="test3@example.com", last_login=datetime.datetime.now().date())
-        TestUser.objects.create(username="E", email="test3@example.com", last_login=datetime.datetime.now().date())
+        self.u3 = TestUser.objects.create(username="C", email="test2@example.com", last_login=datetime.datetime.now().date())
+        self.u4 = TestUser.objects.create(username="D", email="test3@example.com", last_login=datetime.datetime.now().date())
+        self.u5 = TestUser.objects.create(username="E", email="test3@example.com", last_login=datetime.datetime.now().date())
 
         self.apple = TestFruit.objects.create(name="apple", color="red")
         self.banana = TestFruit.objects.create(name="banana", color="yellow")
@@ -1118,6 +1118,18 @@ class EdgeCaseTests(TestCase):
 
         with self.assertRaises(FieldError):
             users = list(TestUser.objects.order_by("bananas"))
+
+        users = TestUser.objects.filter(id__in=[self.u2.id, self.u3.id, self.u4.id]).order_by('id')
+        self.assertEqual(["B", "C", "D"], [x.username for x in users])
+
+        users = TestUser.objects.filter(id__in=[self.u2.id, self.u3.id, self.u4.id]).order_by('-id')
+        self.assertEqual(["D", "C", "B"], [x.username for x in users])
+
+        users = TestUser.objects.filter(id__in=[self.u1.id, self.u5.id, self.u3.id]).order_by('id')
+        self.assertEqual(["A", "C", "E"], [x.username for x in users])
+
+        users = TestUser.objects.filter(id__in=[self.u4.id, self.u5.id, self.u3.id, self.u1.id]).order_by('-id')
+        self.assertEqual(["E", "D", "C", "A"], [x.username for x in users])
 
     def test_dates_query(self):
         z_user = TestUser.objects.create(username="Z", email="z@example.com")

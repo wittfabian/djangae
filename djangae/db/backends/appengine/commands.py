@@ -258,7 +258,13 @@ class QueryByKeys(object):
 
         # If there was nothing in the cache, or we had more than one key, then use Get()
         if results is None:
-            results = sorted((x for x in datastore.Get(self.queries_by_key.keys()) if x is not None), cmp=partial(utils.django_ordering_comparison, self.ordering))
+            id_list = [i.id() for i in self.queries_by_key.keys()]
+            results = datastore.Get(self.queries_by_key.keys())
+            for idx, result in enumerate(results):
+                if isinstance(result, dict):
+                    result['__key__'] = id_list[idx]
+           
+            results = sorted((x for x in results if x is not None), cmp=partial(utils.django_ordering_comparison, self.ordering))
 
         results = [
             _convert_entity_based_on_query_options(x, opts)
