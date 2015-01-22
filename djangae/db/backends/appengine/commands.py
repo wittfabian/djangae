@@ -252,18 +252,15 @@ class QueryByKeys(object):
 
         # If we have a single key lookup going on, just hit the cache
         if len(self.queries_by_key) == 1:
-            ret = caching.get_from_cache_by_key(self.queries_by_key.keys()[0])
+            keys = self.queries_by_key.keys()
+            ret = caching.get_from_cache_by_key(keys[0])
             if ret is not None:
                 results = [ret]
 
         # If there was nothing in the cache, or we had more than one key, then use Get()
         if results is None:
-            id_list = [i.id() for i in self.queries_by_key.keys()]
-            results = datastore.Get(self.queries_by_key.keys())
-            for idx, result in enumerate(results):
-                if isinstance(result, dict):
-                    result['__key__'] = id_list[idx]
-           
+            keys = self.queries_by_key.keys()
+            results = datastore.Get(keys)
             results = sorted((x for x in results if x is not None), cmp=partial(utils.django_ordering_comparison, self.ordering))
 
         results = [

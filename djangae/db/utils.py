@@ -233,10 +233,13 @@ def django_ordering_comparison(ordering, lhs, rhs):
     DESCENDING = 2
 
     for order, direction in ordering:
-        if direction == ASCENDING and lhs[order] != rhs[order]:
-            return -1 if lhs[order] < rhs[order] else 1
-        elif direction == DESCENDING and lhs[order] != rhs[order]:
-            return 1 if lhs[order] < rhs[order] else -1
+        lhs_value = lhs.key() if order == "__key__" else lhs[order]
+        rhs_value = rhs.key() if order == "__key__" else rhs[order]
+
+        if direction == ASCENDING and lhs_value != rhs_value:
+            return -1 if lhs_value < rhs_value else 1
+        elif direction == DESCENDING and lhs_value != rhs_value:
+            return 1 if lhs_value < rhs_value else -1
 
     return 0
 
