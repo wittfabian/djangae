@@ -2,7 +2,7 @@ from django import forms
 from django.db import models
 from django.contrib import admin
 from djangae.db.constraints import UniquenessMixin
-from .models import UniqueAction, ActionLog
+from .models import UniqueAction, ActionLog, encode_model
 
 
 class UniqueActionAdmin(admin.ModelAdmin):
@@ -14,7 +14,7 @@ class UniqueActionAdmin(admin.ModelAdmin):
     def model_choices(cls):
         if not hasattr(cls, '_model_choices'):
             all_models = sorted([
-                (m._meta.db_table, m.__name__)
+                (encode_model(m), m.__name__)
                 for m in models.get_models()
                 if issubclass(m, UniquenessMixin)
             ], key=lambda x: x[1])
