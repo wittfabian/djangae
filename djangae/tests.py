@@ -1175,7 +1175,7 @@ class EdgeCaseTests(TestCase):
         self.assertItemsEqual(results, [self.u1, self.u2])
         # Check that using more than 30 items in an __in query not on the pk causes death
         query = TestUser.objects.filter(username__in=list([x for x in letters[:31]]))
-        # This currently rasies an error from App Engine, should we raise our own?
+        # This currently raises an error from App Engine, should we raise our own?
         self.assertRaises(Exception, list, query)
         # Check that it's ok with PKs though
         query = TestUser.objects.filter(pk__in=list(xrange(1, 32)))
