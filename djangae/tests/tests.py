@@ -44,8 +44,8 @@ from djangae.db import transaction
 from djangae.fields import ComputedCharField, ShardedCounterField, SetField, ListField, GenericRelationField
 from djangae.models import CounterShard
 from djangae.db.backends.appengine.dnf import parse_dnf
-from .storage import BlobstoreFileUploadHandler
-from .wsgi import DjangaeApplication
+from djangae.storage import BlobstoreFileUploadHandler
+from djangae.wsgi import DjangaeApplication
 from djangae.core import paginator
 from django.template import Template, Context
 
