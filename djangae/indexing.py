@@ -116,15 +116,11 @@ class IExactIndexer(Indexer):
         return len(value) < 500
 
     def prep_value_for_database(self, value):
-        if not value:
-            return None
         if isinstance(value, (int, long)):
             value = str(value)
         return value.lower()
 
     def prep_value_for_query(self, value):
-        if not value:
-            return None
         return value.lower()
 
     def indexed_column_name(self, field_column, value):
@@ -256,10 +252,8 @@ class ContainsIndexer(Indexer):
 
 class IContainsIndexer(ContainsIndexer):
     def prep_value_for_database(self, value):
-        if not value:
-            return None
         result = super(IContainsIndexer, self).prep_value_for_database(value.lower())
-        return result
+        return result if result else None
 
     def indexed_column_name(self, field_column, value):
         column_name = super(IContainsIndexer, self).indexed_column_name(field_column, value)
@@ -281,8 +275,6 @@ class EndsWithIndexer(Indexer):
         return isinstance(value, basestring) and len(value) < 500
 
     def prep_value_for_database(self, value):
-        if not value:
-            return None
         results = []
         for i in xrange(len(value)):
             results.append(value[i:])
@@ -303,8 +295,6 @@ class IEndsWithIndexer(EndsWithIndexer):
         Same as above, just all lower cased
     """
     def prep_value_for_database(self, value):
-        if not value:
-            return None
         result = super(IEndsWithIndexer, self).prep_value_for_database(value.lower())
         return result or None
 
@@ -324,8 +314,6 @@ class StartsWithIndexer(Indexer):
         return isinstance(value, basestring) and len(value) < 500
 
     def prep_value_for_database(self, value):
-        if not value:
-            return None
         if isinstance(value, datetime.datetime):
             value = value.strftime("%Y-%m-%d %H:%M:%S")
 
@@ -353,13 +341,9 @@ class IStartsWithIndexer(StartsWithIndexer):
         Same as above, just all lower cased
     """
     def prep_value_for_database(self, value):
-        if not value:
-            return None
         return super(IStartsWithIndexer, self).prep_value_for_database(value.lower())
 
     def prep_value_for_query(self, value):
-        if not value:
-            return None
         return super(IStartsWithIndexer, self).prep_value_for_query(value.lower())
 
     def indexed_column_name(self, field_column, value):
