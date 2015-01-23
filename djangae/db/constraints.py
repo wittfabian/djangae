@@ -1,6 +1,8 @@
 import datetime
 import logging
 
+from django.core.exceptions import NON_FIELD_ERRORS
+
 from google.appengine.ext import db
 from google.appengine.api.datastore import Key, Delete
 from google.appengine.datastore.datastore_rpc import TransactionOptions
