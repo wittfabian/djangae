@@ -422,11 +422,11 @@ class SelectCommand(object):
 
                 self.queried_fields.append(column)
         else:
-            self.queried_fields = [x.column for x in opts.fields if (not only_load) or (x.column in only_load)]
+            # If no specific fields were specified, select all fields if the query is distinct (as App Engine only supports
+            # distinct on projection queries) or the ones specified by only_load
+            self.queried_fields = [x.column for x in opts.fields if (x.column in only_load) or self.distinct]
 
         self.keys_only = keys_only or self.queried_fields == [opts.pk.column]
-
-        assert self.queried_fields
 
         # Projection queries don't return results unless all projected fields are
         # indexed on the model. This means if you add a field, and all fields on the model
@@ -439,6 +439,8 @@ class SelectCommand(object):
         try_projection = (self.keys_only is False) and bool(self.queried_fields)
 
         if not self.queried_fields:
+            # If we don't have any queried fields yet, it must have been an empty select and not a distinct
+            # and not an only/defer, so get all the fields
             self.queried_fields = [ x.column for x in opts.fields ]
 
         self.excluded_pks = set()
