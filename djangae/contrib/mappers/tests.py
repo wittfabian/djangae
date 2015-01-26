@@ -3,6 +3,7 @@ from django.db import models
 
 from djangae.test import process_task_queues
 from djangae.contrib.mappers.pipes import MapReduceTask
+import logging
 
 class TestNode(models.Model):
     data = models.CharField(max_length=32)
@@ -20,6 +21,10 @@ class TestMapperClass(MapReduceTask):
     name = 'test_map'
 
     @staticmethod
+    def finish(**kwargs):
+        logging.info('TestMapper1 Finished')
+
+    @staticmethod
     def map(entity, *args, **kwargs):
         if entity.counter % 2:
             entity.delete()
@@ -27,10 +32,15 @@ class TestMapperClass(MapReduceTask):
         else:
             yield ('remains', [entity.pk])
 
+
 class TestMapperClass2(MapReduceTask):
 
     model = TestNode
     name = 'test_map_2'
+
+    @staticmethod
+    def finish(**kwargs):
+        logging.info('TestMapper2 Finished')
 
     @staticmethod
     def map(entity, *args, **kwargs):

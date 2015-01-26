@@ -5,8 +5,8 @@ from mapreduce import context
 from pipeline.util import for_name
 
 
-DJANGAE_MAPREDUCE_BASE_PATH = '/_ah/mapreduce'
-
+BASE_PATH = '/_ah/mapreduce'
+PIPELINE_BASE_PATH = BASE_PATH + '/pipeline'
 
 class DjangaeMapperPipeline(MapperPipeline):
 
@@ -27,7 +27,7 @@ class DjangaeMapperPipeline(MapperPipeline):
                 "done_callback": self.get_callback_url(),
                 "done_callback_method": "GET",
                 "pipeline_id": self.pipeline_id,
-                "base_path": DJANGAE_MAPREDUCE_BASE_PATH
+                "base_path": BASE_PATH,
             },
             shard_count=shards,
             output_writer_spec=output_writer_spec,
@@ -45,6 +45,8 @@ class DjangaeMapperPipeline(MapperPipeline):
         ctx = context.get()
         params = ctx.mapreduce_spec.mapper.params
         finish_func = params.get('_finish', None)
+        if not finish_func:
+            return None
         finish_func = for_name(finish_func)
         return finish_func(**kwargs)
 
@@ -66,8 +68,6 @@ class MapReduceTask(object):
     pipeline_class = MapperPipeline # Defaults to MapperPipeline which just runs map stage
     job_name = None
     queue_name = 'default'
-    output_writer_spec = None
-    pipeline_base_path = '/_ah/mapreduce/pipeline'
     output_writer_spec = None
     mapreduce_parameters = {}
     countdown = None
@@ -98,22 +98,12 @@ class MapReduceTask(object):
             cls=self.__class__.__name__,
         )
 
-    def get_map_path(self):
-        return '{cls}.{func}'.format(
-            cls=self.get_class_path(),
-            func=self.map.__name__
-        )
-
-    def get_reduce_path(self):
-        return '{cls}.{func}'.format(
-            cls=self.get_class_path(),
-            func=self.reduce.__name__
-        )
-
-    def get_finish_path(self):
-        return '{cls}.{func}'.format(
-            cls=self.get_class_path(),
-            func=self.finish.__name__
+    @classmethod
+    def get_relative_path(cls, func):
+        return '{mod}.{cls}.{func}'.format(
+            mod=cls.__module__,
+            cls=cls.__name__,
+            func=func.__name__,
         )
 
     @staticmethod
@@ -122,13 +112,6 @@ class MapReduceTask(object):
             Override this definition with a staticmethod map definition
         """
         raise NotImplementedError('You must supply a map function')
-
-    @staticmethod
-    def reduce(key, values):
-        """
-            Override this with a static method for the reduce phase
-        """
-        raise NotImplementedError('You must supply a reduce function')
 
     @staticmethod
     def finish(**kwargs):
@@ -140,35 +123,21 @@ class MapReduceTask(object):
     def start(self, *args, **kwargs):
         mapper_parameters = {
             'model': self.get_model_app_(),
-            '_map': self.get_map_path(),
-            '_finish': self.get_finish_path(),
             'kwargs': kwargs,
             'args': args,
         }
+        if 'map' not in self.__class__.__dict__:
+            raise Exception('No static map method defined on class {cls}'.format(self.__class__))
+        mapper_parameters['_map'] = self.get_relative_path(self.map)
+        if 'finish' in self.__class__.__dict__:
+            mapper_parameters['_finish'] = self.get_relative_path(self.finish)
+
 
         pipe = DjangaeMapperPipeline(
             self.job_name,
-            'djangae.contrib.mappers.pipes.thunk_map',
+            'djangae.contrib.mappers.thunks.thunk_map',
             'djangae.contrib.mappers.readers.DjangoInputReader',
             params=mapper_parameters,
             shards=self.shard_count
         )
-        pipe.start(base_path=self.pipeline_base_path)
-
-
-
-def thunk_map(x):
-    """
-        This is the default map function that wraps the static map function.
-
-        It allows you to pass args and kwargs to your map function for defining
-        more dynamic mappers
-    """
-    from mapreduce import context
-    ctx = context.get()
-    params = ctx.mapreduce_spec.mapper.params
-    map_func = params.get('_map', None)
-    args = params.get('args', [])
-    kwargs = params.get('kwargs', {})
-    map_func = for_name(map_func)
-    return map_func(x, *args, **kwargs)
+        pipe.start(base_path=PIPELINE_BASE_PATH)
