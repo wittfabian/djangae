@@ -1,8 +1,10 @@
 from django.db import models
-from djangae.fields import ListField
 from django.dispatch import receiver
 from django.db.models.signals import post_save
 from django.db.models.loading import cache as model_cache
+
+from djangae.db import transaction
+from djangae.fields import ListField
 from djangae.contrib.mappers.pipes import MapReduceTask
 
 
@@ -44,7 +46,6 @@ class ActionLog(models.Model):
 def start_action(sender, instance, created, raw, **kwargs):
     if created == False:
         # we are saving because status is now "done"?
-        import pdb; pdb.set_trace()
         return
 
     mapper = ActionMapper(model=decode_model(instance.model))
@@ -56,9 +57,20 @@ class ActionMapper(MapReduceTask):
 
     @staticmethod
     def map(entity, *args, **kwargs):
-        import pdb; pdb.set_trace()
         #if entity.counter % 2:
         #    entity.delete()
         #    yield ('removed', [entity.pk])
         #else:
         yield ('remains', [entity.pk])
+
+    @staticmethod
+    def finish(*args, **kwargs):
+        action_pk = kwargs.get('action_pk')
+
+        @transaction.atomic
+        def finish_the_action():
+            action = UniqueAction.objects.get(pk=action_pk)
+            action.status = "done"
+            action.save()
+
+        finish_the_action()

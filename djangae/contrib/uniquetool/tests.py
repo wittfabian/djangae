@@ -27,6 +27,6 @@ class MapperTests(TestCase):
         process_task_queues()
 
         a = UniqueAction.objects.get()
-        import pdb; pdb.set_trace()
         self.assertEqual(a.status, "done")
+        self.assertEqual(0, a.actionlog_set.count())
 
