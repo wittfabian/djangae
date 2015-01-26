@@ -73,11 +73,12 @@ INEQUALITY_OPERATORS = frozenset(['>', '<', '<=', '>='])
 
 
 def get_field_from_column(model, column):
-    #FIXME: memoize this
-    for field in model._meta.fields:
-        if field.column == column:
-            return field
-    return None
+    if not hasattr(model._meta, 'cached_fields'):
+        model._meta.cached_fields = {}
+        for field in model._meta.fields:
+            model._meta.cached_fields[field.column] = field     
+    
+    return model._meta.cached_fields.get(column, None)
 
 
 def field_conv_year_only(value):
