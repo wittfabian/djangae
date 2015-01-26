@@ -93,6 +93,22 @@ def find_project_root():
     raise RuntimeError("Unable to locate app.yaml. Did you add it to skip_files?")
 
 
+def get_in_batches(queryset, batch_size=10):
+    """ prefetches the queryset in batches """
+    start = 0
+    if batch_size < 1:
+        raise Exception("batch_size must be > 0")
+    end = batch_size
+    while True:
+        batch = [x for x in queryset[start:end]]
+        for y in batch:
+            yield y
+        if len(batch) < batch_size:
+            break
+        start += batch_size
+        end += batch_size
+
+
 def djangae_webapp(request_handler):
     """ Decorator for wrapping a webapp2.RequestHandler to work with
     the django wsgi hander"""
