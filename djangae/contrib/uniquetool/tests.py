@@ -1,9 +1,11 @@
+from hashlib import md5
 from django.db import models
 from django.test import TestCase
+from google.appengine.api import datastore
 
 from .models import UniqueAction, encode_model
 from djangae.test import process_task_queues
-from djangae.db.constraints import UniquenessMixin
+from djangae.db.constraints import UniqueMarker, UniquenessMixin
 
 
 class TestModel(UniquenessMixin, models.Model):
@@ -18,8 +20,8 @@ class TestModel(UniquenessMixin, models.Model):
 class MapperTests(TestCase):
 
     def setUp(self):
-        TestModel.objects.create(name="name1", counter1=1, counter2=1)
-        TestModel.objects.create(name="name3", counter1=1, counter2=2)
+        self.i1 = TestModel.objects.create(name="name1", counter1=1, counter2=1)
+        self.i2 = TestModel.objects.create(name="name3", counter1=1, counter2=2)
 
     def test_check_ok(self):
         # A check should produce no errors.
@@ -29,4 +31,41 @@ class MapperTests(TestCase):
         a = UniqueAction.objects.get()
         self.assertEqual(a.status, "done")
         self.assertEqual(0, a.actionlog_set.count())
+
+    def test_check_missing_markers(self):
+        marker1 = "{}|name:{}".format(TestModel._meta.db_table, md5(self.i2.name).hexdigest())
+        marker_key = datastore.Key.from_path(UniqueMarker.kind(), marker1)
+        datastore.Delete(marker_key)
+        UniqueAction.objects.create(action_type="check", model=encode_model(TestModel))
+        process_task_queues()
+
+        a = UniqueAction.objects.get()
+        self.assertEqual(a.status, "done")
+        self.assertEqual(1, a.actionlog_set.count())
+        error = a.actionlog_set.all()[0]
+        instance_key = datastore.Key.from_path(TestModel._meta.db_table, self.i2.pk)
+        self.assertEqual(error.log_type, "missing_marker")
+        self.assertEqual(error.instance_key, str(instance_key))
+        self.assertEqual(error.marker_key, str(marker_key))
+
+    def test_check_missing_instance_attr(self):
+        marker1 = "{}|name:{}".format(TestModel._meta.db_table, md5(self.i2.name).hexdigest())
+        marker_key = datastore.Key.from_path(UniqueMarker.kind(), marker1)
+        marker = datastore.Get(marker_key)
+        marker['instance'] = None
+        datastore.Put(marker)
+
+        UniqueAction.objects.create(action_type="check", model=encode_model(TestModel))
+        process_task_queues()
+
+        a = UniqueAction.objects.get()
+        self.assertEqual(a.status, "done")
+        self.assertEqual(1, a.actionlog_set.count())
+        error = a.actionlog_set.all()[0]
+        instance_key = datastore.Key.from_path(TestModel._meta.db_table, self.i2.pk)
+        self.assertEqual(error.log_type, "missing_instance")
+        self.assertEqual(error.instance_key, str(instance_key))
+        self.assertEqual(error.marker_key, str(marker_key))
+
+
 

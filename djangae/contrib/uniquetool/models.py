@@ -1,11 +1,17 @@
-from django.db import models
+from django.db import models, connection
 from django.dispatch import receiver
 from django.db.models.signals import post_save
 from django.db.models.loading import cache as model_cache
 
+from google.appengine.api import datastore
+from google.appengine.ext import deferred
+
 from djangae.db import transaction
 from djangae.fields import ListField
 from djangae.contrib.mappers.pipes import MapReduceTask
+from djangae.db.utils import django_instance_to_entity
+from djangae.db.unique_utils import unique_identifiers_from_entity
+from djangae.db.constraints import UniqueMarker
 
 
 ACTION_TYPES = [
@@ -22,6 +28,15 @@ ACTION_STATUSES = [
     ('done', 'Done'),
 ]
 
+LOG_MSGS = [
+    ('missing_marker', "Marker for the unique constraint is missing"),
+    ('missing_instance', "Unique constraint marker exists, but doesn't point to the instance"),
+    ('already_assigned', "Marker is assigned to a different instance already"),
+]
+
+MAX_ERRORS = 100
+
+
 def encode_model(model):
     return "%s,%s" % (model._meta.app_label, model._meta.model_name)
 
@@ -33,13 +48,37 @@ class UniqueAction(models.Model):
     action_type = models.CharField(choices=ACTION_TYPES, max_length=100)
     model = models.CharField(max_length=100)
     status = models.CharField(choices=ACTION_STATUSES, default=ACTION_STATUSES[0][0], editable=False, max_length=100)
-    #logs = ListField(models.IntegerField(), blank=True, editable=False)
+    log_ids = ListField(models.IntegerField(), blank=True, editable=False)
 
 
 class ActionLog(models.Model):
     instance_key = models.CharField(max_length=255)
     marker_key = models.CharField(max_length=255)
+    log_type = models.CharField(max_length=255, choices=LOG_MSGS)
     action = models.ForeignKey(UniqueAction)
+
+
+def log(action_id, log_type, instance_key, marker_key, defer=True):
+    """ Shorthand for creating an ActionLog."""
+
+    @transaction.atomic(xg=True)
+    def log_action(action_id, log_type, instance_key, marker_key):
+        action = UniqueAction.objects.get(pk=action_id)
+        if len(action.log_ids) > MAX_ERRORS:
+            return
+
+        log = ActionLog.objects.create(
+            action_id=action_id,
+            log_type=log_type,
+            instance_key=instance_key,
+            marker_key=marker_key)
+        action.log_ids.append(log.pk)
+        action.save()
+
+    if defer:
+        deferred.defer(log_action, action_id, log_type, instance_key, marker_key)
+    else:
+        log_action(action_id, log_type, instance_key, marker_key)
 
 
 @receiver(post_save, sender=UniqueAction)
@@ -48,29 +87,86 @@ def start_action(sender, instance, created, raw, **kwargs):
         # we are saving because status is now "done"?
         return
 
-    mapper = ActionMapper(model=decode_model(instance.model))
-    mapper.start(action_pk=instance.pk)
+    kwargs = dict(
+        action_pk=instance.pk,
+    )
+
+    if instance.action_type == "clean":
+        kwargs.update(model=instance.model)
+        CleanMapper().start(**kwargs)
+    else:
+        kwargs.update(repair=instance.action_type=="repair")
+        CheckRepairMapper(model=decode_model(instance.model)).start(**kwargs)
 
 
-class ActionMapper(MapReduceTask):
-    name = 'action_map'
+def _finish(*args, **kwargs):
+    action_pk = kwargs.get('action_pk')
 
-    @staticmethod
-    def map(entity, *args, **kwargs):
-        #if entity.counter % 2:
-        #    entity.delete()
-        #    yield ('removed', [entity.pk])
-        #else:
-        yield ('remains', [entity.pk])
+    @transaction.atomic
+    def finish_the_action():
+        action = UniqueAction.objects.get(pk=action_pk)
+        action.status = "done"
+        action.save()
+
+    finish_the_action()
+
+
+class CheckRepairMapper(MapReduceTask):
+    name = 'action_mapper'
 
     @staticmethod
     def finish(*args, **kwargs):
-        action_pk = kwargs.get('action_pk')
+        _finish(*args, **kwargs)
 
-        @transaction.atomic
-        def finish_the_action():
-            action = UniqueAction.objects.get(pk=action_pk)
-            action.status = "done"
-            action.save()
+    @staticmethod
+    def map(instance, *args, **kwargs):
+        """ Figure out what markers the instance should use and verify they're attached to
+        this instance. Log any weirdness and in repair mode - recreate missing markers. """
+        action_id = kwargs.get("action_pk")
+        repair = kwargs.get("repair")
 
-        finish_the_action()
+        entity = django_instance_to_entity(connection, type(instance), instance._meta.fields, raw=False, instance=instance)
+        identifiers = unique_identifiers_from_entity(type(instance), entity, ignore_pk=True)
+        identifier_keys = [datastore.Key.from_path(UniqueMarker.kind(), i) for i in identifiers]
+
+        markers = datastore.Get(identifier_keys)
+        instance_key = str(entity.key())
+
+        for i, m in zip(identifier_keys, markers):
+            marker_key = str(i)
+            if m is None:
+                # Missig marker
+                if repair:
+                    return
+                    raise NotImplementedError
+                else:
+                    log(action_id, "missing_marker", instance_key, marker_key, defer=False)
+
+            elif not m['instance']:
+                # Marker with missining instance attribute
+                if repair:
+                    return
+                    raise NotImplementedError
+                else:
+                    log(action_id, "missing_instance", instance_key, marker_key, defer=False)
+
+            elif m['instance'] != instance_key:
+                # Marker already assigned to a different instance
+                log(action_id, "already_assigned", instance_key, marker_key, defer=False)
+                # Also log in repair mode as reparing would break the other instance.
+
+        yield ('_', [instance.pk])
+
+
+class CleanMapper(MapReduceTask):
+    name = 'action_clean_mapper'
+    model = UniqueMarker
+
+    @staticmethod
+    def finish(*args, **kwargs):
+        _finish(*args, **kwargs)
+
+    @staticmethod
+    def map(instance, *args, **kwargs):
+        """ The Clean mapper maps over all UniqueMarker instances. """
+        raise NotImplementedError

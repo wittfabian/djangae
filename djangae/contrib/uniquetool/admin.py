@@ -30,6 +30,7 @@ class UniqueActionAdmin(admin.ModelAdmin):
             return super(UniqueActionAdmin, self).get_form(request, obj=obj, **kwargs)
 
         form = super(UniqueActionAdmin, self).get_form(request, obj=obj, **kwargs)
+        # FIXME: this field should be optional when a "clean" action is selected
         form.base_fields['model'] = forms.ChoiceField(choices=self.model_choices())
         return form
 
