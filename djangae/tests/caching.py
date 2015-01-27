@@ -92,6 +92,8 @@ class CachingTestModel(models.Model):
             ("comb1", "comb2")
         ]
 
+        app_label = "djangae"
+
 
 class MemcacheCachingTests(TestCase):
     """

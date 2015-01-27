@@ -49,6 +49,7 @@ from djangae.storage import BlobstoreFileUploadHandler
 from djangae.wsgi import DjangaeApplication
 from djangae.core import paginator
 from django.template import Template, Context
+from djangae.fields import RelatedSetField
 
 try:
     import webtest
@@ -65,6 +66,8 @@ class TestUser(models.Model):
     def __unicode__(self):
         return self.username
 
+    class Meta:
+        app_label = "djangae"
 
 class UniqueModel(models.Model):
     unique_field = models.CharField(max_length=100, unique=True)
@@ -84,9 +87,14 @@ class UniqueModel(models.Model):
             ("unique_together_list_field", "unique_combo_one")
         ]
 
+        app_label = "djangae"
+
 
 class IntegerModel(models.Model):
     integer_field = models.IntegerField()
+
+    class Meta:
+        app_label = "djangae"
 
 
 class TestFruit(models.Model):
@@ -97,6 +105,7 @@ class TestFruit(models.Model):
 
     class Meta:
         ordering = ("color",)
+        app_label = "djangae"
 
     def __unicode__(self):
         return self.name
@@ -113,31 +122,153 @@ class Permission(models.Model):
 
     class Meta:
         ordering = ('user__username', 'perm')
+        app_label = "djangae"
 
 
 class SelfRelatedModel(models.Model):
     related = models.ForeignKey('self', blank=True, null=True)
 
+    class Meta:
+        app_label = "djangae"
 
 class MultiTableParent(models.Model):
     parent_field = models.CharField(max_length=32)
 
+    class Meta:
+        app_label = "djangae"
 
 class MultiTableChildOne(MultiTableParent):
     child_one_field = models.CharField(max_length=32)
+
+    class Meta:
+        app_label = "djangae"
 
 
 class MultiTableChildTwo(MultiTableParent):
     child_two_field = models.CharField(max_length=32)
 
+    class Meta:
+        app_label = "djangae"
+
 
 class Relation(models.Model):
-    pass
+    class Meta:
+        app_label = "djangae"
 
 
 class Related(models.Model):
     headline = models.CharField(max_length=500)
     relation = models.ForeignKey(Relation)
+
+    class Meta:
+        app_label = "djangae"
+
+
+class NullDate(models.Model):
+    date = models.DateField(null=True, default=None)
+    datetime = models.DateTimeField(null=True, default=None)
+    time = models.TimeField(null=True, default=None)
+
+    class Meta:
+        app_label = "djangae"
+
+
+class ModelWithUniques(models.Model):
+    name = models.CharField(max_length=64, unique=True)
+
+    class Meta:
+        app_label = "djangae"
+
+
+class ModelWithUniquesOnForeignKey(models.Model):
+    name = models.CharField(max_length=64, unique=True)
+    related_name = models.ForeignKey(ModelWithUniques, unique=True)
+
+    class Meta:
+        unique_together = [("name", "related_name")]
+        app_label = "djangae"
+
+
+class ModelWithDates(models.Model):
+    start = models.DateField()
+    end = models.DateField()
+
+    class Meta:
+        app_label = "djangae"
+
+
+class ModelWithUniquesAndOverride(models.Model):
+    name = models.CharField(max_length=64, unique=True)
+
+    class Djangae:
+        disable_constraint_checks = False
+
+    class Meta:
+        app_label = "djangae"
+
+
+class ISOther(models.Model):
+    name = models.CharField(max_length=500)
+
+    def __unicode__(self):
+        return "%s:%s" % (self.pk, self.name)
+
+    class Meta:
+        app_label = "djangae"
+
+class RelationWithoutReverse(models.Model):
+    name = models.CharField(max_length=500)
+
+    class Meta:
+        app_label = "djangae"
+
+
+class ISModel(models.Model):
+    related_things = RelatedSetField(ISOther)
+    limted_related = RelatedSetField(RelationWithoutReverse, limit_choices_to={'name': 'banana'}, related_name="+")
+    children = RelatedSetField("self", related_name="+")
+
+    class Meta:
+        app_label = "djangae"
+
+
+class RelationWithOverriddenDbTable(models.Model):
+    class Meta:
+        db_table = "bananarama"
+        app_label = "djangae"
+
+
+class GenericRelationModel(models.Model):
+    relation_to_content_type = GenericRelationField(ContentType, null=True)
+    relation_to_weird = GenericRelationField(RelationWithOverriddenDbTable, null=True)
+
+    class Meta:
+        app_label = "djangae"
+
+
+class SpecialIndexesModel(models.Model):
+    name = models.CharField(max_length=255)
+
+    def __unicode__(self):
+        return self.name
+
+    class Meta:
+        app_label = "djangae"
+
+
+class PaginatorModel(models.Model):
+    foo = models.IntegerField()
+
+    class Meta:
+        app_label = "djangae"
+
+
+class IterableFieldModel(models.Model):
+    set_field = SetField(models.CharField(max_length=1))
+    list_field = ListField(models.CharField(max_length=1))
+
+    class Meta:
+        app_label = "djangae"
 
 
 class CachingTests(TestCase):
@@ -228,11 +359,6 @@ class CachingTests(TestCase):
             UniqueModel.objects.get(unique_field="test")
             self.assertEqual(query.call_count, 2)
 
-
-class NullDate(models.Model):
-    date = models.DateField(null=True, default=None)
-    datetime = models.DateTimeField(null=True, default=None)
-    time = models.TimeField(null=True, default=None)
 
 class BackendTests(TestCase):
     def test_entity_matches_query(self):
@@ -592,26 +718,6 @@ class QueryNormalizationTests(TestCase):
         self.assertEqual(expected, parse_dnf(qs.query.where, connection=connection)[0])
 
 
-class ModelWithUniques(models.Model):
-    name = models.CharField(max_length=64, unique=True)
-
-class ModelWithUniquesOnForeignKey(models.Model):
-    name = models.CharField(max_length=64, unique=True)
-    related_name = models.ForeignKey(ModelWithUniques, unique=True)
-
-    class Meta:
-        unique_together = [("name", "related_name")]
-
-class ModelWithDates(models.Model):
-    start = models.DateField()
-    end = models.DateField()
-
-
-class ModelWithUniquesAndOverride(models.Model):
-    name = models.CharField(max_length=64, unique=True)
-
-    class Djangae:
-        disable_constraint_checks = False
 
 
 class ConstraintTests(TestCase):
@@ -1370,11 +1476,6 @@ class ShardedCounterTest(TestCase):
         self.assertEqual(0, instance.counter.value())
 
 
-class IterableFieldModel(models.Model):
-    set_field = SetField(models.CharField(max_length=1))
-    list_field = ListField(models.CharField(max_length=1))
-
-
 class IterableFieldTests(TestCase):
     def test_filtering_on_iterable_fields(self):
         list1 = IterableFieldModel.objects.create(
@@ -1477,22 +1578,6 @@ class IterableFieldTests(TestCase):
         self.assertTrue(IterableFieldModel.objects.exclude(set_field__isnull=True).exists())
 
 
-from djangae.fields import RelatedSetField
-
-class ISOther(models.Model):
-    name = models.CharField(max_length=500)
-
-    def __unicode__(self):
-        return "%s:%s" % (self.pk, self.name)
-
-class RelationWithoutReverse(models.Model):
-    name = models.CharField(max_length=500)
-
-class ISModel(models.Model):
-    related_things = RelatedSetField(ISOther)
-    limted_related = RelatedSetField(RelationWithoutReverse, limit_choices_to={'name': 'banana'}, related_name="+")
-    children = RelatedSetField("self", related_name="+")
-
 class InstanceSetFieldTests(TestCase):
 
     def test_basic_usage(self):
@@ -1571,13 +1656,6 @@ class InstanceSetFieldTests(TestCase):
         other.delete()
         self.assertEqual(main.related_things.count(), 0)
 
-class RelationWithOverriddenDbTable(models.Model):
-    class Meta:
-        db_table = "bananarama"
-
-class GenericRelationModel(models.Model):
-    relation_to_content_type = GenericRelationField(ContentType, null=True)
-    relation_to_weird = GenericRelationField(RelationWithOverriddenDbTable, null=True)
 
 class TestGenericRelationField(TestCase):
     def test_basic_usage(self):
@@ -1605,10 +1683,6 @@ class TestGenericRelationField(TestCase):
 
         instance = GenericRelationModel.objects.get()
         self.assertEqual(ct, instance.relation_to_weird)
-
-
-class PaginatorModel(models.Model):
-    foo = models.IntegerField()
 
 
 class DatastorePaginatorTest(TestCase):
@@ -1655,12 +1729,6 @@ class DatastorePaginatorTest(TestCase):
         self.assertEqual(p1.end_index(), 0)
         self.assertEqual([x for x in p1], [])
 
-
-class SpecialIndexesModel(models.Model):
-    name = models.CharField(max_length=255)
-
-    def __unicode__(self):
-        return self.name
 
 class TestSpecialIndexers(TestCase):
 
