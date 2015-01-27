@@ -1,3 +1,5 @@
+import threading
+
 from djangae.contrib import sleuth
 from django.db import models
 from django.core.cache import cache
@@ -6,6 +8,9 @@ from djangae.db import unique_utils
 from djangae.db import transaction
 from djangae.db.backends.appengine.context import ContextStack
 from google.appengine.api import datastore
+
+from djangae.db.backends.appengine import caching
+from djangae.db.caching import disable_cache
 
 class FakeEntity(dict):
     COUNTER = 1
@@ -328,6 +333,7 @@ class ContextCachingTests(TestCase):
         - filter/get by anything else does not (eventually consistent)
     """
 
+    @disable_cache(memcache=True, context=False)
     def test_transactions_get_their_own_context(self):
         with sleuth.watch("djangae.db.backends.appengine.context.ContextStack.push") as context_push:
             with transaction.atomic():
@@ -335,9 +341,28 @@ class ContextCachingTests(TestCase):
 
             self.assertTrue(context_push.called)
 
+    @disable_cache(memcache=True, context=False)
     def test_nested_transaction_doesnt_apply_to_outer_context(self):
-        pass
+        entity_data = {
+            "field1": "Apple",
+            "comb1": 1,
+            "comb2": "Cherry"
+        }
 
+        original = CachingTestModel.objects.create(**entity_data)
+        with transaction.atomic():
+            with transaction.atomic(independent=True):
+                inner = CachingTestModel.objects.get(pk=original.pk)
+                inner.field1 = "Banana"
+                inner.save()
+
+            outer = CachingTestModel.objects.get(pk=original.pk)
+            self.assertEqual("Apple", outer.field1)
+
+        original = CachingTestModel.objects.get(pk=original.pk)
+        self.assertEqual("Banana", original.field1)
+
+    @disable_cache(memcache=True, context=False)
     def test_outermost_transaction_applies_all_contexts_on_commit(self):
         entity_data = {
             "field1": "Apple",
@@ -347,41 +372,151 @@ class ContextCachingTests(TestCase):
 
         with transaction.atomic():
             with transaction.atomic(independent=True):
-                CachingTestModel.objects.create(**entity_data)
+                instance = CachingTestModel.objects.create(**entity_data)
 
             # At this point the instance should be unretrievable, even though we just created it
             try:
-                CachingTestModel.objects.get()
+                CachingTestModel.objects.get(pk=instance.pk)
                 self.fail("Unexpectedly was able to retrieve instance")
             except CachingTestModel.DoesNotExist:
                 pass
 
         # Should now exist in the cache
         with sleuth.switch("google.appengine.api.datastore.Get") as datastore_get:
-            CachingTestModel.objects.get()
+            CachingTestModel.objects.get(pk=instance.pk)
             self.assertFalse(datastore_get.called)
 
-
+    @disable_cache(memcache=True, context=False)
     def test_nested_rollback_doesnt_apply_on_outer_commit(self):
-        pass
+        entity_data = {
+            "field1": "Apple",
+            "comb1": 1,
+            "comb2": "Cherry"
+        }
 
-    def test_context_wiped_on_rollback(self):
-        pass
+        original = CachingTestModel.objects.create(**entity_data)
+        with transaction.atomic():
+            try:
+                with transaction.atomic(independent=True):
+                    inner = CachingTestModel.objects.get(pk=original.pk)
+                    inner.field1 = "Banana"
+                    inner.save()
+                    raise ValueError() # Will rollback the transaction
+            except ValueError:
+                pass
 
+            outer = CachingTestModel.objects.get(pk=original.pk)
+            self.assertEqual("Apple", outer.field1)
+
+        original = CachingTestModel.objects.get(pk=original.pk)
+        self.assertEqual("Apple", original.field1) # Shouldn't have changed
+
+    @disable_cache(memcache=True, context=False)
     def test_save_caches(self):
-        pass
+        entity_data = {
+            "field1": "Apple",
+            "comb1": 1,
+            "comb2": "Cherry"
+        }
 
-    def test_consistent_read_updates_cache(self):
-        pass
+        original = CachingTestModel.objects.create(**entity_data)
 
+        with sleuth.watch("google.appengine.api.datastore.Get") as datastore_get:
+            with sleuth.watch("django.core.cache.cache.get") as memcache_get:
+                original = CachingTestModel.objects.get(pk=original.pk)
+
+        self.assertFalse(datastore_get.called)
+        self.assertFalse(memcache_get.called)
+
+    @disable_cache(memcache=True, context=False)
+    def test_consistent_read_updates_cache_outside_transaction(self):
+        entity_data = {
+            "field1": "Apple",
+            "comb1": 1,
+            "comb2": "Cherry"
+        }
+
+        original = CachingTestModel.objects.create(**entity_data)
+
+        caching.context = threading.local() # Wipe out the context
+
+        CachingTestModel.objects.get(pk=original.pk) # Should update the cache
+
+        with sleuth.watch("google.appengine.api.datastore.Get") as datastore_get:
+            CachingTestModel.objects.get(pk=original.pk)
+
+        self.assertFalse(datastore_get.called)
+
+        caching.context = threading.local() # Wipe out the context
+
+        with transaction.atomic():
+            CachingTestModel.objects.get(pk=original.pk) # Should *not* update the cache
+
+        with sleuth.watch("google.appengine.api.datastore.Get") as datastore_get:
+            CachingTestModel.objects.get(pk=original.pk)
+
+        self.assertTrue(datastore_get.called)
+
+    @disable_cache(memcache=True, context=False)
     def test_inconsistent_read_doesnt_update_cache(self):
-        pass
+        entity_data = {
+            "field1": "Apple",
+            "comb1": 1,
+            "comb2": "Cherry"
+        }
 
+        original = CachingTestModel.objects.create(**entity_data)
+
+        caching._context = threading.local() # Wipe out the context
+
+        CachingTestModel.objects.all() # Inconsistent
+
+        with sleuth.watch("google.appengine.api.datastore.Get") as datastore_get:
+            CachingTestModel.objects.get(pk=original.pk)
+
+        self.assertTrue(datastore_get.called)
+
+    @disable_cache(memcache=True, context=False)
     def test_unique_filter_hits_cache(self):
-        pass
+        entity_data = {
+            "field1": "Apple",
+            "comb1": 1,
+            "comb2": "Cherry"
+        }
 
+        CachingTestModel.objects.create(**entity_data)
+
+        with sleuth.watch("google.appengine.api.datastore.Get") as datastore_get:
+            list(CachingTestModel.objects.filter(field1="Apple"))
+
+        self.assertFalse(datastore_get.called)
+
+    @disable_cache(memcache=True, context=False)
     def test_get_by_key_hits_cache(self):
-        pass
+        entity_data = {
+            "field1": "Apple",
+            "comb1": 1,
+            "comb2": "Cherry"
+        }
 
+        original = CachingTestModel.objects.create(**entity_data)
+
+        with sleuth.watch("google.appengine.api.datastore.Get") as datastore_get:
+            CachingTestModel.objects.get(pk=original.pk)
+
+        self.assertFalse(datastore_get.called)
+
+    @disable_cache(memcache=True, context=False)
     def test_unique_get_hits_cache(self):
-        pass
+        entity_data = {
+            "field1": "Apple",
+            "comb1": 1,
+            "comb2": "Cherry"
+        }
+
+        CachingTestModel.objects.create(**entity_data)
+
+        with sleuth.watch("google.appengine.api.datastore.Get") as datastore_get:
+            CachingTestModel.objects.get(field1="Apple")
+
+        self.assertFalse(datastore_get.called)

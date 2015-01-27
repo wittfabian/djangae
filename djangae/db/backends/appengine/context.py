@@ -3,9 +3,10 @@ from google.appengine.api import datastore
 
 class Context(object):
 
-    def __init__(self):
+    def __init__(self, stack):
         self.cache = {}
         self.reverse_cache = {}
+        self._stack = stack
 
     def apply(self, other):
         self.cache.update(other.cache)
@@ -39,6 +40,30 @@ class Context(object):
 
         del self.reverse_cache[entity_or_key]
 
+    def get_entity(self, identifier):
+        cache = {}
+
+        for ctx in self._stack.stack:
+            cache.update(ctx.cache)
+            if ctx == self:
+                break;
+
+        return cache.get(identifier)
+
+    def get_entity_by_key(self, key):
+        cache = {}
+
+        for ctx in self._stack.stack:
+            cache.update(ctx.reverse_cache)
+            if ctx == self:
+                break;
+
+        try:
+            identifier = cache[key][0]  # Pick any identifier
+        except KeyError:
+            return None
+
+        return self.get_entity(identifier)
 
 class ContextStack(object):
     """
@@ -47,15 +72,15 @@ class ContextStack(object):
     """
 
     def __init__(self):
-        self.stack = [ Context() ]
+        self.stack = [ Context(self) ]
         self.staged = []
 
     def push(self):
         self.stack.append(
-            copy.deepcopy(self.stack[-1])
+            Context(self) # Empty context
         )
 
-    def pop(self, apply_staged=False, clear_staged=False):
+    def pop(self, apply_staged=False, clear_staged=False, discard=False):
         """
             apply_staged: pop normally takes the top of the stack and adds it to a FIFO
             queue. By passing apply_staged it will pop to the FIFO queue then apply the
@@ -63,10 +88,15 @@ class ContextStack(object):
 
             clear_staged: pop, and then wipe out any staged contexts.
 
+            discard: Ignores the popped entry in the stack, it's just discarded
+
             The staged queue will be wiped out if the pop makes the size of the stack one,
             regardless of whether you pass clear_staged or not. This is for safety!
         """
-        self.staged.insert(0, self.stack.pop())
+        if not discard:
+            self.staged.insert(0, self.stack.pop())
+        else:
+            self.stack.pop()
 
         if apply_staged:
             while self.staged:
