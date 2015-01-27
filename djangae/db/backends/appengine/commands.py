@@ -933,7 +933,8 @@ class InsertCommand(object):
                     constraints.release_markers(to_delete)
                     raise
 
-                for ent, m in zip(self.entities, markers):
+                for ent, k, m in zip(self.entities, results, markers):
+                    ent.__key = k
                     constraints.update_instance_on_markers(ent, m)
 
                 return results
