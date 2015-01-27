@@ -1,4 +1,5 @@
 import threading
+import unittest
 
 from djangae.contrib import sleuth
 from django.db import models
@@ -362,6 +363,7 @@ class ContextCachingTests(TestCase):
         original = CachingTestModel.objects.get(pk=original.pk)
         self.assertEqual("Banana", original.field1)
 
+    @unittest.skip("The datastore seems broken, see: https://code.google.com/p/googleappengine/issues/detail?id=11631&thanks=11631&ts=1422376783")
     @disable_cache(memcache=True, context=False)
     def test_outermost_transaction_applies_all_contexts_on_commit(self):
         entity_data = {
