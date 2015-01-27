@@ -1,5 +1,8 @@
 import os
 import sys
+import time
+import logging
+
 
 def application_id():
     from google.appengine.api import app_identity
@@ -91,6 +94,40 @@ def find_project_root():
                 path = parent
 
     raise RuntimeError("Unable to locate app.yaml. Did you add it to skip_files?")
+
+
+def get_in_batches(queryset, batch_size=10):
+    """ prefetches the queryset in batches """
+    start = 0
+    if batch_size < 1:
+        raise Exception("batch_size must be > 0")
+    end = batch_size
+    while True:
+        batch = [x for x in queryset[start:end]]
+        for y in batch:
+            yield y
+        if len(batch) < batch_size:
+            break
+        start += batch_size
+        end += batch_size
+
+
+def retry_until_successful(func, *args, **kwargs):
+    from google.appengine.api import datastore_errors
+    from google.appengine.runtime import apiproxy_errors
+    from google.appengine.runtime import DeadlineExceededError
+    try:
+        timeout_ms = 100
+        while True:
+            try:
+                return func(*args, **kwargs)
+            except (datastore_errors.Error, apiproxy_errors.Error):
+                logging.info("Retrying function: %s(%s, %s)", str(func), str(args), str(kwargs))
+                time.sleep(timeout_ms / 1000000.0)
+                timeout_ms *= 2
+    except DeadlineExceededError:
+        logging.error("Timeout while running function: %s(%s, %s)", str(func), str(args), str(kwargs))
+        raise
 
 
 def djangae_webapp(request_handler):
