@@ -15,12 +15,9 @@ from djangae.db.constraints import UniqueMarker
 
 
 ACTION_TYPES = [
-    # Verify all models unique contraint markers exist and are assigned to it.
-    ('check', 'Check'),
-    # Recreate any missing markers
-    ('repair', 'Repair'),
-    # Remove any marker that isn't properly linked to an instance.
-    ('clean', 'Clean'),
+    ('check', 'Check'),  # Verify all models unique contraint markers exist and are assigned to it.
+    ('repair', 'Repair'),  # Recreate any missing markers
+    ('clean', 'Clean'),  # Remove any marker that isn't properly linked to an instance.
 ]
 
 ACTION_STATUSES = [
@@ -74,8 +71,12 @@ def _log_action(action_id, log_type, instance_key, marker_key):
         action.save()
     _atomic(action_id, log_type, instance_key, marker_key)
 
+
 def log(action_id, log_type, instance_key, marker_key, defer=True):
-    """ Shorthand for creating an ActionLog."""
+    """ Shorthand for creating an ActionLog.
+
+    Defer doesn't accept an inline function or an atomic wrapped function directly, so
+    we defer a helper function, which wraps the transactionaly decorated one. """
     if defer:
         deferred.defer(_log_action, action_id, log_type, instance_key, marker_key)
     else:
@@ -133,21 +134,24 @@ class CheckRepairMapper(MapReduceTask):
         markers = datastore.Get(identifier_keys)
         instance_key = str(entity.key())
 
+        markers_to_save = []
+
         for i, m in zip(identifier_keys, markers):
             marker_key = str(i)
             if m is None:
                 # Missig marker
                 if repair:
-                    return
-                    raise NotImplementedError
+                    new_marker = datastore.Entity(UniqueMarker.kind(), name=i.name())
+                    new_marker['instance'] = instance_key
+                    markers_to_save.append(new_marker)
                 else:
                     log(action_id, "missing_marker", instance_key, marker_key)
 
             elif not m['instance']:
                 # Marker with missining instance attribute
                 if repair:
-                    return
-                    raise NotImplementedError
+                    m['instance'] = instance_key
+                    markers_to_save.append(m)
                 else:
                     log(action_id, "missing_instance", instance_key, marker_key)
 
@@ -155,6 +159,9 @@ class CheckRepairMapper(MapReduceTask):
                 # Marker already assigned to a different instance
                 log(action_id, "already_assigned", instance_key, marker_key)
                 # Also log in repair mode as reparing would break the other instance.
+
+        if markers_to_save:
+            datastore.Put(markers_to_save)
 
         yield ('_', [instance.pk])
 
