@@ -337,7 +337,28 @@ class ContextCachingTests(TestCase):
         pass
 
     def test_outermost_transaction_applies_all_contexts_on_commit(self):
-        pass
+        entity_data = {
+            "field1": "Apple",
+            "comb1": 1,
+            "comb2": "Cherry"
+        }
+
+        with transaction.atomic():
+            with transaction.atomic(independent=True):
+                CachingTestModel.objects.create(**entity_data)
+
+            # At this point the instance should be unretrievable, even though we just created it
+            try:
+                CachingTestModel.objects.get()
+                self.fail("Unexpectedly was able to retrieve instance")
+            except CachingTestModel.DoesNotExist:
+                pass
+
+        # Should now exist in the cache
+        with sleuth.switch("google.appengine.api.datastore.Get") as datastore_get:
+            CachingTestModel.objects.get()
+            self.assertFalse(datastore_get.called)
+
 
     def test_nested_rollback_doesnt_apply_on_outer_commit(self):
         pass
