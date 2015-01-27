@@ -58,11 +58,9 @@ class ActionLog(models.Model):
     action = models.ForeignKey(UniqueAction)
 
 
-def log(action_id, log_type, instance_key, marker_key, defer=True):
-    """ Shorthand for creating an ActionLog."""
-
+def _log_action(action_id, log_type, instance_key, marker_key):
     @transaction.atomic(xg=True)
-    def log_action(action_id, log_type, instance_key, marker_key):
+    def _atomic(action_id, log_type, instance_key, marker_key):
         action = UniqueAction.objects.get(pk=action_id)
         if len(action.log_ids) > MAX_ERRORS:
             return
@@ -74,11 +72,14 @@ def log(action_id, log_type, instance_key, marker_key, defer=True):
             marker_key=marker_key)
         action.log_ids.append(log.pk)
         action.save()
+    _atomic(action_id, log_type, instance_key, marker_key)
 
+def log(action_id, log_type, instance_key, marker_key, defer=True):
+    """ Shorthand for creating an ActionLog."""
     if defer:
-        deferred.defer(log_action, action_id, log_type, instance_key, marker_key)
+        deferred.defer(_log_action, action_id, log_type, instance_key, marker_key)
     else:
-        log_action(action_id, log_type, instance_key, marker_key)
+        _log_action(action_id, log_type, instance_key, marker_key)
 
 
 @receiver(post_save, sender=UniqueAction)
@@ -140,7 +141,7 @@ class CheckRepairMapper(MapReduceTask):
                     return
                     raise NotImplementedError
                 else:
-                    log(action_id, "missing_marker", instance_key, marker_key, defer=False)
+                    log(action_id, "missing_marker", instance_key, marker_key)
 
             elif not m['instance']:
                 # Marker with missining instance attribute
@@ -148,11 +149,11 @@ class CheckRepairMapper(MapReduceTask):
                     return
                     raise NotImplementedError
                 else:
-                    log(action_id, "missing_instance", instance_key, marker_key, defer=False)
+                    log(action_id, "missing_instance", instance_key, marker_key)
 
             elif m['instance'] != instance_key:
                 # Marker already assigned to a different instance
-                log(action_id, "already_assigned", instance_key, marker_key, defer=False)
+                log(action_id, "already_assigned", instance_key, marker_key)
                 # Also log in repair mode as reparing would break the other instance.
 
         yield ('_', [instance.pk])
