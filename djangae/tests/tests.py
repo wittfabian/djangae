@@ -5,6 +5,7 @@ import datetime
 import unittest
 from string import letters
 from hashlib import md5
+import decimal
 
 # LIBRARIES
 from django.core.files.uploadhandler import StopFutureHandlers
@@ -37,7 +38,7 @@ from djangae.db.backends.appengine.dbapi import CouldBeSupportedError, NotSuppor
 from djangae.db.constraints import UniqueMarker, UniquenessMixin
 from djangae.db.unique_utils import _unique_combinations, unique_identifiers_from_entity
 from djangae.indexing import add_special_index
-from djangae.db.utils import entity_matches_query
+from djangae.db.utils import entity_matches_query, decimal_to_string, normalise_field_value
 from djangae.db.backends.appengine import caching
 from djangae.db.unique_utils import query_is_unique
 from djangae.db import transaction
@@ -91,7 +92,7 @@ class IntegerModel(models.Model):
 class TestFruit(models.Model):
     name = models.CharField(primary_key=True, max_length=32)
     origin = models.CharField(max_length=32, default="Unknown")
-    color = models.CharField(max_length=100, null=True)
+    color = models.CharField(max_length=100)
     is_mouldy = models.BooleanField(default=False)
 
     class Meta:
@@ -262,6 +263,22 @@ class BackendTests(TestCase):
         # query then it's a match
         entity["name"] = [ "Bob", "Fred", "Dave" ]
         self.assertTrue(entity_matches_query(entity, query))  # ListField test
+
+    def test_normalise_field_value(self):
+        self.assertEqual(u'0000475231073257', normalise_field_value(decimal.Decimal(475231073257)))
+        self.assertEqual(u'-0000475231073257', normalise_field_value(decimal.Decimal(-475231073257)))
+        self.assertEqual(u'0000000004752311', normalise_field_value(decimal.Decimal(4752310.73257)))
+        self.assertEqual(u'0000004752310733', normalise_field_value(decimal.Decimal(4752310732.57)))
+        self.assertEqual(datetime.datetime(2015, 1, 27, 2, 46, 8, 584258), normalise_field_value(datetime.datetime(2015, 1, 27, 2, 46, 8, 584258)))
+
+    def test_decimal_to_string(self):
+        self.assertEqual(u'0002312487812767', decimal_to_string(decimal.Decimal(2312487812767)))
+        self.assertEqual(u'-0002312487812767', decimal_to_string(decimal.Decimal(-2312487812767)))
+        self.assertEqual(u'002312487812', decimal_to_string(decimal.Decimal(2312487812), 12))
+        self.assertEqual(u'002387812.320', decimal_to_string(decimal.Decimal(2387812.32), 12, 3))
+        self.assertEqual(u'-002387812.513', decimal_to_string(decimal.Decimal(-2387812.513212), 12, 3))
+        self.assertEqual(u'0237812.000', decimal_to_string(decimal.Decimal(237812), 10, 3))
+        self.assertEqual(u'-0237812.210', decimal_to_string(decimal.Decimal(-237812.21), 10, 3))
 
     def test_gae_conversion(self):
         # A PK IN query should result in a single get by key
@@ -1217,13 +1234,6 @@ class EdgeCaseTests(TestCase):
         self.assertEqual(len(list(qry)), 1)
         qry = TestFruit.objects.filter(color__icontains='8901')
         self.assertEqual(len(list(qry)), 0)
-
-    def test_special_indexes_for_null_values(self):
-        obj = TestFruit.objects.create(name='pear', color=None)
-        indexes = ['icontains', 'contains', 'iexact', 'iendswith', 'endswith', 'istartswith', 'startswith']
-        for index in indexes:
-            add_special_index(TestFruit, 'color', index)
-        obj.save()
 
 
 

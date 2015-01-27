@@ -15,6 +15,10 @@ context.reverse_cache = {}
 
 
 def add_entity_to_context_cache(model, entity):
+    if not hasattr(context, "cache") or not hasattr(context, "reverse_cache"):
+        context.cache = {}
+        context.reverse_cache = {}
+
     identifiers = unique_identifiers_from_entity(model, entity)
 
     for identifier in identifiers:
@@ -29,6 +33,12 @@ def remove_entity_from_context_cache(entity):
 
 
 def remove_entity_from_context_cache_by_key(key):
+    if not hasattr(context, "cache"):
+        return
+
+    if not hasattr(context, "reverse_cache"):
+        return
+
     for identifier in context.reverse_cache.get(key, []):
         if identifier in context.cache:
             del context.cache[identifier]
@@ -48,6 +58,9 @@ def uncache_entity(model, entity):
 
 
 def get_from_cache_by_key(key):
+    if not hasattr(context, "reverse_cache"):
+        return None
+
     if key not in context.reverse_cache:
         return None
 
@@ -57,6 +70,9 @@ def get_from_cache_by_key(key):
 
 def get_from_cache(unique_identifier):
     if getattr(context, "cache_disabled", False):
+        return None
+
+    if not hasattr(context, "cache"):
         return None
 
     return context.cache.get(unique_identifier)
