@@ -3,6 +3,7 @@ import threading
 
 from google.appengine.api import datastore
 
+from django.core.cache import cache
 from django.core.signals import request_finished, request_started
 from django.dispatch import receiver
 
@@ -27,6 +28,16 @@ def ensure_context():
     if not hasattr(_context, "stack"):
         _context.stack = ContextStack()
 
+def _add_entity_to_memcache_by_key(model, key):
+    pass
+
+def _add_entity_to_memcache(model, entity, identifiers):
+    cache.set_many({ x: entity for x in identifiers})
+
+
+def _get_entity_from_memcache(identifier):
+    return cache.get(identifier)
+
 
 def add_entity_to_cache(model, entity, situation):
     ensure_context()
@@ -40,6 +51,11 @@ def add_entity_to_cache(model, entity, situation):
         return
 
     _context.stack.top.cache_entity(identifiers, entity, situation)
+
+    if situation == CachingSituation.DATASTORE_GET or (
+            situation == CachingSituation.DATASTORE_PUT and not datastore.IsInTransaction()
+        ):
+        _add_entity_to_memcache(model, entity, identifiers)
 
 
 def remove_entity_from_cache(entity):
@@ -58,6 +74,7 @@ def remove_entity_from_cache_by_key(key):
 def get_from_cache_by_key(key):
     ensure_context()
 
+    ret = None
     if _context.context_enabled:
         ret = _context.stack.top.get_entity_by_key(key)
         if ret is None:
@@ -71,13 +88,14 @@ def get_from_cache_by_key(key):
 def get_from_cache(unique_identifier):
     ensure_context()
 
+    ret = None
     if _context.context_enabled:
         ret = _context.stack.top.get_entity(unique_identifier)
         if ret is None:
             if _context.memcache_enabled:
-                pass #FIXME: Do memcache thing
+                ret = _get_entity_from_memcache(unique_identifier)
     elif _context.memcache_enabled:
-        pass # FIXME: Do memcache thing
+        ret = _get_entity_from_memcache(unique_identifier)
 
     return ret
 

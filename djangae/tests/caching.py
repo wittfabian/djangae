@@ -118,6 +118,7 @@ class MemcacheCachingTests(TestCase):
          - filter/get by anything else does not (eventually consistent)
     """
 
+    @disable_cache(memcache=False, context=True)
     def test_save_caches_outside_transaction_only(self):
         entity_data = {
             "field1": "Apple",
@@ -148,6 +149,7 @@ class MemcacheCachingTests(TestCase):
         for identifier in identifiers:
             self.assertIsNone(cache.get(identifier))
 
+    @disable_cache(memcache=False, context=True)
     def test_save_wipes_entity_from_cache_inside_transaction(self):
         entity_data = {
             "field1": "Apple",
@@ -171,6 +173,7 @@ class MemcacheCachingTests(TestCase):
         for identifier in identifiers:
             self.assertIsNone(cache.get(identifier))
 
+    @disable_cache(memcache=False, context=True)
     def test_consistent_read_updates_memcache_outside_transaction(self):
         entity_data = {
             "field1": "Apple",
@@ -198,6 +201,7 @@ class MemcacheCachingTests(TestCase):
         for identifier in identifiers:
             self.assertEqual(entity_data, cache.get(identifier))
 
+    @disable_cache(memcache=False, context=True)
     def test_eventual_read_doesnt_update_memcache(self):
         entity_data = {
             "field1": "Apple",
@@ -225,6 +229,7 @@ class MemcacheCachingTests(TestCase):
         for identifier in identifiers:
             self.assertIsNone(cache.get(identifier))
 
+    @disable_cache(memcache=False, context=True)
     def test_unique_filter_hits_memcache(self):
         entity_data = {
             "field1": "Apple",
@@ -240,6 +245,7 @@ class MemcacheCachingTests(TestCase):
 
         self.assertFalse(datastore_query.called)
 
+    @disable_cache(memcache=False, context=True)
     def test_non_unique_filter_hits_datastore(self):
         entity_data = {
             "field1": "Apple",
@@ -255,6 +261,7 @@ class MemcacheCachingTests(TestCase):
 
         self.assertTrue(datastore_query.called)
 
+    @disable_cache(memcache=False, context=True)
     def test_get_by_key_hits_memcache(self):
         entity_data = {
             "field1": "Apple",
@@ -270,6 +277,7 @@ class MemcacheCachingTests(TestCase):
 
         self.assertFalse(datastore_get.called)
 
+    @disable_cache(memcache=False, context=True)
     def test_get_by_key_hits_datastore_inside_transaction(self):
         entity_data = {
             "field1": "Apple",
@@ -286,6 +294,7 @@ class MemcacheCachingTests(TestCase):
 
         self.assertTrue(datastore_get.called)
 
+    @disable_cache(memcache=False, context=True)
     def test_unique_get_hits_memcache(self):
         entity_data = {
             "field1": "Apple",
@@ -301,6 +310,7 @@ class MemcacheCachingTests(TestCase):
 
         self.assertFalse(datastore_get.called)
 
+    @disable_cache(memcache=False, context=True)
     def test_unique_get_hits_datastore_inside_transaction(self):
         entity_data = {
             "field1": "Apple",
