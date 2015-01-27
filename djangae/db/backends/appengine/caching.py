@@ -11,6 +11,10 @@ logger = logging.getLogger("djangae")
 
 _context = threading.local()
 
+class CachingSituation:
+    DATASTORE_GET = 0
+    DATASTORE_PUT = 1
+
 def ensure_context():
     if not hasattr(_context, "memcache_enabled"):
         _context.memcache_enabled = True
@@ -22,12 +26,12 @@ def ensure_context():
         _context.stack = ContextStack()
 
 
-def add_entity_to_cache(model, entity):
+def add_entity_to_cache(model, entity, situation):
     ensure_context()
 
     identifiers = unique_identifiers_from_entity(model, entity)
 
-    _context.stack.top.cache_entity(identifiers, entity)
+    _context.stack.top.cache_entity(identifiers, entity, situation)
 
 
 def remove_entity_from_cache(entity):

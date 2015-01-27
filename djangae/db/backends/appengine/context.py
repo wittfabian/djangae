@@ -23,7 +23,7 @@ class Context(object):
             if k not in other.reverse_cache:
                 del self.reverse_cache[k]
 
-    def cache_entity(self, identifiers, entity):
+    def cache_entity(self, identifiers, entity, situation):
         assert hasattr(identifiers, "__iter__")
 
         for identifier in identifiers:
