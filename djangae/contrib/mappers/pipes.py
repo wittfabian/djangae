@@ -12,7 +12,7 @@ class DjangaeMapperPipeline(MapperPipeline):
 
     def run(self, job_name, handler_spec, input_reader_spec, output_writer_spec=None, params=None, shards=None):
         """
-            Overwritting this method allows us to pass the base_path properly, I know it's stupid but I think
+            Overwriting this method allows us to pass the base_path properly, I know it's stupid but I think
             this is the cleanest way that still gives us a working Pipeline that we can chain
         """
         if shards is None:
