@@ -1,6 +1,8 @@
 import logging
 import threading
 
+from google.appengine.api import datastore
+
 from django.core.signals import request_finished, request_started
 from django.dispatch import receiver
 
@@ -30,6 +32,12 @@ def add_entity_to_cache(model, entity, situation):
     ensure_context()
 
     identifiers = unique_identifiers_from_entity(model, entity)
+
+    # Don't cache on Get if we are inside a transaction, even in the context
+    # This is because transactions don't see the current state of the datastore
+    # We can still cache in the context on Put() but not in memcache
+    if situation == CachingSituation.DATASTORE_GET and datastore.IsInTransaction():
+        return
 
     _context.stack.top.cache_entity(identifiers, entity, situation)
 

@@ -10,13 +10,11 @@ import decimal
 # LIBRARIES
 from django.core.files.uploadhandler import StopFutureHandlers
 from django.core.cache import cache
-from django.core.signals import request_finished, request_started
 from django.core.exceptions import ValidationError
 from django.db import connections
 from django.db import DataError, models
 from django.db.models.query import Q
 from django.forms import ModelForm
-from django.http import HttpRequest
 from django.test import RequestFactory
 from django.utils.safestring import SafeText
 from django.forms.models import modelformset_factory
@@ -269,95 +267,6 @@ class IterableFieldModel(models.Model):
 
     class Meta:
         app_label = "djangae"
-
-
-class CachingTests(TestCase):
-    def test_query_is_unique(self):
-        qry = datastore.Query(UniqueModel._meta.db_table)
-        qry["unique_field ="] = "test"
-        self.assertTrue(query_is_unique(UniqueModel, qry))
-        del qry["unique_field ="]
-
-        qry["unique_field >"] = "test"
-        self.assertFalse(query_is_unique(UniqueModel, qry))
-        del qry["unique_field >"]
-
-        qry["unique_combo_one ="] = "one"
-        self.assertFalse(query_is_unique(UniqueModel, qry))
-
-        qry["unique_combo_two ="] = "two"
-        self.assertTrue(query_is_unique(UniqueModel, qry))
-
-    def test_insert_adds_to_context_cache(self):
-        original_keys = caching.context.cache.keys()
-        original_rc_keys = caching.context.reverse_cache.keys()
-
-        instance = UniqueModel.objects.create(unique_field="test")
-
-        #There are 3 unique combinations (id, unique_field, unique_combo), we should've cached under all of them
-        self.assertEqual(3, len(caching.context.cache.keys()) - len(original_keys))
-
-        new_keys = list(set(caching.context.reverse_cache.keys()) - set(original_rc_keys))
-        self.assertEqual(new_keys[0].id_or_name(), instance.pk)
-
-    def test_pk_queries_hit_the_context_cache(self):
-        instance = UniqueModel.objects.create(unique_field="test") #Create an instance
-
-        #With the context cache enabled, make sure we don't hit the DB
-        with sleuth.watch("google.appengine.api.datastore.Query.Run") as rpc_run:
-            with sleuth.watch("djangae.db.backends.appengine.caching.get_from_cache") as cache_hit:
-                UniqueModel.objects.get(pk=instance.pk)
-                self.assertTrue(cache_hit.called)
-                self.assertFalse(rpc_run.called)
-
-    def test_transactions_clear_the_context_cache(self):
-        UniqueModel.objects.create(unique_field="test") #Create an instance
-
-        with transaction.atomic():
-            self.assertFalse(caching.context.cache)
-            UniqueModel.objects.create(unique_field="test2", unique_combo_one=1) #Create an instance
-            self.assertTrue(caching.context.cache)
-
-        self.assertFalse(caching.context.cache)
-
-    def test_insert_then_unique_query_returns_from_cache(self):
-        UniqueModel.objects.create(unique_field="test")  # Create an instance
-
-        # With the context cache enabled, make sure we don't hit the DB
-        with sleuth.watch("google.appengine.api.datastore.Query.Run") as rpc_wrapper:
-            with sleuth.watch("djangae.db.backends.appengine.caching.get_from_cache") as cache_hit:
-                instance_from_cache = UniqueModel.objects.get(unique_field="test")
-                self.assertTrue(cache_hit.called)
-                self.assertFalse(rpc_wrapper.called)
-
-        # Disable the context cache, make sure that we hit the database
-        with caching.disable_context_cache():
-            with sleuth.watch("google.appengine.api.datastore.Query.Run") as rpc_wrapper:
-                with sleuth.watch("djangae.db.backends.appengine.caching.get_from_cache") as cache_hit:
-                    instance_from_database = UniqueModel.objects.get(unique_field="test")
-                    self.assertTrue(cache_hit.called)
-                    self.assertTrue(rpc_wrapper.called)
-
-        self.assertEqual(instance_from_cache, instance_from_database)
-
-    def test_context_cache_cleared_after_request(self):
-        """ The context cache should be cleared between requests. """
-        UniqueModel.objects.create(unique_field="test")
-        with sleuth.watch("google.appengine.api.datastore.Query.Run") as query:
-            UniqueModel.objects.get(unique_field="test")
-            self.assertEqual(query.call_count, 0)
-            # Now start a new request, which should clear the cache
-            request_started.send(HttpRequest())
-            UniqueModel.objects.get(unique_field="test")
-            self.assertEqual(query.call_count, 1)
-            # Now do another call, which should use the cache (because it would have been
-            # populated by the previous call)
-            UniqueModel.objects.get(unique_field="test")
-            self.assertEqual(query.call_count, 1)
-            # Now clear the cache again by *finishing* a request
-            request_finished.send(HttpRequest())
-            UniqueModel.objects.get(unique_field="test")
-            self.assertEqual(query.call_count, 2)
 
 
 class BackendTests(TestCase):

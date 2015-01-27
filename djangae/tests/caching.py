@@ -1,17 +1,21 @@
 import threading
 import unittest
 
-from djangae.contrib import sleuth
+from google.appengine.api import datastore
+
 from django.db import models
+from django.http import HttpRequest
+from django.core.signals import request_finished, request_started
 from django.core.cache import cache
+
+from djangae.contrib import sleuth
 from djangae.test import TestCase
 from djangae.db import unique_utils
 from djangae.db import transaction
 from djangae.db.backends.appengine.context import ContextStack
-from google.appengine.api import datastore
-
 from djangae.db.backends.appengine import caching
 from djangae.db.caching import disable_cache
+
 
 class FakeEntity(dict):
     COUNTER = 1
@@ -35,31 +39,30 @@ class ContextStackTests(TestCase):
 
         entity = FakeEntity({"bananas": 1})
 
-        stack.top.cache_entity(["bananas:1"], entity)
+        stack.top.cache_entity(["bananas:1"], entity, caching.CachingSituation.DATASTORE_PUT)
 
         self.assertEqual({"bananas": 1}, stack.top.cache.values()[0])
 
         stack.push()
 
-        self.assertEqual({"bananas": 1}, stack.top.cache.values()[0])
+        self.assertEqual([], stack.top.cache.values())
         self.assertEqual(2, stack.size)
 
         stack.push()
 
-        stack.top.cache_entity(["apples:2"], entity)
+        stack.top.cache_entity(["apples:2"], entity, caching.CachingSituation.DATASTORE_PUT)
 
-        self.assertItemsEqual(["bananas:1", "apples:2"], stack.top.cache.keys())
+        self.assertItemsEqual(["apples:2"], stack.top.cache.keys())
 
         stack.pop()
 
-        self.assertItemsEqual(["bananas:1"], stack.top.cache.keys())
-        self.assertEqual({"bananas": 1}, stack.top.cache["bananas:1"])
+        self.assertItemsEqual([], stack.top.cache.keys())
         self.assertEqual(2, stack.size)
         self.assertEqual(1, stack.staged_count)
 
         updated = FakeEntity({"bananas": 3})
 
-        stack.top.cache_entity(["bananas:1"], updated)
+        stack.top.cache_entity(["bananas:1"], updated, caching.CachingSituation.DATASTORE_PUT)
 
         stack.pop(apply_staged=True, clear_staged=True)
 
@@ -72,14 +75,14 @@ class ContextStackTests(TestCase):
 
         entity = FakeEntity({"field1": "one", "field2": "two"})
 
-        stack.top.cache_entity(["entity"], entity)
+        stack.top.cache_entity(["entity"], entity, caching.CachingSituation.DATASTORE_PUT)
 
         stack.push() # Enter transaction
 
         entity["field1"] = "oneone"
         del entity["field2"]
 
-        stack.top.cache_entity(["entity"], entity)
+        stack.top.cache_entity(["entity"], entity, caching.CachingSituation.DATASTORE_PUT)
 
         stack.pop(apply_staged=True, clear_staged=True)
 
@@ -440,7 +443,8 @@ class ContextCachingTests(TestCase):
 
         original = CachingTestModel.objects.create(**entity_data)
 
-        caching.context = threading.local() # Wipe out the context
+        caching._context = threading.local() # Wipe out the context
+        caching.ensure_context()
 
         CachingTestModel.objects.get(pk=original.pk) # Should update the cache
 
@@ -449,10 +453,13 @@ class ContextCachingTests(TestCase):
 
         self.assertFalse(datastore_get.called)
 
-        caching.context = threading.local() # Wipe out the context
+        caching._context = threading.local() # Wipe out the context
+        caching.ensure_context()
 
         with transaction.atomic():
-            CachingTestModel.objects.get(pk=original.pk) # Should *not* update the cache
+            with sleuth.watch("google.appengine.api.datastore.Get") as datastore_get:
+                CachingTestModel.objects.get(pk=original.pk) # Should *not* update the cache
+                self.assertTrue(datastore_get.called)
 
         with sleuth.watch("google.appengine.api.datastore.Get") as datastore_get:
             CachingTestModel.objects.get(pk=original.pk)
@@ -470,6 +477,7 @@ class ContextCachingTests(TestCase):
         original = CachingTestModel.objects.create(**entity_data)
 
         caching._context = threading.local() # Wipe out the context
+        caching.ensure_context()
 
         CachingTestModel.objects.all() # Inconsistent
 
@@ -522,3 +530,23 @@ class ContextCachingTests(TestCase):
             CachingTestModel.objects.get(field1="Apple")
 
         self.assertFalse(datastore_get.called)
+
+    @disable_cache(memcache=True, context=False)
+    def test_context_cache_cleared_after_request(self):
+        """ The context cache should be cleared between requests. """
+        CachingTestModel.objects.create(field1="test")
+        with sleuth.watch("google.appengine.api.datastore.Query.Run") as query:
+            CachingTestModel.objects.get(field1="test")
+            self.assertEqual(query.call_count, 0)
+            # Now start a new request, which should clear the cache
+            request_started.send(HttpRequest())
+            CachingTestModel.objects.get(field1="test")
+            self.assertEqual(query.call_count, 1)
+            # Now do another call, which should use the cache (because it would have been
+            # populated by the previous call)
+            CachingTestModel.objects.get(field1="test")
+            self.assertEqual(query.call_count, 1)
+            # Now clear the cache again by *finishing* a request
+            request_finished.send(HttpRequest())
+            CachingTestModel.objects.get(field1="test")
+            self.assertEqual(query.call_count, 2)
