@@ -1,7 +1,16 @@
+from google.appengine.api import datastore
+
 from djangae.db.backends.appengine import caching
 from djangae.db.backends.appengine import context
 
 class DisableCache(object):
+    """
+        Decorator and context manager for disabling the caches,
+        passing no args disables everything, but you can pass
+        memcache=False or context=False to only disable one or
+        the other.
+    """
+
     def __init__(self, context=True, memcache=True):
         self.func = None
 
@@ -41,4 +50,12 @@ disable_cache = DisableCache
 
 
 def clear_context_cache():
+    """
+        Resets the context cache, don't do this inside a transaction... in fact, probably
+        just don't do this.
+    """
+
+    if datastore.IsInTransaction():
+        raise RuntimeError("Clearing the context cache inside a transaction breaks everything, we can't let you do that")
+
     caching._context.stack = context.ContextStack()
