@@ -3,6 +3,7 @@ import threading
 
 from google.appengine.api import datastore
 
+from django.conf import settings
 from django.core.cache import cache
 from django.core.signals import request_finished, request_started
 from django.dispatch import receiver
@@ -30,8 +31,14 @@ def ensure_context():
         _context.stack = ContextStack()
 
 
+def _get_memcache_timeout():
+    return getattr(settings, "DJANGAE_CACHE_TIMEOUT_SECONDS", 60 * 60)
+
+def _get_cache_enabled():
+    return getattr(settings, "DJANGAE_ENABLE_CACHING", True)
+
 def _add_entity_to_memcache(model, entity, identifiers):
-    cache.set_many({ x: entity for x in identifiers})
+    cache.set_many({ x: entity for x in identifiers}, timeout=_get_memcache_timeout())
 
 
 def _get_cache_key_and_model_from_datastore_key(key):
@@ -115,6 +122,9 @@ def remove_entity_from_cache_by_key(key):
 def get_from_cache_by_key(key):
     ensure_context()
 
+    if not _get_cache_enabled():
+        return None
+
     ret = None
     if _context.context_enabled:
         ret = _context.stack.top.get_entity_by_key(key)
@@ -128,6 +138,9 @@ def get_from_cache_by_key(key):
 
 def get_from_cache(unique_identifier):
     ensure_context()
+
+    if not _get_cache_enabled():
+        return None
 
     ret = None
     if _context.context_enabled:

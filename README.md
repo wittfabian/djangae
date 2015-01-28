@@ -104,8 +104,6 @@ Here's the full list of magic:
 1.0-beta
 
  - Support for ancestor queries. Lots of tests
- - Memcache backed caching by PK and unique constraints
- - Mapreduce handlers and utilities
  - All NotSupportedError tests being skipped, everything passes in the testapp
  - Namespaces handled via the connection settings
 
@@ -274,6 +272,29 @@ use this functionality, you have the following options:
 The `disable_constraint_checks` per-model setting overrides the global `DJANGAE_DISABLE_CONSTRAINT_CHECKS` so if you are concerned about speed/cost then you might want to disable globally and
 override on a per-model basis by setting `disable_constraint_checks = False` on models that require constraints.
 
+## Datastore Caching
+
+Djangae has a built-in caching layer, similar to the one built into NDB - only better! You shouldn't even notice the caching layer at work, it's fairly complex and to understand the
+behaviour you are best reading through the caching tests. But here's a general overview:
+
+ - There are two layers of caching, the context cache and the memcache cache
+ - When possible, if you get/save an entity it will be cached by it's primary key value, and it's unique constraint combinations
+ - This protects against HRD inconsistencies in many situations, and it happens automagically
+ - The caching layer is heavily tied into the transaction.atomic decorator. If you use the db.RunInTransaction stuff you are going to have a hard time, so don't do that!
+ - You can disable the caching by using the `disable_cache` context manager/decorator. `disable_cache` takes two boolean parameters, `context` and `memcache` so you can
+   configure which caches you want disabled. Be careful though, don't toggle the caching on and off too much or you might get into trouble (I'm sure there's a situation you can
+   break it but I haven't figured out what it is)
+ - The context cache has a complex stack structure, when you enter a transaction the stack is pushed, and when you leave a transaction it's popped. This is to ensure the cache
+   gives you the right results at the right time
+ - The context cache is cleared on each request, and it's thread-local
+ - The memcache cache is not cleared, it's global across all instances and so is updated only when a consistent Get/Put outside a transaction is made
+ - Entities are evicted from memcache if they are updated inside a transaction (to prevent crazy)
+
+The following settings are available to control the caching:
+
+ - DJANGAE_ENABLE_CACHING (default True). Setting to False it all off, I really wouldn't suggest doing that!
+ - DJANGAE_CACHE_TIMEOUT_SECONDS (default 60 * 60). The length of time stuff should be kept in memcache
+
 ## Map Reduce
 
 Djangae contains functionality to allow Google's mapreduce library to run over instances of Django models.
@@ -289,7 +310,7 @@ Instructions:
 1. You can optionally pass any additional args and/or kwargs to the `.start()` method, which will then be passed into to each call of the `.map()` method for you.
 
 Note that currently only the 'map' stage is implemented.  There is currently no reduce stage, but you could contribute it :-).
- 
+
 
 ## Contributing
 
