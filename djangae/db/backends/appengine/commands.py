@@ -31,7 +31,7 @@ from djangae.db.utils import (
     has_concrete_parents
 )
 from djangae.indexing import special_indexes_for_column, REQUIRES_SPECIAL_INDEXES, add_special_index
-from djangae.utils import on_production
+from djangae.utils import on_production, memoized
 from djangae.db import constraints, utils
 from djangae.db.backends.appengine import caching
 from djangae.db.unique_utils import query_is_unique
@@ -72,8 +72,8 @@ REVERSE_OP_MAP = {
 INEQUALITY_OPERATORS = frozenset(['>', '<', '<=', '>='])
 
 
+@memoized
 def get_field_from_column(model, column):
-    #FIXME: memoize this
     for field in model._meta.fields:
         if field.column == column:
             return field
