@@ -73,6 +73,11 @@ def add_entity_to_cache(model, entity, situation):
     if situation == CachingSituation.DATASTORE_GET and datastore.IsInTransaction():
         return
 
+    if situation in (CachingSituation.DATASTORE_PUT, CachingSituation.DATASTORE_GET_PUT) and datastore.IsInTransaction():
+        # We have to wipe the entity from memcache
+        if entity.key():
+            _remove_entity_from_memcache_by_key(entity.key())
+
     _context.stack.top.cache_entity(identifiers, entity, situation)
 
     # Only cache in memcache of we are doing a GET (outside a transaction) or PUT (outside a transaction)

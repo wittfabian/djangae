@@ -155,12 +155,12 @@ class MemcacheCachingTests(TestCase):
             "comb2": "Cherry"
         }
 
-        identifiers = unique_utils.unique_identifiers_from_entity(CachingTestModel, FakeEntity(entity_data))
+        identifiers = unique_utils.unique_identifiers_from_entity(CachingTestModel, FakeEntity(entity_data, id=222))
 
         for identifier in identifiers:
             self.assertIsNone(cache.get(identifier))
 
-        instance = CachingTestModel.objects.create(**entity_data)
+        instance = CachingTestModel.objects.create(id=222, **entity_data)
 
         for identifier in identifiers:
             self.assertEqual(entity_data, cache.get(identifier))
