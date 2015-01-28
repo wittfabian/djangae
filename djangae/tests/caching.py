@@ -2,6 +2,7 @@ import threading
 import unittest
 
 from google.appengine.api import datastore
+from google.appengine.api import datastore_errors
 
 from django.db import models
 from django.http import HttpRequest
@@ -316,14 +317,17 @@ class MemcacheCachingTests(TestCase):
             "comb2": "Cherry"
         }
 
-        original = CachingTestModel.objects.create(**entity_data)
+        CachingTestModel.objects.create(**entity_data)
 
-        with sleuth.watch("google.appengine.api.datastore.Get") as datastore_get:
+        with sleuth.watch("google.appengine.api.datastore.Query.Run") as datastore_query:
             with transaction.atomic():
-                instance = CachingTestModel.objects.get(field1="Apple")
-            self.assertEqual(original, instance)
+                try:
+                    CachingTestModel.objects.get(field1="Apple")
+                except datastore_errors.BadRequestError:
+                    # You can't query in a transaction, but still
+                    pass
 
-        self.assertTrue(datastore_get.called)
+        self.assertTrue(datastore_query.called)
 
 class ContextCachingTests(TestCase):
     """

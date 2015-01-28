@@ -34,12 +34,7 @@ def _add_entity_to_memcache(model, entity, identifiers):
     cache.set_many({ x: entity for x in identifiers})
 
 
-def _remove_entity_from_memcache_by_key(key):
-    """
-        Note, if the key of the entity got evicted from the cache, it's possible that stale cache
-        entries would be left behind. Remember if you need pure atomicity then use disable_cache() or a
-        transaction.
-    """
+def _get_cache_key_and_model_from_datastore_key(key):
     model = utils.get_model_from_db_table(key.kind())
 
     if not model:
@@ -51,6 +46,16 @@ def _remove_entity_from_memcache_by_key(key):
     # We build the cache key for the ID of the instance
     cache_key =  "|".join([key.kind(), "{}:{}".format(model._meta.pk.column,  _format_value_for_identifier(key.id_or_name()))])
 
+    return (cache_key, model)
+
+def _remove_entity_from_memcache_by_key(key):
+    """
+        Note, if the key of the entity got evicted from the cache, it's possible that stale cache
+        entries would be left behind. Remember if you need pure atomicity then use disable_cache() or a
+        transaction.
+    """
+
+    cache_key, model = _get_cache_key_and_model_from_datastore_key(key)
     entity = cache.get(cache_key)
 
     if entity:
@@ -60,6 +65,11 @@ def _remove_entity_from_memcache_by_key(key):
 
 def _get_entity_from_memcache(identifier):
     return cache.get(identifier)
+
+def _get_entity_from_memcache_by_key(key):
+    # We build the cache key for the ID of the instance
+    cache_key, _ = _get_cache_key_and_model_from_datastore_key(key)
+    return cache.get(cache_key)
 
 
 def add_entity_to_cache(model, entity, situation):
@@ -108,11 +118,11 @@ def get_from_cache_by_key(key):
     ret = None
     if _context.context_enabled:
         ret = _context.stack.top.get_entity_by_key(key)
-        if ret is None:
+        if ret is None and not datastore.IsInTransaction():
             if _context.memcache_enabled:
-                pass #FIXME: do memcache thing
-    elif _context.memcache_enabled:
-        pass #FIXME: do memcache thing
+                ret = _get_entity_from_memcache_by_key(key)
+    elif _context.memcache_enabled and not datastore.IsInTransaction():
+        ret = _get_entity_from_memcache_by_key(key)
 
     return ret
 
@@ -122,10 +132,10 @@ def get_from_cache(unique_identifier):
     ret = None
     if _context.context_enabled:
         ret = _context.stack.top.get_entity(unique_identifier)
-        if ret is None:
+        if ret is None and not datastore.IsInTransaction():
             if _context.memcache_enabled:
                 ret = _get_entity_from_memcache(unique_identifier)
-    elif _context.memcache_enabled:
+    elif _context.memcache_enabled and not datastore.IsInTransaction():
         ret = _get_entity_from_memcache(unique_identifier)
 
     return ret
