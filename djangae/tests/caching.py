@@ -1,4 +1,3 @@
-import threading
 import unittest
 
 from google.appengine.api import datastore
@@ -15,7 +14,7 @@ from djangae.db import unique_utils
 from djangae.db import transaction
 from djangae.db.backends.appengine.context import ContextStack
 from djangae.db.backends.appengine import caching
-from djangae.db.caching import disable_cache
+from djangae.db.caching import disable_cache, clear_context_cache
 
 
 class FakeEntity(dict):
@@ -455,8 +454,7 @@ class ContextCachingTests(TestCase):
 
         original = CachingTestModel.objects.create(**entity_data)
 
-        caching._context = threading.local() # Wipe out the context
-        caching.ensure_context()
+        clear_context_cache()
 
         CachingTestModel.objects.get(pk=original.pk) # Should update the cache
 
@@ -465,8 +463,7 @@ class ContextCachingTests(TestCase):
 
         self.assertFalse(datastore_get.called)
 
-        caching._context = threading.local() # Wipe out the context
-        caching.ensure_context()
+        clear_context_cache()
 
         with transaction.atomic():
             with sleuth.watch("google.appengine.api.datastore.Get") as datastore_get:
@@ -488,8 +485,7 @@ class ContextCachingTests(TestCase):
 
         original = CachingTestModel.objects.create(**entity_data)
 
-        caching._context = threading.local() # Wipe out the context
-        caching.ensure_context()
+        clear_context_cache()
 
         CachingTestModel.objects.all() # Inconsistent
 
@@ -551,7 +547,7 @@ class ContextCachingTests(TestCase):
             CachingTestModel.objects.get(field1="test")
             self.assertEqual(query.call_count, 0)
             # Now start a new request, which should clear the cache
-            request_started.send(HttpRequest())
+            request_started.send(HttpRequest(), keep_disabled_flags=True)
             CachingTestModel.objects.get(field1="test")
             self.assertEqual(query.call_count, 1)
             # Now do another call, which should use the cache (because it would have been
@@ -559,6 +555,6 @@ class ContextCachingTests(TestCase):
             CachingTestModel.objects.get(field1="test")
             self.assertEqual(query.call_count, 1)
             # Now clear the cache again by *finishing* a request
-            request_finished.send(HttpRequest())
+            request_finished.send(HttpRequest(), keep_disabled_flags=True)
             CachingTestModel.objects.get(field1="test")
             self.assertEqual(query.call_count, 2)

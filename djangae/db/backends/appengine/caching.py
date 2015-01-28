@@ -142,7 +142,15 @@ def get_from_cache(unique_identifier):
 
 @receiver(request_finished)
 @receiver(request_started)
-def clear_context_cache(*args, **kwargs):
+def reset_context(keep_disabled_flags=False, *args, **kwargs):
     global _context
+
+    memcache_enabled = getattr(_context, "memcache_enabled", True)
+    context_enabled = getattr(_context, "context_enabled", True)
+
     _context = threading.local()
     ensure_context()
+
+    if keep_disabled_flags:
+        _context.memcache_enabled = memcache_enabled
+        _context.context_enabled = context_enabled

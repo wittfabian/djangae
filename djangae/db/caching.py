@@ -1,4 +1,5 @@
 from djangae.db.backends.appengine import caching
+from djangae.db.backends.appengine import context
 
 class DisableCache(object):
     def __init__(self, context=True, memcache=True):
@@ -37,3 +38,7 @@ class DisableCache(object):
         caching._context.context_enabled = self.orig_context
 
 disable_cache = DisableCache
+
+
+def clear_context_cache():
+    caching._context.stack = context.ContextStack()

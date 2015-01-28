@@ -36,6 +36,7 @@ from djangae.db import constraints, utils
 from djangae.db.backends.appengine import caching
 from djangae.db.unique_utils import query_is_unique
 from djangae.db.backends.appengine import transforms
+from djangae.db.caching import clear_context_cache
 
 DATE_TRANSFORMS = {
     "year": transforms.year_transform,
@@ -840,8 +841,6 @@ class FlushCommand(object):
             datastore.Delete(query.Run())
 
         cache.clear()
-
-        from .caching import clear_context_cache
         clear_context_cache()
 
 @db.non_transactional
