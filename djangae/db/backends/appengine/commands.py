@@ -883,6 +883,8 @@ class InsertCommand(object):
             # We do it in a loop so each check/put is transactional - because it's an ancestor query it shouldn't
             # cost any entity groups
 
+            was_in_transaction = datastore.IsInTransaction()
+
             for key, ent in zip(self.included_keys, self.entities):
                 @db.transactional
                 def txn():
@@ -901,7 +903,9 @@ class InsertCommand(object):
                         markers = constraints.acquire(self.model, ent)
                         try:
                             results.append(datastore.Put(ent))
-                            caching.add_entity_to_cache(self.model, ent, caching.CachingSituation.DATASTORE_PUT)
+                            if not was_in_transaction:
+                                # We can cache if we weren't in a transaction before this little nested one
+                                caching.add_entity_to_cache(self.model, ent, caching.CachingSituation.DATASTORE_GET_PUT)
                         except:
                             # Make sure we delete any created markers before we re-raise
                             constraints.release_markers(markers)

@@ -17,6 +17,7 @@ _context = threading.local()
 class CachingSituation:
     DATASTORE_GET = 0
     DATASTORE_PUT = 1
+    DATASTORE_GET_PUT = 2 # When we are doing an update
 
 def ensure_context():
     if not hasattr(_context, "memcache_enabled"):
@@ -52,9 +53,11 @@ def add_entity_to_cache(model, entity, situation):
 
     _context.stack.top.cache_entity(identifiers, entity, situation)
 
-    if situation == CachingSituation.DATASTORE_GET or (
-            situation == CachingSituation.DATASTORE_PUT and not datastore.IsInTransaction()
-        ):
+    # Only cache in memcache of we are doing a GET (outside a transaction) or PUT (outside a transaction)
+    # the exception is GET_PUT - which we do in our own transaction so we have to ignore that!
+    if (not datastore.IsInTransaction() and situation in (CachingSituation.DATASTORE_GET, CachingSituation.DATASTORE_PUT)) or \
+            situation == CachingSituation.DATASTORE_GET_PUT:
+
         _add_entity_to_memcache(model, entity, identifiers)
 
 
