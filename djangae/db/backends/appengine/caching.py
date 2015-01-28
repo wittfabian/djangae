@@ -111,6 +111,9 @@ def remove_entity_from_cache(entity):
 
 
 def remove_entity_from_cache_by_key(key):
+    """
+        Removes an entity from all caches (both context and memcache)
+    """
     ensure_context()
 
     for identifier in _context.stack.top.reverse_cache.get(key, []):
@@ -120,6 +123,10 @@ def remove_entity_from_cache_by_key(key):
     _remove_entity_from_memcache_by_key(key)
 
 def get_from_cache_by_key(key):
+    """
+        Return an entity from the context cache, falling back to memcache when possible
+    """
+
     ensure_context()
 
     if not _get_cache_enabled():
@@ -137,6 +144,10 @@ def get_from_cache_by_key(key):
     return ret
 
 def get_from_cache(unique_identifier):
+    """
+        Return an entity from the context cache, falling back to memcache when possible
+    """
+
     ensure_context()
 
     if not _get_cache_enabled():
@@ -156,6 +167,12 @@ def get_from_cache(unique_identifier):
 @receiver(request_finished)
 @receiver(request_started)
 def reset_context(keep_disabled_flags=False, *args, **kwargs):
+    """
+        Called at the beginning and end of each request, resets the thread local
+        context. If you pass keep_disabled_flags=True the memcache_enabled and context_enabled
+        flags will be preserved, this is really only useful for testing.
+    """
+
     global _context
 
     memcache_enabled = getattr(_context, "memcache_enabled", True)
