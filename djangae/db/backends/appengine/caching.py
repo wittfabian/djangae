@@ -6,8 +6,8 @@ from google.appengine.api import datastore
 from django.core.cache import cache
 from django.core.signals import request_finished, request_started
 from django.dispatch import receiver
-
-from djangae.db.unique_utils import unique_identifiers_from_entity
+from djangae.db import utils
+from djangae.db.unique_utils import unique_identifiers_from_entity, _format_value_for_identifier
 from djangae.db.backends.appengine.context import ContextStack
 
 logger = logging.getLogger("djangae")
@@ -29,11 +29,33 @@ def ensure_context():
     if not hasattr(_context, "stack"):
         _context.stack = ContextStack()
 
-def _add_entity_to_memcache_by_key(model, key):
-    pass
 
 def _add_entity_to_memcache(model, entity, identifiers):
     cache.set_many({ x: entity for x in identifiers})
+
+
+def _remove_entity_from_memcache_by_key(key):
+    """
+        Note, if the key of the entity got evicted from the cache, it's possible that stale cache
+        entries would be left behind. Remember if you need pure atomicity then use disable_cache() or a
+        transaction.
+    """
+    model = utils.get_model_from_db_table(key.kind())
+
+    if not model:
+        # This should never happen.. if it does then we can edit get_model_from_db_table to pass
+        # include_deferred=True/included_swapped=True to get_models, whichever makes it better
+        logging.warning("Unable to locate model for db_table '{}' - item won't be evicted from the cache".format(key.kind()))
+        return
+
+    # We build the cache key for the ID of the instance
+    cache_key =  "|".join([key.kind(), "{}:{}".format(model._meta.pk.column,  _format_value_for_identifier(key.id_or_name()))])
+
+    entity = cache.get(cache_key)
+
+    if entity:
+        identifiers = unique_identifiers_from_entity(model, entity)
+        cache.delete_many(identifiers)
 
 
 def _get_entity_from_memcache(identifier):
@@ -73,6 +95,7 @@ def remove_entity_from_cache_by_key(key):
         if identifier in _context.stack.top.cache:
             del _context.stack.top.cache[identifier]
 
+    _remove_entity_from_memcache_by_key(key)
 
 def get_from_cache_by_key(key):
     ensure_context()
