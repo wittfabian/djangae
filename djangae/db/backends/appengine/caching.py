@@ -24,6 +24,7 @@ class CachingSituation:
     DATASTORE_PUT = 1
     DATASTORE_GET_PUT = 2 # When we are doing an update
 
+
 def ensure_context():
     if not hasattr(_context, "memcache_enabled"):
         _context.memcache_enabled = True
@@ -52,6 +53,7 @@ def _get_cache_key_and_model_from_datastore_key(key):
 
     return (cache_key, model)
 
+
 def _remove_entity_from_memcache_by_key(key):
     """
         Note, if the key of the entity got evicted from the cache, it's possible that stale cache
@@ -69,6 +71,7 @@ def _remove_entity_from_memcache_by_key(key):
 
 def _get_entity_from_memcache(identifier):
     return cache.get(identifier)
+
 
 def _get_entity_from_memcache_by_key(key):
     # We build the cache key for the ID of the instance
@@ -119,6 +122,7 @@ def remove_entity_from_cache_by_key(key):
 
     _remove_entity_from_memcache_by_key(key)
 
+
 def get_from_cache_by_key(key):
     """
         Return an entity from the context cache, falling back to memcache when possible
@@ -140,6 +144,7 @@ def get_from_cache_by_key(key):
 
     return ret
 
+
 def get_from_cache(unique_identifier):
     """
         Return an entity from the context cache, falling back to memcache when possible
@@ -160,6 +165,7 @@ def get_from_cache(unique_identifier):
         ret = _get_entity_from_memcache(unique_identifier)
 
     return ret
+
 
 @receiver(request_finished)
 @receiver(request_started)

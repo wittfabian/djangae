@@ -1,7 +1,7 @@
 from google.appengine.api import datastore
 
-from djangae.db.backends.appengine import caching
-from djangae.db.backends.appengine import context
+from djangae.db.backends.appengine import caching, context
+
 
 class DisableCache(object):
     """
