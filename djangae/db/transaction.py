@@ -11,7 +11,6 @@ from google.appengine.datastore.datastore_rpc import TransactionOptions
 
 from djangae.db.backends.appengine import caching
 
-
 class AtomicDecorator(object):
     def __init__(self, *args, **kwargs):
         self.func = None
@@ -41,17 +40,25 @@ class AtomicDecorator(object):
         _SetConnection(conn.new_transaction(options))
 
         # Clear the context cache at the start of a transaction
-        caching.clear_context_cache()
+        caching._context.stack.push()
 
-    def _finalize(self):
+    def _finalize(self, exception=False):
         _PopConnection()  # Pop the transaction connection
-        if self.parent_conn:
+        if self.independent and self.parent_conn:
             # If there was a parent transaction, now put that back
             _PushConnection(self.parent_conn)
             self.parent_conn = None
 
-        # Clear the context cache at the end of a transaction
-        caching.clear_context_cache()
+            # Clear the context cache at the end of a transaction
+            if exception:
+                caching._context.stack.pop(discard=True)
+            else:
+                caching._context.stack.pop(apply_staged=False, clear_staged=False)
+        else:
+            if exception:
+                caching._context.stack.pop(discard=True)
+            else:
+                caching._context.stack.pop(apply_staged=True, clear_staged=True)
 
     def __call__(self, *args, **kwargs):
         def call_func(*_args, **_kwargs):
@@ -80,12 +87,14 @@ class AtomicDecorator(object):
         self._begin()
 
     def __exit__(self, *args, **kwargs):
+        exception = False
         if len(args) > 1 and isinstance(args[1], Exception):
+            exception = True
             _GetConnection().rollback()  # If an exception happens, rollback
         else:
             _GetConnection().commit()  # Otherwise commit
 
-        self._finalize()
+        self._finalize(exception)
 
 
 atomic = AtomicDecorator

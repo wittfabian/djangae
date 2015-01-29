@@ -36,6 +36,7 @@ from djangae.db import constraints, utils
 from djangae.db.backends.appengine import caching
 from djangae.db.unique_utils import query_is_unique
 from djangae.db.backends.appengine import transforms
+from djangae.db.caching import clear_context_cache
 
 DATE_TRANSFORMS = {
     "year": transforms.year_transform,
@@ -236,7 +237,8 @@ def _get_key(query):
     return query["__key__ ="]
 
 class QueryByKeys(object):
-    def __init__(self, queries, ordering):
+    def __init__(self, model, queries, ordering):
+        self.model = model
         self.queries = queries
         self.queries_by_key = { a: list(b) for a, b in groupby(queries, lambda x: _get_key(x)) }
         self.ordering = ordering
@@ -261,6 +263,10 @@ class QueryByKeys(object):
         if results is None:
             keys = self.queries_by_key.keys()
             results = datastore.Get(keys)
+            for result in results:
+                if result is None:
+                    continue
+                caching.add_entity_to_cache(self.model, result, caching.CachingSituation.DATASTORE_GET)
             results = sorted((x for x in results if x is not None), cmp=partial(utils.django_ordering_comparison, self.ordering))
 
         results = [
@@ -307,7 +313,7 @@ class UniqueQuery(object):
         if ret is None:
             ret = [ x for x in self._gae_query.Run(limit=limit, offset=offset) ]
             if len(ret) == 1:
-                caching.add_entity_to_context_cache(self._model, ret[0])
+                caching.add_entity_to_cache(self._model, ret[0], caching.CachingSituation.DATASTORE_GET)
             return iter(ret)
 
         return iter([ ret ])
@@ -661,7 +667,7 @@ class SelectCommand(object):
 
             included_pks = [ qry["__key__ ="] for qry in queries if "__key__ =" in qry ]
             if len(included_pks) == len(queries): # If all queries have a key, we can perform a Get
-                return QueryByKeys(queries, ordering) # Just use whatever query to determine the matches
+                return QueryByKeys(self.model, queries, ordering) # Just use whatever query to determine the matches
             else:
                 if len(queries) > 1:
                     # Disable keys only queries for MultiQuery
@@ -835,8 +841,6 @@ class FlushCommand(object):
             datastore.Delete(query.Run())
 
         cache.clear()
-
-        from .caching import clear_context_cache
         clear_context_cache()
 
 @db.non_transactional
@@ -878,6 +882,8 @@ class InsertCommand(object):
             # We do it in a loop so each check/put is transactional - because it's an ancestor query it shouldn't
             # cost any entity groups
 
+            was_in_transaction = datastore.IsInTransaction()
+
             for key, ent in zip(self.included_keys, self.entities):
                 @db.transactional
                 def txn():
@@ -896,7 +902,9 @@ class InsertCommand(object):
                         markers = constraints.acquire(self.model, ent)
                         try:
                             results.append(datastore.Put(ent))
-                            caching.add_entity_to_context_cache(self.model, ent)
+                            if not was_in_transaction:
+                                # We can cache if we weren't in a transaction before this little nested one
+                                caching.add_entity_to_cache(self.model, ent, caching.CachingSituation.DATASTORE_GET_PUT)
                         except:
                             # Make sure we delete any created markers before we re-raise
                             constraints.release_markers(markers)
@@ -915,7 +923,7 @@ class InsertCommand(object):
                 # Fast path, just bulk insert
                 results = datastore.Put(self.entities)
                 for entity in self.entities:
-                    caching.add_entity_to_context_cache(self.model, entity)
+                    caching.add_entity_to_cache(self.model, entity, caching.CachingSituation.DATASTORE_PUT)
                 return results
             else:
                 markers = []
@@ -926,7 +934,7 @@ class InsertCommand(object):
 
                     results = datastore.Put(self.entities)
                     for entity in self.entities:
-                        caching.add_entity_to_context_cache(self.model, entity)
+                        caching.add_entity_to_cache(self.model, entity, caching.CachingSituation.DATASTORE_PUT)
 
                 except:
                     to_delete = chain(*markers)
@@ -960,14 +968,14 @@ class DeleteCommand(object):
         if not queries:
             return
 
-        for entity in QueryByKeys(queries, []).Run():
+        for entity in QueryByKeys(self.select.model, queries, []).Run():
             keys.append(entity.key())
 
             # Delete constraints if that's enabled
             if constraints.constraint_checks_enabled(self.select.model):
                 constraints.release(self.select.model, entity)
 
-            caching.remove_entity_from_context_cache_by_key(entity.key())
+            caching.remove_entity_from_cache_by_key(entity.key())
         datastore.Delete(keys)
 
 
@@ -980,7 +988,7 @@ class UpdateCommand(object):
 
     @db.transactional
     def _update_entity(self, key):
-        caching.remove_entity_from_context_cache_by_key(key)
+        caching.remove_entity_from_cache_by_key(key)
 
         try:
             result = datastore.Get(key)
@@ -1022,7 +1030,7 @@ class UpdateCommand(object):
         if not constraints.constraint_checks_enabled(self.model):
             # The fast path, no constraint checking
             datastore.Put(result)
-            caching.add_entity_to_context_cache(self.model, result)
+            caching.add_entity_to_cache(self.model, result, caching.CachingSituation.DATASTORE_PUT)
         else:
             to_acquire, to_release = constraints.get_markers_for_update(self.model, original, result)
 
@@ -1030,7 +1038,7 @@ class UpdateCommand(object):
             constraints.acquire_identifiers(to_acquire, result.key())
             try:
                 datastore.Put(result)
-                caching.add_entity_to_context_cache(self.model, result)
+                caching.add_entity_to_cache(self.model, result, caching.CachingSituation.DATASTORE_PUT)
             except:
                 constraints.release_identifiers(to_acquire)
                 raise

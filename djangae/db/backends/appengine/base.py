@@ -35,7 +35,7 @@ from djangae.db.utils import (
     make_timezone_naive,
     get_datastore_key,
 )
-from djangae.db.backends.appengine import caching
+from djangae.db import caching
 from djangae.indexing import load_special_indexes
 from .commands import (
     SelectCommand,
@@ -196,7 +196,7 @@ class DatabaseOperations(BaseDatabaseOperations):
         finally:
             # FIXME: We should only delete the markers from the associated tables!
             FlushCommand("__unique_marker").execute()
-            caching.clear_all_caches()
+            caching.clear_context_cache()
 
     def prep_lookup_key(self, model, value, field):
         if isinstance(value, basestring):
@@ -402,11 +402,11 @@ class DatabaseCreation(BaseDatabaseCreation):
         self.testbed.activate()
         self.testbed.init_datastore_v3_stub(**kwargs)
         self.testbed.init_memcache_stub()
-        caching.clear_all_caches()
+        caching.clear_context_cache()
 
     def _destroy_test_db(self, name, verbosity):
         if self.testbed:
-            caching.clear_all_caches()
+            caching.clear_context_cache()
             self.testbed.deactivate()
             self.testbed = None
 
