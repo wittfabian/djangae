@@ -28,6 +28,7 @@ from google.appengine.ext.db import metadata
 from google.appengine.ext import testbed
 from google.appengine.datastore import datastore_stub_util
 from google.appengine.api.datastore import Key
+from google.appengine.api import datastore
 
 #DJANGAE
 from djangae.db.utils import (
@@ -412,6 +413,7 @@ class DatabaseCreation(BaseDatabaseCreation):
 
 
 class DatabaseIntrospection(BaseDatabaseIntrospection):
+    @datastore.NonTransactional
     def get_table_list(self, cursor):
         return metadata.get_kinds()
 
