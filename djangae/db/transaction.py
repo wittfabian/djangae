@@ -38,8 +38,6 @@ class AtomicDecorator(ContextDecorator):
         super(AtomicDecorator, self).__init__(func)
 
     def _do_enter(self, independent, xg):
-        # Clear the context cache at the start of a transaction
-        caching.clear_context_cache()
 
         if IsInTransaction():
             if independent:
@@ -59,6 +57,9 @@ class AtomicDecorator(ContextDecorator):
         _PushConnection(None)
         _SetConnection(conn.new_transaction(options))
 
+        # Clear the context cache at the start of a transaction
+        caching._context.stack.push()
+
     def _do_exit(self, independent, xg, exception):
         try:
             if exception:
@@ -73,8 +74,16 @@ class AtomicDecorator(ContextDecorator):
                 while self.conn_stack:
                     _PushConnection(self.conn_stack.pop())
 
-        # Clear the context cache at the end of a transaction
-        caching.clear_context_cache()
+                 # Clear the context cache at the end of a transaction
+                if exception:
+                    caching._context.stack.pop(discard=True)
+                else:
+                    caching._context.stack.pop(apply_staged=False, clear_staged=False)
+            else:
+                if exception:
+                    caching._context.stack.pop(discard=True)
+                else:
+                    caching._context.stack.pop(apply_staged=True, clear_staged=True)
 
     def __enter__(self):
         self._do_enter(self.independent, self.xg)

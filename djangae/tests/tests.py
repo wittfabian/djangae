@@ -10,13 +10,11 @@ import decimal
 # LIBRARIES
 from django.core.files.uploadhandler import StopFutureHandlers
 from django.core.cache import cache
-from django.core.signals import request_finished, request_started
 from django.core.exceptions import ValidationError
 from django.db import connections
 from django.db import DataError, models
 from django.db.models.query import Q
 from django.forms import ModelForm
-from django.http import HttpRequest
 from django.test import RequestFactory
 from django.utils.safestring import SafeText
 from django.forms.models import modelformset_factory
@@ -45,10 +43,11 @@ from djangae.db import transaction
 from djangae.fields import ComputedCharField, ShardedCounterField, SetField, ListField, GenericRelationField
 from djangae.models import CounterShard
 from djangae.db.backends.appengine.dnf import parse_dnf
-from .storage import BlobstoreFileUploadHandler
-from .wsgi import DjangaeApplication
+from djangae.storage import BlobstoreFileUploadHandler
+from djangae.wsgi import DjangaeApplication
 from djangae.core import paginator
 from django.template import Template, Context
+from djangae.fields import RelatedSetField
 
 try:
     import webtest
@@ -65,6 +64,8 @@ class TestUser(models.Model):
     def __unicode__(self):
         return self.username
 
+    class Meta:
+        app_label = "djangae"
 
 class UniqueModel(models.Model):
     unique_field = models.CharField(max_length=100, unique=True)
@@ -84,9 +85,14 @@ class UniqueModel(models.Model):
             ("unique_together_list_field", "unique_combo_one")
         ]
 
+        app_label = "djangae"
+
 
 class IntegerModel(models.Model):
     integer_field = models.IntegerField()
+
+    class Meta:
+        app_label = "djangae"
 
 
 class TestFruit(models.Model):
@@ -97,6 +103,7 @@ class TestFruit(models.Model):
 
     class Meta:
         ordering = ("color",)
+        app_label = "djangae"
 
     def __unicode__(self):
         return self.name
@@ -113,126 +120,154 @@ class Permission(models.Model):
 
     class Meta:
         ordering = ('user__username', 'perm')
+        app_label = "djangae"
 
 
 class SelfRelatedModel(models.Model):
     related = models.ForeignKey('self', blank=True, null=True)
 
+    class Meta:
+        app_label = "djangae"
 
 class MultiTableParent(models.Model):
     parent_field = models.CharField(max_length=32)
 
+    class Meta:
+        app_label = "djangae"
 
 class MultiTableChildOne(MultiTableParent):
     child_one_field = models.CharField(max_length=32)
+
+    class Meta:
+        app_label = "djangae"
 
 
 class MultiTableChildTwo(MultiTableParent):
     child_two_field = models.CharField(max_length=32)
 
+    class Meta:
+        app_label = "djangae"
+
 
 class Relation(models.Model):
-    pass
+    class Meta:
+        app_label = "djangae"
 
 
 class Related(models.Model):
     headline = models.CharField(max_length=500)
     relation = models.ForeignKey(Relation)
 
-
-class CachingTests(TestCase):
-    def test_query_is_unique(self):
-        qry = datastore.Query(UniqueModel._meta.db_table)
-        qry["unique_field ="] = "test"
-        self.assertTrue(query_is_unique(UniqueModel, qry))
-        del qry["unique_field ="]
-
-        qry["unique_field >"] = "test"
-        self.assertFalse(query_is_unique(UniqueModel, qry))
-        del qry["unique_field >"]
-
-        qry["unique_combo_one ="] = "one"
-        self.assertFalse(query_is_unique(UniqueModel, qry))
-
-        qry["unique_combo_two ="] = "two"
-        self.assertTrue(query_is_unique(UniqueModel, qry))
-
-    def test_insert_adds_to_context_cache(self):
-        original_keys = caching.context.cache.keys()
-        original_rc_keys = caching.context.reverse_cache.keys()
-
-        instance = UniqueModel.objects.create(unique_field="test")
-
-        #There are 3 unique combinations (id, unique_field, unique_combo), we should've cached under all of them
-        self.assertEqual(3, len(caching.context.cache.keys()) - len(original_keys))
-
-        new_keys = list(set(caching.context.reverse_cache.keys()) - set(original_rc_keys))
-        self.assertEqual(new_keys[0].id_or_name(), instance.pk)
-
-    def test_pk_queries_hit_the_context_cache(self):
-        instance = UniqueModel.objects.create(unique_field="test") #Create an instance
-
-        #With the context cache enabled, make sure we don't hit the DB
-        with sleuth.watch("google.appengine.api.datastore.Query.Run") as rpc_run:
-            with sleuth.watch("djangae.db.backends.appengine.caching.get_from_cache") as cache_hit:
-                UniqueModel.objects.get(pk=instance.pk)
-                self.assertTrue(cache_hit.called)
-                self.assertFalse(rpc_run.called)
-
-    def test_transactions_clear_the_context_cache(self):
-        UniqueModel.objects.create(unique_field="test") #Create an instance
-
-        with transaction.atomic():
-            self.assertFalse(caching.context.cache)
-            UniqueModel.objects.create(unique_field="test2", unique_combo_one=1) #Create an instance
-            self.assertTrue(caching.context.cache)
-
-        self.assertFalse(caching.context.cache)
-
-    def test_insert_then_unique_query_returns_from_cache(self):
-        UniqueModel.objects.create(unique_field="test")  # Create an instance
-
-        # With the context cache enabled, make sure we don't hit the DB
-        with sleuth.watch("google.appengine.api.datastore.Query.Run") as rpc_wrapper:
-            with sleuth.watch("djangae.db.backends.appengine.caching.get_from_cache") as cache_hit:
-                instance_from_cache = UniqueModel.objects.get(unique_field="test")
-                self.assertTrue(cache_hit.called)
-                self.assertFalse(rpc_wrapper.called)
-
-        # Disable the context cache, make sure that we hit the database
-        with caching.disable_context_cache():
-            with sleuth.watch("google.appengine.api.datastore.Query.Run") as rpc_wrapper:
-                with sleuth.watch("djangae.db.backends.appengine.caching.get_from_cache") as cache_hit:
-                    instance_from_database = UniqueModel.objects.get(unique_field="test")
-                    self.assertTrue(cache_hit.called)
-                    self.assertTrue(rpc_wrapper.called)
-
-        self.assertEqual(instance_from_cache, instance_from_database)
-
-    def test_context_cache_cleared_after_request(self):
-        """ The context cache should be cleared between requests. """
-        UniqueModel.objects.create(unique_field="test")
-        with sleuth.watch("google.appengine.api.datastore.Query.Run") as query:
-            UniqueModel.objects.get(unique_field="test")
-            self.assertEqual(query.call_count, 0)
-            # Now start a new request, which should clear the cache
-            request_started.send(HttpRequest())
-            UniqueModel.objects.get(unique_field="test")
-            self.assertEqual(query.call_count, 1)
-            # Now do another call, which should use the cache (because it would have been
-            # populated by the previous call)
-            UniqueModel.objects.get(unique_field="test")
-            self.assertEqual(query.call_count, 1)
-            # Now clear the cache again by *finishing* a request
-            request_finished.send(HttpRequest())
-            UniqueModel.objects.get(unique_field="test")
-            self.assertEqual(query.call_count, 2)
+    class Meta:
+        app_label = "djangae"
 
 
 class NullDate(models.Model):
     date = models.DateField(null=True, default=None)
     datetime = models.DateTimeField(null=True, default=None)
     time = models.TimeField(null=True, default=None)
+
+    class Meta:
+        app_label = "djangae"
+
+
+class ModelWithUniques(models.Model):
+    name = models.CharField(max_length=64, unique=True)
+
+    class Meta:
+        app_label = "djangae"
+
+
+class ModelWithUniquesOnForeignKey(models.Model):
+    name = models.CharField(max_length=64, unique=True)
+    related_name = models.ForeignKey(ModelWithUniques, unique=True)
+
+    class Meta:
+        unique_together = [("name", "related_name")]
+        app_label = "djangae"
+
+
+class ModelWithDates(models.Model):
+    start = models.DateField()
+    end = models.DateField()
+
+    class Meta:
+        app_label = "djangae"
+
+
+class ModelWithUniquesAndOverride(models.Model):
+    name = models.CharField(max_length=64, unique=True)
+
+    class Djangae:
+        disable_constraint_checks = False
+
+    class Meta:
+        app_label = "djangae"
+
+
+class ISOther(models.Model):
+    name = models.CharField(max_length=500)
+
+    def __unicode__(self):
+        return "%s:%s" % (self.pk, self.name)
+
+    class Meta:
+        app_label = "djangae"
+
+class RelationWithoutReverse(models.Model):
+    name = models.CharField(max_length=500)
+
+    class Meta:
+        app_label = "djangae"
+
+
+class ISModel(models.Model):
+    related_things = RelatedSetField(ISOther)
+    limted_related = RelatedSetField(RelationWithoutReverse, limit_choices_to={'name': 'banana'}, related_name="+")
+    children = RelatedSetField("self", related_name="+")
+
+    class Meta:
+        app_label = "djangae"
+
+
+class RelationWithOverriddenDbTable(models.Model):
+    class Meta:
+        db_table = "bananarama"
+        app_label = "djangae"
+
+
+class GenericRelationModel(models.Model):
+    relation_to_content_type = GenericRelationField(ContentType, null=True)
+    relation_to_weird = GenericRelationField(RelationWithOverriddenDbTable, null=True)
+
+    class Meta:
+        app_label = "djangae"
+
+
+class SpecialIndexesModel(models.Model):
+    name = models.CharField(max_length=255)
+
+    def __unicode__(self):
+        return self.name
+
+    class Meta:
+        app_label = "djangae"
+
+
+class PaginatorModel(models.Model):
+    foo = models.IntegerField()
+
+    class Meta:
+        app_label = "djangae"
+
+
+class IterableFieldModel(models.Model):
+    set_field = SetField(models.CharField(max_length=1))
+    list_field = ListField(models.CharField(max_length=1))
+
+    class Meta:
+        app_label = "djangae"
+
 
 class BackendTests(TestCase):
     def test_entity_matches_query(self):
@@ -592,26 +627,6 @@ class QueryNormalizationTests(TestCase):
         self.assertEqual(expected, parse_dnf(qs.query.where, connection=connection)[0])
 
 
-class ModelWithUniques(models.Model):
-    name = models.CharField(max_length=64, unique=True)
-
-class ModelWithUniquesOnForeignKey(models.Model):
-    name = models.CharField(max_length=64, unique=True)
-    related_name = models.ForeignKey(ModelWithUniques, unique=True)
-
-    class Meta:
-        unique_together = [("name", "related_name")]
-
-class ModelWithDates(models.Model):
-    start = models.DateField()
-    end = models.DateField()
-
-
-class ModelWithUniquesAndOverride(models.Model):
-    name = models.CharField(max_length=64, unique=True)
-
-    class Djangae:
-        disable_constraint_checks = False
 
 
 class ConstraintTests(TestCase):
@@ -1370,11 +1385,6 @@ class ShardedCounterTest(TestCase):
         self.assertEqual(0, instance.counter.value())
 
 
-class IterableFieldModel(models.Model):
-    set_field = SetField(models.CharField(max_length=1))
-    list_field = ListField(models.CharField(max_length=1))
-
-
 class IterableFieldTests(TestCase):
     def test_filtering_on_iterable_fields(self):
         list1 = IterableFieldModel.objects.create(
@@ -1477,22 +1487,6 @@ class IterableFieldTests(TestCase):
         self.assertTrue(IterableFieldModel.objects.exclude(set_field__isnull=True).exists())
 
 
-from djangae.fields import RelatedSetField
-
-class ISOther(models.Model):
-    name = models.CharField(max_length=500)
-
-    def __unicode__(self):
-        return "%s:%s" % (self.pk, self.name)
-
-class RelationWithoutReverse(models.Model):
-    name = models.CharField(max_length=500)
-
-class ISModel(models.Model):
-    related_things = RelatedSetField(ISOther)
-    limted_related = RelatedSetField(RelationWithoutReverse, limit_choices_to={'name': 'banana'}, related_name="+")
-    children = RelatedSetField("self", related_name="+")
-
 class InstanceSetFieldTests(TestCase):
 
     def test_basic_usage(self):
@@ -1571,13 +1565,6 @@ class InstanceSetFieldTests(TestCase):
         other.delete()
         self.assertEqual(main.related_things.count(), 0)
 
-class RelationWithOverriddenDbTable(models.Model):
-    class Meta:
-        db_table = "bananarama"
-
-class GenericRelationModel(models.Model):
-    relation_to_content_type = GenericRelationField(ContentType, null=True)
-    relation_to_weird = GenericRelationField(RelationWithOverriddenDbTable, null=True)
 
 class TestGenericRelationField(TestCase):
     def test_basic_usage(self):
@@ -1605,10 +1592,6 @@ class TestGenericRelationField(TestCase):
 
         instance = GenericRelationModel.objects.get()
         self.assertEqual(ct, instance.relation_to_weird)
-
-
-class PaginatorModel(models.Model):
-    foo = models.IntegerField()
 
 
 class DatastorePaginatorTest(TestCase):
@@ -1655,12 +1638,6 @@ class DatastorePaginatorTest(TestCase):
         self.assertEqual(p1.end_index(), 0)
         self.assertEqual([x for x in p1], [])
 
-
-class SpecialIndexesModel(models.Model):
-    name = models.CharField(max_length=255)
-
-    def __unicode__(self):
-        return self.name
 
 class TestSpecialIndexers(TestCase):
 
