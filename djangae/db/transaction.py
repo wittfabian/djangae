@@ -12,81 +12,84 @@ from google.appengine.datastore.datastore_rpc import TransactionOptions
 from djangae.db.backends.appengine import caching
 
 
-class AtomicDecorator(object):
-    def __init__(self, *args, **kwargs):
-        self.func = None
+class ContextDecorator(object):
+    def __init__(self, func=None):
+        self.func = func
 
-        self.xg = kwargs.get("xg")
-        self.independent = kwargs.get("independent")
-        self.parent_conn = None
+    def __call__(self, *args, **kwargs):
+        def decorated(*_args, **_kwargs):
+            with self:
+                return self.func(*_args, **_kwargs)
 
-        if len(args) == 1 and callable(args[0]):
+        if not self.func:
             self.func = args[0]
+            return decorated
 
-    def _begin(self):
+        return decorated(*args, **kwargs)
+
+class TransactionFailedError(Exception):
+    pass
+
+class AtomicDecorator(ContextDecorator):
+    def __init__(self, func=None, xg=False, independent=False):
+        self.independent = independent
+        self.xg = xg
+        self.conn_stack = []
+        super(AtomicDecorator, self).__init__(func)
+
+    def _do_enter(self, independent, xg):
+
+        if IsInTransaction():
+            if independent:
+                self.conn_stack.append(_PopConnection())
+                try:
+                    return self._do_enter(independent, xg)
+                except:
+                    _PushConnection(self.conn_stack.pop())
+                    raise
+
         options = CreateTransactionOptions(
-            xg = True if self.xg else False,
-            propagation = TransactionOptions.INDEPENDENT if self.independent else None
+            xg=xg,
+            propagation=TransactionOptions.INDEPENDENT if independent else None
         )
 
-        if IsInTransaction() and not self.independent:
-            raise RuntimeError("Nested transactions are not supported")
-        elif self.independent:
-            # If we're running an independent transaction, pop the current one
-            self.parent_conn = _PopConnection()
-
-        # Push a new connection, start a new transaction
         conn = _GetConnection()
         _PushConnection(None)
         _SetConnection(conn.new_transaction(options))
 
         # Clear the context cache at the start of a transaction
-        caching.clear_context_cache()
+        caching._context.stack.push()
 
-    def _finalize(self):
-        _PopConnection()  # Pop the transaction connection
-        if self.parent_conn:
-            # If there was a parent transaction, now put that back
-            _PushConnection(self.parent_conn)
-            self.parent_conn = None
+    def _do_exit(self, independent, xg, exception):
+        try:
+            if exception:
+                _GetConnection().rollback()
+            else:
+                if not _GetConnection().commit():
+                    raise TransactionFailedError()
+        finally:
+            _PopConnection()
 
-        # Clear the context cache at the end of a transaction
-        caching.clear_context_cache()
+            if independent:
+                while self.conn_stack:
+                    _PushConnection(self.conn_stack.pop())
 
-    def __call__(self, *args, **kwargs):
-        def call_func(*_args, **_kwargs):
-            try:
-                self._begin()
-                result = self.func(*_args, **_kwargs)
-                _GetConnection().commit()
-                return result
-            except:
-                conn = _GetConnection()
-                if conn:
-                    conn.rollback()
-                raise
-            finally:
-                self._finalize()
-
-        if not self.func:
-            assert args and callable(args[0])
-            self.func = args[0]
-            return call_func
-
-        if self.func:
-            return call_func(*args, **kwargs)
+                 # Clear the context cache at the end of a transaction
+                if exception:
+                    caching._context.stack.pop(discard=True)
+                else:
+                    caching._context.stack.pop(apply_staged=False, clear_staged=False)
+            else:
+                if exception:
+                    caching._context.stack.pop(discard=True)
+                else:
+                    caching._context.stack.pop(apply_staged=True, clear_staged=True)
 
     def __enter__(self):
-        self._begin()
+        self._do_enter(self.independent, self.xg)
 
-    def __exit__(self, *args, **kwargs):
-        if len(args) > 1 and isinstance(args[1], Exception):
-            _GetConnection().rollback()  # If an exception happens, rollback
-        else:
-            _GetConnection().commit()  # Otherwise commit
-
-        self._finalize()
-
+    def __exit__(self, exc_type, exc_value, traceback):
+        self._do_exit(self.independent, self.xg, exc_type)
 
 atomic = AtomicDecorator
 commit_on_success = AtomicDecorator  # Alias to the old Django name for this kinda thing

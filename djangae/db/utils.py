@@ -7,6 +7,7 @@ import warnings
 
 #LIBRARIES
 from django.conf import settings
+from django.db import models
 from django.db.backends.util import format_number
 from django.db import IntegrityError
 from django.utils import timezone
@@ -14,6 +15,7 @@ from google.appengine.api import datastore
 from google.appengine.api.datastore import Key, Query
 
 #DJANGAE
+from djangae.utils import memoized
 from djangae.indexing import special_indexes_for_column, REQUIRES_SPECIAL_INDEXES
 from djangae.db.backends.appengine.dbapi import CouldBeSupportedError
 
@@ -28,6 +30,13 @@ def make_timezone_naive(value):
         else:
             raise ValueError("Djangae backend does not support timezone-aware datetimes when USE_TZ is False.")
     return value
+
+
+@memoized
+def get_model_from_db_table(db_table):
+    for model in models.get_models(include_auto_created=True, only_installed=False):
+        if model._meta.db_table == db_table:
+            return model
 
 
 def decimal_to_string(value, max_digits=16, decimal_places=0):
