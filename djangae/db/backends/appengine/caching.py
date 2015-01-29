@@ -45,8 +45,7 @@ def _get_cache_key_and_model_from_datastore_key(key):
     if not model:
         # This should never happen.. if it does then we can edit get_model_from_db_table to pass
         # include_deferred=True/included_swapped=True to get_models, whichever makes it better
-        logging.warning("Unable to locate model for db_table '{}' - item won't be evicted from the cache".format(key.kind()))
-        return
+        raise AssertionError("Unable to locate model for db_table '{}' - item won't be evicted from the cache".format(key.kind()))
 
     # We build the cache key for the ID of the instance
     cache_key =  "|".join([key.kind(), "{}:{}".format(model._meta.pk.column,  _format_value_for_identifier(key.id_or_name()))])
