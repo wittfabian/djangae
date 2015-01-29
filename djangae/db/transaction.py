@@ -31,36 +31,53 @@ class TransactionFailedError(Exception):
     pass
 
 class AtomicDecorator(ContextDecorator):
-    def __init__(self, func=None, xg=False, independent=False):
+    def __init__(self, func=None, xg=False, independent=False, mandatory=False):
         self.independent = independent
         self.xg = xg
+        self.mandatory = mandatory
         self.conn_stack = []
+        self.transaction_started = False
         super(AtomicDecorator, self).__init__(func)
 
-    def _do_enter(self, independent, xg):
-
+    def _do_enter(self):
         if IsInTransaction():
-            if independent:
+            if self.independent:
                 self.conn_stack.append(_PopConnection())
                 try:
-                    return self._do_enter(independent, xg)
+                    return self._do_enter()
                 except:
                     _PushConnection(self.conn_stack.pop())
                     raise
+            else:
+                # App Engine doesn't support nested transactions, so if there is a nested
+                # atomic() call we just don't do anything. This is how RunInTransaction does it
+                return
+        elif self.mandatory:
+            raise TransactionFailedError("You've specified that an outer transaction is mandatory, but one doesn't exist")
 
         options = CreateTransactionOptions(
-            xg=xg,
-            propagation=TransactionOptions.INDEPENDENT if independent else None
+            xg=self.xg,
+            propagation=TransactionOptions.INDEPENDENT if self.independent else None
         )
 
         conn = _GetConnection()
+
+        self.transaction_started = True
+        new_conn = conn.new_transaction(options)
+
         _PushConnection(None)
-        _SetConnection(conn.new_transaction(options))
+        _SetConnection(new_conn)
+
+        assert(_GetConnection())
 
         # Clear the context cache at the start of a transaction
         caching._context.stack.push()
 
-    def _do_exit(self, independent, xg, exception):
+    def _do_exit(self, exception):
+        if not self.transaction_started:
+            # If we didn't start a transaction, then don't roll back or anything
+            return
+
         try:
             if exception:
                 _GetConnection().rollback()
@@ -70,7 +87,7 @@ class AtomicDecorator(ContextDecorator):
         finally:
             _PopConnection()
 
-            if independent:
+            if self.independent:
                 while self.conn_stack:
                     _PushConnection(self.conn_stack.pop())
 
@@ -86,10 +103,10 @@ class AtomicDecorator(ContextDecorator):
                     caching._context.stack.pop(apply_staged=True, clear_staged=True)
 
     def __enter__(self):
-        self._do_enter(self.independent, self.xg)
+        self._do_enter()
 
     def __exit__(self, exc_type, exc_value, traceback):
-        self._do_exit(self.independent, self.xg, exc_type)
+        self._do_exit(exc_type)
 
 atomic = AtomicDecorator
 commit_on_success = AtomicDecorator  # Alias to the old Django name for this kinda thing
