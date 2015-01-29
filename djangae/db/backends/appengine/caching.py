@@ -15,6 +15,10 @@ logger = logging.getLogger("djangae")
 
 _context = threading.local()
 
+CACHE_TIMEOUT_SECONDS = getattr(settings, "DJANGAE_CACHE_TIMEOUT_SECONDS", 60 * 60)
+CACHE_ENABLED = getattr(settings, "DJANGAE_CACHE_ENABLED", True)
+
+
 class CachingSituation:
     DATASTORE_GET = 0
     DATASTORE_PUT = 1
@@ -31,14 +35,8 @@ def ensure_context():
         _context.stack = ContextStack()
 
 
-def _get_memcache_timeout():
-    return getattr(settings, "DJANGAE_CACHE_TIMEOUT_SECONDS", 60 * 60)
-
-def _get_cache_enabled():
-    return getattr(settings, "DJANGAE_ENABLE_CACHING", True)
-
 def _add_entity_to_memcache(model, entity, identifiers):
-    cache.set_many({ x: entity for x in identifiers}, timeout=_get_memcache_timeout())
+    cache.set_many({ x: entity for x in identifiers}, timeout=CACHE_TIMEOUT_SECONDS)
 
 
 def _get_cache_key_and_model_from_datastore_key(key):
@@ -129,7 +127,7 @@ def get_from_cache_by_key(key):
 
     ensure_context()
 
-    if not _get_cache_enabled():
+    if not CACHE_ENABLED:
         return None
 
     ret = None
@@ -150,7 +148,7 @@ def get_from_cache(unique_identifier):
 
     ensure_context()
 
-    if not _get_cache_enabled():
+    if not CACHE_ENABLED:
         return None
 
     ret = None

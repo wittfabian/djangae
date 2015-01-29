@@ -292,7 +292,7 @@ behaviour you are best reading through the caching tests. But here's a general o
 
 The following settings are available to control the caching:
 
- - DJANGAE_ENABLE_CACHING (default True). Setting to False it all off, I really wouldn't suggest doing that!
+ - DJANGAE_CACHE_ENABLED (default True). Setting to False it all off, I really wouldn't suggest doing that!
  - DJANGAE_CACHE_TIMEOUT_SECONDS (default 60 * 60). The length of time stuff should be kept in memcache
 
 ## Map Reduce
