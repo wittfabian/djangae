@@ -85,9 +85,13 @@ def query_is_unique(model, query):
 
     for combination in combinations:
         unique_match = True
+        field_names = []
         for field in combination:
             if field == model._meta.pk.column:
                 field = "__key__"
+            else:
+                field = model._meta.get_field(field).column
+            field_names.append(field)
 
             # We don't match this combination if the field didn't exist in the queried fields
             # or if it was, but the value was None (you can have multiple NULL values, they aren't unique)
@@ -99,7 +103,7 @@ def query_is_unique(model, query):
         if unique_match:
             return "|".join([model._meta.db_table] + [
                 "{}:{}".format(x, _format_value_for_identifier(query["{} =".format(x)]))
-                for x in combination
+                for x in field_names
             ])
 
     return False
