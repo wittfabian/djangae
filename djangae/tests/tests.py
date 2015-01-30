@@ -668,6 +668,19 @@ class ConstraintTests(TestCase):
         with self.assertRaises((IntegrityError, DataError)):
             ModelWithUniques.objects.create(name="One")
 
+    def test_table_flush_clears_markers_for_that_table(self):
+        ModelWithUniques.objects.create(name="One")
+        UniqueModel.objects.create(unique_field="One")
+
+        from djangae.db.backends.appengine.commands import FlushCommand
+
+        FlushCommand(ModelWithUniques._meta.db_table).execute()
+        ModelWithUniques.objects.create(name="One")
+
+        with self.assertRaises(DataError):
+            UniqueModel.objects.create(unique_field="One")
+
+
     def test_conflicting_update_throws_integrity_error(self):
         ModelWithUniques.objects.create(name="One")
 

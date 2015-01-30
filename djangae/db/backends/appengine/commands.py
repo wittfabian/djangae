@@ -840,6 +840,14 @@ class FlushCommand(object):
         while query.Count():
             datastore.Delete(query.Run())
 
+        # Delete the markers we need to
+        from djangae.db.constraints import UniqueMarker
+        query = datastore.Query(UniqueMarker.kind(), keys_only=True)
+        query["__key__ >="] = datastore.Key.from_path(UniqueMarker.kind(), self.table)
+        query["__key__ <"] = datastore.Key.from_path(UniqueMarker.kind(), u"{}{}".format(self.table, u'\ufffd'))
+        while query.Count():
+            datastore.Delete(query.Run())
+
         cache.clear()
         clear_context_cache()
 

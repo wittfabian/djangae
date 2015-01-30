@@ -192,12 +192,7 @@ class DatabaseOperations(BaseDatabaseOperations):
         return value
 
     def sql_flush(self, style, tables, seqs, allow_cascade=False):
-        try:
-             return [ FlushCommand(table) for table in tables ]
-        finally:
-            # FIXME: We should only delete the markers from the associated tables!
-            FlushCommand("__unique_marker").execute()
-            caching.clear_context_cache()
+        return [ FlushCommand(table) for table in tables ]
 
     def prep_lookup_key(self, model, value, field):
         if isinstance(value, basestring):
