@@ -244,7 +244,7 @@ The following settings are available to control the caching:
 ## Contrib Applications
 
  - [Authentication with djangae.contrib.gauth](djangae/contrib/gauth/README.md)
- - [Map-reduce integration with djangae.contrib.mappers](djangae/contrib/gauth/README.md)
+ - [Map-reduce integration with djangae.contrib.mappers](djangae/contrib/mappers/README.md)
 
 ## Contributing
 
