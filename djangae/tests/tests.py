@@ -453,6 +453,52 @@ class TransactionTests(TestCase):
 
         self.assertEqual(0, TestUser.objects.count())
 
+    def test_interaction_with_datastore_txn(self):
+        from google.appengine.ext import db
+        from google.appengine.datastore.datastore_rpc import TransactionOptions
+
+        @db.transactional(propagation=TransactionOptions.INDEPENDENT)
+        def some_indie_txn(_username):
+            TestUser.objects.create(username=_username)
+
+        @db.transactional()
+        def some_non_indie_txn(_username):
+            TestUser.objects.create(username=_username)
+
+        @db.transactional()
+        def double_nested_transactional():
+            @db.transactional(propagation=TransactionOptions.INDEPENDENT)
+            def do_stuff():
+                TestUser.objects.create(username="Double")
+                raise ValueError()
+
+            try:
+                return do_stuff
+            except:
+                return
+
+        with transaction.atomic():
+            double_nested_transactional()
+
+
+        @db.transactional()
+        def something_containing_atomic():
+            with transaction.atomic():
+                TestUser.objects.create(username="Inner")
+
+        something_containing_atomic()
+
+        with transaction.atomic():
+            with transaction.atomic():
+                some_non_indie_txn("Bob1")
+                some_indie_txn("Bob2")
+                some_indie_txn("Bob3")
+
+        with transaction.atomic(independent=True):
+            some_non_indie_txn("Fred1")
+            some_indie_txn("Fred2")
+            some_indie_txn("Fred3")
+
     def test_atomic_context_manager(self):
 
         with self.assertRaises(ValueError):

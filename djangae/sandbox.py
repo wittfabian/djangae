@@ -283,9 +283,16 @@ def allow_modules(func, *args):
         sys.meta_path = []
         patch_modules = [subprocess, os, tempfile, select]
 
+        import copy
+        environ = copy.copy(os.environ)
+
         for mod in patch_modules:
             _system = reload(mod)
             mod.__dict__.update(_system.__dict__)
+
+        # We have to maintain the environment, or bad things happen
+        os.environ = environ
+
         try:
             return func(*args, **kwargs)
         finally:
