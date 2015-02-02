@@ -1009,31 +1009,11 @@ class UpdateCommand(object):
 
         instance_kwargs = {field.attname:value for field, param, value in self.values}
         instance = MockInstance(**instance_kwargs)
-        for field, param, value in self.values:
-            column_value = get_prepared_db_value(self.connection, instance, field, raw=True)
-
-            result[field.column] = column_value
-
-            # Add special indexed fields
-            for index in special_indexes_for_column(self.model, field.column):
-                indexer = REQUIRES_SPECIAL_INDEXES[index]
-                values = indexer.prep_value_for_database(column_value)
-
-                if values is None:
-                    continue
-
-                if not hasattr(values, "__iter__"):
-                    values = [ values ]
-
-                for value in values:
-                    column = indexer.indexed_column_name(field.column, value)
-                    if column in result:
-                        if not isinstance(result[column], list):
-                            result[column] = [ result[column], value ]
-                        else:
-                            result[column].append(value)
-                    else:
-                        result[column] = value
+        result.update(django_instance_to_entity(
+            self.connection, self.model,
+            [ x[0] for x in self.values],  # Pass in the fields that were updated
+            True, instance)
+        )
 
         if not constraints.constraint_checks_enabled(self.model):
             # The fast path, no constraint checking
