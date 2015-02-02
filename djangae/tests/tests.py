@@ -89,7 +89,7 @@ class UniqueModel(models.Model):
 
 
 class IntegerModel(models.Model):
-    integer_field = models.IntegerField()
+    integer_field = models.IntegerField(default=0)
 
     class Meta:
         app_label = "djangae"
@@ -298,6 +298,21 @@ class BackendTests(TestCase):
         # query then it's a match
         entity["name"] = [ "Bob", "Fred", "Dave" ]
         self.assertTrue(entity_matches_query(entity, query))  # ListField test
+
+    def test_setting_non_null_null_throws_integrity_error(self):
+        with self.assertRaises(DjangoIntegrityError):
+            IntegerModel.objects.create(integer_field=None)
+
+        with self.assertRaises(DjangoIntegrityError):
+            instance = IntegerModel()
+            instance.integer_field = None
+            instance.save()
+
+        with self.assertRaises(DjangoIntegrityError):
+            instance = IntegerModel.objects.create(integer_field=1)
+            instance = IntegerModel.objects.get()
+            instance.integer_field = None
+            instance.save()
 
     def test_normalise_field_value(self):
         self.assertEqual(u'0000475231073257', normalise_field_value(decimal.Decimal(475231073257)))

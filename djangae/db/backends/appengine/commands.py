@@ -1008,32 +1008,21 @@ class UpdateCommand(object):
         original = copy.deepcopy(result)
 
         instance_kwargs = {field.attname:value for field, param, value in self.values}
+
+        # Note: If you replace MockInstance with self.model, you'll find that some delete
+        # tests fail in the test app. This is because any unspecified fields would then call
+        # get_default (even though we aren't going to use them) which may run a query which
+        # fails inside this transaction. Given as we are just using MockInstance so that we can
+        # call django_instance_to_entity it on it with the subset of fields we pass in,
+        # what we have is fine.
         instance = MockInstance(**instance_kwargs)
-        for field, param, value in self.values:
-            column_value = get_prepared_db_value(self.connection, instance, field, raw=True)
 
-            result[field.column] = column_value
-
-            # Add special indexed fields
-            for index in special_indexes_for_column(self.model, field.column):
-                indexer = REQUIRES_SPECIAL_INDEXES[index]
-                values = indexer.prep_value_for_database(column_value)
-
-                if values is None:
-                    continue
-
-                if not hasattr(values, "__iter__"):
-                    values = [ values ]
-
-                for value in values:
-                    column = indexer.indexed_column_name(field.column, value)
-                    if column in result:
-                        if not isinstance(result[column], list):
-                            result[column] = [ result[column], value ]
-                        else:
-                            result[column].append(value)
-                    else:
-                        result[column] = value
+        # Update the entity we read above with the new values
+        result.update(django_instance_to_entity(
+            self.connection, self.model,
+            [ x[0] for x in self.values],  # Pass in the fields that were updated
+            True, instance)
+        )
 
         if not constraints.constraint_checks_enabled(self.model):
             # The fast path, no constraint checking
