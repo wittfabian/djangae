@@ -186,7 +186,7 @@ def django_instance_to_entity(connection, model, fields, raw, instance):
         if isinstance(primary_key, (int, long)):
             kwargs["id"] = primary_key
         elif isinstance(primary_key, basestring):
-            if len(primary_key) >= 500:
+            if len(primary_key) > 500:
                 warnings.warn("Truncating primary key that is over 500 characters. "
                               "THIS IS AN ERROR IN YOUR PROGRAM.",
                               RuntimeWarning)
