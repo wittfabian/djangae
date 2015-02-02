@@ -18,7 +18,7 @@ from django.core.mail import send_mail
 from django.core import validators
 from django.db import models
 from django.db.models import signals
-from django.utils import timezone
+from django.utils import timezone, six
 from django.utils.translation import ugettext_lazy as _
 from django.db.models.loading import get_apps, get_models
 from django.contrib.auth import get_permission_codename
@@ -204,6 +204,7 @@ class GaeUserManager(UserManager):
         return self.create(**values)
 
 
+@python_2_unicode_compatible
 class GaeAbstractBaseUser(AbstractBaseUser):
     """ Absract base class for creating a User model which works with the App Engine users API. """
 
@@ -259,6 +260,15 @@ class GaeAbstractBaseUser(AbstractBaseUser):
         """
         send_mail(subject, message, from_email, [self.email])
 
+    def __str__(self):
+        """
+            We have to override this as username is nullable. We either return the email
+            address, or if there is a username, we return "email (username)".
+        """
+        username = self.get_username()
+        if username:
+            return "{} ({})".format(six.text_type(self.email), six.text_type(username))
+        return six.text_type(self.email)
 
 class GaeAbstractUser(GaeAbstractBaseUser, DjangoPermissionsMixin):
     """
