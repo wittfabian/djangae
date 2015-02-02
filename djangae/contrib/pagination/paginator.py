@@ -8,14 +8,41 @@ class PaginationOrderingRequired(RuntimeError):
     pass
 
 
+def _marker_cache_key(model, query_id, page_number):
+    cache_key = "_PAGE_MARKER_{}:{}:{}".format(model._meta.db_table, query_id, page_number)
+    return cache_key
+
+
+def _count_cache_key(query_id, per_page):
+    cache_key = "_PAGE_COUNTER_{}:{}".format(query_id, per_page)
+    return cache_key
+
+
+def _update_known_count(query_id, per_page, count):
+    cache_key = _count_cache_key(query_id, per_page)
+
+    ret = cache.get(cache_key)
+    if ret and ret > count:
+        return
+
+    cache.set(cache_key, count)
+
+
+def _get_known_count(query_id, per_page):
+    cache_key = _count_cache_key(query_id, per_page)
+    ret = cache.get(cache_key)
+    if ret:
+        return ret
+    return 0
+
 def _store_marker(model, query_id, page_number, marker_value):
     """
         For a model and query id, stores the marker value for previously
         queried page number
     """
 
-    CACHE_KEY = "{}:{}:{}".format(model._meta.db_table, query_id, page_number)
-    cache.set(CACHE_KEY, marker_value, 30*60)
+    cache_key = _marker_cache_key(model, query_id, page_number)
+    cache.set(cache_key, marker_value, 30*60)
 
 
 def _get_marker(model, query_id, page_number):
@@ -30,9 +57,8 @@ def _get_marker(model, query_id, page_number):
     pages_skipped = 0
 
     while counter:
-        CACHE_KEY = "{}:{}:{}".format(model._meta.db_table, query_id, counter)
-
-        ret = cache.get(CACHE_KEY)
+        cache_key = _marker_cache_key(model, query_id, page_number)
+        ret = cache.get(cache_key)
 
         if ret:
             return ret, pages_skipped
@@ -59,7 +85,7 @@ class DatastorePaginator(Paginator):
         return paginated sets on the appengine datastore
     """
 
-    def __init__(self, object_list, per_page, **kwargs):
+    def __init__(self, object_list, per_page, count_pages_up_to=10, **kwargs):
         if not object_list.ordered:
             object_list.order_by("pk") # Just order by PK by default
 
@@ -80,8 +106,18 @@ class DatastorePaginator(Paginator):
         else:
             object_list = object_list.order_by(self.field_required)
 
+        # If we specified an initial count up to, then count some things
+        queryset_id = queryset_identifier(object_list)
+        upper_count_limit = count_pages_up_to * per_page
+        if _get_known_count(queryset_id, per_page) < upper_count_limit:
+            object_count = object_list[:upper_count_limit].count()
+            _update_known_count(queryset_id, per_page, object_count)
+
         super(DatastorePaginator, self).__init__(object_list, per_page, **kwargs)
 
+    @property
+    def count(self):
+        return _get_known_count(queryset_identifier(self.object_list), self.per_page)
 
     def page(self, number):
         """

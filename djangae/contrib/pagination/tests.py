@@ -49,6 +49,15 @@ class DatastorePaginatorTests(TestCase):
         self.u3 = TestUser.objects.create(id=3, first_name="B", last_name="A")
         self.u4 = TestUser.objects.create(id=4, first_name="B", last_name="B")
 
+    def test_count_up_to(self):
+        paginator = DatastorePaginator(TestUser.objects.all().order_by("first_name"), 1, count_pages_up_to=2)
+
+        self.assertEqual(2, paginator.count)
+
+        paginator = DatastorePaginator(TestUser.objects.all().order_by("first_name"), 1)
+
+        self.assertEqual(4, paginator.count)
+
     def test_pages_correct(self):
         paginator = DatastorePaginator(TestUser.objects.all().order_by("first_name"), 1) # 1 item per page
 
