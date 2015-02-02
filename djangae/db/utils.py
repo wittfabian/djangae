@@ -106,7 +106,7 @@ def get_concrete_parents(model, ignore_leaf=False):
         ret = [ x for x in ret if x != model ]
     return ret
 
-
+@memoized
 def get_top_concrete_parent(model):
     return get_concrete_parents(model)[-1]
 
@@ -122,9 +122,11 @@ def get_concrete_fields(model, ignore_leaf=False):
 
     return fields
 
+@memoized
 def get_concrete_db_tables(model):
     return [ x._meta.db_table for x in get_concrete_parents(model) ]
 
+@memoized
 def has_concrete_parents(model):
     return get_concrete_parents(model) != [model]
 
