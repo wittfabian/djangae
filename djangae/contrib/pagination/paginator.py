@@ -1,5 +1,8 @@
+from hashlib import md5
+from django.db import models
 from django.core.paginator import Paginator
 from djangae.contrib.pagination.decorators import _field_name_for_ordering
+from django.core.cache import cache
 
 class PaginationOrderingRequired(RuntimeError):
     pass
@@ -11,7 +14,9 @@ def _store_marker(model, query_id, page_number, marker_value):
         queried page number
     """
 
-    pass
+    CACHE_KEY = "{}:{}:{}".format(model._meta.db_table, query_id, page_number)
+    cache.set(CACHE_KEY, marker_value, 30*60)
+
 
 def _get_marker(model, query_id, page_number):
     """
@@ -20,19 +25,50 @@ def _get_marker(model, query_id, page_number):
         the number of pages we had to go back to find the marker (this is the
         number of pages we need to skip in the result set)
     """
-    pass
+
+    counter = page_number - 1
+    pages_skipped = 0
+
+    while counter:
+        CACHE_KEY = "{}:{}:{}".format(model._meta.db_table, query_id, counter)
+
+        ret = cache.get(CACHE_KEY)
+
+        if ret:
+            return ret, pages_skipped
+
+        counter -= 1
+        pages_skipped += 1
+
+    # If we get here then we couldn't find a stored marker anywhere
+    return None, pages_skipped
+
+
+def queryset_identifier(queryset):
+    """ Returns a string that uniquely identifies this query excluding its low and high mark"""
+
+    hasher = md5()
+    hasher.update(str(queryset.query.where))
+    hasher.update(str(queryset.query.order_by))
+    return hasher.hexdigest()
 
 
 class DatastorePaginator(Paginator):
+    """
+        A paginator that works with the @paginated_model class decorator to efficiently
+        return paginated sets on the appengine datastore
+    """
 
     def __init__(self, object_list, per_page, **kwargs):
         if not object_list.ordered:
             object_list.order_by("pk") # Just order by PK by default
 
         self.original_orderings = object_list.query.order_by
-        self.field_required = _field_name_for_ordering(self.original_orderings)
+        self.field_required = _field_name_for_ordering(self.original_orderings[:])
 
-        if not object_list.model._meta.get_field(self.field_required):
+        try:
+            object_list.model._meta.get_field(self.field_required)
+        except models.FieldDoesNotExist:
             raise PaginationOrderingRequired("No pagination ordering specified for {}".format(self.original_orderings))
 
         # Wipe out the existing ordering
@@ -57,16 +93,18 @@ class DatastorePaginator(Paginator):
         if top + self.orphans >= self.count:
             top = self.count
 
+        queryset_id = queryset_identifier(self.object_list)
+
         try:
             marker_value, pages = _get_marker(
                 self.object_list.model,
-                str(self.object_list.query), #FIXME, make sure this doesn't change for high/low
+                queryset_id,
                 number
             )
 
             if marker_value:
                 if len(self.original_orderings) == 1 and self.original_orderings[0].startswith("-"):
-                    qs = self.object_list.all().filter(**{"{}__lte".format(self.field_required): marker_value})
+                    qs = self.object_list.all().filter(**{"{}__lt".format(self.field_required): marker_value})
                 else:
                     qs = self.object_list.all().filter(**{"{}__gt".format(self.field_required): marker_value})
                 bottom = pages * self.per_page
@@ -79,7 +117,7 @@ class DatastorePaginator(Paginator):
         finally:
             _store_marker(
                 self.object_list.model,
-                str(self.object_list.query),
+                queryset_id,
                 number,
                 getattr(page.object_list[self.per_page-1], self.field_required)
             )

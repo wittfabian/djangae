@@ -44,10 +44,10 @@ class DatastorePaginatorTests(TestCase):
     def setUp(self):
         super(DatastorePaginatorTests, self).setUp()
 
-        self.u1 = TestUser.objects.create(first_name="A", last_name="A")
-        self.u2 = TestUser.objects.create(first_name="A", last_name="B")
-        self.u3 = TestUser.objects.create(first_name="B", last_name="A")
-        self.u4 = TestUser.objects.create(first_name="B", last_name="B")
+        self.u1 = TestUser.objects.create(id=1, first_name="A", last_name="A")
+        self.u2 = TestUser.objects.create(id=2, first_name="A", last_name="B")
+        self.u3 = TestUser.objects.create(id=3, first_name="B", last_name="A")
+        self.u4 = TestUser.objects.create(id=4, first_name="B", last_name="B")
 
     def test_pages_correct(self):
         paginator = DatastorePaginator(TestUser.objects.all().order_by("first_name"), 1) # 1 item per page

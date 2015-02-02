@@ -19,7 +19,7 @@ def generator(fields, instance):
             value = u"".join([ unichr(0xffff - ord(x)) for x in value ])
         values.append(value)
 
-    values.append(unicode(instance.pk) or unicode(random.randint(0, 1000000000)))
+    values.append(unicode(instance.pk) if instance.pk else unicode(random.randint(0, 1000000000)))
 
     return NULL_CHARACTER.join(values)
 
