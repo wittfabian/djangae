@@ -100,14 +100,30 @@ def get_prepared_db_value(connection, instance, field, raw=False):
     return value
 
 
-def get_concrete_parents(model):
+def get_concrete_parents(model, ignore_leaf=False):
     ret = [x for x in model.mro() if hasattr(x, "_meta") and not x._meta.abstract and not x._meta.proxy]
+    if ignore_leaf:
+        ret = [ x for x in ret if x != model ]
     return ret
 
 
 def get_top_concrete_parent(model):
     return get_concrete_parents(model)[-1]
 
+def get_concrete_fields(model, ignore_leaf=False):
+    """
+        Returns all the concrete fields for the model, including those
+        from parent models
+    """
+    concrete_classes = get_concrete_parents(model, ignore_leaf)
+    fields = []
+    for klass in concrete_classes:
+        fields.extend(klass._meta.fields)
+
+    return fields
+
+def get_concrete_db_tables(model):
+    return [ x._meta.db_table for x in get_concrete_parents(model) ]
 
 def has_concrete_parents(model):
     return get_concrete_parents(model) != [model]
@@ -131,14 +147,6 @@ def django_instance_to_entity(connection, model, fields, raw, instance):
 
         return value, is_primary_key
 
-    concrete_classes = get_concrete_parents(model)
-    classes = None
-    if len(concrete_classes) > 1:
-        classes = [ x._meta.db_table for x in concrete_classes ]
-
-        for klass in concrete_classes[1:]:  # Ignore the current model
-            for field in klass._meta.fields:
-                fields.append(field)  # Add any parent fields
 
     field_values = {}
     primary_key = None
@@ -189,7 +197,8 @@ def django_instance_to_entity(connection, model, fields, raw, instance):
     entity = datastore.Entity(db_table, **kwargs)
     entity.update(field_values)
 
-    if classes:
+    classes = get_concrete_db_tables(model)
+    if len(classes) > 1:
         entity["class"] = classes
 
     return entity

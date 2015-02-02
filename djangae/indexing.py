@@ -116,6 +116,9 @@ class IExactIndexer(Indexer):
         return len(value) < 500
 
     def prep_value_for_database(self, value):
+        if value is None:
+            return None
+
         if isinstance(value, (int, long)):
             value = str(value)
         return value.lower()

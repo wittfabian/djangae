@@ -34,7 +34,15 @@ class SQLInsertCompiler(compiler.SQLInsertCompiler, SQLCompiler):
 
     def as_sql(self):
         self.pre_sql_setup()
-        return [ (InsertCommand(self.connection, self.query.model, self.query.objs, self.query.fields, self.query.raw), []) ]
+
+        from djangae.db.utils import get_concrete_fields
+
+        # Always pass down all the fields on an insert
+        return [ (InsertCommand(
+            self.connection, self.query.model, self.query.objs,
+            self.query.fields + get_concrete_fields(self.query.model, ignore_leaf=True),
+            self.query.raw), [])
+        ]
 
 
 class SQLDeleteCompiler(compiler.SQLDeleteCompiler, SQLCompiler):
