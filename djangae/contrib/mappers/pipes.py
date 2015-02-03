@@ -1,7 +1,7 @@
 from mapreduce.mapper_pipeline import MapperPipeline
 from mapreduce import parameters
 from mapreduce import control
-from mapreduce import context
+from mapreduce import model
 from pipeline.util import for_name
 
 
@@ -37,13 +37,16 @@ class DjangaeMapperPipeline(MapperPipeline):
         self.set_status(console_url="%s/detail?mapreduce_id=%s" % (
             (parameters.config.BASE_PATH, mapreduce_id)))
 
-    def callback(self, **kwargs):
+    def callback(self):
         """
             Callback finish exists on the pipeline class, so we just use it as a nice
             wrapper for the static method attached to the MapReduceTask
         """
-        ctx = context.get()
-        params = ctx.mapreduce_spec.mapper.params
+        super(DjangaeMapperPipeline, self).callback()
+
+        mapreduce_id = self.outputs.job_id.value
+        mapreduce_state = model.MapreduceState.get_by_job_id(mapreduce_id)
+        params = mapreduce_state.mapreduce_spec.mapper.params
         finish_func = params.get('_finish', None)
         if not finish_func:
             return None
