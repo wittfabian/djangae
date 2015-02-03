@@ -1,6 +1,6 @@
 from hashlib import md5
 from django.db import models
-from django.core.paginator import Paginator
+from django.core import paginator
 from djangae.contrib.pagination.decorators import _field_name_for_ordering
 from django.core.cache import cache
 
@@ -57,7 +57,7 @@ def _get_marker(model, query_id, page_number):
     pages_skipped = 0
 
     while counter:
-        cache_key = _marker_cache_key(model, query_id, page_number)
+        cache_key = _marker_cache_key(model, query_id, counter)
         ret = cache.get(cache_key)
 
         if ret:
@@ -79,18 +79,19 @@ def queryset_identifier(queryset):
     return hasher.hexdigest()
 
 
-class DatastorePaginator(Paginator):
+class DatastorePaginator(paginator.Paginator):
     """
         A paginator that works with the @paginated_model class decorator to efficiently
         return paginated sets on the appengine datastore
     """
 
-    def __init__(self, object_list, per_page, count_pages_up_to=10, **kwargs):
+    def __init__(self, object_list, per_page, readahead=10, **kwargs):
         if not object_list.ordered:
             object_list.order_by("pk") # Just order by PK by default
 
         self.original_orderings = object_list.query.order_by
         self.field_required = _field_name_for_ordering(self.original_orderings[:])
+        self.readahead = readahead
 
         try:
             object_list.model._meta.get_field(self.field_required)
@@ -108,7 +109,7 @@ class DatastorePaginator(Paginator):
 
         # If we specified an initial count up to, then count some things
         queryset_id = queryset_identifier(object_list)
-        upper_count_limit = count_pages_up_to * per_page
+        upper_count_limit = readahead * per_page
         if _get_known_count(queryset_id, per_page) < upper_count_limit:
             object_count = object_list[:upper_count_limit].count()
             _update_known_count(queryset_id, per_page, object_count)
@@ -119,6 +120,19 @@ class DatastorePaginator(Paginator):
     def count(self):
         return _get_known_count(queryset_identifier(self.object_list), self.per_page)
 
+    def validate_number(self, number):
+        """
+        Validates the given 1-based page number.
+        """
+        try:
+            number = int(number)
+        except (TypeError, ValueError):
+            raise paginator.PageNotAnInteger('That page number is not an integer')
+        if number < 1:
+            raise paginator.EmptyPage('That page number is less than 1')
+
+        return number
+
     def page(self, number):
         """
         Returns a Page object for the given 1-based page number.
@@ -126,34 +140,39 @@ class DatastorePaginator(Paginator):
         number = self.validate_number(number)
         bottom = (number - 1) * self.per_page
         top = bottom + self.per_page
-        if top + self.orphans >= self.count:
-            top = self.count
-
         queryset_id = queryset_identifier(self.object_list)
 
-        try:
-            marker_value, pages = _get_marker(
-                self.object_list.model,
-                queryset_id,
-                number
-            )
+        marker_value, pages = _get_marker(
+            self.object_list.model,
+            queryset_id,
+            number
+        )
 
-            if marker_value:
-                if len(self.original_orderings) == 1 and self.original_orderings[0].startswith("-"):
-                    qs = self.object_list.all().filter(**{"{}__lt".format(self.field_required): marker_value})
-                else:
-                    qs = self.object_list.all().filter(**{"{}__gt".format(self.field_required): marker_value})
-                bottom = pages * self.per_page
-                top = bottom + self.per_page
+        if marker_value:
+            if len(self.original_orderings) == 1 and self.original_orderings[0].startswith("-"):
+                qs = self.object_list.all().filter(**{"{}__lt".format(self.field_required): marker_value})
             else:
-                qs = self.object_list
+                qs = self.object_list.all().filter(**{"{}__gt".format(self.field_required): marker_value})
+            bottom = pages * self.per_page # We have to skip the pages here
+            top = bottom + self.per_page
+        else:
+            qs = self.object_list
 
-            page = self._get_page(qs[bottom:top], number, self)
-            return page
-        finally:
-            _store_marker(
-                self.object_list.model,
-                queryset_id,
-                number,
-                getattr(page.object_list[self.per_page-1], self.field_required)
-            )
+        results = list(qs[bottom:top + (self.per_page * self.readahead)])
+
+        if not results:
+            raise paginator.EmptyPage("That page contains no results")
+
+        known_count = ((number - 1) * self.per_page) + len(results)
+        _update_known_count(queryset_id, self.per_page, known_count)
+
+        page = self._get_page(results[:top], number, self)
+
+        _store_marker(
+            self.object_list.model,
+            queryset_id,
+            number,
+            getattr(page.object_list[self.per_page-1], self.field_required)
+        )
+
+        return page
