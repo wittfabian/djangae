@@ -148,10 +148,7 @@ def djangae_webapp(request_handler):
         req.app = WSGIApplication()
         response = Response()
         view_func = request_handler(req, response)
-        try:
-            view_func.dispatch()
-        except Exception as e:
-            raise e
+        view_func.dispatch()
 
         django_response = HttpResponse(response.body, status=int(str(response.status).split(" ")[0]))
         for header, value in response.headers.iteritems():
