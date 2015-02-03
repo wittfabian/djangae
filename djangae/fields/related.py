@@ -69,6 +69,9 @@ def create_related_set_manager(superclass, rel):
         def clear(self):
             setattr(self.instance, self.field.attname, set())
 
+        def __len__(self):
+            return len(self.field.value_from_object(self.instance))
+
 
     return RelatedSetManager
 

@@ -48,7 +48,7 @@ class DjangaeMapperPipeline(MapperPipeline):
         if not finish_func:
             return None
         finish_func = for_name(finish_func)
-        return finish_func(**kwargs)
+        return finish_func(*params.get('args',[]), **params.get('kwargs', {}))
 
 
 class MapReduceTask(object):
