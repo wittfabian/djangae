@@ -16,6 +16,8 @@ def generator(fields, instance):
         value = unicode(instance._meta.get_field(field.lstrip("-")).value_from_object(instance))
 
         if neg:
+            # this creates the alphabetical mirror of a string, e.g. ab => zy, but for the full
+            # range of unicode characters, e.g. first unicode char => last unicode char, etc
             value = u"".join([ unichr(0xffff - ord(x)) for x in value ])
         values.append(value)
 
