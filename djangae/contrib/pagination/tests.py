@@ -8,6 +8,8 @@ from djangae.contrib.pagination import (
     PaginationOrderingRequired
 )
 
+from .paginator import queryset_identifier, _get_marker
+
 @paginated_model(orderings=[
     ("first_name",),
     ("last_name",),
@@ -19,7 +21,7 @@ class TestUser(models.Model):
     last_name = models.CharField(max_length=200)
 
     def __unicode__(self):
-        return u" ".join(self.first_name, self.last_name)
+        return u" ".join([self.first_name, self.last_name])
 
 class PaginatedModelTests(TestCase):
     def test_fields_added_correctly(self):
@@ -85,6 +87,37 @@ class DatastorePaginatorTests(TestCase):
             self.assertTrue(get_marker.called)
             self.assertIsNotNone(get_marker.call_returns[0][0])
             self.assertEqual(1, get_marker.call_returns[0][1])
+
+    def test_that_readahead_stores_markers(self):
+        paginator = DatastorePaginator(TestUser.objects.all().order_by("first_name"), 1, readahead=4)
+
+        expected_markers = [ None ] + list(TestUser.objects.all().order_by("first_name").values_list(paginator.field_required, flat=True))[:3]
+
+        paginator.page(1)
+
+        query_id = queryset_identifier(paginator.object_list)
+
+        actual_markers = []
+        for i in xrange(1, 5):
+            actual_markers.append(_get_marker(paginator.object_list.model, query_id, i)[0])
+
+        self.assertEqual(expected_markers, actual_markers)
+
+        # Now change the per page number
+        paginator = DatastorePaginator(TestUser.objects.all().order_by("first_name"), 2, readahead=4)
+
+        all_markers = list(TestUser.objects.all().order_by("first_name").values_list(paginator.field_required, flat=True))
+        expected_markers = [ None, all_markers[1] ]
+
+        paginator.page(1)
+
+        query_id = queryset_identifier(paginator.object_list)
+
+        actual_markers = []
+        for i in xrange(1, 3):
+            actual_markers.append(_get_marker(paginator.object_list.model, query_id, i)[0])
+
+        self.assertEqual(expected_markers, actual_markers)
 
     def test_pages_correct(self):
         paginator = DatastorePaginator(TestUser.objects.all().order_by("first_name"), 1) # 1 item per page

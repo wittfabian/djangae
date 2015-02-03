@@ -38,7 +38,10 @@ def _get_known_count(query_id, per_page):
 def _store_marker(model, query_id, page_number, marker_value):
     """
         For a model and query id, stores the marker value for previously
-        queried page number
+        queried page number.
+
+        This stores the last item on the page identified by page number,
+        not the marker that starts the page. i.e. there is a marker for page 1
     """
 
     cache_key = _marker_cache_key(model, query_id, page_number)
@@ -56,7 +59,7 @@ def _get_marker(model, query_id, page_number):
     counter = page_number - 1
     pages_skipped = 0
 
-    while counter:
+    while counter > 0   :
         cache_key = _marker_cache_key(model, query_id, counter)
         ret = cache.get(cache_key)
 
@@ -159,6 +162,18 @@ class DatastorePaginator(paginator.Paginator):
             qs = self.object_list
 
         results = list(qs[bottom:top + (self.per_page * self.readahead)])
+
+        next_page = results[top:]
+        next_page_counter = number + 1
+        while next_page:
+            _store_marker(
+                self.object_list.model,
+                queryset_id,
+                next_page_counter,
+                getattr(next_page[self.per_page-1], self.field_required)
+            )
+            next_page_counter += 1
+            next_page = next_page[self.per_page:]
 
         if not results:
             raise paginator.EmptyPage("That page contains no results")
