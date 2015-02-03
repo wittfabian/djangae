@@ -245,6 +245,7 @@ The following settings are available to control the caching:
 
  - [Authentication with djangae.contrib.gauth](djangae/contrib/gauth/README.md)
  - [Map-reduce integration with djangae.contrib.mappers](djangae/contrib/mappers/README.md)
+ - [Pagination with djangae.contrib.pagination](djangae/contrib/pagination/README.md)
 
 ## Contributing
 
