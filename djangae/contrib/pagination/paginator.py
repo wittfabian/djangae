@@ -120,11 +120,13 @@ class Paginator(paginator.Paginator):
         else:
             object_list = object_list.order_by(self.field_required)
 
+        self.queryset_id = queryset_identifier(object_list)
         super(Paginator, self).__init__(object_list, per_page, **kwargs)
+
 
     @property
     def count(self):
-        return _get_known_count(queryset_identifier(self.object_list))
+        return _get_known_count(self.queryset_id)
 
     def validate_number(self, number):
         """
@@ -146,10 +148,9 @@ class Paginator(paginator.Paginator):
         number = self.validate_number(number)
         bottom = (number - 1) * self.per_page
         top = bottom + self.per_page
-        queryset_id = queryset_identifier(self.object_list)
 
         marker_value, pages = _get_marker(
-            queryset_id,
+            self.queryset_id,
             number
         )
 
@@ -169,7 +170,7 @@ class Paginator(paginator.Paginator):
         next_page_counter = number + 1
         while next_page:
             _store_marker(
-                queryset_id,
+                self.queryset_id,
                 next_page_counter,
                 getattr(next_page[self.per_page-1], self.field_required)
             )
@@ -180,12 +181,12 @@ class Paginator(paginator.Paginator):
             raise paginator.EmptyPage("That page contains no results")
 
         known_count = ((number - 1) * self.per_page) + len(results)
-        _update_known_count(queryset_id, known_count)
+        _update_known_count(self.queryset_id, known_count)
 
         page = self._get_page(results[:top], number, self)
 
         _store_marker(
-            queryset_id,
+            self.queryset_id,
             number,
             getattr(page.object_list[self.per_page-1], self.field_required)
         )
