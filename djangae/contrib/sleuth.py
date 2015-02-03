@@ -15,6 +15,8 @@
 #  with sleuth.switch("some.path.to.thing", lambda x: pass) as mock:
 #
 
+import time
+
 def _dot_lookup(thing, comp, import_path):
     try:
         return getattr(thing, comp)
@@ -33,13 +35,11 @@ def _evaluate_path(target):
         thing = _dot_lookup(thing, comp, import_path)
     return thing
 
-
 def _patch(path, replacement):
     thing = _evaluate_path(
         ".".join(path.split(".")[:-1])
     )
     setattr(thing, path.split(".")[-1], replacement)
-
 
 class Watch(object):
     """
@@ -61,11 +61,16 @@ class Watch(object):
                     (args, kwargs)
                 )
                 wrapped.called = True
-                return _func(*args, **kwargs)
+                wrapped.call_times.append(time.time())
+                ret_val = _func(*args, **kwargs)
+                wrapped.call_returns.append(ret_val)
+                return ret_val
 
             wrapped.call_count = 0
             wrapped.calls = []
             wrapped.called = False
+            wrapped.call_times = []
+            wrapped.call_returns = []
 
             return wrapped
 
@@ -104,3 +109,26 @@ class Switch(object):
         _patch(self._func_path, self._original_func)
 
 switch = Switch
+
+class Detonate(Switch):
+    def __init__(self, func_path, exception=None):
+        self._exception = exception or Exception
+
+        def throw(*args, **kwargs):
+            if callable(self._exception):
+                raise self._exception("Detonated %s" % func_path)
+            else:
+                raise self._exception
+
+        super(Detonate, self).__init__(func_path, throw)
+
+detonate = Detonate
+
+class Fake(Switch):
+    def __init__(self, func_path, return_value):
+        def replacement(*args, **kwargs):
+            return return_value
+
+        super(Fake, self).__init__(func_path, replacement)
+
+fake = Fake
