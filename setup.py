@@ -33,6 +33,7 @@ setup(
         'Programming Language :: Python',
     ],
 
+    include_package_data=True,
     # dependencies
     extras_require=EXTRAS,
     tests_require=EXTRAS['test'],
