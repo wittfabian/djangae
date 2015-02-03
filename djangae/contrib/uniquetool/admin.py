@@ -1,9 +1,20 @@
 from django import forms
 from django.db import models
 from django.contrib import admin
-from djangae.db.constraints import UniquenessMixin
 from .models import UniqueAction, ActionLog, encode_model
 
+def _show_model(m):
+
+    if m._meta.app_label == "uniquetool":
+        return False
+
+    if any([ x.unique for x in m._meta.fields ]):
+        return True
+
+    if x._meta.unique_together:
+        return True
+
+    return False
 
 class UniqueActionAdmin(admin.ModelAdmin):
     actions = None
@@ -16,7 +27,7 @@ class UniqueActionAdmin(admin.ModelAdmin):
             all_models = sorted([
                 (encode_model(m), m.__name__)
                 for m in models.get_models()
-                if issubclass(m, UniquenessMixin)
+                if _show_model(m)
             ], key=lambda x: x[1])
             cls._model_choices = all_models
         return cls._model_choices
