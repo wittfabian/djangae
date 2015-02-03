@@ -11,8 +11,8 @@ Pagination on the datastore is *slow*. This is for a couple of reasons:
 This app provides two things that work together to efficiently paginate datasets on the datastore:
 
  - `@paginated_model` - A class decorator that dynamically generates (a) precalculated field(s) on a model,
-    which can be used for ordering and `__gte` filtering, rather than doing inefficient slicing.
- - `DatastorePaginator` - A Paginator subclass which uses the precalculated field(s) along with memcache to
+    which can be used for ordering and `__gt` filtering, rather than doing inefficient slicing.
+ - `Paginator` - A Paginator subclass which uses the precalculated field(s) along with memcache to
 efficiently paginate and doesn't count all the results.
 
 ### Can you explain that a bit more?
