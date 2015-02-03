@@ -7,7 +7,7 @@ from google.appengine.api import datastore
 from google.appengine.ext import deferred
 
 from djangae.db import transaction
-from djangae.fields import ListField
+from djangae.fields import RelatedSetField
 from djangae.contrib.mappers.pipes import MapReduceTask
 from djangae.db.utils import django_instance_to_entity
 from djangae.db.unique_utils import unique_identifiers_from_entity
@@ -41,25 +41,25 @@ def decode_model(model_str):
     return model_cache.get_model(*model_str.split(','))
 
 
-class UniqueAction(models.Model):
-    action_type = models.CharField(choices=ACTION_TYPES, max_length=100)
-    model = models.CharField(max_length=100)
-    status = models.CharField(choices=ACTION_STATUSES, default=ACTION_STATUSES[0][0], editable=False, max_length=100)
-    log_ids = ListField(models.IntegerField(), blank=True, editable=False)
-
-
 class ActionLog(models.Model):
     instance_key = models.CharField(max_length=255)
     marker_key = models.CharField(max_length=255)
     log_type = models.CharField(max_length=255, choices=LOG_MSGS)
-    action = models.ForeignKey(UniqueAction)
+    action = models.ForeignKey('UniqueAction')
+
+
+class UniqueAction(models.Model):
+    action_type = models.CharField(choices=ACTION_TYPES, max_length=100)
+    model = models.CharField(max_length=100)
+    status = models.CharField(choices=ACTION_STATUSES, default=ACTION_STATUSES[0][0], editable=False, max_length=100)
+    logs = RelatedSetField(ActionLog, editable=False)
 
 
 def _log_action(action_id, log_type, instance_key, marker_key):
     @transaction.atomic(xg=True)
     def _atomic(action_id, log_type, instance_key, marker_key):
         action = UniqueAction.objects.get(pk=action_id)
-        if len(action.log_ids) > MAX_ERRORS:
+        if len(action.logs) > MAX_ERRORS:
             return
 
         log = ActionLog.objects.create(
@@ -67,7 +67,7 @@ def _log_action(action_id, log_type, instance_key, marker_key):
             log_type=log_type,
             instance_key=instance_key,
             marker_key=marker_key)
-        action.log_ids.append(log.pk)
+        action.logs.add(log)
         action.save()
     _atomic(action_id, log_type, instance_key, marker_key)
 
