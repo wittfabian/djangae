@@ -20,13 +20,13 @@ def _marker_cache_key(model, query_id, page_number):
     return cache_key
 
 
-def _count_cache_key(query_id, per_page):
-    cache_key = "_PAGE_COUNTER_{}:{}".format(query_id, per_page)
+def _count_cache_key(query_id):
+    cache_key = "_PAGE_COUNTER_{}".format(query_id)
     return cache_key
 
 
-def _update_known_count(query_id, per_page, count):
-    cache_key = _count_cache_key(query_id, per_page)
+def _update_known_count(query_id, count):
+    cache_key = _count_cache_key(query_id)
 
     ret = cache.get(cache_key)
     if ret and ret > count:
@@ -35,8 +35,8 @@ def _update_known_count(query_id, per_page, count):
     cache.set(cache_key, count, CACHE_TIME)
 
 
-def _get_known_count(query_id, per_page):
-    cache_key = _count_cache_key(query_id, per_page)
+def _get_known_count(query_id):
+    cache_key = _count_cache_key(query_id)
     ret = cache.get(cache_key)
     if ret:
         return ret
@@ -128,7 +128,7 @@ class Paginator(paginator.Paginator):
 
     @property
     def count(self):
-        return _get_known_count(queryset_identifier(self.object_list), self.per_page)
+        return _get_known_count(queryset_identifier(self.object_list))
 
     def validate_number(self, number):
         """
@@ -186,7 +186,7 @@ class Paginator(paginator.Paginator):
             raise paginator.EmptyPage("That page contains no results")
 
         known_count = ((number - 1) * self.per_page) + len(results)
-        _update_known_count(queryset_id, self.per_page, known_count)
+        _update_known_count(queryset_id, known_count)
 
         page = self._get_page(results[:top], number, self)
 
