@@ -54,26 +54,27 @@ class DatastorePaginatorTests(TestCase):
 
     def test_count_up_to(self):
         paginator = Paginator(TestUser.objects.all().order_by("first_name"), 1, readahead=2)
+        paginator.page(1)
+        self.assertEqual(3, paginator.count)
 
-        self.assertEqual(2, paginator.count)
-
-        paginator = Paginator(TestUser.objects.all().order_by("first_name"), 1)
-
+        paginator = Paginator(TestUser.objects.all().order_by("first_name"), 1, readahead=10)
+        paginator.page(1)
         self.assertEqual(4, paginator.count)
 
     def test_count_reads_ahead(self):
         paginator = Paginator(TestUser.objects.all().order_by("first_name"), 1, readahead=2)
 
-        self.assertEqual(2, paginator.count)
+        paginator.page(1)
+        self.assertEqual(3, paginator.count)
 
         paginator.page(3)
-
         self.assertEqual(4, paginator.count)
 
 
     def test_page_jump_updates_count_correctly(self):
         paginator = Paginator(TestUser.objects.all().order_by("first_name"), 1, readahead=1)
-        self.assertEqual(1, paginator.count)
+        paginator.page(1)
+        self.assertEqual(2, paginator.count)
         paginator.page(3)
         self.assertEqual(4, paginator.count)
 

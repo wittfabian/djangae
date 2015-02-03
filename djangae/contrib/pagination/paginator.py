@@ -117,13 +117,6 @@ class Paginator(paginator.Paginator):
         else:
             object_list = object_list.order_by(self.field_required)
 
-        # If we specified an initial count up to, then count some things
-        queryset_id = queryset_identifier(object_list)
-        upper_count_limit = readahead * per_page
-        if _get_known_count(queryset_id, per_page) < upper_count_limit:
-            object_count = object_list[:upper_count_limit].count()
-            _update_known_count(queryset_id, per_page, object_count)
-
         super(Paginator, self).__init__(object_list, per_page, **kwargs)
 
     @property
