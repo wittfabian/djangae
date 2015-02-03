@@ -112,6 +112,8 @@ class Paginator(paginator.Paginator):
         object_list = object_list.order_by()
 
         # Add our replacement ordering
+        # A single negated ordering can use the same field (we just flip the query), this
+        # normalisation happens in _field_name_for_ordering, so we do the same here.
         if len(self.original_orderings) == 1 and self.original_orderings[0].startswith("-"):
             object_list = object_list.order_by("-" + self.field_required)
         else:
