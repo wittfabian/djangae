@@ -10,19 +10,27 @@ Pagination on the datastore is *slow*. This is for a couple of reasons:
 
 This app provides two things that work together to efficiently paginate datasets on the datastore:
 
- - @paginated_model - A class decorator that dynamically generates precalculated fields on a model
- - DatastorePaginator - A Paginator subclass which uses the precalculated along with memcache to efficiently paginate and doesn't count all the results
+ - `@paginated_model` - A class decorator that dynamically generates (a) precalculated field(s) on a model,
+    which can be used for ordering and `__gte` filtering, rather than doing inefficient slicing.
+ - `DatastorePaginator` - A Paginator subclass which uses the precalculated field(s) along with memcache to
+efficiently paginate and doesn't count all the results.
+
+### Can you explain that a bit more?
+
+Supposing you have a queryset like `queryset = MyModel.objects.order_by('first_name', 'last_name')`, and you then want to paginate with 100 objects per page.  Your query for page 2 will be `queryset[200:299]`, which will cause the Datastore iterate over the first 200 entities before then returning entities 200-299, which is inefficient.  However, if we create a pre-calculated field, made up of the fields we want to order by, plus a unique-ifier, (e.g. `"%s|%s|%s" % (first_name, last_name, pk)`), then we can order by that single field.  For pagination, when we fetch page 1, we can store the value of this field from the last object of page 1.  The query for page 2 can then be `MyModel.objects.order_by('pre_calculated_field').filter(pre_calculated_field__gte=page_1_last_value)`, which avoids any slicing at all.  The whole query and offset is based on Datastore indexes, and is efficient.
+
+The `@paginated_model` decorator allows you to specify which fields on your model you want to order by (you can specify multiple orderings for a model) and generates the pre-calculated fields for you.  The `DatastorePaginator` then seemlessly uses these pre-calculated fields and does the offset/limiting for you.
+
+The `lookahead` argument to the paginator tells it how many pages ahead it should look.  E.g. if you set lookahead to `10` then it will query ahead to find the offset value to allow it to jump 10 pages.
+
 
 ## Wait, doesn't the datastore have cursors?
 
 Yes! However from the docs:
 
-```
-Because the != and IN operators are implemented with multiple queries, queries that use them do not support cursors.
-```
+> Because the != and IN operators are implemented with multiple queries, queries that use them do not support cursors.
 
-That's a hell of an annoying caveat. That's not to say our approach doesn't suffer it's own caveats (below), but our approach
-will generate an unsupported query, which is obvious to detect, and supports IN and != queries.
+That's a hell of an annoying caveat. That's not to say our approach doesn't suffer it's own caveats (below), but it does support IN and != queries.
 
 ## Caveats
 
@@ -32,11 +40,11 @@ or rethink your design.
 
 ## Why didn't you update potatopage?
 
-Potatopage (http://github.com/potatolondon/potatopage) supports different backends for pagination. I didn't extend that for the following reasons:
+[Potatopage](http://github.com/potatolondon/potatopage) supports different backends for pagination. I didn't extend that for the following reasons:
 
  - Efficient pagination is something that pretty much any Djangae-based app needs and should come built-in, moving potatopage into Djangae wouldn't make
- sense as it has backends for Djangoappengine and NDB and they don't belong in Djangae. Potatopage is better as a standalone library anyway
- - This paginator uses class decorators, the ones in potatopage do not it would be weird to have a different API depending on the backend
+ sense as it has backends for Djangoappengine and NDB and they don't belong in Djangae. Potatopage is better as a standalone library anyway.
+ - This paginator uses class decorators, the ones in potatopage do not, and it would be weird to have a different API depending on the backend.
  - The only way to really make a suitable backend for potatopage would be to expose the App Engine cursors in Djangae somehow, but this wouldn't work for
  many queries due to the features and optimizations that the smart datastore connector performs (e.g. datastore.Get lookups, support for OR queries etc.)
  and it would be ugly and hacky.
