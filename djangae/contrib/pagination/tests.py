@@ -4,7 +4,7 @@ from djangae.contrib import sleuth
 
 from djangae.contrib.pagination import (
     paginated_model,
-    DatastorePaginator,
+    Paginator,
     PaginationOrderingRequired
 )
 
@@ -53,16 +53,16 @@ class DatastorePaginatorTests(TestCase):
         self.u4 = TestUser.objects.create(id=4, first_name="B", last_name="B")
 
     def test_count_up_to(self):
-        paginator = DatastorePaginator(TestUser.objects.all().order_by("first_name"), 1, readahead=2)
+        paginator = Paginator(TestUser.objects.all().order_by("first_name"), 1, readahead=2)
 
         self.assertEqual(2, paginator.count)
 
-        paginator = DatastorePaginator(TestUser.objects.all().order_by("first_name"), 1)
+        paginator = Paginator(TestUser.objects.all().order_by("first_name"), 1)
 
         self.assertEqual(4, paginator.count)
 
     def test_count_reads_ahead(self):
-        paginator = DatastorePaginator(TestUser.objects.all().order_by("first_name"), 1, readahead=2)
+        paginator = Paginator(TestUser.objects.all().order_by("first_name"), 1, readahead=2)
 
         self.assertEqual(2, paginator.count)
 
@@ -72,13 +72,13 @@ class DatastorePaginatorTests(TestCase):
 
 
     def test_page_jump_updates_count_correctly(self):
-        paginator = DatastorePaginator(TestUser.objects.all().order_by("first_name"), 1, readahead=1)
+        paginator = Paginator(TestUser.objects.all().order_by("first_name"), 1, readahead=1)
         self.assertEqual(1, paginator.count)
         paginator.page(3)
         self.assertEqual(4, paginator.count)
 
     def test_that_marker_is_read(self):
-        paginator = DatastorePaginator(TestUser.objects.all().order_by("first_name"), 1, readahead=1)
+        paginator = Paginator(TestUser.objects.all().order_by("first_name"), 1, readahead=1)
         paginator.page(2)
 
         with sleuth.watch("djangae.contrib.pagination.paginator._get_marker") as get_marker:
@@ -89,7 +89,7 @@ class DatastorePaginatorTests(TestCase):
             self.assertEqual(1, get_marker.call_returns[0][1])
 
     def test_that_readahead_stores_markers(self):
-        paginator = DatastorePaginator(TestUser.objects.all().order_by("first_name"), 1, readahead=4)
+        paginator = Paginator(TestUser.objects.all().order_by("first_name"), 1, readahead=4)
 
         expected_markers = [ None ] + list(TestUser.objects.all().order_by("first_name").values_list(paginator.field_required, flat=True))[:3]
 
@@ -104,7 +104,7 @@ class DatastorePaginatorTests(TestCase):
         self.assertEqual(expected_markers, actual_markers)
 
         # Now change the per page number
-        paginator = DatastorePaginator(TestUser.objects.all().order_by("first_name"), 2, readahead=4)
+        paginator = Paginator(TestUser.objects.all().order_by("first_name"), 2, readahead=4)
 
         all_markers = list(TestUser.objects.all().order_by("first_name").values_list(paginator.field_required, flat=True))
         expected_markers = [ None, all_markers[1] ]
@@ -120,31 +120,31 @@ class DatastorePaginatorTests(TestCase):
         self.assertEqual(expected_markers, actual_markers)
 
     def test_pages_correct(self):
-        paginator = DatastorePaginator(TestUser.objects.all().order_by("first_name"), 1) # 1 item per page
+        paginator = Paginator(TestUser.objects.all().order_by("first_name"), 1) # 1 item per page
 
         self.assertEqual("A", paginator.page(1).object_list[0].first_name)
         self.assertEqual("A", paginator.page(2).object_list[0].first_name)
         self.assertEqual("B", paginator.page(3).object_list[0].first_name)
         self.assertEqual("B", paginator.page(4).object_list[0].first_name)
 
-        paginator = DatastorePaginator(TestUser.objects.all().order_by("first_name", "last_name"), 1) # 1 item per page
+        paginator = Paginator(TestUser.objects.all().order_by("first_name", "last_name"), 1) # 1 item per page
         self.assertEqual(self.u1, paginator.page(1).object_list[0])
         self.assertEqual(self.u2, paginator.page(2).object_list[0])
         self.assertEqual(self.u3, paginator.page(3).object_list[0])
         self.assertEqual(self.u4, paginator.page(4).object_list[0])
 
-        paginator = DatastorePaginator(TestUser.objects.all().order_by("first_name", "-last_name"), 1) # 1 item per page
+        paginator = Paginator(TestUser.objects.all().order_by("first_name", "-last_name"), 1) # 1 item per page
         self.assertEqual(self.u2, paginator.page(1).object_list[0])
         self.assertEqual(self.u1, paginator.page(2).object_list[0])
         self.assertEqual(self.u4, paginator.page(3).object_list[0])
         self.assertEqual(self.u3, paginator.page(4).object_list[0])
 
-        paginator = DatastorePaginator(TestUser.objects.all().order_by("-first_name"), 1) # 1 item per page
+        paginator = Paginator(TestUser.objects.all().order_by("-first_name"), 1) # 1 item per page
         self.assertEqual(self.u4, paginator.page(1).object_list[0])
         self.assertEqual(self.u3, paginator.page(2).object_list[0])
         self.assertEqual(self.u2, paginator.page(3).object_list[0])
         self.assertEqual(self.u1, paginator.page(4).object_list[0])
 
         with self.assertRaises(PaginationOrderingRequired):
-            paginator = DatastorePaginator(TestUser.objects.all().order_by("-first_name", "last_name"), 1) # 1 item per page
+            paginator = Paginator(TestUser.objects.all().order_by("-first_name", "last_name"), 1) # 1 item per page
             list(paginator.page(1).object_list)

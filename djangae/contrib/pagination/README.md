@@ -1,19 +1,19 @@
-
-# Easy Efficient Pagination for the Datastore
+# django.contrib.pagination
+## Easy Efficient Pagination for the Datastore
 
 Pagination on the datastore is *slow*. This is for a couple of reasons:
 
  - Counting on the datastore is slow; traditional pagination counts the dataset
  - Skipping results on the datastore is slow; if you slice a query, App Engine literally skips the entities up to the lower bound
 
-# So, what does this app do?
+## So, what does this app do?
 
 This app provides two things that work together to efficiently paginate datasets on the datastore:
 
  - @paginated_model - A class decorator that dynamically generates precalculated fields on a model
  - DatastorePaginator - A Paginator subclass which uses the precalculated along with memcache to efficiently paginate and doesn't count all the results
 
-# Wait, doesn't the datastore have cursors?
+## Wait, doesn't the datastore have cursors?
 
 Yes! However from the docs:
 
@@ -24,8 +24,63 @@ Because the != and IN operators are implemented with multiple queries, queries t
 That's a hell of an annoying caveat. That's not to say our approach doesn't suffer it's own caveats (below), but our approach
 will generate an unsupported query, which is obvious to detect, and supports IN and != queries.
 
-# Caveats
+## Caveats
 
 Because our pre-calculated fields are indexed, the combined length of the values (plus the unique ID and joining characters) you are
-ordering on must not exceed 500 characters. This will throw an error, and if that happens, you'll either need to use a slower paginator (e.g. Django's)
+ordering on must not exceed 500 characters. This will throw an error, and if that happens, you'll either need to use a slower paginator (e.g. djangae.core.paginator)
 or rethink your design.
+
+## Why didn't you update potatopage?
+
+Potatopage (http://github.com/potatolondon/potatopage) supports different backends for pagination. I didn't extend that for the following reasons:
+
+ - Efficient pagination is something that pretty much any Djangae-based app needs and should come built-in, moving potatopage into Djangae wouldn't make
+ sense as it has backends for Djangoappengine and NDB and they don't belong in Djangae. Potatopage is better as a standalone library anyway
+ - This paginator uses class decorators, the ones in potatopage do not it would be weird to have a different API depending on the backend
+ - The only way to really make a suitable backend for potatopage would be to expose the App Engine cursors in Djangae somehow, but this wouldn't work for
+ many queries due to the features and optimizations that the smart datastore connector performs (e.g. datastore.Get lookups, support for OR queries etc.)
+ and it would be ugly and hacky.
+
+## Can you give me an example?
+
+Sure!
+
+```
+@paginated_model(orderings=[
+    ("first_name",),
+    ("last_name",),
+    ("first_name", "last_name"),
+    ("first_name", "-last_name")
+])
+class TestUser(models.Model):
+    first_name = models.CharField(max_length=200)
+    last_name = models.CharField(max_length=200)
+
+    def __unicode__(self):
+        return u" ".join([self.first_name, self.last_name])
+```
+
+By decorating the model this way, special computed properties are added for ordering by first and last name. Then you can just do this:
+
+
+```
+from djangae.contrib.pagination import Paginator
+
+def listing(request):
+    contact_list = TestUser.objects.order_by("first_name")
+    paginator = Paginator(contact_list, 25, readahead=10) # Show 25 testusers per page, readahead 10 pages
+
+    page = request.GET.get('page')
+    try:
+        # Under the hood this will instead order and filter by the magically generated field for
+        # first_name, allowing you to efficiently jump to a specific page
+        contacts = paginator.page(page)
+    except PageNotAnInteger:
+        # If page is not an integer, deliver first page.
+        contacts = paginator.page(1)
+    except EmptyPage:
+        # If page is out of range (e.g. 9999), deliver last page of results.
+        contacts = paginator.page(paginator.num_pages)
+
+    return render_to_response('list.html', {"contacts": contacts})
+```

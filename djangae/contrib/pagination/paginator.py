@@ -82,7 +82,7 @@ def queryset_identifier(queryset):
     return hasher.hexdigest()
 
 
-class DatastorePaginator(paginator.Paginator):
+class Paginator(paginator.Paginator):
     """
         A paginator that works with the @paginated_model class decorator to efficiently
         return paginated sets on the appengine datastore
@@ -117,7 +117,7 @@ class DatastorePaginator(paginator.Paginator):
             object_count = object_list[:upper_count_limit].count()
             _update_known_count(queryset_id, per_page, object_count)
 
-        super(DatastorePaginator, self).__init__(object_list, per_page, **kwargs)
+        super(Paginator, self).__init__(object_list, per_page, **kwargs)
 
     @property
     def count(self):
