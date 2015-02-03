@@ -65,7 +65,9 @@ class PaginatedModel(object):
         """
         for ordering in self.orderings:
             new_field_name = _field_name_for_ordering(ordering)
-            ComputedCharField(partial(generator, ordering), max_length=500, editable=False).contribute_to_class(cls, new_field_name)
+            ComputedCharField(
+                partial(generator, ordering), max_length=500, editable=False
+            ).contribute_to_class(cls, new_field_name)
 
         return cls
 

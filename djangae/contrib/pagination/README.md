@@ -17,11 +17,23 @@ efficiently paginate and doesn't count all the results.
 
 ### Can you explain that a bit more?
 
-Supposing you have a queryset like `queryset = MyModel.objects.order_by('first_name', 'last_name')`, and you then want to paginate with 100 objects per page.  Your query for page 2 will be `queryset[200:299]`, which will cause the Datastore iterate over the first 200 entities before then returning entities 200-299, which is inefficient.  However, if we create a pre-calculated field, made up of the fields we want to order by, plus a unique-ifier, (e.g. `"%s|%s|%s" % (first_name, last_name, pk)`), then we can order by that single field.  For pagination, when we fetch page 1, we can store the value of this field from the last object of page 1.  The query for page 2 can then be `MyModel.objects.order_by('pre_calculated_field').filter(pre_calculated_field__gte=page_1_last_value)`, which avoids any slicing at all.  The whole query and offset is based on Datastore indexes, and is efficient.
+Supposing you have a queryset like `queryset = MyModel.objects.order_by('first_name', 'last_name')`,
+and you then want to paginate with 100 objects per page.  Your query for page 2 will be
+`queryset[200:299]`, which will cause the Datastore iterate over the first 200 entities before then
+returning entities 200-299, which is inefficient.  However, if we create a pre-calculated field,
+made up of the fields we want to order by, plus a unique-ifier, (e.g.
+`"%s|%s|%s" % (first_name, last_name, pk)`), then we can order by that single field.  For
+pagination, when we fetch page 1, we can store the value of this field from the last object of page 1.
+The query for page 2 can then be
+`MyModel.objects.order_by('pre_calculated_field').filter(pre_calculated_field__gte=page_1_last_value)`,
+which avoids any slicing at all.  The whole query and offset is based on Datastore indexes, and is efficient.
 
-The `@paginated_model` decorator allows you to specify which fields on your model you want to order by (you can specify multiple orderings for a model) and generates the pre-calculated fields for you.  The `DatastorePaginator` then seemlessly uses these pre-calculated fields and does the offset/limiting for you.
+The `@paginated_model` decorator allows you to specify which fields on your model you want to order
+by (you can specify multiple orderings for a model) and generates the pre-calculated fields for you.
+The `DatastorePaginator` then seemlessly uses these pre-calculated fields and does the offset/limiting for you.
 
-The `lookahead` argument to the paginator tells it how many pages ahead it should look.  E.g. if you set lookahead to `10` then it will query ahead to find the offset value to allow it to jump 10 pages.
+The `lookahead` argument to the paginator tells it how many pages ahead it should look.  E.g. if
+you set lookahead to `10` then it will query ahead to find the offset value to allow it to jump 10 pages.
 
 
 ## Wait, doesn't the datastore have cursors?
