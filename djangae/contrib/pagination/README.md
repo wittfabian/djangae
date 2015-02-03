@@ -92,3 +92,8 @@ def listing(request):
 
     return render_to_response('list.html', {"contacts": contacts})
 ```
+
+## Configuation
+
+The Paginator caches the values for offsetting the queries.  You can configure the cache expiry time
+by defining `settings.DJANGAE_PAGINATION_CACHE_TIME`.

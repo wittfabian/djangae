@@ -1,8 +1,15 @@
 from hashlib import md5
+from django.conf import settings
 from django.db import models
 from django.core import paginator
 from djangae.contrib.pagination.decorators import _field_name_for_ordering
 from django.core.cache import cache
+
+
+# TODO: it would be nice to be able to define a function which is given the queryset and returns
+# the cache time.  That would allow different cache times for different queries.
+CACHE_TIME = getattr(settings, "DJANGAE_PAGINATION_CACHE_TIME", 30*60)
+
 
 class PaginationOrderingRequired(RuntimeError):
     pass
@@ -25,7 +32,7 @@ def _update_known_count(query_id, per_page, count):
     if ret and ret > count:
         return
 
-    cache.set(cache_key, count)
+    cache.set(cache_key, count, CACHE_TIME)
 
 
 def _get_known_count(query_id, per_page):
@@ -45,7 +52,7 @@ def _store_marker(model, query_id, page_number, marker_value):
     """
 
     cache_key = _marker_cache_key(model, query_id, page_number)
-    cache.set(cache_key, marker_value, 30*60)
+    cache.set(cache_key, marker_value, CACHE_TIME)
 
 
 def _get_marker(model, query_id, page_number):
