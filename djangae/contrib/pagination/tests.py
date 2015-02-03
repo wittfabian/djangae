@@ -100,7 +100,7 @@ class DatastorePaginatorTests(TestCase):
 
         actual_markers = []
         for i in xrange(1, 5):
-            actual_markers.append(_get_marker(paginator.object_list.model, query_id, i)[0])
+            actual_markers.append(_get_marker(query_id, i)[0])
 
         self.assertEqual(expected_markers, actual_markers)
 
@@ -116,7 +116,7 @@ class DatastorePaginatorTests(TestCase):
 
         actual_markers = []
         for i in xrange(1, 3):
-            actual_markers.append(_get_marker(paginator.object_list.model, query_id, i)[0])
+            actual_markers.append(_get_marker(query_id, i)[0])
 
         self.assertEqual(expected_markers, actual_markers)
 

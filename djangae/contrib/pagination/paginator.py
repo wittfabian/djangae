@@ -15,8 +15,8 @@ class PaginationOrderingRequired(RuntimeError):
     pass
 
 
-def _marker_cache_key(model, query_id, page_number):
-    cache_key = "_PAGE_MARKER_{}:{}:{}".format(model._meta.db_table, query_id, page_number)
+def _marker_cache_key(query_id, page_number):
+    cache_key = "_PAGE_MARKER_{}:{}".format(query_id, page_number)
     return cache_key
 
 
@@ -42,7 +42,7 @@ def _get_known_count(query_id):
         return ret
     return 0
 
-def _store_marker(model, query_id, page_number, marker_value):
+def _store_marker(query_id, page_number, marker_value):
     """
         For a model and query id, stores the marker value for previously
         queried page number.
@@ -51,13 +51,13 @@ def _store_marker(model, query_id, page_number, marker_value):
         not the marker that starts the page. i.e. there is a marker for page 1
     """
 
-    cache_key = _marker_cache_key(model, query_id, page_number)
+    cache_key = _marker_cache_key(query_id, page_number)
     cache.set(cache_key, marker_value, CACHE_TIME)
 
 
-def _get_marker(model, query_id, page_number):
+def _get_marker(query_id, page_number):
     """
-        For a model and query_id, returns the marker at the end of the
+        For a query_id, returns the marker at the end of the
         previous page. Returns a tuple of (marker, pages) where pages is
         the number of pages we had to go back to find the marker (this is the
         number of pages we need to skip in the result set)
@@ -67,7 +67,7 @@ def _get_marker(model, query_id, page_number):
     pages_skipped = 0
 
     while counter > 0   :
-        cache_key = _marker_cache_key(model, query_id, counter)
+        cache_key = _marker_cache_key(query_id, counter)
         ret = cache.get(cache_key)
 
         if ret:
@@ -84,6 +84,7 @@ def queryset_identifier(queryset):
     """ Returns a string that uniquely identifies this query excluding its low and high mark"""
 
     hasher = md5()
+    hasher.update(queryset.model._meta.db_table)
     hasher.update(str(queryset.query.where))
     hasher.update(str(queryset.query.order_by))
     return hasher.hexdigest()
@@ -148,7 +149,6 @@ class Paginator(paginator.Paginator):
         queryset_id = queryset_identifier(self.object_list)
 
         marker_value, pages = _get_marker(
-            self.object_list.model,
             queryset_id,
             number
         )
@@ -169,7 +169,6 @@ class Paginator(paginator.Paginator):
         next_page_counter = number + 1
         while next_page:
             _store_marker(
-                self.object_list.model,
                 queryset_id,
                 next_page_counter,
                 getattr(next_page[self.per_page-1], self.field_required)
@@ -186,7 +185,6 @@ class Paginator(paginator.Paginator):
         page = self._get_page(results[:top], number, self)
 
         _store_marker(
-            self.object_list.model,
             queryset_id,
             number,
             getattr(page.object_list[self.per_page-1], self.field_required)
