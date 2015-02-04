@@ -16,10 +16,24 @@ def _show_model(m):
 
     return False
 
+class ActionLogInline(admin.TabularInline):
+    model = ActionLog
+    verbose_name_plural = 'List of action messages'
+
+    can_delete = False
+    extra = 0
+    editable_fields = []
+    readonly_fields = ('log_type', 'instance_key', 'marker_key', )
+
+    def has_add_permission(self, request):
+        return False
+
+
 class UniqueActionAdmin(admin.ModelAdmin):
     actions = None
     list_display = ('action_type', 'model_name', 'status')
     change_form_template = "admin/unique_action_change_form.html"
+    inlines = [ActionLogInline]
 
     @classmethod
     def model_choices(cls):

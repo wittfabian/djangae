@@ -147,7 +147,7 @@ class CheckRepairMapper(MapReduceTask):
                 else:
                     log(action_id, "missing_marker", instance_key, marker_key)
 
-            elif not m['instance']:
+            elif 'instance' not in m or not m['instance']:
                 # Marker with missining instance attribute
                 if repair:
                     m['instance'] = instance_key
