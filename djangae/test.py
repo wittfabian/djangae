@@ -91,8 +91,8 @@ def process_task_queues(queue_name=None):
             tasks = _get_queued_tasks(stub, queue_name)
 
 class TestCase(test.TestCase):
-    def _fixture_setup(self):
-        super(TestCase, self)._fixture_setup()
+    def setUp(self):
+        super(TestCase, self).setUp()
         self.taskqueue_stub = apiproxy_stub_map.apiproxy.GetStub("taskqueue")
         if self.taskqueue_stub:
             _flush_tasks(self.taskqueue_stub) # Make sure we clear the queue before every test
