@@ -32,7 +32,7 @@ def _field_name_for_ordering(ordering):
     # A single negated ordering can use the same field (we just flip the query)
     # so we normalize that out here and use the same field in that case
     if len(ordering) == 1 and ordering[0].startswith("-"):
-        ordering[0] = ordering[0].lstrip("-")
+        ordering = (ordering[0].lstrip("-"),)
 
     for field in ordering:
         if field.startswith("-"):
