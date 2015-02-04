@@ -169,10 +169,14 @@ class Paginator(paginator.Paginator):
         next_page = results[top:]
         next_page_counter = number + 1
         while next_page:
+            if len(next_page) >= self.per_page-1:
+                index = self.per_page-1
+            else:
+                index = len(next_page)-1
             _store_marker(
                 self.queryset_id,
                 next_page_counter,
-                getattr(next_page[self.per_page-1], self.field_required)
+                getattr(next_page[index], self.field_required)
             )
             next_page_counter += 1
             next_page = next_page[self.per_page:]
@@ -185,10 +189,14 @@ class Paginator(paginator.Paginator):
 
         page = self._get_page(results[:top], number, self)
 
+        if len(page.object_list) >= self.per_page-1:
+            index = self.per_page-1
+        else:
+            index = len(page.object_list)-1
         _store_marker(
             self.queryset_id,
             number,
-            getattr(page.object_list[self.per_page-1], self.field_required)
+            getattr(page.object_list[index], self.field_required)
         )
 
         return page

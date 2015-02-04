@@ -149,3 +149,14 @@ class DatastorePaginatorTests(TestCase):
         with self.assertRaises(PaginationOrderingRequired):
             paginator = Paginator(TestUser.objects.all().order_by("-first_name", "last_name"), 1) # 1 item per page
             list(paginator.page(1).object_list)
+
+        # test paging when last page has less than per_page objects
+        paginator = Paginator(TestUser.objects.all().order_by("first_name"), 3) # 3 items per page
+        self.assertEqual(
+            sorted([self.u1.pk, self.u2.pk, self.u3.pk]),
+            sorted([x.pk for x in paginator.page(1).object_list])
+        )
+        self.assertEqual(
+            sorted([self.u4.pk]),
+            sorted([x.pk for x in paginator.page(2).object_list])
+        )
