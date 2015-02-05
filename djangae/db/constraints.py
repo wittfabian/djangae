@@ -32,6 +32,19 @@ def constraint_checks_enabled(model_or_instance):
     return not getattr(settings, "DJANGAE_DISABLE_CONSTRAINT_CHECKS", False)
 
 
+
+class KeyProperty(db.Property):
+    """A property that stores a datastore.Key reference to another object.
+        Think of this as a Django GenericForeignKey which returns only the PK value, not the whole
+        object, or a db.ReferenceProperty which can point to any model kind, and only returns the Key.
+    """
+
+    def validate(self, value):
+        if value is None or isinstance(value, Key):
+            return value
+        raise ValueError("KeyProperty only accepts datastore.Key or None")
+
+
 class UniqueMarker(db.Model):
     instance = db.StringProperty()
     created = db.DateTimeProperty(required=True, auto_now_add=True)
