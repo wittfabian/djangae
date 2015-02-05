@@ -953,7 +953,8 @@ class ConstraintTests(TestCase):
         obj = UniqueModelWithLongPK(pk="x" * 500, unique_field=1)
         obj.save()
         duplicate = UniqueModelWithLongPK(pk="y" * 500, unique_field=1)
-        self.assertRaises(IntegrityError, duplicate.save)
+        self.assertRaises(DataError, duplicate.save)
+
 
 class EdgeCaseTests(TestCase):
     def setUp(self):
