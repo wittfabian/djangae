@@ -88,6 +88,11 @@ class UniqueModel(models.Model):
         app_label = "djangae"
 
 
+class UniqueModelWithLongPK(models.Model):
+    long_pk = models.CharField(max_length=500, primary_key=True)
+    unique_field = models.IntegerField(unique=True)
+
+
 class IntegerModel(models.Model):
     integer_field = models.IntegerField(default=0)
 
@@ -707,7 +712,7 @@ class ConstraintTests(TestCase):
 
         marker = [x for x in qry.Run()][0]
         # Make sure we assigned the instance
-        self.assertEqual(datastore.Key(marker["instance"]), datastore.Key.from_path(instance._meta.db_table, instance.pk))
+        self.assertEqual(marker["instance"], datastore.Key.from_path(instance._meta.db_table, instance.pk))
 
         expected_marker = "{}|name:{}".format(ModelWithUniques._meta.db_table, md5("One").hexdigest())
         self.assertEqual(expected_marker, marker.key().id_or_name())
@@ -718,7 +723,7 @@ class ConstraintTests(TestCase):
         self.assertEqual(1, datastore.Query(UniqueMarker.kind()).Count() - initial_count)
         marker = [x for x in qry.Run()][0]
         # Make sure we assigned the instance
-        self.assertEqual(datastore.Key(marker["instance"]), datastore.Key.from_path(instance._meta.db_table, instance.pk))
+        self.assertEqual(marker["instance"], datastore.Key.from_path(instance._meta.db_table, instance.pk))
 
         expected_marker = "{}|name:{}".format(ModelWithUniques._meta.db_table, md5("Two").hexdigest())
         self.assertEqual(expected_marker, marker.key().id_or_name())
@@ -789,7 +794,7 @@ class ConstraintTests(TestCase):
 
         marker = [ x for x in qry.Run()][0]
         # Make sure we assigned the instance
-        self.assertEqual(datastore.Key(marker["instance"]), datastore.Key.from_path(instance._meta.db_table, instance.pk))
+        self.assertEqual(marker["instance"], datastore.Key.from_path(instance._meta.db_table, instance.pk))
 
         expected_marker = "{}|name:{}".format(ModelWithUniques._meta.db_table, md5("One").hexdigest())
         self.assertEqual(expected_marker, marker.key().id_or_name())
@@ -819,7 +824,7 @@ class ConstraintTests(TestCase):
         self.assertEqual(1, datastore.Query(UniqueMarker.kind()).Count() - initial_count)
         marker = [x for x in qry.Run()][0]
         # Make sure we assigned the instance
-        self.assertEqual(datastore.Key(marker["instance"]), datastore.Key.from_path(instance._meta.db_table, instance.pk))
+        self.assertEqual(marker["instance"], datastore.Key.from_path(instance._meta.db_table, instance.pk))
 
         expected_marker = "{}|name:{}".format(ModelWithUniques._meta.db_table, md5("One").hexdigest())
         self.assertEqual(expected_marker, marker.key().id_or_name())
@@ -940,6 +945,16 @@ class ConstraintTests(TestCase):
 
         instance2.unique_set_field = set()
         instance2.save() # You can have two fields with empty sets
+
+    def test_unique_constraints_on_model_with_long_str_pk(self):
+        """ Check that an object with a string-based PK of 500 characters (the max that GAE allows)
+            can still have unique constraints pointing at it.  (See #242.)
+        """
+        obj = UniqueModelWithLongPK(pk="x" * 500, unique_field=1)
+        obj.save()
+        duplicate = UniqueModelWithLongPK(pk="y" * 500, unique_field=1)
+        self.assertRaises(DataError, duplicate.save)
+
 
 class EdgeCaseTests(TestCase):
     def setUp(self):

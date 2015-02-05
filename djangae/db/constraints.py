@@ -32,8 +32,21 @@ def constraint_checks_enabled(model_or_instance):
     return not getattr(settings, "DJANGAE_DISABLE_CONSTRAINT_CHECKS", False)
 
 
+
+class KeyProperty(db.Property):
+    """A property that stores a datastore.Key reference to another object.
+        Think of this as a Django GenericForeignKey which returns only the PK value, not the whole
+        object, or a db.ReferenceProperty which can point to any model kind, and only returns the Key.
+    """
+
+    def validate(self, value):
+        if value is None or isinstance(value, Key):
+            return value
+        raise ValueError("KeyProperty only accepts datastore.Key or None")
+
+
 class UniqueMarker(db.Model):
-    instance = db.StringProperty()
+    instance = KeyProperty()
     created = db.DateTimeProperty(required=True, auto_now_add=True)
 
     @staticmethod
@@ -52,7 +65,7 @@ def acquire_identifiers(identifiers, entity_key):
             # and assume that it's stale.
             if not marker.instance and (datetime.datetime.utcnow() - marker.created).seconds > 5:
                 marker.delete()
-            elif marker.instance and Key(marker.instance) != entity_key and key_exists(Key(marker.instance)):
+            elif marker.instance and marker.instance != entity_key and key_exists(marker.instance):
                 raise IntegrityError("Unable to acquire marker for %s" % identifier)
             else:
                 # The marker is ours anyway
@@ -60,7 +73,7 @@ def acquire_identifiers(identifiers, entity_key):
 
         marker = UniqueMarker(
             key=identifier_key,
-            instance=str(entity_key) if entity_key.id_or_name() else None,  # May be None if unsaved
+            instance=entity_key if entity_key.id_or_name() else None,  # May be None if unsaved
             created=datetime.datetime.utcnow()
         )
         marker.put()
@@ -104,7 +117,7 @@ def update_instance_on_markers(entity, markers):
         marker.instance = instance
         marker.put()
 
-    instance = str(entity.key())
+    instance = entity.key()
     for marker in markers:
         update(marker, instance)
 
