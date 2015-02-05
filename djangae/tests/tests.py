@@ -88,6 +88,11 @@ class UniqueModel(models.Model):
         app_label = "djangae"
 
 
+class UniqueModelWithLongPK(models.Model):
+    long_pk = models.CharField(max_length=500, primary_key=True)
+    unique_field = models.IntegerField(unique=True)
+
+
 class IntegerModel(models.Model):
     integer_field = models.IntegerField(default=0)
 
@@ -940,6 +945,15 @@ class ConstraintTests(TestCase):
 
         instance2.unique_set_field = set()
         instance2.save() # You can have two fields with empty sets
+
+    def test_unique_constraints_on_model_with_long_str_pk(self):
+        """ Check that an object with a string-based PK of 500 characters (the max that GAE allows)
+            can still have unique constraints pointing at it.  (See #242.)
+        """
+        obj = UniqueModelWithLongPK(pk="x" * 500, unique_field=1)
+        obj.save()
+        duplicate = UniqueModelWithLongPK(pk="y" * 500, unique_field=1)
+        self.assertRaises(IntegrityError, duplicate.save)
 
 class EdgeCaseTests(TestCase):
     def setUp(self):
