@@ -46,7 +46,7 @@ class KeyProperty(db.Property):
 
 
 class UniqueMarker(db.Model):
-    instance = db.StringProperty()
+    instance = KeyProperty()
     created = db.DateTimeProperty(required=True, auto_now_add=True)
 
     @staticmethod
@@ -65,7 +65,7 @@ def acquire_identifiers(identifiers, entity_key):
             # and assume that it's stale.
             if not marker.instance and (datetime.datetime.utcnow() - marker.created).seconds > 5:
                 marker.delete()
-            elif marker.instance and Key(marker.instance) != entity_key and key_exists(Key(marker.instance)):
+            elif marker.instance and marker.instance != entity_key and key_exists(marker.instance):
                 raise IntegrityError("Unable to acquire marker for %s" % identifier)
             else:
                 # The marker is ours anyway
@@ -73,7 +73,7 @@ def acquire_identifiers(identifiers, entity_key):
 
         marker = UniqueMarker(
             key=identifier_key,
-            instance=str(entity_key) if entity_key.id_or_name() else None,  # May be None if unsaved
+            instance=entity_key if entity_key.id_or_name() else None,  # May be None if unsaved
             created=datetime.datetime.utcnow()
         )
         marker.put()
@@ -117,7 +117,7 @@ def update_instance_on_markers(entity, markers):
         marker.instance = instance
         marker.put()
 
-    instance = str(entity.key())
+    instance = entity.key()
     for marker in markers:
         update(marker, instance)
 

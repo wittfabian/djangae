@@ -712,7 +712,7 @@ class ConstraintTests(TestCase):
 
         marker = [x for x in qry.Run()][0]
         # Make sure we assigned the instance
-        self.assertEqual(datastore.Key(marker["instance"]), datastore.Key.from_path(instance._meta.db_table, instance.pk))
+        self.assertEqual(marker["instance"], datastore.Key.from_path(instance._meta.db_table, instance.pk))
 
         expected_marker = "{}|name:{}".format(ModelWithUniques._meta.db_table, md5("One").hexdigest())
         self.assertEqual(expected_marker, marker.key().id_or_name())
@@ -723,7 +723,7 @@ class ConstraintTests(TestCase):
         self.assertEqual(1, datastore.Query(UniqueMarker.kind()).Count() - initial_count)
         marker = [x for x in qry.Run()][0]
         # Make sure we assigned the instance
-        self.assertEqual(datastore.Key(marker["instance"]), datastore.Key.from_path(instance._meta.db_table, instance.pk))
+        self.assertEqual(marker["instance"], datastore.Key.from_path(instance._meta.db_table, instance.pk))
 
         expected_marker = "{}|name:{}".format(ModelWithUniques._meta.db_table, md5("Two").hexdigest())
         self.assertEqual(expected_marker, marker.key().id_or_name())
@@ -794,7 +794,7 @@ class ConstraintTests(TestCase):
 
         marker = [ x for x in qry.Run()][0]
         # Make sure we assigned the instance
-        self.assertEqual(datastore.Key(marker["instance"]), datastore.Key.from_path(instance._meta.db_table, instance.pk))
+        self.assertEqual(marker["instance"], datastore.Key.from_path(instance._meta.db_table, instance.pk))
 
         expected_marker = "{}|name:{}".format(ModelWithUniques._meta.db_table, md5("One").hexdigest())
         self.assertEqual(expected_marker, marker.key().id_or_name())
@@ -824,7 +824,7 @@ class ConstraintTests(TestCase):
         self.assertEqual(1, datastore.Query(UniqueMarker.kind()).Count() - initial_count)
         marker = [x for x in qry.Run()][0]
         # Make sure we assigned the instance
-        self.assertEqual(datastore.Key(marker["instance"]), datastore.Key.from_path(instance._meta.db_table, instance.pk))
+        self.assertEqual(marker["instance"], datastore.Key.from_path(instance._meta.db_table, instance.pk))
 
         expected_marker = "{}|name:{}".format(ModelWithUniques._meta.db_table, md5("One").hexdigest())
         self.assertEqual(expected_marker, marker.key().id_or_name())
