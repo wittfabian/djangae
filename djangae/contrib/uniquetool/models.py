@@ -29,6 +29,7 @@ LOG_MSGS = [
     ('missing_marker', "Marker for the unique constraint is missing"),
     ('missing_instance', "Unique constraint marker exists, but doesn't point to the instance"),
     ('already_assigned', "Marker is assigned to a different instance already"),
+    ('old_instance_key', "Marker was created when instance was a StringProperty")
 ]
 
 MAX_ERRORS = 100
@@ -142,7 +143,7 @@ class CheckRepairMapper(MapReduceTask):
                 # Missig marker
                 if repair:
                     new_marker = datastore.Entity(UniqueMarker.kind(), name=i.name())
-                    new_marker['instance'] = instance_key
+                    new_marker['instance'] = entity.key()
                     markers_to_save.append(new_marker)
                 else:
                     log(action_id, "missing_marker", instance_key, marker_key)
@@ -156,9 +157,19 @@ class CheckRepairMapper(MapReduceTask):
                     log(action_id, "missing_instance", instance_key, marker_key)
 
             elif m['instance'] != entity.key():
-                # Marker already assigned to a different instance
-                log(action_id, "already_assigned", instance_key, marker_key)
-                # Also log in repair mode as reparing would break the other instance.
+
+                if isinstance(m['instance'], basestring):
+                    m['instance'] = datastore.Key(m['instance'])
+
+                    if repair:
+                        markers_to_save.append(m)
+                    else:
+                        log(action_id, "old_instance_key", instance_key, marker_key)
+
+                if m['instance'] != entity.key():
+                    # Marker already assigned to a different instance
+                    log(action_id, "already_assigned", instance_key, marker_key)
+                    # Also log in repair mode as reparing would break the other instance.
 
         if markers_to_save:
             datastore.Put(markers_to_save)
