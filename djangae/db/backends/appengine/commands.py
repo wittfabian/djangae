@@ -664,6 +664,8 @@ class SelectCommand(object):
                     else:
                         queries.pop()
 
+            if not queries:
+                return NoOpQuery()
 
             included_pks = [ qry["__key__ ="] for qry in queries if "__key__ =" in qry ]
             if len(included_pks) == len(queries): # If all queries have a key, we can perform a Get
