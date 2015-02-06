@@ -257,9 +257,12 @@ def allow_mode_write():
     original_modes = stubs.FakeFile.ALLOWED_MODES
     new_modes = set(stubs.FakeFile.ALLOWED_MODES)
     new_modes.add('w')
+    new_modes.add('wb')
     stubs.FakeFile.ALLOWED_MODES = frozenset(new_modes)
-    yield
-    stubs.FakeFile.ALLOWED_MODES = original_modes
+    try:
+        yield
+    finally:
+        stubs.FakeFile.ALLOWED_MODES = original_modes
 
 
 def allow_modules(func, *args):
