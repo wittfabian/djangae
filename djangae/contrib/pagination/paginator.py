@@ -107,7 +107,7 @@ class Paginator(paginator.Paginator):
         try:
             object_list.model._meta.get_field(self.field_required)
         except models.FieldDoesNotExist:
-            raise PaginationOrderingRequired("No pagination ordering specified for {}".format(self.original_orderings))
+            raise PaginationOrderingRequired("No pagination ordering specified for {}. Field required: {}".format(self.original_orderings, self.field_required))
 
         # Wipe out the existing ordering
         object_list = object_list.order_by()
@@ -169,7 +169,7 @@ class Paginator(paginator.Paginator):
         next_page = results[top:]
         next_page_counter = number + 1
         while next_page:
-            if len(next_page) >= self.per_page-1:
+            if len(next_page) > self.per_page-1:
                 index = self.per_page-1
             else:
                 index = len(next_page)-1
@@ -189,7 +189,7 @@ class Paginator(paginator.Paginator):
 
         page = self._get_page(results[:top], number, self)
 
-        if len(page.object_list) >= self.per_page-1:
+        if len(page.object_list) > self.per_page-1:
             index = self.per_page-1
         else:
             index = len(page.object_list)-1
