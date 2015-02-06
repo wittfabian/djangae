@@ -620,7 +620,7 @@ class SelectCommand(object):
                     column = "__key__"
 
                     #FIXME: This EmptyResultSet check should happen during normalization so that Django doesn't count it as a query
-                    if op == "=" and "__key__ =" in query:
+                    if op == "=" and "__key__ =" in query and query["__key__ ="] != value:
                         # We've already done an exact lookup on a key, this query can't return anything!
                         raise EmptyResultSet()
 
