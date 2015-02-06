@@ -42,8 +42,8 @@ def decode_model(model_str):
 
 
 class ActionLog(models.Model):
-    instance_key = models.CharField(max_length=255)
-    marker_key = models.CharField(max_length=255)
+    instance_key = models.TextField()
+    marker_key = models.CharField(max_length=500)
     log_type = models.CharField(max_length=255, choices=LOG_MSGS)
     action = models.ForeignKey('UniqueAction')
 
