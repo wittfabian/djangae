@@ -97,4 +97,4 @@ class MapperTests(TestCase):
         self.assertEqual(0, a.actionlog_set.count())
         marker = datastore.Get(marker_key)
         self.assertTrue(marker)
-        self.assertEqual(marker['instance'], str(instance_key))
+        self.assertEqual(marker['instance'], instance_key)

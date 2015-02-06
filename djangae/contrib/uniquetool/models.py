@@ -150,12 +150,12 @@ class CheckRepairMapper(MapReduceTask):
             elif 'instance' not in m or not m['instance']:
                 # Marker with missining instance attribute
                 if repair:
-                    m['instance'] = instance_key
+                    m['instance'] = entity.key()
                     markers_to_save.append(m)
                 else:
                     log(action_id, "missing_instance", instance_key, marker_key)
 
-            elif m['instance'] != instance_key:
+            elif m['instance'] != entity.key():
                 # Marker already assigned to a different instance
                 log(action_id, "already_assigned", instance_key, marker_key)
                 # Also log in repair mode as reparing would break the other instance.
