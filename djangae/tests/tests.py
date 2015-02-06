@@ -958,6 +958,8 @@ class ConstraintTests(TestCase):
 
 class EdgeCaseTests(TestCase):
     def setUp(self):
+        super(EdgeCaseTests, self).setUp()
+
         add_special_index(TestUser, "username", "iexact")
 
         self.u1 = TestUser.objects.create(username="A", email="test@example.com", last_login=datetime.datetime.now().date())
@@ -1345,6 +1347,8 @@ class BlobstoreFileUploadHandlerTest(TestCase):
     boundary = "===============7417945581544019063=="
 
     def setUp(self):
+        super(BlobstoreFileUploadHandlerTest, self).setUp()
+
         self.request = RequestFactory().get('/')
         self.request.META = {
             'wsgi.input': self._create_wsgi_input(),
@@ -1686,6 +1690,8 @@ class TestGenericRelationField(TestCase):
 class DatastorePaginatorTest(TestCase):
 
     def setUp(self):
+        super(DatastorePaginatorTest, self).setUp()
+
         for i in range(15):
             PaginatorModel.objects.create(foo=i)
 
@@ -1731,6 +1737,8 @@ class DatastorePaginatorTest(TestCase):
 class TestSpecialIndexers(TestCase):
 
     def setUp(self):
+        super(TestSpecialIndexers, self).setUp()
+
         self.names = ['Ola', 'Adam', 'Luke', 'rob', 'Daniel', 'Ela', 'Olga', 'olek', 'ola', 'Olaaa', 'OlaaA']
         for name in self.names:
             SpecialIndexesModel.objects.create(name=name)

@@ -1,10 +1,9 @@
 from hashlib import md5
 from django.db import models
-from django.test import TestCase
 from google.appengine.api import datastore
 
 from .models import UniqueAction, encode_model
-from djangae.test import process_task_queues
+from djangae.test import TestCase, process_task_queues
 from djangae.db.constraints import UniqueMarker, UniquenessMixin
 
 
@@ -20,6 +19,7 @@ class TestModel(UniquenessMixin, models.Model):
 class MapperTests(TestCase):
 
     def setUp(self):
+        super(MapperTests, self).setUp()
         self.i1 = TestModel.objects.create(name="name1", counter1=1, counter2=1)
         self.i2 = TestModel.objects.create(name="name3", counter1=1, counter2=2)
 
@@ -98,10 +98,3 @@ class MapperTests(TestCase):
         marker = datastore.Get(marker_key)
         self.assertTrue(marker)
         self.assertEqual(marker['instance'], str(instance_key))
-
-
-
-
-
-
-

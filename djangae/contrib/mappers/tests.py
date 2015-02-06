@@ -61,6 +61,8 @@ class TestMapperClass3(MapReduceTask):
 class MapReduceTestCase(TestCase):
 
     def setUp(self):
+        super(MapReduceTestCase, self).setUp()
+
         for x in xrange(10):
             TestNode(data="TestNode".format(x), counter=x).save()
 
