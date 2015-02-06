@@ -80,6 +80,16 @@ Django 1.6 is supported, but 1.7 support is in the pipeline.
  * If you wish to use the App Engine's Google Accounts-based authentication to authenticate your users, and/or you wish to use Django's permissions system with the Datastore as you DB, then see the section on **Authentication**.
  * **It is highly recommended that you read the section on [Unique Constraints](#unique-constraint-checking)**
 
+## Deployment
+
+Create a Google App Engine project. Edit `app.yaml` and change `application: [...]` to `application: your-app-id`. Then run:
+
+    $ appcfg.py update ./
+
+If you have two-factor authentication enabled in your Google account, run:
+
+    $ appcfg.py --oauth2 update ./
+
 ## The Database Backend
 
 Previously, in order to use Django's ORM with the App Engine Datastore, django-nonrel was required, along with
