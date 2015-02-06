@@ -85,8 +85,7 @@ def acquire_identifiers(identifiers, entity_key):
             markers.append(acquire_marker(identifier))
             DJANGAE_LOG.debug("Acquired unique marker for %s", identifier)
     except:
-        for marker in markers:
-            marker.delete()
+        release_markers(markers)
         DJANGAE_LOG.debug("Due to an error, deleted markers %s", markers)
         raise
     return markers
