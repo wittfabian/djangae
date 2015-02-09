@@ -51,7 +51,7 @@ class UniqueMarker(db.Model):
 
     @staticmethod
     def kind():
-        return "__unique_marker"
+        return "_djangae_unique_marker"
 
 
 def acquire_identifiers(identifiers, entity_key):
