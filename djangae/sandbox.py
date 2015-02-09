@@ -15,7 +15,9 @@ _API_SERVER = None
 
 class Filter(object):
     def filter(self, record):
-        if record.funcName=='__StarSchemaQueryPlan' and record.module=='datastore_sqlite_stub':
+        if record.funcName == '__StarSchemaQueryPlan' and record.module == 'datastore_sqlite_stub':
+            return 0
+        elif record.funcName == 'Run' and record.module == 'datastore':
             return 0
         else:
             return 1
