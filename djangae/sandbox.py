@@ -5,12 +5,30 @@ import sys
 import contextlib
 import subprocess
 import getpass
-
+import logging
 import djangae.utils as utils
 
 _SCRIPT_NAME = 'dev_appserver.py'
 
 _API_SERVER = None
+
+
+class Filter(object):
+    def filter(self, record):
+        if record.funcName=='__StarSchemaQueryPlan' and record.module=='datastore_sqlite_stub':
+            return 0
+        else:
+            return 1
+
+
+def _disable_sqlite_stub_logging():
+    """
+        For some reason, Google decided to log all queries at debug level to the
+        root logger when running stuff locally. This switches that off (if you want it, then just
+        remove the filter)
+    """
+    logging.getLogger().addFilter(Filter())
+
 
 def _find_sdk_from_python_path():
     import google.appengine
@@ -71,6 +89,8 @@ def _create_dispatcher(configuration, options):
 @contextlib.contextmanager
 def _local(devappserver2=None, configuration=None, options=None, wsgi_request_info=None, **kwargs):
     global _API_SERVER
+
+    _disable_sqlite_stub_logging()
 
     original_environ = os.environ.copy()
 

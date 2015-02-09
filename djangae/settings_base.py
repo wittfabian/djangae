@@ -40,6 +40,9 @@ LOGGING = {
             'level': 'ERROR',
             'propagate': True,
         },
+        'djangae': {
+            'level': 'WARN'
+        }
     }
 }
 
