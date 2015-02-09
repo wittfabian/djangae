@@ -37,8 +37,7 @@ from djangae.db.constraints import UniqueMarker, UniquenessMixin
 from djangae.db.unique_utils import _unique_combinations, unique_identifiers_from_entity
 from djangae.indexing import add_special_index
 from djangae.db.utils import entity_matches_query, decimal_to_string, normalise_field_value
-from djangae.db.backends.appengine import caching
-from djangae.db.unique_utils import query_is_unique
+from djangae.db.caching import disable_cache
 from djangae.db import transaction
 from djangae.fields import ComputedCharField, ShardedCounterField, SetField, ListField, GenericRelationField
 from djangae.models import CounterShard
@@ -303,6 +302,42 @@ class BackendTests(TestCase):
         # query then it's a match
         entity["name"] = [ "Bob", "Fred", "Dave" ]
         self.assertTrue(entity_matches_query(entity, query))  # ListField test
+
+    def test_get_or_create(self):
+        """
+            Django's get_or_create can do the following:
+
+            1. get(**lookup) -> throws DoesNotExist
+            2. Catches DoesNotExist
+            3. create() -> throws IntegrityError
+            4. get(**lookup)
+
+            This test proves that we throw the right kind of error at step 3 when
+            unique constraints are violated.
+        """
+
+        def wrap_get(func):
+            def _wrapped(*args, **kwargs):
+                try:
+                    if _wrapped.calls == 0:
+                        raise UniqueModel.DoesNotExist()
+                    else:
+                        return func(*args, **kwargs)
+                finally:
+                    _wrapped.calls += 1
+
+            _wrapped.calls = 0
+            return _wrapped
+
+        from django.db.models import query
+        wrapped_get = wrap_get(query.QuerySet.get)
+
+        UniqueModel.objects.create(unique_field="Test")
+
+        with disable_cache():
+            with sleuth.switch("django.db.models.query.QuerySet.get", wrapped_get):
+                instance, created = UniqueModel.objects.get_or_create(unique_field="Test")
+                self.assertFalse(created)
 
     def test_setting_non_null_null_throws_integrity_error(self):
         with self.assertRaises(DjangoIntegrityError):
