@@ -131,6 +131,9 @@ def _remote(configuration=None, remote_api_stub=None, apiproxy_stub_map=None, **
     else:
         app_id = configuration.app_id
 
+    os.environ['HTTP_HOST'] = '{0}.appspot.com'.format(app_id)
+    os.environ['DEFAULT_VERSION_HOSTNAME'] = os.environ['HTTP_HOST']
+
     remote_api_stub.ConfigureRemoteApi(
         None,
         '/_ah/remote_api',
