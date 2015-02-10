@@ -62,14 +62,14 @@ class DjangoInputReader(input_readers.InputReader):
         # Grab the lowest pk
         query = model.objects.all()
         query = query.order_by('pk')
-        if not query:
-            return [DjangoInputReader(0,0, params['model'])]
-        first_id = query[0].id
 
-        # Grab the highest pk
-        query = model.objects.all()
-        query = query.order_by('-pk')
-        last_id = query[0].id
+        try:
+            first_id = query.values_list('pk', flat=True)[:1][0]
+
+            query = query.order_by('-pk')
+            last_id = query.values_list('pk', flat=True)[:1][0]
+        except IndexError:
+            return [DjangoInputReader(0,0, params['model'])]
 
         pk_range = last_id - first_id
 
