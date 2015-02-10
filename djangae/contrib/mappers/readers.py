@@ -2,6 +2,7 @@ from mapreduce import input_readers
 import itertools
 import logging
 from django.db.models.loading import cache as model_cache
+from djangae import utils
 
 class DjangoInputReader(input_readers.InputReader):
 
@@ -29,7 +30,7 @@ class DjangoInputReader(input_readers.InputReader):
             query = query.filter(pk__gt=self.start_id).filter(pk__lte=self.end_id)
         query = query.order_by('pk')
 
-        for model in query:
+        for model in utils.get_in_batches(query, batch_size=500):
             # From the mapreduce docs (AbstractDatastoreInputReader):
             #     The caller must consume yielded values so advancing the KeyRange
             #     before yielding is safe.
