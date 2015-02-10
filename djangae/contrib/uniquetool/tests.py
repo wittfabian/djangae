@@ -83,6 +83,7 @@ class MapperTests(TestCase):
         self.assertTrue(marker)
         self.assertTrue(isinstance(marker["instance"], datastore.Key))
         self.assertEqual(instance_key, marker["instance"])
+        self.assertTrue(marker["created"])
 
     def test_check_old_style_marker(self):
         instance_key = datastore.Key.from_path(TestModel._meta.db_table, self.i2.pk)

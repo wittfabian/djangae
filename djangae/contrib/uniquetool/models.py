@@ -1,3 +1,5 @@
+import datetime
+
 from django.db import models, connection
 from django.dispatch import receiver
 from django.db.models.signals import post_save
@@ -144,6 +146,7 @@ class CheckRepairMapper(MapReduceTask):
                 if repair:
                     new_marker = datastore.Entity(UniqueMarker.kind(), name=i.name())
                     new_marker['instance'] = entity.key()
+                    new_marker['created'] = datetime.datetime.now()
                     markers_to_save.append(new_marker)
                 else:
                     log(action_id, "missing_marker", instance_key, marker_key)
