@@ -177,7 +177,6 @@ class CheckRepairMapper(MapReduceTask):
         if markers_to_save:
             datastore.Put(markers_to_save)
 
-        yield ('_', [instance.pk])
 
 
 class CleanMapper(MapReduceTask):
