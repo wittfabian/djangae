@@ -67,7 +67,7 @@ class MapReduceTask(object):
 
         Overwrite 'finish' with a static definition for a finish callback
     """
-    shard_count = 3
+    shard_count = None
     pipeline_class = MapperPipeline # Defaults to MapperPipeline which just runs map stage
     job_name = None
     queue_name = 'default'
@@ -136,11 +136,14 @@ class MapReduceTask(object):
             mapper_parameters['_finish'] = self.get_relative_path(self.finish)
 
 
+        # Calculate a sensible shard count if one isn't specified
+        shard_count = self.shard_count or (self.model.objects.all()[:1000].count() / 100) + 1
+
         pipe = DjangaeMapperPipeline(
             self.job_name,
             'djangae.contrib.mappers.thunks.thunk_map',
             'djangae.contrib.mappers.readers.DjangoInputReader',
             params=mapper_parameters,
-            shards=self.shard_count
+            shards=shard_count
         )
         pipe.start(base_path=PIPELINE_BASE_PATH)
