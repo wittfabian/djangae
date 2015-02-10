@@ -1023,7 +1023,7 @@ class UpdateCommand(object):
         result.update(django_instance_to_entity(
             self.connection, self.model,
             [ x[0] for x in self.values],  # Pass in the fields that were updated
-            True, instance)
+            False, instance)
         )
 
         if not constraints.constraint_checks_enabled(self.model):

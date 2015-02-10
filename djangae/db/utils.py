@@ -139,9 +139,10 @@ def django_instance_to_entity(connection, model, fields, raw, instance):
     def value_from_instance(_instance, _field):
         value = get_prepared_db_value(connection, _instance, _field, raw)
 
-        if (not _field.null and not _field.primary_key) and value is None:
-            raise IntegrityError("You can't set %s (a non-nullable "
-                                     "field) to None!" % _field.name)
+        if not raw:
+            if (not _field.null and not _field.primary_key) and value is None:
+                raise IntegrityError("You can't set %s (a non-nullable "
+                                         "field) to None!" % _field.name)
 
         is_primary_key = False
         if _field.primary_key and _field.model == inheritance_root:
