@@ -131,7 +131,7 @@ def has_concrete_parents(model):
     return get_concrete_parents(model) != [model]
 
 
-def django_instance_to_entity(connection, model, fields, raw, instance):
+def django_instance_to_entity(connection, model, fields, raw, instance, check_null=True):
     # uses_inheritance = False
     inheritance_root = get_top_concrete_parent(model)
     db_table = get_datastore_kind(inheritance_root)
@@ -139,7 +139,7 @@ def django_instance_to_entity(connection, model, fields, raw, instance):
     def value_from_instance(_instance, _field):
         value = get_prepared_db_value(connection, _instance, _field, raw)
 
-        if (not _field.null and not _field.primary_key) and value is None:
+        if check_null and (not _field.null and not _field.primary_key) and value is None:
             raise IntegrityError("You can't set %s (a non-nullable "
                                      "field) to None!" % _field.name)
 

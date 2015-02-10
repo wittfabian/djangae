@@ -130,7 +130,7 @@ class CheckRepairMapper(MapReduceTask):
         action_id = kwargs.get("action_pk")
         repair = kwargs.get("repair")
 
-        entity = django_instance_to_entity(connection, type(instance), instance._meta.fields, raw=True, instance=instance)
+        entity = django_instance_to_entity(connection, type(instance), instance._meta.fields, raw=True, instance=instance, check_null=False)
         identifiers = unique_identifiers_from_entity(type(instance), entity, ignore_pk=True)
         identifier_keys = [datastore.Key.from_path(UniqueMarker.kind(), i) for i in identifiers]
 
