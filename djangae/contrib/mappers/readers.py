@@ -1,8 +1,6 @@
 from mapreduce import input_readers
-import copy
-import cPickle
+import itertools
 import logging
-import importlib
 from django.db.models.loading import cache as model_cache
 
 class DjangoInputReader(input_readers.InputReader):
@@ -88,7 +86,10 @@ class DjangoInputReader(input_readers.InputReader):
         # Splitting could be much smarter by taking a __scatter__ sample and
         # clustering, which is how the DatastoreInputWriter from the mapreduce
         # splits on pks
-        for i in xrange(first_id-1, last_id, max_shard_size):
+        for i in itertools.count(first_id-1, max_shard_size):
+            if i >= last_id:
+                break
+
             shard_start_id = i
             shard_end_id = i + max_shard_size
             if shard_end_id > last_id:
