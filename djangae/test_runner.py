@@ -29,7 +29,7 @@ def init_testbed():
     return bed
 
 
-def testbed_wrap(test):
+def bed_wrap(test):
     def _wrapped(*args, **kwargs):
         bed = None
         try:
@@ -57,7 +57,7 @@ class DjangaeTestSuiteRunner(DjangoTestSuiteRunner):
         suite = super(DjangaeTestSuiteRunner, self).build_suite(*args, **kwargs)
 
         for i, test in enumerate(suite._tests):
-            suite._tests[i] = testbed_wrap(test)
+            suite._tests[i] = bed_wrap(test)
 
         return suite
 
