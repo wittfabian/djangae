@@ -997,11 +997,11 @@ class EdgeCaseTests(TestCase):
 
         add_special_index(TestUser, "username", "iexact")
 
-        self.u1 = TestUser.objects.create(username="A", email="test@example.com", last_login=datetime.datetime.now().date())
-        self.u2 = TestUser.objects.create(username="B", email="test@example.com", last_login=datetime.datetime.now().date())
-        self.u3 = TestUser.objects.create(username="C", email="test2@example.com", last_login=datetime.datetime.now().date())
-        self.u4 = TestUser.objects.create(username="D", email="test3@example.com", last_login=datetime.datetime.now().date())
-        self.u5 = TestUser.objects.create(username="E", email="test3@example.com", last_login=datetime.datetime.now().date())
+        self.u1 = TestUser.objects.create(username="A", email="test@example.com", last_login=datetime.datetime.now().date(), id=1)
+        self.u2 = TestUser.objects.create(username="B", email="test@example.com", last_login=datetime.datetime.now().date(), id=2)
+        self.u3 = TestUser.objects.create(username="C", email="test2@example.com", last_login=datetime.datetime.now().date(), id=3)
+        self.u4 = TestUser.objects.create(username="D", email="test3@example.com", last_login=datetime.datetime.now().date(), id=4)
+        self.u5 = TestUser.objects.create(username="E", email="test3@example.com", last_login=datetime.datetime.now().date(), id=5)
 
         self.apple = TestFruit.objects.create(name="apple", color="red")
         self.banana = TestFruit.objects.create(name="banana", color="yellow")
@@ -1470,6 +1470,9 @@ class ComputedFieldModel(models.Model):
     int_field = models.IntegerField()
     char_field = models.CharField(max_length=50)
     test_field = ComputedCharField(computer, max_length=50)
+
+    class Meta:
+        app_label = "djangae"
 
 
 class ComputedFieldTests(TestCase):
