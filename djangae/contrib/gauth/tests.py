@@ -150,6 +150,10 @@ class CustomPermissionsUserModelBackendTest(TestCase):
             is_active=True,
         )
 
+    def tearDown(self):
+        GaeDatastoreUser.objects.all().delete()
+        super(CustomPermissionsUserModelBackendTest, self).tearDown()
+
     def test_has_perm(self):
         user = self.UserModel.objects.get(pk=self.user.pk)
         self.assertEqual(user.has_perm('auth.test'), False)

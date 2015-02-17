@@ -23,6 +23,9 @@ class TestUser(models.Model):
     def __unicode__(self):
         return u" ".join([self.first_name, self.last_name])
 
+    class Meta:
+        db_table = "pagination"
+
 class PaginatedModelTests(TestCase):
     def test_fields_added_correctly(self):
         self.assertIsNotNone(TestUser._meta.get_field("pagination_first_name"))
