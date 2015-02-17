@@ -2,7 +2,7 @@ from django import forms
 from django.db import router, models
 from django.db.models.fields.related import RelatedField
 from django.utils.functional import cached_property
-
+from django.core.exceptions import ImproperlyConfigured
 from djangae.forms.fields import (
     encode_pk,
     GenericRelationFormfield
@@ -262,7 +262,7 @@ class GRCreator(property):
     def get(self, obj):
         cache_attr = "_{}_cache".format(self.attname)
         if getattr(obj, cache_attr, None) is None:
-            setattr(obj, cache_attr, self.field.to_python(obj.__dict__[self.attname]))
+            setattr(obj, cache_attr, self.field.__get__(obj))
         return getattr(obj, cache_attr)
 
     def set(self, obj, value):
@@ -287,7 +287,6 @@ class GRReverseCreator(property):
         if not isinstance(value, basestring):
             value = self.field.get_prep_value(value)
         obj.__dict__[self.attname] = value
-
 
 
 class GenericRelationField(models.Field):
@@ -335,8 +334,23 @@ class GenericRelationField(models.Field):
     def get_prep_value(cls, value):
         return cls.form_class.to_string(value)
 
-    def to_python(self, value):
-        return self.form_class.to_python(value)
+    def __get__(self, instance):
+        if instance is None:
+            return self
+
+        value = getattr(instance, self.attname)
+
+        from djangae.forms.fields import decode_pk
+        from djangae.db.utils import get_model_from_db_table
+
+        if value is None:
+            return None
+
+        model_ref, pk = decode_pk(value)
+        try:
+            return get_model_from_db_table(model_ref).objects.get(pk=pk)
+        except AttributeError:
+            raise ImproperlyConfigured("Unable to find model with db_table: {}".format(model_ref))
 
     def formfield(self, **kwargs):
         defaults = {
