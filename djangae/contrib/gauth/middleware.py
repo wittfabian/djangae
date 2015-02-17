@@ -34,7 +34,7 @@ class AuthenticationMiddleware(DjangoMiddleware):
 
         backend_str = request.session.get(BACKEND_SESSION_KEY)
 
-        if backend_str and django_user:
+        if backend_str and google_user:
             backend = load_backend(backend_str)
 
             # We only do this next bit if the user was authenticated with the AppEngineUserAPI
