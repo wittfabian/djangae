@@ -34,7 +34,7 @@ class AuthenticationMiddleware(DjangoMiddleware):
 
         backend_str = request.session.get(BACKEND_SESSION_KEY)
 
-        if backend_str:
+        if backend_str and django_user:
             backend = load_backend(backend_str)
 
             # We only do this next bit if the user was authenticated with the AppEngineUserAPI
@@ -42,7 +42,7 @@ class AuthenticationMiddleware(DjangoMiddleware):
             if isinstance(backend, AppEngineUserAPI):
                 # Now make sure we update is_superuser and is_staff appropriately
                 is_superuser = users.is_current_user_admin()
-                google_email = BaseUserManager.normalize_email(users.get_current_user().email())
+                google_email = BaseUserManager.normalize_email(google_user.email())
                 resave = False
 
                 if is_superuser != django_user.is_superuser:
