@@ -1826,6 +1826,11 @@ class TestHelperTests(TestCase):
             self.assertEqual(1, TestFruit.objects.filter(pk=fruit.pk).count()) #Consistent query
 
     def test_processing_tasks(self):
+        from google.appengine.api import apiproxy_stub_map
+        stub = apiproxy_stub_map.apiproxy.GetStub("taskqueue")
+        stub._queues[None]._ConstructQueue("another") # Add a test queue
+        stub._queues[None]._queue_yaml_parser = None # Make it so that the taskqueue stub doesn't reload from YAML
+
         self.assertNumTasksEquals(0) #No tasks
 
         deferred.defer(deferred_func)
