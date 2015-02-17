@@ -34,7 +34,9 @@ def make_timezone_naive(value):
 
 @memoized
 def get_model_from_db_table(db_table):
-    for model in models.get_models(include_auto_created=True, only_installed=False):
+    # We use include_swapped=True because tests might need access to gauth User models which are
+    # swapped if the user has a different custom user model
+    for model in models.get_models(include_auto_created=True, only_installed=False, include_swapped=True):
         if model._meta.db_table == db_table:
             return model
 
