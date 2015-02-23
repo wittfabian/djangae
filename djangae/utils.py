@@ -113,18 +113,30 @@ def get_in_batches(queryset, batch_size=10):
 
 
 def retry_until_successful(func, *args, **kwargs):
+    return retry(func, *args, _retries=float('inf'), **kwargs)
+
+
+def retry(func, *args, **kwargs):
     from google.appengine.api import datastore_errors
     from google.appengine.runtime import apiproxy_errors
     from google.appengine.runtime import DeadlineExceededError
+    from djangae.db.transaction import TransactionFailedError
+
+    retries = kwargs.pop('_retries', 3)
+    i = 0
     try:
         timeout_ms = 100
         while True:
             try:
+                i += 1
                 return func(*args, **kwargs)
-            except (datastore_errors.Error, apiproxy_errors.Error):
-                logging.info("Retrying function: %s(%s, %s)", str(func), str(args), str(kwargs))
+            except (datastore_errors.Error, apiproxy_errors.Error, TransactionFailedError), exc:
+                logging.info("Retrying function: %s(%s, %s) - %s", str(func), str(args), str(kwargs), str(exc))
                 time.sleep(timeout_ms / 1000000.0)
                 timeout_ms *= 2
+                if i > retries:
+                    raise exc
+
     except DeadlineExceededError:
         logging.error("Timeout while running function: %s(%s, %s)", str(func), str(args), str(kwargs))
         raise
