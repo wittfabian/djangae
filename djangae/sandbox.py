@@ -309,7 +309,7 @@ def allow_modules(func, *args):
         # of the old one
         old_meta_path = sys.meta_path
         sys.meta_path = []
-        patch_modules = [subprocess, os, tempfile, select]
+        patch_modules = [os, tempfile, select, subprocess]
 
         import copy
         environ = copy.copy(os.environ)
