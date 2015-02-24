@@ -249,7 +249,15 @@ behaviour you are best reading through the caching tests. But here's a general o
 The following settings are available to control the caching:
 
  - DJANGAE_CACHE_ENABLED (default True). Setting to False it all off, I really wouldn't suggest doing that!
- - DJANGAE_CACHE_TIMEOUT_SECONDS (default 60 * 60). The length of time stuff should be kept in memcache
+ - DJANGAE_CACHE_TIMEOUT_SECONDS (default 60 * 60). The length of time stuff should be kept in memcache.
+ 
+## Datastore Behaviours
+
+The Djangae database backend for the Datastore contains some clever optimisations and integrity checks to make working with the Datastore easier.  This means that in some cases there are behaviours which are either not the same as the Django-on-SQL behaviour or not the same as the default Datastore behaviour. So for clarity, below is a list of statements which are true:
+
+* Doing `MyModel.objects.create(primary_key_field=value)` will do an insert, so will explicitly check that an object with that PK doesn't already exist before inserting, and will raise an IntegrityError if it does. This is done in a transaction, so there is no need for any kind of manual transaction or existence checking.
+
+
 
 ## Contrib Applications
 
