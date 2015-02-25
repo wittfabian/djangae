@@ -34,7 +34,7 @@ def _disable_sqlite_stub_logging():
 
 def _find_sdk_from_python_path():
     import google.appengine
-    return os.path.abspath(os.path.dirname(google.__path__[0]))
+    return os.path.abspath(os.path.dirname(os.path.dirname(google.appengine.__path__[0])))
 
 
 def _find_sdk_from_path():
