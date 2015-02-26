@@ -79,7 +79,7 @@ class DatastorePage(collections.Sequence):
     def __repr__(self):
         bottom = (self.number - 1) * self.paginator.per_page
         top = len(self.object_list)
-        return '<Objects %s to %s>'.format(bottom, top)
+        return '<Objects {0} to {1}>'.format(bottom, top)
 
     def __len__(self):
         return len(self.object_list)
