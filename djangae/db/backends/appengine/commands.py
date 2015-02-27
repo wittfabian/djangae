@@ -1003,9 +1003,8 @@ class UpdateCommand(object):
         try:
             result = datastore.Get(key)
         except datastore_errors.EntityNotFoundError:
-            reserve_id(key.kind(), key.id_or_name())
-            result = datastore.Entity(key.kind(), id=key.id_or_name())
-
+            # Return false to indicate update failure
+            return False
 
         original = copy.deepcopy(result)
 
@@ -1045,6 +1044,9 @@ class UpdateCommand(object):
                 # Now we release the ones we don't want anymore
                 constraints.release_identifiers(to_release)
 
+        # Return true to indicate update success
+        return True
+
     def execute(self):
         self.select.execute()
 
@@ -1052,7 +1054,8 @@ class UpdateCommand(object):
 
         i = 0
         for result in results:
-            self._update_entity(result.key())
-            i += 1
+            if self._update_entity(result.key()):
+                # Only increment the count if we successfully updated
+                i += 1
 
         return i
