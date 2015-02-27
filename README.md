@@ -257,7 +257,9 @@ The Djangae database backend for the Datastore contains some clever optimisation
 
 * Doing `MyModel.objects.create(primary_key_field=value)` will do an insert, so will explicitly check that an object with that PK doesn't already exist before inserting, and will raise an IntegrityError if it does. This is done in a transaction, so there is no need for any kind of manual transaction or existence checking.
 
+## On Delete Constraints
 
+In general, django's emulation of SQL ON DELETE constraints works with djangae on the datastore. Due to eventual consistency however, the constraints can fail. Take care when deleting related objects in quick succession, a PROTECT constraint can wrongly cause a ProtectedError when deleting an object that references a recently deleted one. Constraints can also fail to raise an error if a referencing object was created just prior to deleting the referenced one. Similarly, when using ON CASCADE DELETE (the default behaviour), a newly created referencing object might not be deleted along with the referenced one.
 
 ## Contrib Applications
 
