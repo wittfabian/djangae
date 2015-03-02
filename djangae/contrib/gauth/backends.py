@@ -73,13 +73,11 @@ class AppEngineUserAPI(ModelBackend):
                 user = User.objects.get(username=user_id)
 
             except User.DoesNotExist:
-                if hasattr(settings, "ALLOW_USER_PRE_CREATION"):
+                if (
+                    getattr(settings, 'DJANGAE_ALLOW_USER_PRE_CREATION', False) or
                     # Backwards compatibility, remove before 1.0
-                    allow_user_creation = getattr(settings, 'ALLOW_USER_PRE_CREATION', False)
-                else:
-                    allow_user_creation = getattr(settings, 'DJANGAE_ALLOW_USER_PRE_CREATION', False)
-
-                if allow_user_creation:
+                    getattr(settings, 'ALLOW_USER_PRE_CREATION', False)
+                ):
                     # Check to see if a User object for this email address has been pre-created.
                     try:
                         # Convert the pre-created User object so that the user can now login via
