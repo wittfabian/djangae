@@ -1,11 +1,40 @@
 import copy
 from google.appengine.api import datastore
 
+import collections
+
+class CopyDict(collections.MutableMapping):
+    """
+        It's important we don't pass references around in and out
+        of the cache, so this just ensures we copy stuff going in, and
+        copy it going out!
+    """
+    def __init__(self, *args, **kwargs):
+        self._store = {}
+        super(CopyDict, self).__init__(*args, **kwargs)
+
+    def __setitem__(self, key, value):
+        value = copy.deepcopy(value)
+        self._store[key] = value
+
+    def __getitem__(self, key):
+        value = self._store[key]
+        return copy.deepcopy(value)
+
+    def __delitem__(self, key):
+        del self._store[key]
+
+    def __iter__(self):
+        return iter(self._store)
+
+    def __len__(self):
+        return len(self._store)
+
 class Context(object):
 
     def __init__(self, stack):
-        self.cache = {}
-        self.reverse_cache = {}
+        self.cache = CopyDict()
+        self.reverse_cache = CopyDict()
         self._stack = stack
 
     def apply(self, other):
