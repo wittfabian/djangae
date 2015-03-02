@@ -211,14 +211,14 @@ class GaeAbstractBaseUser(AbstractBaseUser):
     username = models.CharField(
         # This stores the Google user_id, or custom username for non-Google-based users.
         # We allow it to be null so that Google-based users can be pre-created before they log in.
-        _('User ID'), max_length=21, unique=True, null=True,
+        _('User ID'), max_length=21, unique=True, null=True, default=None,
         validators=[
             validators.RegexValidator(re.compile('^\d{21}$'), _('User Id should be 21 digits.'), 'invalid')
         ]
     )
     first_name = models.CharField(_('first name'), max_length=30, blank=True)
     last_name = models.CharField(_('last name'), max_length=30, blank=True)
-    email = models.EmailField(_('email address'))
+    email = models.EmailField(_('email address'), unique=True)
     is_staff = models.BooleanField(
         _('staff status'), default=False,
         help_text=_('Designates whether the user can log into this admin site.')
