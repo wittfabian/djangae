@@ -361,8 +361,11 @@ class ContextCachingTests(TestCase):
         expected = entity_data.copy()
         expected[u"id"] = instance.pk
 
+        # Fetch the object, which causes it to be added to the context cache
         self.assertItemsEqual(CachingTestModel.objects.filter(pk=instance.pk).values(), [expected])
+        # Doing a .values_list() fetches from the cache and wipes out the other fields from the entity
         self.assertItemsEqual(CachingTestModel.objects.filter(pk=instance.pk).values_list("field1"), [("Apple",)])
+        # Now fetch from the cache again, checking that the previously wiped fields are still in tact
         self.assertItemsEqual(CachingTestModel.objects.filter(pk=instance.pk).values(), [expected])
 
 
