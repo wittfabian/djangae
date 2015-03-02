@@ -1,7 +1,7 @@
+from django.core import paginator as django_paginator
 from django.db import models
 from djangae.test import TestCase
 from djangae.contrib import sleuth
-
 from djangae.contrib.pagination import (
     paginated_model,
     Paginator,
@@ -163,3 +163,11 @@ class DatastorePaginatorTests(TestCase):
             sorted([self.u4.pk]),
             sorted([x.pk for x in paginator.page(2).object_list])
         )
+
+    def test_empty_page(self):
+        paginator = Paginator(TestUser.objects.all().order_by("-first_name"), 1, allow_empty_first_page=False)
+        with self.assertRaises(django_paginator.EmptyPage):
+            self.assertEqual(paginator.page(5).object_list, [])
+
+        paginator = Paginator(TestUser.objects.all().order_by("-first_name"), 1)
+        self.assertEqual(paginator.page(5).object_list, [])
