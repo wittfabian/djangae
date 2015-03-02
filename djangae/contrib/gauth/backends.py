@@ -1,3 +1,4 @@
+import logging
 from itertools import chain
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -9,6 +10,9 @@ from django.utils import timezone
 # DJANGAE
 from djangae.contrib.gauth.models import GaeAbstractBaseUser, get_permission_choices
 
+# This is here so that we only log once on import, not on each authentication
+if hasattr(settings, "ALLOW_USER_PRE_CREATION"):
+    logging.warning("settings.ALLOW_USER_PRE_CREATION is deprecated, please use DJANGAE_ALLOW_USER_PRECREATION instead")
 
 class AppEngineUserAPI(ModelBackend):
     """
@@ -69,7 +73,11 @@ class AppEngineUserAPI(ModelBackend):
                 user = User.objects.get(username=user_id)
 
             except User.DoesNotExist:
-                if getattr(settings, 'ALLOW_USER_PRE_CREATION', False):
+                if (
+                    getattr(settings, 'DJANGAE_ALLOW_USER_PRE_CREATION', False) or
+                    # Backwards compatibility, remove before 1.0
+                    getattr(settings, 'ALLOW_USER_PRE_CREATION', False)
+                ):
                     # Check to see if a User object for this email address has been pre-created.
                     try:
                         # Convert the pre-created User object so that the user can now login via
