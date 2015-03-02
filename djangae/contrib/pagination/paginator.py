@@ -96,13 +96,15 @@ class Paginator(paginator.Paginator):
         return paginated sets on the appengine datastore
     """
 
-    def __init__(self, object_list, per_page, readahead=10, **kwargs):
+    def __init__(self, object_list, per_page, readahead=10,
+                allow_empty_first_page=True, **kwargs):
         if not object_list.ordered:
             object_list.order_by("pk") # Just order by PK by default
 
         self.original_orderings = object_list.query.order_by
         self.field_required = _field_name_for_ordering(self.original_orderings[:])
         self.readahead = readahead
+        self.allow_empty_first_page = allow_empty_first_page
 
         try:
             object_list.model._meta.get_field(self.field_required)
@@ -121,7 +123,7 @@ class Paginator(paginator.Paginator):
             object_list = object_list.order_by(self.field_required)
 
         self.queryset_id = queryset_identifier(object_list)
-        super(Paginator, self).__init__(object_list, per_page, **kwargs)
+        super(Paginator, self).__init__(object_list, per_page, allow_empty_first_page=allow_empty_first_page, **kwargs)
 
 
     @property
@@ -181,7 +183,7 @@ class Paginator(paginator.Paginator):
             next_page_counter += 1
             next_page = next_page[self.per_page:]
 
-        if not results:
+        if not results and not self.allow_empty_first_page:
             raise paginator.EmptyPage("That page contains no results")
 
         known_count = ((number - 1) * self.per_page) + len(results)
@@ -193,10 +195,12 @@ class Paginator(paginator.Paginator):
             index = self.per_page-1
         else:
             index = len(page.object_list)-1
-        _store_marker(
-            self.queryset_id,
-            number,
-            getattr(page.object_list[index], self.field_required)
-        )
+
+        if results:
+            _store_marker(
+                self.queryset_id,
+                number,
+                getattr(page.object_list[index], self.field_required)
+            )
 
         return page
