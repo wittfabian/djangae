@@ -401,7 +401,14 @@ class BackendTests(TestCase):
 
             self.assertEqual(1, get_mock.call_count)
 
+    def test_range_behaviour(self):
+        IntegerModel.objects.create(integer_field=5)
+        IntegerModel.objects.create(integer_field=10)
+        IntegerModel.objects.create(integer_field=15)
 
+        self.assertItemsEqual([10], IntegerModel.objects.filter(integer_field__range=(6, 14)).values_list("integer_field", flat=True))
+        self.assertItemsEqual([5, 10, 15], IntegerModel.objects.filter(integer_field__range=(5, 15)).order_by("integer_field").values_list("integer_field", flat=True))
+        self.assertItemsEqual([5, 15], IntegerModel.objects.exclude(integer_field__range=(6, 14)).values_list("integer_field", flat=True))
 
     def test_null_date_field(self):
         null_date = NullDate()
