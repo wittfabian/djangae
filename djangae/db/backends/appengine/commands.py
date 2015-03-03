@@ -155,24 +155,28 @@ def parse_constraint(child, connection, negated=False):
     packed, value = constraint.process(op, value, connection)
     alias, column, db_type = packed
 
-    if constraint.field.name == "id" and op == "iexact" and constraint.field.primary_key and isinstance(constraint.field, AutoField):
+    field = constraint.field
+    is_pk = field and field.primary_key
+
+    if constraint.col == "id" and op == "iexact" and is_pk and isinstance(constraint.field, AutoField):
         # When new instance is created, automatic primary key 'id' does not generate '_idx_iexact_id'.
         # As the primary key 'id' (AutoField) is integer and is always case insensitive, we can deal with 'id_iexact=' query by using 'exact' rather than 'iexact'.
         op = "exact"
 
-    if constraint.field.db_type(connection) in ("bytes", "text"):
+    if field and field.db_type(connection) in ("bytes", "text"):
         raise NotSupportedError("Text and Blob fields are not indexed by the datastore, so you can't filter on them")
 
     if op not in REQUIRES_SPECIAL_INDEXES:
         # Don't convert if this op requires special indexes, it will be handled there
-        value = [ connection.ops.prep_lookup_value(constraint.field.model, x, constraint.field, constraint=constraint) for x in value]
+        if field:
+            value = [ connection.ops.prep_lookup_value(field.model, x, field, constraint=constraint) for x in value]
 
         # Don't ask me why, but constraint.process on isnull wipes out the value (it returns an empty list)
         # so we have to special case this to use the annotation value instead
         if op == "isnull":
             value = [ annotation ]
 
-            if constraint.field.primary_key and value[0]:
+            if is_pk and value[0]:
                 raise EmptyResultSet()
 
         if not was_list:
