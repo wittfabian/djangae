@@ -100,6 +100,16 @@ def process_literal(node, is_pk_filter, excluded_pks, filtered_columns=None, neg
         else:
             op = "exact"
             value = None
+    elif op == "range":
+        lits = []
+        if not negated:
+            lits.append(('LIT', (column, '>=', value[0])))
+            lits.append(('LIT', (column, '<=', value[1])))
+            return ('AND', lits), filtered_columns
+        else:
+            lits.append(('LIT', (column, '<', value[0])))
+            lits.append(('LIT', (column, '>', value[1])))
+            return ('OR', lits), filtered_columns
 
     if not OPERATORS_MAP.get(op):
         raise NotSupportedError("Unsupported operator %s" % op)
