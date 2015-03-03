@@ -1,6 +1,6 @@
 from django import forms
 from django.db import router, models
-from django.db.models.fields.related import RelatedField
+from django.db.models.fields.related import RelatedField, ForeignObjectRel
 from django.utils.functional import cached_property
 from django.core.exceptions import ImproperlyConfigured
 from djangae.forms.fields import (
@@ -8,7 +8,7 @@ from djangae.forms.fields import (
     GenericRelationFormfield
 )
 
-class RelatedSetRel(object):
+class RelatedSetRel(ForeignObjectRel):
     def __init__(self, to, related_name=None, limit_choices_to=None):
         self.to = to
         self.related_name = related_name
