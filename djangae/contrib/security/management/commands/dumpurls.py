@@ -8,7 +8,9 @@ from django.contrib.admindocs.views import simplify_regex
 from djangae.contrib.security.commands_utils import (
     extract_views_from_urlpatterns,
     display_as_table,
-    get_func_name
+    get_func_name,
+    get_decorators,
+    get_mixins
 )
 
 
@@ -30,38 +32,12 @@ class Command(BaseCommand):
             if isinstance(func, functools.partial):
                 func = func.func
 
-            # Name of the function / class
-            func_name = get_func_name(func)
+            decorators_and_mixins = get_decorators(func) + get_mixins(func, ignored_modules=ignored_modules)
 
-            # Decorators
-            decorators = []
-            if hasattr(func, '__module__'):
-                mod = inspect.getmodule(func)
-                source_code = inspect.getsourcelines(mod)[0]
-                i = 0
-
-                for line in source_code:
-                    if line.startswith('def {}'.format(func_name)) or line.startswith('class {}'.format(func_name)):
-                        j = 1
-                        k = source_code[i-j]
-                        while k.startswith('@'):
-                            decorators.append(k.strip().split('(')[0])
-                            j += 1
-                            k = source_code[i-j]
-                    i += 1
-
-            # Mixins
-            mixins = []
-            if hasattr(func, 'cls'):
-                for klass in func.cls.mro():
-                    if klass != func.cls and klass.__module__.split('.')[0] not in ignored_modules:
-                        mixins.append("{}.{}".format(klass.__module__, get_func_name(klass)))
-
-            # Collect information
             views.append("{url}||{module}||{decorators}".format(
-                module='{0}.{1}'.format(func.__module__, func_name),
+                module='{0}.{1}'.format(func.__module__, get_func_name(func)),
                 url=simplify_regex(regex),
-                decorators=', '.join(decorators+mixins)
+                decorators=', '.join(decorators_and_mixins)
             ))
 
         return display_as_table(views)
