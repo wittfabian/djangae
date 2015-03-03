@@ -228,7 +228,11 @@ class RelatedSetField(RelatedField):
         return str(list(self._get_val_from_obj(obj)))
 
     def save_form_data(self, instance, data):
-        setattr(instance, self.attname, set([x.pk for x in data]))
+        for value in data:
+            if isinstance(value, self.rel.to):
+                getattr(instance, self.name).add(value)
+            else:
+                getattr(instance, self.attname).add(value)
 
     def formfield(self, **kwargs):
         db = kwargs.pop('using', None)
