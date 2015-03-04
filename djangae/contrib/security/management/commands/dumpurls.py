@@ -10,7 +10,8 @@ from djangae.contrib.security.commands_utils import (
     display_as_table,
     get_func_name,
     get_decorators,
-    get_mixins
+    get_mixins,
+    simplify_regex,
 )
 
 

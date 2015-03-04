@@ -1,4 +1,5 @@
 import re, inspect
+from django.contrib import admindocs
 from django.core.exceptions import ViewDoesNotExist
 from django.core.urlresolvers import RegexURLPattern, RegexURLResolver
 
@@ -153,3 +154,28 @@ def get_mixins(func, ignored_modules=None):
                 mixins.append("{}.{}".format(klass.__module__, get_func_name(klass)))
 
     return mixins
+
+
+# This is copied from django.contrib.admindocs.views, but improved to deal with non-capturing
+# groups within the group.
+# TODO: submit this as a patch to Django.
+
+non_named_group_matcher = re.compile(
+    r'\(' # opening bracket of group
+    '(' # a group for THIS regex...
+        r'[^\)]*' # zero or more characters that are not a closing bracket
+        # the next line allows us to have non-capturing groups within the overall group that we're matching
+        r'\(\?[^\)]*\)' # a non-capturing group
+        r'[^\)]*' # zero or more characters that are not a bracket
+    ')*' # all of that ^ bit zero or more times
+    r'\)' # the closing bracket of the group
+)
+
+def simplify_regex(pattern):
+    """ Do the same as django.contrib.admindocs.views.simplify_regex but with our improved regex.
+    """
+    original_regex = admindocs.views.non_named_group_matcher
+    admindocs.views.non_named_group_matcher = non_named_group_matcher
+    result = admindocs.views.simplify_regex(pattern)
+    admindocs.views.non_named_group_matcher = original_regex
+    return result
