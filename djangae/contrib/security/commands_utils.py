@@ -111,7 +111,9 @@ def get_func_name(func):
 
 def get_decorators(func):
     """
-        Get function or class and return names of applied decorators
+        Get function or class and return names of applied decorators.
+        Note that due to the dynamic nature of python and the many ways in which functions can be
+        decorated, patched or switched, this is - and will only ever be - a best effort attempt.
     """
     decorators = []
     if hasattr(func, '__module__'):
@@ -143,11 +145,16 @@ def get_decorators(func):
 
 def get_mixins(func, ignored_modules=None):
     """
-        Get class and return names and paths to applied mixins
-        Has an optional argument for names of modules that should be ignored
+        Given a Django class-based view, return names and paths to applied mixins
+        Has an optional argument for names of modules that should be ignored.
+        Note that there could be decorators on the methods of the class (or on methods of the
+        mixins), but as with decorators, being sure of finding them all is impossible, so we simply
+        list the mixins.
     """
     ignored_modules = ignored_modules if ignored_modules else []
     mixins = []
+    # Django class-based views are used by calling .as_view() which creates a nested function that
+    # has a 'cls' attribute which is the actual class
     if hasattr(func, 'cls'):
         for klass in func.cls.mro():
             if klass != func.cls and klass.__module__.split('.')[0] not in ignored_modules:
