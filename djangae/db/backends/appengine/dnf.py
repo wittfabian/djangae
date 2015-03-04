@@ -30,10 +30,12 @@ def check_for_inequalities(node, key=None, other=None):
             raise QueryContainsOR
 
         for literal in literals:
-            field_name = literal[0].field.column
-            if node.negated and literal[1] == "exact" and literal[0].field.primary_key:
+            field = literal[0].field
+
+            field_name = literal[0].col
+            if node.negated and literal[1] == "exact" and (field and field.primary_key):
                 key = field_name
-            elif ((node.negated and literal[1] == "exact") or (literal[1] in ("gt", "gte", "lt", "lte"))) and not literal[0].field.primary_key:
+            elif ((node.negated and literal[1] == "exact") or (literal[1] in ("gt", "gte", "lt", "lte"))) and not (field and field.primary_key):
                 other.add(field_name)
 
         for branch in branches:
@@ -126,7 +128,8 @@ def process_literal(node, is_pk_filter, excluded_pks, filtered_columns=None, neg
 
 def process_node(node, connection, negated=False):
     if isinstance(node, tuple) and isinstance(node[0], Constraint):
-        is_pk = node[0].field.primary_key
+        field = node[0].field
+        is_pk = field and field.primary_key
         return ('LIT', parse_constraint(node, connection, negated)), negated, is_pk
     if isinstance(node, tuple):
         return node, negated, False
