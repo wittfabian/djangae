@@ -126,9 +126,14 @@ def get_decorators(func):
             if line.startswith(func_def) or line.startswith(class_def):
                 j = 1
                 k = source_code[i-j]
-                while k.startswith('@'):
-                    decorators.append(k.strip().split('(')[0])
+                # decorators can be defined on the previous line(s), but can have blank lines before them
+                # blank lines are '\n', hence we strip() them to see if they're empty
+                while k.startswith('@') or not k.strip():
+                    if k.startswith('@'):
+                        decorators.append(k.strip().split('(')[0])
                     j += 1
+                    if j >= i: # don't wrap around when we get to the start of the file
+                        break
                     k = source_code[i-j]
             i += 1
 
