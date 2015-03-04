@@ -62,14 +62,15 @@ def display_as_table(views):
         Get list of views from dumpurls security management command
         and returns them in the form of table to print in command line
     """
+    headers = ('URL', 'Handler path', 'Decorators & Mixins')
     views = [row.split('||', 3) for row in sorted(views)]
-    widths = [len(max(columns, key=len)) for columns in zip(*views)]
+    # Find the longest value in each column
+    widths = [len(max(columns, key=len)) for columns in zip(*[headers] + views)]
     widths = [width  if width < 100 else 100 for width in widths]
     table_views = []
 
-    header = ('URL', 'Handler path', 'Decorators & Mixins')
     table_views.append(
-        ' | '.join('{0:<{1}}'.format(title, width) for width, title in zip(widths, header))
+        ' | '.join('{0:<{1}}'.format(title, width) for width, title in zip(widths, headers))
     )
     table_views.append('-+-'.join('-' * width for width in widths))
 
