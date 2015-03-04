@@ -119,8 +119,11 @@ def get_decorators(func):
         func_name = get_func_name(func)
         i = 0
 
+        func_def = 'def {}'.format(func_name)
+        class_def = 'class {}'.format(func_name)
+
         for line in source_code:
-            if line.startswith('def {}'.format(func_name)) or line.startswith('class {}'.format(func_name)):
+            if line.startswith(func_def) or line.startswith(class_def):
                 j = 1
                 k = source_code[i-j]
                 while k.startswith('@'):
