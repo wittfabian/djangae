@@ -41,4 +41,9 @@ class Command(BaseCommand):
                 decorators=', '.join(decorators_and_mixins)
             ))
 
-        return display_as_table(views)
+        info = (
+            "Decorators lists are not comprehensive and do not take account of other patching.\n"
+            "Decorators for methods of class-based views are not listed."
+        )
+        table = display_as_table(views)
+        return "\n{0}\n{1}".format(table, info)
