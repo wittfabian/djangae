@@ -72,6 +72,9 @@ REVERSE_OP_MAP = {
 
 INEQUALITY_OPERATORS = frozenset(['>', '<', '<=', '>='])
 
+def _get_tables_from_where(where_node):
+    cols = where_node.get_cols() if hasattr(where_node, 'get_cols') else where_node.get_group_by_cols()
+    return list(set([x[0] for x in cols if x[0] ]))
 
 @memoized
 def get_field_from_column(model, column):
@@ -497,7 +500,7 @@ class SelectCommand(object):
             # Empty where means return nothing!
             raise EmptyResultSet()
         else:
-            where_tables = list(set([x[0] for x in query.where.get_cols() if x[0] ]))
+            where_tables = _get_tables_from_where(query.where)
             if where_tables and where_tables != [ query.model._meta.db_table ]:
                 raise NotSupportedError("Cross-join WHERE constraints aren't supported: %s" % query.where.get_cols())
 
