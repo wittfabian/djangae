@@ -157,6 +157,9 @@ class Cursor(object):
     def __iter__(self):
         return self
 
+    def close(self):
+        pass
+
 
 class DatabaseOperations(BaseDatabaseOperations):
     compiler_module = "djangae.db.backends.appengine.compiler"
