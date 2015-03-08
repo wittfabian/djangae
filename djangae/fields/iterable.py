@@ -76,6 +76,9 @@ class IterableField(models.Field):
         if default is not None and not callable(default):
             kwargs["default"] = lambda: self._iterable_type(default)
 
+        if hasattr(item_field_type, 'attname'):
+            item_field_type = item_field_type.__class__
+
         if callable(item_field_type):
             item_field_type = item_field_type()
 

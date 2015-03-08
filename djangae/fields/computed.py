@@ -13,6 +13,11 @@ class ComputedFieldMixin(object):
         setattr(model_instance, self.attname, value)
         return value
 
+    def deconstruct(self):
+        name, path, args, kwargs = super(ComputedFieldMixin, self).deconstruct()
+        args = [self.computer] + args
+        del kwargs["editable"]
+        return name, path, args, kwargs
 
 class ComputedCharField(ComputedFieldMixin, models.CharField):
     __metaclass__ = models.SubfieldBase
