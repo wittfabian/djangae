@@ -271,7 +271,13 @@ If you're unsure, answer 'no'.
 
 def patch():
     from django.contrib.contenttypes.management import update_contenttypes as original
-    signals.post_syncdb.disconnect(original)
+
+
+    if hasattr(signals, "post_migrate"):
+        signals.post_migrate.disconnect(original)
+
+    if hasattr(signals, "post_syncdb"):
+        signals.post_syncdb.disconnect(original)
 
     from django.conf import settings
     if getattr(settings, "DJANGAE_SIMULATE_CONTENTTYPES", False):
