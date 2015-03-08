@@ -30,12 +30,16 @@ def check_for_inequalities(node, key=None, other=None):
             raise QueryContainsOR
 
         for literal in literals:
-            field = literal[0].field
+            # Django 1.7+ have a lhs attribute which stores column info, django 1.6 doesn't
+            field = literal.lhs.output_field if hasattr(literal, "lhs") else literal[0].field
+            field_name = field.column
 
-            field_name = literal[0].col
-            if node.negated and literal[1] == "exact" and (field and field.primary_key):
+            # Again, Django 1.7+ has lookup_name, 1.6 doesn't
+            lookup = literal.lookup_name if hasattr(literal, "lookup_name") else literal[1]
+
+            if node.negated and lookup == "exact" and (field and field.primary_key):
                 key = field_name
-            elif ((node.negated and literal[1] == "exact") or (literal[1] in ("gt", "gte", "lt", "lte"))) and not (field and field.primary_key):
+            elif ((node.negated and lookup == "exact") or (lookup in ("gt", "gte", "lt", "lte"))) and not (field and field.primary_key):
                 other.add(field_name)
 
         for branch in branches:
