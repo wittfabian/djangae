@@ -11,9 +11,9 @@ from django.contrib.auth.models import (
     _user_get_all_permissions,
     _user_has_perm,
     _user_has_module_perms,
-    urlquote,
     PermissionsMixin as DjangoPermissionsMixin,
 )
+from django.utils.http import urlquote
 from django.core.mail import send_mail
 from django.core import validators
 from django.db import models

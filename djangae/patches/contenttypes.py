@@ -5,11 +5,11 @@ from itertools import chain
 
 from django.contrib.contenttypes.models import ContentType
 from django.db import DEFAULT_DB_ALIAS, router, connections
-from django.db.models import get_model, get_models, UnavailableApp, signals, Manager, get_apps
+from django.db.models import get_model, get_models, signals, Manager, get_apps
+from django.db.models.loading import UnavailableApp
 from django.utils.encoding import smart_text
 from django.utils import six
 from django.utils.six.moves import input
-
 from djangae.crc64 import CRC64
 
 

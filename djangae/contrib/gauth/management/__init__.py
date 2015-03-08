@@ -1,6 +1,5 @@
 from django.db.models import signals
-
-from django.db.models import UnavailableApp
+from django.db.models.loading import UnavailableApp
 
 # Disconnect the django.contrib.auth signal
 from django.contrib.auth.management import create_permissions
