@@ -413,6 +413,9 @@ class DatabaseSchemaEditor(BaseDatabaseSchemaEditor):
         """ Don't do anything when creating tables """
         pass
 
+    def alter_unique_together(self, *args, **kwargs):
+        pass
+
 
 class DatabaseFeatures(BaseDatabaseFeatures):
     empty_fetchmany_value = []
