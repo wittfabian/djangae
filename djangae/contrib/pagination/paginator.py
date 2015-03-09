@@ -189,7 +189,7 @@ class Paginator(paginator.Paginator):
         known_count = ((number - 1) * self.per_page) + len(results)
         _update_known_count(self.queryset_id, known_count)
 
-        page = self._get_page(results[:top], number, self)
+        page = self._get_page(results[:self.per_page], number, self)
 
         if len(page.object_list) > self.per_page-1:
             index = self.per_page-1
