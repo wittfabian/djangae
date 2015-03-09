@@ -16,34 +16,55 @@ from django.utils.encoding import smart_str, force_unicode
 
 from google.appengine.api import files
 from google.appengine.api.images import get_serving_url, NotImageError
-
 from google.appengine.ext.blobstore import (
     BlobInfo,
     BlobKey,
     delete,
     BLOB_KEY_HEADER,
     BLOB_RANGE_HEADER,
-    BlobReader
+    BlobReader,
+    create_gs_key,
 )
+
+try:
+    import cloudstorage
+    has_cloudstorage = True
+except ImportError:
+    has_cloudstorage = False
 
 
 def serve_file(request, blob_key_or_info, as_download=False, content_type=None, filename=None, offset=None, size=None):
     """
         Serves a file from the blobstore, reads most of the data from the blobinfo by default but you can override stuff
         by passing kwargs.
+
+        You can also pass a Google Cloud Storage filename as `blob_key_or_info` to use Blobstore API to serve the file:
+        https://cloud.google.com/appengine/docs/python/blobstore/#Python_Using_the_Blobstore_API_with_Google_Cloud_Storage
     """
 
     if isinstance(blob_key_or_info, BlobKey):
         info = BlobInfo.get(blob_key_or_info)
+        blob_key = blob_key_or_info
     elif isinstance(blob_key_or_info, basestring):
         info = BlobInfo.get(BlobKey(blob_key_or_info))
+        blob_key = BlobKey(blob_key_or_info)
     elif isinstance(blob_key_or_info, BlobInfo):
         info = blob_key_or_info
+        blob_key = info.key()
     else:
         raise ValueError("Invalid type %s" % blob_key_or_info.__class__)
 
+    if info == None:
+        # Lack of blobstore_info means this is a Google Cloud Storage file
+        if has_cloudstorage:
+            info = cloudstorage.stat(blob_key_or_info)
+            info.size = info.st_size
+            blob_key = create_gs_key('/gs{0}'.format(blob_key_or_info))
+        else:
+            raise ImportError("To serve a Cloud Storage file you need to install cloudstorage")
+
     response = HttpResponse(content_type=content_type or info.content_type)
-    response[BLOB_KEY_HEADER] = str(info.key())
+    response[BLOB_KEY_HEADER] = str(blob_key)
     response['Accept-Ranges'] = 'bytes'
     http_range = request.META.get('HTTP_RANGE')
 
