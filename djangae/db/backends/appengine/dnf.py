@@ -6,6 +6,14 @@ from djangae.db.backends.appengine.dbapi import NotSupportedError
 
 from google.appengine.api import datastore
 
+try:
+    from django.db.models import Lookup # Django 1.7+ uses lookup
+except ImportError:
+    # Fake lookup, so we can test using isinstance(node, Lookup) and this
+    # will always return False on < 1.7
+    class Lookup(object):
+        pass
+
 
 IMPOSSIBLE_FILTER = ('__key__', '<', datastore.Key.from_path('', 1))
 
@@ -131,7 +139,11 @@ def process_literal(node, is_pk_filter, excluded_pks, filtered_columns=None, neg
 
 
 def process_node(node, connection, negated=False):
-    if isinstance(node, tuple) and isinstance(node[0], Constraint):
+    if isinstance(node, Lookup):
+        field = node.lhs.output_field
+        is_pk = field and field.primary_key
+        return ('LIT', parse_constraint(node, connection, negated)), negated, is_pk
+    elif isinstance(node, tuple) and isinstance(node[0], Constraint):
         field = node[0].field
         is_pk = field and field.primary_key
         return ('LIT', parse_constraint(node, connection, negated)), negated, is_pk
