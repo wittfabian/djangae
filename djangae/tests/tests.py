@@ -68,6 +68,7 @@ class TestUser(models.Model):
 
 class ModelWithNullableCharField(models.Model):
     field1 = models.CharField(max_length=500, null=True)
+    some_id = models.IntegerField(default=0)
 
     class Meta:
         app_label = "djangae"
@@ -417,8 +418,15 @@ class BackendTests(TestCase):
         self.assertItemsEqual([5, 15], IntegerModel.objects.exclude(integer_field__range=(6, 14)).values_list("integer_field", flat=True))
 
     def test_exclude_nullable_field(self):
-        instance = ModelWithNullableCharField.objects.create() # Create a nullable thing
-        self.assertItemsEqual([instance], ModelWithNullableCharField.objects.exclude(field1="test").all())
+        instance = ModelWithNullableCharField.objects.create(some_id=999) # Create a nullable thing
+        instance2 = ModelWithNullableCharField.objects.create(some_id=999, field1="test") # Create a nullable thing
+        self.assertItemsEqual([instance], ModelWithNullableCharField.objects.filter(some_id=999).exclude(field1="test").all())
+
+        instance.field1 = "bananas"
+        instance.save()
+
+        self.assertEqual(instance, ModelWithNullableCharField.objects.filter(some_id=999).exclude(field1="test")[0])
+
 
     def test_null_date_field(self):
         null_date = NullDate()
