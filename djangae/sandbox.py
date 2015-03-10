@@ -203,9 +203,12 @@ def activate(sandbox_name, add_sdk_to_path=False, **overrides):
 
     project_root = utils.find_project_root()
 
+   # Store our original sys.path before we do anything, this must be tacked
+    # onto the end of the other paths so we can access globally installed things (e.g. ipdb etc.)
+    original_path = sys.path[:]
+
     # Setup paths as though we were running dev_appserver. This is similar to
     # what the App Engine script wrappers do.
-
     if add_sdk_to_path:
         try:
             import wrapper_util  # Already on sys.path
@@ -218,11 +221,6 @@ def activate(sandbox_name, add_sdk_to_path=False, **overrides):
         except ImportError:
             raise RuntimeError("Couldn't find a recent enough Google App Engine SDK, make sure you are using at least 1.9.6")
 
-    original_path = sys.path[:]
-
-    sdk_path = _find_sdk_from_python_path()
-    _PATHS = wrapper_util.Paths(sdk_path)
-    sys.path = (_PATHS.script_paths(_SCRIPT_NAME) + _PATHS.scrub_path(_SCRIPT_NAME, sys.path))
 
     # Gotta set the runtime properly otherwise it changes appengine imports, like wepapp
     # when you are not running dev_appserver
@@ -231,6 +229,11 @@ def activate(sandbox_name, add_sdk_to_path=False, **overrides):
         app_yaml = yaml.load(app_yaml)
         os.environ['APPENGINE_RUNTIME'] = app_yaml.get('runtime', '')
 
+    sdk_path = _find_sdk_from_python_path()
+    _PATHS = wrapper_util.Paths(sdk_path)
+
+    # Set the path to just the app engine SDK
+    sys.path[:] = _PATHS.script_paths(_SCRIPT_NAME) + _PATHS.scrub_path(_SCRIPT_NAME, original_path)
 
     # Initialize as though `dev_appserver.py` is about to run our app, using all the
     # configuration provided in app.yaml.
@@ -253,12 +256,10 @@ def activate(sandbox_name, add_sdk_to_path=False, **overrides):
 
     configuration = application_configuration.ApplicationConfiguration(options.config_paths)
 
-    # Take dev_appserver paths off sys.path - GAE apps cannot access these
-    sys.path = original_path[:]
     # Enable built-in libraries from app.yaml without enabling the full sandbox.
     module = configuration.modules[0]
     for l in sandbox._enable_libraries(module.normalized_libraries):
-        sys.path.insert(0, l)
+        sys.path.insert(1, l)
 
     try:
         global _OPTIONS
