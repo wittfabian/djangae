@@ -139,16 +139,18 @@ def process_node(node, connection, negated=False):
 
 
         # This is a little crazy, but bear with me...
-        # If you run a query like this:  filter(thing=1).exclude(field1="test") you'll end up with a negated
-        # branch in the where tree which is:
+        # If you run a query like this:  filter(thing=1).exclude(field1="test") where field1 is
+        # null-able you'll end up with a negated branch in the where tree which is:
 
         #           AND (negated)
         #          /            \
         #   field1="test"   field1__isnull=False
 
-        # This is because on SQL, field1 != "test" won't give back rows where field1 is null. On App Engine though
-        # None is just a value, not the lack of a value, so it's enough to just have the first branch in the negated node
-        # and in fact, if you try to use the above tree, it will result in looking for:
+        # This is because on SQL, field1 != "test" won't give back rows where field1 is null, so
+        # django has to include the negated isnull=False as well in order to get back the null rows
+        # as well.  On App Engine though None is just a value, not the lack of a value, so it's
+        # enough to just have the first branch in the negated node and in fact, if you try to use
+        # the above tree, it will result in looking for:
         #  field1 < "test" and field1 > "test" and field1__isnull=True
         # which returns the wrong result (it'll return when field1 == None only)
 
