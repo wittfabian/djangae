@@ -133,10 +133,46 @@ def process_node(node, connection, negated=False):
         return ('LIT', parse_constraint(node, connection, negated)), negated, is_pk
     if isinstance(node, tuple):
         return node, negated, False
-    if node.connector == 'AND' or 'OR':
-        if node.negated:
-            negated = True
-        return (node.connector, [child for child in node.children]), negated, False
+
+    if node.negated:
+        negated = True
+
+
+        # This is a little crazy, but bear with me...
+        # If you run a query like this:  filter(thing=1).exclude(field1="test") where field1 is
+        # null-able you'll end up with a negated branch in the where tree which is:
+
+        #           AND (negated)
+        #          /            \
+        #   field1="test"   field1__isnull=False
+
+        # This is because on SQL, field1 != "test" won't give back rows where field1 is null, so
+        # django has to include the negated isnull=False as well in order to get back the null rows
+        # as well.  On App Engine though None is just a value, not the lack of a value, so it's
+        # enough to just have the first branch in the negated node and in fact, if you try to use
+        # the above tree, it will result in looking for:
+        #  field1 < "test" and field1 > "test" and field1__isnull=True
+        # which returns the wrong result (it'll return when field1 == None only)
+
+        if node.connector == 'AND':
+            # If the connector is 'AND'
+            field_equalities = {}
+
+            # Look and see if we have an exact and isnull on the same field
+            for child in node.children:
+                if child[1] in ('exact', 'isnull'):
+                    field_equalities.setdefault(child[0].col, []).append(child[1])
+
+            # If so, remove the isnull
+            for field, equalities in field_equalities.iteritems():
+                if sorted(equalities) != [ 'exact', 'isnull' ]:
+                    continue
+
+                # If we have more than one equality and one of them is isnull, then remove it
+                node.children = [ x for x in node.children if x[0].col != field or x[1] != 'isnull' ]
+
+
+    return (node.connector, [child for child in node.children]), negated, False
 
 
 def parse_dnf(node, connection, ordering=None):
