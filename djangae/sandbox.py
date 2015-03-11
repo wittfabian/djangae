@@ -221,6 +221,11 @@ def activate(sandbox_name, add_sdk_to_path=False, **overrides):
         except ImportError:
             raise RuntimeError("Couldn't find a recent enough Google App Engine SDK, make sure you are using at least 1.9.6")
 
+    sdk_path = _find_sdk_from_python_path()
+    _PATHS = wrapper_util.Paths(sdk_path)
+
+    # Set the path to just the app engine SDK
+    sys.path[:] = _PATHS.script_paths(_SCRIPT_NAME) + _PATHS.scrub_path(_SCRIPT_NAME, original_path)
 
     # Gotta set the runtime properly otherwise it changes appengine imports, like wepapp
     # when you are not running dev_appserver
@@ -228,12 +233,6 @@ def activate(sandbox_name, add_sdk_to_path=False, **overrides):
     with open(os.path.join(project_root, 'app.yaml'), 'r') as app_yaml:
         app_yaml = yaml.load(app_yaml)
         os.environ['APPENGINE_RUNTIME'] = app_yaml.get('runtime', '')
-
-    sdk_path = _find_sdk_from_python_path()
-    _PATHS = wrapper_util.Paths(sdk_path)
-
-    # Set the path to just the app engine SDK
-    sys.path[:] = _PATHS.script_paths(_SCRIPT_NAME) + _PATHS.scrub_path(_SCRIPT_NAME, original_path)
 
     # Initialize as though `dev_appserver.py` is about to run our app, using all the
     # configuration provided in app.yaml.
