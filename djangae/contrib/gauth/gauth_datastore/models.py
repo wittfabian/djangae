@@ -16,7 +16,7 @@ from django.utils.functional import lazy
 
 from djangae.fields import ListField, RelatedSetField
 from djangae.contrib.gauth.common.models import GaeAbstractBaseUser
-from djangae.contrib.gauth.datastore.permissions import get_permission_choices
+from djangae.contrib.gauth.gauth_datastore.permissions import get_permission_choices
 
 
 #We disconnect the built-in Django permission creation when using our custom user model

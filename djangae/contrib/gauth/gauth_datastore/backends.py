@@ -9,8 +9,8 @@ from django.utils import timezone
 
 # DJANGAE
 from djangae.contrib.gauth.common.models import GaeAbstractBaseUser
-from djangae.contrib.gauth.datastore.permissions import get_permission_choices
 from djangae.contrib.gauth.common.backends import BaseAppEngineUserAPIBackend
+from djangae.contrib.gauth.gauth_datastore.permissions import get_permission_choices
 
 
 # This is here so that we only log once on import, not on each authentication

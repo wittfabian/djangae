@@ -1,4 +1,4 @@
-from djangae.contrib.gauth.datastore.backends import AppEngineUserAPIBackend
+from djangae.contrib.gauth.gauth_datastore.backends import AppEngineUserAPIBackend
 
 
 class AppEngineUserAPI(AppEngineUserAPIBackend): 
