@@ -31,7 +31,7 @@ class ListWidget(forms.TextInput):
         value = data.get(name, '')
         if isinstance(value, (str, unicode)):
             value = value.split(',')
-        return [v.strip() for v in value if len(v.strip()) > 0]
+        return [v.strip() for v in value if v.strip()]
 
 
 class ListFormField(forms.Field):
@@ -45,7 +45,7 @@ class ListFormField(forms.Field):
             if isinstance(value, (list, tuple, set)):
                 self._check_values_against_delimiter(value)
                 return value
-            return [v.strip() for v in value.split(',') if len(v.strip()) > 0]
+            return [v.strip() for v in value.split(',') if v.strip()]
         return None
 
     def _check_values_against_delimiter(self, values):
