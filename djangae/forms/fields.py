@@ -17,10 +17,10 @@ class TrueOrNullFormField(forms.Field):
 
 
 class ListWidget(forms.TextInput):
-    """ A widget for being able to display a ListField. """
+    """ A widget for being able to display a ListField and SetField. """
 
     def render(self, name, value, attrs=None):
-        if isinstance(value, (list, tuple)):
+        if isinstance(value, (list, tuple, set)):
             value = u', '.join([unicode(v) for v in value])
         return super(ListWidget, self).render(name, value, attrs)
 
@@ -29,18 +29,20 @@ class ListWidget(forms.TextInput):
             of this widget. Returns None if it's not provided.
         """
         value = data.get(name, '')
-        return [v.strip() for v in value.split(',') if len(v.strip()) > 0]
+        if isinstance(value, (str, unicode)):
+            value = value.split(',')
+        return [v.strip() for v in value if len(v.strip()) > 0]
 
 
 class ListFormField(forms.Field):
-    """ A form field for being able to display a ListField. """
+    """ A form field for being able to display a ListField and SetField. """
 
     widget = ListWidget
     delimiter = ','
 
     def clean(self, value):
         if value:
-            if isinstance(value, (list, tuple)):
+            if isinstance(value, (list, tuple, set)):
                 self._check_values_against_delimiter(value)
                 return value
             return [v.strip() for v in value.split(',') if len(v.strip()) > 0]
