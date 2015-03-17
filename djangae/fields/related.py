@@ -228,6 +228,8 @@ class RelatedSetField(RelatedField):
         return str(list(self._get_val_from_obj(obj)))
 
     def save_form_data(self, instance, data):
+        getattr(instance, self.attname).clear() #Wipe out existing things
+
         for value in data:
             if isinstance(value, self.rel.to):
                 getattr(instance, self.name).add(value)
