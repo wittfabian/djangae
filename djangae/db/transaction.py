@@ -91,16 +91,12 @@ class AtomicDecorator(ContextDecorator):
                 while self.conn_stack:
                     _PushConnection(self.conn_stack.pop())
 
-                 # Clear the context cache at the end of a transaction
-                if exception:
-                    caching._context.stack.pop(discard=True)
-                else:
-                    caching._context.stack.pop(apply_staged=False, clear_staged=False)
+             # Clear the context cache at the end of a transaction
+            if exception:
+                caching._context.stack.pop(discard=True)
             else:
-                if exception:
-                    caching._context.stack.pop(discard=True)
-                else:
-                    caching._context.stack.pop(apply_staged=True, clear_staged=True)
+                caching._context.stack.pop(apply_staged=True, clear_staged=True)
+
 
     def __enter__(self):
         self._do_enter()
