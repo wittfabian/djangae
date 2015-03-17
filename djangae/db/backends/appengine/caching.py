@@ -130,7 +130,7 @@ def get_from_cache_by_key(key):
 
     ret = None
     if _context.context_enabled:
-        # It's safe to hit the context cache in a transaction as we don't inherit by default
+        # It's safe to hit the context cache, because a new one was pushed on the stack at the start of the transaction
         ret = _context.stack.top.get_entity_by_key(key)
         if ret is None and not datastore.IsInTransaction():
             if _context.memcache_enabled:
@@ -153,7 +153,7 @@ def get_from_cache(unique_identifier):
 
     ret = None
     if _context.context_enabled:
-        # It's safe to hit the context cache in a transaction as we don't inherit by default
+        # It's safe to hit the context cache, because a new one was pushed on the stack at the start of the transaction
         ret = _context.stack.top.get_entity(unique_identifier)
         if ret is None and not datastore.IsInTransaction():
             if _context.memcache_enabled:

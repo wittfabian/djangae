@@ -69,42 +69,16 @@ class Context(object):
 
         del self.reverse_cache[entity_or_key]
 
-    def get_entity(self, identifier, inherit=False):
-        cache = {}
+    def get_entity(self, identifier):
+        return self.cache.get(identifier)
 
-        if not inherit:
-            # Don't inherit the whole stack, just get from the top
-            return self.cache.get(identifier)
-        else:
-            # Inherit the entire stack
-            for ctx in self._stack.stack:
-                cache.update(ctx.cache)
-                if ctx == self:
-                    break;
+    def get_entity_by_key(self, key):
+        try:
+            identifier = self.reverse_cache[key][0]
+        except KeyError:
+            return None
+        return self.get_entity(identifier)
 
-            return cache.get(identifier)
-
-    def get_entity_by_key(self, key, inherit=False):
-        cache = {}
-
-        if not inherit:
-            try:
-                identifier = self.reverse_cache[key][0]
-            except KeyError:
-                return None
-            return self.get_entity(identifier, inherit)
-        else:
-            for ctx in self._stack.stack:
-                cache.update(ctx.reverse_cache)
-                if ctx == self:
-                    break;
-
-            try:
-                identifier = cache[key][0]  # Pick any identifier
-            except KeyError:
-                return None
-
-            return self.get_entity(identifier, inherit)
 
 class ContextStack(object):
     """
