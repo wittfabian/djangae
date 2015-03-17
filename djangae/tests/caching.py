@@ -349,6 +349,31 @@ class ContextCachingTests(TestCase):
     """
 
     @disable_cache(memcache=True, context=False)
+    def test_that_transactions_dont_inherit_context_cache(self):
+        """
+            It's fine to hit the context cache inside an independent transaction,
+            providing that the cache doesn't inherit the outer cache! Otherwise we have
+            a situation where the transaction never hits the database when reloading an entity
+        """
+        entity_data = {
+            "field1": u"Apple",
+            "comb1": 1,
+            "comb2": u"Cherry"
+        }
+
+        instance = CachingTestModel.objects.create(**entity_data)
+
+        with transaction.atomic():
+            with sleuth.watch("google.appengine.api.datastore.Get") as datastore_get:
+                instance = CachingTestModel.objects.get(pk=instance.pk)
+                self.assertEqual(1, datastore_get.call_count) # Shouldn't hit the cache!
+                instance.save()
+
+            with sleuth.watch("google.appengine.api.datastore.Get") as datastore_get:
+                self.assertEqual(0, datastore_get.call_count) # Should hit the cache
+
+
+    @disable_cache(memcache=True, context=False)
     def test_caching_bug(self):
         entity_data = {
             "field1": u"Apple",
@@ -378,7 +403,20 @@ class ContextCachingTests(TestCase):
             self.assertTrue(context_push.called)
 
     @disable_cache(memcache=True, context=False)
-    def test_nested_transaction_doesnt_apply_to_outer_context(self):
+    def test_independent_transaction_applies_to_outer_context(self):
+        """
+            When a transaction commits successfully, we can apply its cache to the outer stack. This
+            alters the behaviour of transactions a little but in a positive way. Things that change are:
+
+            1. If you run an independent transaction inside another transaction, a subsequent Get for an entity
+               updated there will return the updated instance from the cache. Due to serialization of transactions
+               it's possible that this would have happened anyway (the outer transaction wouldn't start until the independent
+               one had finished). It makes this behaviour consistent even when serialization isn't possible.
+            2. Due to the fact the context cache is hit within a transaction, you can now Put, then Get an entity and it
+               will return its current state (as the transaction would see it), rather than the state at the beginning of the
+               transaction. This behaviour is nicer than the default.
+        """
+
         entity_data = {
             "field1": "Apple",
             "comb1": 1,
@@ -393,35 +431,32 @@ class ContextCachingTests(TestCase):
                 inner.save()
 
             outer = CachingTestModel.objects.get(pk=original.pk)
-            self.assertEqual("Apple", outer.field1)
+            self.assertEqual("Banana", outer.field1)
+
+            outer.field1 = "Apple"
+            outer.save()
 
         original = CachingTestModel.objects.get(pk=original.pk)
-        self.assertEqual("Banana", original.field1)
+        self.assertEqual("Apple", original.field1)
 
-    @unittest.skip("The datastore seems broken, see: https://code.google.com/p/googleappengine/issues/detail?id=11631&thanks=11631&ts=1422376783")
     @disable_cache(memcache=True, context=False)
-    def test_outermost_transaction_applies_all_contexts_on_commit(self):
-        entity_data = {
-            "field1": "Apple",
-            "comb1": 1,
-            "comb2": "Cherry"
-        }
+    def test_nested_transactions_dont_get_their_own_context(self):
+        """
+            The datastore doesn't support nested transactions, so when there is a nested
+            atomic block which isn't marked as independent, the atomic is a no-op. Therefore
+            we shouldn't push a context here, and we shouldn't pop it at the end either.
+        """
 
+        self.assertEqual(1, caching._context.stack.size)
         with transaction.atomic():
-            with transaction.atomic(independent=True):
-                instance = CachingTestModel.objects.create(**entity_data)
-
-            # At this point the instance should be unretrievable, even though we just created it
-            try:
-                CachingTestModel.objects.get(pk=instance.pk)
-                self.fail("Unexpectedly was able to retrieve instance")
-            except CachingTestModel.DoesNotExist:
-                pass
-
-        # Should now exist in the cache
-        with sleuth.switch("google.appengine.api.datastore.Get") as datastore_get:
-            CachingTestModel.objects.get(pk=instance.pk)
-            self.assertFalse(datastore_get.called)
+            self.assertEqual(2, caching._context.stack.size)
+            with transaction.atomic():
+                self.assertEqual(2, caching._context.stack.size)
+                with transaction.atomic():
+                    self.assertEqual(2, caching._context.stack.size)
+                self.assertEqual(2, caching._context.stack.size)
+            self.assertEqual(2, caching._context.stack.size)
+        self.assertEqual(1, caching._context.stack.size)
 
     @disable_cache(memcache=True, context=False)
     def test_nested_rollback_doesnt_apply_on_outer_commit(self):
@@ -467,6 +502,11 @@ class ContextCachingTests(TestCase):
 
     @disable_cache(memcache=True, context=False)
     def test_consistent_read_updates_cache_outside_transaction(self):
+        """
+            A read inside a transaction shouldn't update the context cache outside that
+            transaction
+        """
+
         entity_data = {
             "field1": "Apple",
             "comb1": 1,

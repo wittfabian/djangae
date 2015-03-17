@@ -70,29 +70,15 @@ class Context(object):
         del self.reverse_cache[entity_or_key]
 
     def get_entity(self, identifier):
-        cache = {}
-
-        for ctx in self._stack.stack:
-            cache.update(ctx.cache)
-            if ctx == self:
-                break;
-
-        return cache.get(identifier)
+        return self.cache.get(identifier)
 
     def get_entity_by_key(self, key):
-        cache = {}
-
-        for ctx in self._stack.stack:
-            cache.update(ctx.reverse_cache)
-            if ctx == self:
-                break;
-
         try:
-            identifier = cache[key][0]  # Pick any identifier
+            identifier = self.reverse_cache[key][0]
         except KeyError:
             return None
-
         return self.get_entity(identifier)
+
 
 class ContextStack(object):
     """
