@@ -226,6 +226,10 @@ class ContainsIndexer(Indexer):
     def prep_value_for_database(self, value):
         result = []
         if value:
+            # If this a date or a datetime, or something that supports isoformat, then use that
+            if hasattr(value, "isoformat"):
+                value = value.isoformat()
+
             if self.number_of_permutations(value) > MAX_COLUMNS_PER_SPECIAL_INDEX*500:
                 raise ValueError("Can't index for contains query, this value is too long and has too many permutations. \
                     You can increase the DJANGAE_MAX_COLUMNS_PER_SPECIAL_INDEX setting to fix that. Use with caution.")
