@@ -225,11 +225,6 @@ class DatabaseOperations(BaseDatabaseOperations):
 
         if db_type == 'decimal':
             return self.prep_lookup_decimal(model, value, field)
-
-        elif db_type == 'date':
-            return self.prep_lookup_date(model, value, field)
-        elif db_type == 'time':
-            return self.prep_lookup_time(model, value, field)
         elif db_type in ('list', 'set'):
             if hasattr(value, "__len__") and not value:
                 value = None #Convert empty lists to None
@@ -252,12 +247,6 @@ class DatabaseOperations(BaseDatabaseOperations):
         elif db_type == 'bytes':
             # Store BlobField, DictField and EmbeddedModelField values as Blobs.
             value = Blob(value)
-        elif db_type == 'date':
-            value = self.value_to_db_date(value)
-        elif db_type == 'datetime':
-            value = self.value_to_db_datetime(value)
-        elif db_type == 'time':
-            value = self.value_to_db_time(value)
         elif db_type == 'decimal':
             value = self.value_to_db_decimal(value, field.max_digits, field.decimal_places)
         elif db_type in ('list', 'set'):
