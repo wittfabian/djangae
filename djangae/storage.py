@@ -165,6 +165,38 @@ class BlobstoreStorage(Storage):
         return BlobInfo.get(self._get_key(name))
 
 
+class UniversalNewLineBlobReader(BlobReader):
+    def readline(self, size=-1):
+        limit_size = size > -1
+
+        buf = []  # A buffer to store our line
+        #Read characters until we find a \r or \n, or hit the maximum size
+        c = self.read(size=1)
+        while c != '\n' and c != '\r' and (not limit_size or len(buf) < size):
+            if not c:
+                break
+
+            buf.append(c)
+            c = self.read(size=1)
+
+        # If we found a \r, it could be "\r\n" so read the next char
+        if c == '\r':
+            n = self.read(size=1)
+
+            #If the \r wasn't followed by a \n, then it was a mac line ending
+            #so we seek backwards 1
+            if n and n != '\n':
+                #We only check n != '\n' if we weren't EOF (e.g. n evaluates to False) otherwise
+                #we'd read nothing, and then seek back 1 which would then be re-read next loop etc.
+                self.seek(-1, 1)  # The second 1 means to seek relative to the current position
+
+        # Only add a trailing \n (if it doesn't break the size constraint)
+        if buf and (not limit_size or len(buf) < size):
+            buf.append("\n")  # Add our trailing \n, no matter what the line endings were
+
+        return "".join(buf)
+
+
 class BlobstoreFile(File):
 
     def __init__(self, name, mode, storage):
@@ -183,7 +215,7 @@ class BlobstoreFile(File):
     @property
     def file(self):
         if not hasattr(self, '_file'):
-            self._file = BlobReader(self.blobstore_info.key())
+            self._file = UniversalNewLineBlobReader(self.blobstore_info.key())
         return self._file
 
 
@@ -265,7 +297,7 @@ class BlobstoreUploadedFile(UploadedFile):
 
     def __init__(self, blobinfo, charset):
         super(BlobstoreUploadedFile, self).__init__(
-            BlobReader(blobinfo.key()), blobinfo.filename,
+            UniversalNewLineBlobReader(blobinfo.key()), blobinfo.filename,
             blobinfo.content_type, blobinfo.size, charset)
         self.blobstore_info = blobinfo
 
