@@ -265,6 +265,13 @@ class SpecialIndexesModel(models.Model):
         app_label = "djangae"
 
 
+class DateTimeModel(models.Model):
+    datetime_field = models.DateTimeField(auto_now_add=True)
+    date_field = models.DateField(auto_now_add=True)
+
+    class Meta:
+        app_label = "djangae"
+
 class PaginatorModel(models.Model):
     foo = models.IntegerField()
 
@@ -1085,6 +1092,19 @@ class EdgeCaseTests(TestCase):
 
         qs = TestUser.objects.filter(username__startswith='Hello') &  TestUser.objects.filter(username__startswith='Goodbye')
         self.assertEqual(0, qs.count())
+
+    def test_datetime_contains(self):
+        """
+            Django allows for __contains on datetime field, so that you can search for a specific
+            date. This is probably just because SQL allows querying it on a string, and contains just
+            turns into a like query. This test just makes sure we behave the same
+        """
+
+        instance = DateTimeModel.objects.create() # Create a DateTimeModel, it has auto_now stuff
+
+        # Make sure that if we query a datetime on a date it is properly returned
+        self.assertItemsEqual([instance], DateTimeModel.objects.filter(datetime_field__contains=instance.datetime_field.date()))
+        self.assertItemsEqual([instance], DateTimeModel.objects.filter(date_field__contains=instance.date_field.year))
 
     def test_combinations_of_special_indexes(self):
         qs = TestUser.objects.filter(username__iexact='Hello') | TestUser.objects.filter(username__contains='ood')
