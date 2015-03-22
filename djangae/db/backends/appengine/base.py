@@ -215,7 +215,7 @@ class DatabaseOperations(BaseDatabaseOperations):
         return self.value_to_db_decimal(value, field.max_digits, field.decimal_places)
 
     def prep_lookup_date(self, model, value, field):
-        return self.value_to_db_datetime(value)
+        return self.value_to_db_date(value)
 
     def prep_lookup_time(self, model, value, field):
         return self.value_to_db_time(value)
@@ -228,6 +228,10 @@ class DatabaseOperations(BaseDatabaseOperations):
 
         if db_type == 'decimal':
             return self.prep_lookup_decimal(model, value, field)
+        elif db_type == 'date':
+            return self.prep_lookup_date(model, value, field)
+        elif db_type == 'time':
+            return self.prep_lookup_time(model, value, field)
         elif db_type in ('list', 'set'):
             if hasattr(value, "__len__") and not value:
                 value = None #Convert empty lists to None
