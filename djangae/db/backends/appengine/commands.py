@@ -389,6 +389,7 @@ def _convert_ordering(query):
 class SelectCommand(object):
     def __init__(self, connection, query, keys_only=False):
 
+
         self.original_query = query
         self.connection = connection
 
@@ -408,7 +409,18 @@ class SelectCommand(object):
         self.extra_select = query.extra_select
         self._set_db_table()
 
-        self._validate_query_is_possible(query)
+        try:
+            self._validate_query_is_possible(query)
+        except NotSupportedError as e:
+            # If we can detect here, or when parsing the WHERE tree that a query is unsupported
+            # we set this flag, and then throw NotSupportedError when execute is called.
+            # This will then wrap the exception in Django's NotSupportedError meaning users
+            # only need to catch that one, and not both Django's and ours
+            self.unsupported_query_message = str(e)
+            return
+        else:
+            self.unsupported_query_message = ""
+
         self.ordering = _convert_ordering(query)
 
         # If the query uses defer()/only() then we need to process deferred. We have to get all deferred columns
@@ -517,7 +529,12 @@ class SelectCommand(object):
                 raise NotSupportedError("Cross-join WHERE constraints aren't supported: %s" % query.where.get_cols())
 
             from dnf import parse_dnf
-            self.where, columns, self.excluded_pks = parse_dnf(query.where, self.connection, ordering=self.ordering)
+            try:
+                self.where, columns, self.excluded_pks = parse_dnf(query.where, self.connection, ordering=self.ordering)
+            except NotSupportedError as e:
+                # Mark this query as unsupported and return
+                self.unsupported_query_message = str(e)
+                return
 
         # DISABLE PROJECTION IF WE ARE FILTERING ON ONE OF THE PROJECTION_FIELDS
         for field in self.projection or []:
@@ -533,6 +550,9 @@ class SelectCommand(object):
             pass
 
     def execute(self):
+        if self.unsupported_query_message:
+            raise NotSupportedError(self.unsupported_query_message)
+
         self.gae_query = self._build_gae_query()
         self.results = None
         self.query_done = False
