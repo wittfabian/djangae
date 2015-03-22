@@ -738,9 +738,11 @@ class SelectCommand(object):
 
                     if key in query:
                         if type(query[key]) == list:
-                            query[key].append(value)
+                            if value not in query[key]:
+                                query[key].append(value)
                         else:
-                            query[key] = [ query[key], value ]
+                            if query[key] != value:
+                                query[key] = [ query[key], value ]
                     else:
                         query[key] = value
                 except datastore_errors.BadFilterError as e:
