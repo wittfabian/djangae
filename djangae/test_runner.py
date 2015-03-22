@@ -1,4 +1,5 @@
 import unittest
+import os
 from unittest import TextTestResult
 
 from django.test.simple import DjangoTestSuiteRunner
@@ -47,7 +48,8 @@ def bed_wrap(test):
 
 class SkipUnsupportedTestResult(TextTestResult):
     def addError(self, test, err):
-        if err[0] in (NotSupportedError, CouldBeSupportedError):
+        skip = os.environ.get("SKIP_UNSUPPORTED", True)
+        if skip and err[0] in (NotSupportedError, CouldBeSupportedError):
             self.addExpectedFailure(test, err)
         else:
             super(SkipUnsupportedTestResult, self).addError(test, err)
