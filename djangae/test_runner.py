@@ -4,7 +4,7 @@ from unittest import TextTestResult
 
 from django.test.simple import DjangoTestSuiteRunner
 
-from djangae.db.backends.appengine.dbapi import NotSupportedError, CouldBeSupportedError
+from django.db import NotSupportedError
 from djangae.utils import find_project_root
 
 from google.appengine.ext import testbed
@@ -49,7 +49,7 @@ def bed_wrap(test):
 class SkipUnsupportedTestResult(TextTestResult):
     def addError(self, test, err):
         skip = os.environ.get("SKIP_UNSUPPORTED", True)
-        if skip and err[0] in (NotSupportedError, CouldBeSupportedError):
+        if skip and err[0] in (NotSupportedError,):
             self.addExpectedFailure(test, err)
         else:
             super(SkipUnsupportedTestResult, self).addError(test, err)
