@@ -510,6 +510,7 @@ class ModelFormsetTest(TestCase):
         class TestModelForm(ModelForm):
             class Meta:
                 model = TestUser
+                fields = ("username", "email", "field2")
 
         test_model = TestUser.objects.create(username='foo', field2='bar')
         TestModelFormSet = modelformset_factory(TestUser, form=TestModelForm, extra=0)
