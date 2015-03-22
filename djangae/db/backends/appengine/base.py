@@ -220,8 +220,8 @@ class DatabaseOperations(BaseDatabaseOperations):
     def prep_lookup_time(self, model, value, field):
         return self.value_to_db_time(value)
 
-    def prep_lookup_value(self, model, value, field, constraint=None):
-        if field.primary_key and (constraint is None or constraint.col == model._meta.pk.column):
+    def prep_lookup_value(self, model, value, field, column=None):
+        if field.primary_key and (not column or column == model._meta.pk.column):
             return self.prep_lookup_key(model, value, field)
 
         db_type = field.db_type(self.connection)

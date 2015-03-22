@@ -152,16 +152,27 @@ log_once.logged = set()
 
 
 def parse_constraint(child, connection, negated=False):
-    # First, unpack the constraint
-    constraint, op, annotation, value = child
-    was_list = isinstance(value, (list, tuple))
-    packed, value = constraint.process(op, value, connection)
-    alias, column, db_type = packed
+    if isinstance(child, tuple):
+        # First, unpack the constraint
+        constraint, op, annotation, value = child
+        packed, value = constraint.process(op, value, connection)
+        alias, column, db_type = packed
+        field = constraint.field
+    else:
+        # Django 1.7+
+        field = child.lhs.output_field
+        column = child.lhs.target.column
+        op = child.lookup_name
+        value = child.rhs
+        annotation = None
 
-    field = constraint.field
+    was_list = isinstance(value, (list, tuple))
+    if not was_list:
+        value = [ value ]
+
     is_pk = field and field.primary_key
 
-    if constraint.col == "id" and op == "iexact" and is_pk and isinstance(constraint.field, AutoField):
+    if column == "id" and op == "iexact" and is_pk and isinstance(field, AutoField):
         # When new instance is created, automatic primary key 'id' does not generate '_idx_iexact_id'.
         # As the primary key 'id' (AutoField) is integer and is always case insensitive, we can deal with 'id_iexact=' query by using 'exact' rather than 'iexact'.
         op = "exact"
@@ -172,12 +183,13 @@ def parse_constraint(child, connection, negated=False):
     if op not in REQUIRES_SPECIAL_INDEXES:
         # Don't convert if this op requires special indexes, it will be handled there
         if field:
-            value = [ connection.ops.prep_lookup_value(field.model, x, field, constraint=constraint) for x in value]
+            value = [ connection.ops.prep_lookup_value(field.model, x, field, column=column) for x in value]
 
-        # Don't ask me why, but constraint.process on isnull wipes out the value (it returns an empty list)
+        # Don't ask me why, but on Django 1.6 constraint.process on isnull wipes out the value (it returns an empty list)
         # so we have to special case this to use the annotation value instead
         if op == "isnull":
-            value = [ annotation ]
+            if annotation:
+                value = [ annotation ]
 
             if is_pk and value[0]:
                 raise EmptyResultSet()
@@ -191,11 +203,11 @@ def parse_constraint(child, connection, negated=False):
         if not was_list:
             value = value[0]
 
-        add_special_index(constraint.field.model, column, op)  # Add the index if we can (e.g. on dev_appserver)
+        add_special_index(field.model, column, op)  # Add the index if we can (e.g. on dev_appserver)
 
-        if op not in special_indexes_for_column(constraint.field.model, column):
+        if op not in special_indexes_for_column(field.model, column):
             raise RuntimeError("There is a missing index in your djangaeidx.yaml - \n\n{0}:\n\t{1}: [{2}]".format(
-                constraint.field.model, column, op)
+                field.model, column, op)
             )
 
         indexer = REQUIRES_SPECIAL_INDEXES[op]
@@ -652,7 +664,7 @@ class SelectCommand(object):
         if self.where:
             queries = []
 
-            # print query._Query__kind, self.where
+            #print query._Query__kind, self.where
 
             for and_branch in self.where[1]:
                 # Duplicate the query for all the "OR"s
