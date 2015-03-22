@@ -180,7 +180,7 @@ def process_node(node, connection, negated=False):
 
             def get_lhs_col(constraint_or_lookup):
                 # <= 1.6 child is a tuple, else it's a lookup
-                return constraint_or_lookup[0] if isinstance(constraint_or_lookup, tuple) else constraint_or_lookup.lhs.target.column
+                return constraint_or_lookup[0].col if isinstance(constraint_or_lookup, tuple) else constraint_or_lookup.lhs.target.column
 
             # Look and see if we have an exact and isnull on the same field
             for child in node.children:
