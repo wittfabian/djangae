@@ -2,6 +2,7 @@
 from datetime import datetime
 import logging
 import copy
+import re
 from functools import partial
 from itertools import chain, groupby
 
@@ -60,6 +61,16 @@ OPERATORS_MAP = {
     'isnull': None,
     'in': None,
     'range': None,
+}
+
+EXTRA_SELECT_FUNCTIONS = {
+    '+': lambda x, y: x + y,
+    '-': lambda x, y: x - y,
+    '/': lambda x, y: x / y,
+    '*': lambda x, y: x * y,
+    '<': lambda x, y: x < y,
+    '>': lambda x, y: x > y,
+    '=': lambda x, y: x == y
 }
 
 REVERSE_OP_MAP = {
@@ -390,6 +401,53 @@ def _convert_ordering(query):
 
 
     return result
+
+def _apply_extra_to_entity(extra_select, entity, pk_col):
+    """
+        Obviously the datastore doesn't support extra columns, but we can emulate simple
+        extra selects as we iterate the results. This function does that!
+    """
+
+    def prep_value(attr):
+        if attr == pk_col:
+            attr = entity.key().id_or_name()
+        else:
+            attr = entity[attr] if attr in entity else attr
+
+        try:
+            attr = int(attr)
+        except (TypeError, ValueError):
+            pass
+
+        if isinstance(attr, basestring):
+            if (attr[0], attr[-1]) == ("'", "'"):
+                attr = attr[1:-1]
+            elif (attr[0], attr[-1]) == ('"', '"'):
+                attr = attr[1:-1]
+        return attr
+
+    for column, (select, _) in extra_select.iteritems():
+
+        arithmetic_regex = "(\w+)\s?([+|-|/|*|\=])\s?([\w|'|\"]+)"
+        match = re.match(arithmetic_regex, select)
+        if match:
+            lhs = match.group(1)
+            op = match.group(2)
+            rhs = match.group(3)
+
+            lhs = prep_value(lhs)
+            rhs = prep_value(rhs)
+
+            fun = EXTRA_SELECT_FUNCTIONS.get(op)
+            if not fun:
+                raise NotSupportedError("Unimplemented extra select operation: '%s'" % op)
+
+            entity[column] = fun(lhs, rhs)
+        else:
+            rhs = prep_value(select)
+            entity[column] = rhs
+
+    return entity
 
 class SelectCommand(object):
     def __init__(self, connection, query, keys_only=False):
@@ -782,63 +840,14 @@ class SelectCommand(object):
         else:
             raise RuntimeError("Unsupported query type")
 
-        if self.extra_select:
-            # Construct the extra_select into the results set, this is then sorted with fetchone()
-            for attr, query in self.extra_select.iteritems():
-                tokens = query[0].split()
-                length = len(tokens)
-                if length == 3:
-                    op = REVERSE_OP_MAP.get(tokens[1])
-                    if not op:
-                        raise RuntimeError("Unsupported extra_select operation {0}".format(tokens[1]))
-                    fun = FILTER_CMP_FUNCTION_MAP[op]
-
-                    def lazy_eval(results, attr, fun, token_a, token_b):
-                        """ Wraps a list or a generator, applies comparison function
-                        token_a is an attribute on the result, the lhs. token_b is the rhs
-                        attr is the target attribute to store the result
-                        """
-                        for result in results:
-                            if result is None:
-                                yield result
-
-                            lhs = result.get(token_a)
-                            lhs_type = type(lhs)
-                            rhs = lhs_type(token_b)
-                            if isinstance(rhs, basestring):
-                                rhs = rhs.strip("'").strip('"') # Strip quotes
-                            result[attr] = fun(lhs, rhs)
-                            yield result
-
-                    results = lazy_eval(results, attr, fun, tokens[0], tokens[2])
-
-                elif length == 1:
-
-                    def lazy_assign(results, attr, value):
-                        """ Wraps a list or a generator, applies attribute assignment
-                        """
-                        for result in results:
-                            if result is None:
-                                yield result
-                            if isinstance(value, basestring):
-                                value = value.strip("'").strip('"')
-                                # Horrible SQL type to python conversion attempt
-                                try:
-                                    value = int(value)
-                                except ValueError:
-                                    pass
-                                # Up for debate
-                                # if value == "TRUE":
-                                #     value = True
-                                # elif value == "FALSE":
-                                #     value = False
-                            result[attr] = value
-                            yield result
-
-                    results = lazy_assign(results, attr, tokens[0])
+        def lazy_results():
+            for result in results:
+                if self.extra_select:
+                    yield _apply_extra_to_entity(self.extra_select, result, self.pk_col)
                 else:
-                    raise RuntimeError("Unsupported extra_select")
-        return results
+                    yield result
+        return lazy_results()
+
 
     def next_result(self):
         if self.limits[1]:
