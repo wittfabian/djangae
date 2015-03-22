@@ -40,7 +40,7 @@ def check_for_inequalities(node, key=None, other=None):
         for literal in literals:
             # Django 1.7+ have a lhs attribute which stores column info, django 1.6 doesn't
             field = literal.lhs.output_field if hasattr(literal, "lhs") else literal[0].field
-            field_name = field.column
+            field_name = field.column if field else literal[0].col
 
             # Again, Django 1.7+ has lookup_name, 1.6 doesn't
             lookup = literal.lookup_name if hasattr(literal, "lookup_name") else literal[1]

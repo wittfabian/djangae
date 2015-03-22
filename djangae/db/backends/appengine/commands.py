@@ -155,6 +155,7 @@ def parse_constraint(child, connection, negated=False):
     if isinstance(child, tuple):
         # First, unpack the constraint
         constraint, op, annotation, value = child
+        was_list = isinstance(value, (list, tuple))
         packed, value = constraint.process(op, value, connection)
         alias, column, db_type = packed
         field = constraint.field
@@ -166,9 +167,9 @@ def parse_constraint(child, connection, negated=False):
         value = child.rhs
         annotation = None
 
-    was_list = isinstance(value, (list, tuple))
-    if not was_list:
-        value = [ value ]
+        was_list = isinstance(value, (list, tuple))
+        if not was_list:
+            value = [ value ]
 
     is_pk = field and field.primary_key
 
@@ -188,7 +189,7 @@ def parse_constraint(child, connection, negated=False):
         # Don't ask me why, but on Django 1.6 constraint.process on isnull wipes out the value (it returns an empty list)
         # so we have to special case this to use the annotation value instead
         if op == "isnull":
-            if annotation:
+            if annotation is not None:
                 value = [ annotation ]
 
             if is_pk and value[0]:
