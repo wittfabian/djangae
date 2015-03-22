@@ -174,10 +174,20 @@ def process_node(node, connection, negated=False):
             # If the connector is 'AND'
             field_equalities = {}
 
+            def get_op(constraint_or_lookup):
+                # <= 1.6 child is a tuple, else it's a lookup
+                return constraint_or_lookup[1] if isinstance(constraint_or_lookup, tuple) else constraint_or_lookup.lookup_name
+
+            def get_lhs_col(constraint_or_lookup):
+                # <= 1.6 child is a tuple, else it's a lookup
+                return constraint_or_lookup[0] if isinstance(constraint_or_lookup, tuple) else constraint_or_lookup.lhs.target.column
+
             # Look and see if we have an exact and isnull on the same field
             for child in node.children:
-                if child[1] in ('exact', 'isnull'):
-                    field_equalities.setdefault(child[0].col, []).append(child[1])
+                op = get_op(child)
+                column = get_lhs_col(child)
+                if op in ('exact', 'isnull'):
+                    field_equalities.setdefault(column, []).append(op)
 
             # If so, remove the isnull
             for field, equalities in field_equalities.iteritems():
@@ -185,7 +195,7 @@ def process_node(node, connection, negated=False):
                     continue
 
                 # If we have more than one equality and one of them is isnull, then remove it
-                node.children = [ x for x in node.children if x[0].col != field or x[1] != 'isnull' ]
+                node.children = [ x for x in node.children if get_lhs_col(x) != field or get_op(x) != 'isnull' ]
 
 
     return (node.connector, [child for child in node.children]), negated, False
