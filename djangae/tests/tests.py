@@ -31,8 +31,7 @@ from django.core.exceptions import FieldError
 from djangae.contrib import sleuth
 from djangae.test import inconsistent_db, TestCase
 
-from django.db import IntegrityError as DjangoIntegrityError
-from djangae.db.backends.appengine.dbapi import CouldBeSupportedError, NotSupportedError, IntegrityError
+from django.db import IntegrityError, NotSupportedError
 from djangae.db.constraints import UniqueMarker, UniquenessMixin
 from djangae.db.unique_utils import _unique_combinations, unique_identifiers_from_entity
 from djangae.indexing import add_special_index
@@ -347,15 +346,15 @@ class BackendTests(TestCase):
                 self.assertFalse(created)
 
     def test_setting_non_null_null_throws_integrity_error(self):
-        with self.assertRaises(DjangoIntegrityError):
+        with self.assertRaises(IntegrityError):
             IntegerModel.objects.create(integer_field=None)
 
-        with self.assertRaises(DjangoIntegrityError):
+        with self.assertRaises(IntegrityError):
             instance = IntegerModel()
             instance.integer_field = None
             instance.save()
 
-        with self.assertRaises(DjangoIntegrityError):
+        with self.assertRaises(IntegrityError):
             instance = IntegerModel.objects.create(integer_field=1)
             instance = IntegerModel.objects.get()
             instance.integer_field = None
@@ -397,7 +396,7 @@ class BackendTests(TestCase):
             self.assertEqual(1, get_mock.call_count)
 
         #FIXME: Issue #80
-        with self.assertRaises(CouldBeSupportedError):
+        with self.assertRaises(NotSupportedError):
             with sleuth.switch("djangae.db.backends.appengine.commands.datastore.MultiQuery.Run", lambda *args, **kwargs: []) as query_mock:
                 list(TestUser.objects.exclude(username__startswith="test"))
                 self.assertEqual(1, query_mock.call_count)
@@ -461,11 +460,11 @@ class BackendTests(TestCase):
         self.assertItemsEqual([pear, banana], list(TestFruit.objects.exclude(name="Apple")))
 
         # Excluding a field, and doing a > or < on another is not so fine
-        with self.assertRaises(DataError):
+        with self.assertRaises(NotSupportedError):
             self.assertEqual(pear, TestFruit.objects.exclude(origin="England").filter(color__lt="Yellow").get())
 
         # Same with excluding two fields
-        with self.assertRaises(DataError):
+        with self.assertRaises(NotSupportedError):
             list(TestFruit.objects.exclude(origin="England").exclude(color="Yellow"))
 
         # But apparently excluding the same field twice is OK
@@ -814,7 +813,7 @@ class ConstraintTests(TestCase):
     def test_conflicting_insert_throws_integrity_error(self):
         ModelWithUniques.objects.create(name="One")
 
-        with self.assertRaises((IntegrityError, DataError)):
+        with self.assertRaises(IntegrityError):
             ModelWithUniques.objects.create(name="One")
 
     def test_table_flush_clears_markers_for_that_table(self):
@@ -826,7 +825,7 @@ class ConstraintTests(TestCase):
         FlushCommand(ModelWithUniques._meta.db_table).execute()
         ModelWithUniques.objects.create(name="One")
 
-        with self.assertRaises(DataError):
+        with self.assertRaises(IntegrityError):
             UniqueModel.objects.create(unique_field="One")
 
 
@@ -834,7 +833,7 @@ class ConstraintTests(TestCase):
         ModelWithUniques.objects.create(name="One")
 
         instance = ModelWithUniques.objects.create(name="Two")
-        with self.assertRaises((IntegrityError, DataError)):
+        with self.assertRaises(IntegrityError):
             instance.name = "One"
             instance.save()
 
@@ -1036,7 +1035,7 @@ class ConstraintTests(TestCase):
         obj = UniqueModelWithLongPK(pk="x" * 500, unique_field=1)
         obj.save()
         duplicate = UniqueModelWithLongPK(pk="y" * 500, unique_field=1)
-        self.assertRaises(DataError, duplicate.save)
+        self.assertRaises(IntegrityError, duplicate.save)
 
 
 class EdgeCaseTests(TestCase):
@@ -1155,7 +1154,7 @@ class EdgeCaseTests(TestCase):
         self.assertEqual(5, len(results))
 
         #Double exclude on different properties not supported
-        with self.assertRaises(DataError):
+        with self.assertRaises(NotSupportedError):
             #FIXME: This should raise a NotSupportedError, but at the moment it's thrown too late in
             #the process and so Django wraps it as a DataError
             list(TestUser.objects.exclude(username="E").exclude(email="A"))
@@ -1256,7 +1255,7 @@ class EdgeCaseTests(TestCase):
         user = TestUser.objects.create(id=999, username="test1", last_login=datetime.datetime.now().date())
         self.assertEqual(999, user.pk)
 
-        with self.assertRaises(DjangoIntegrityError):
+        with self.assertRaises(IntegrityError):
             TestUser.objects.create(id=999, username="test2", last_login=datetime.datetime.now().date())
 
     def test_included_pks(self):
