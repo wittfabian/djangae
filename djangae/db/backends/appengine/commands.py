@@ -165,7 +165,7 @@ def parse_constraint(child, connection, negated=False):
         field = constraint.field
     else:
         # Django 1.7+
-        field = child.lhs.output_field
+        field = child.lhs.target
         column = child.lhs.target.column
         op = child.lookup_name
         value = child.rhs
@@ -690,7 +690,7 @@ class SelectCommand(object):
         if self.where:
             queries = []
 
-            #print query._Query__kind, self.where
+            # print query._Query__kind, self.where
 
             for and_branch in self.where[1]:
                 # Duplicate the query for all the "OR"s
