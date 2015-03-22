@@ -72,8 +72,12 @@ REVERSE_OP_MAP = {
 
 INEQUALITY_OPERATORS = frozenset(['>', '<', '<=', '>='])
 
-def _get_tables_from_where(where_node):
+def _cols_from_where_node(where_node):
     cols = where_node.get_cols() if hasattr(where_node, 'get_cols') else where_node.get_group_by_cols()
+    return cols
+
+def _get_tables_from_where(where_node):
+    cols = _cols_from_where_node(where_node)
     return list(set([x[0] for x in cols if x[0] ]))
 
 @memoized
@@ -527,7 +531,7 @@ class SelectCommand(object):
             where_tables = _get_tables_from_where(query.where)
             if where_tables and where_tables != [ query.model._meta.db_table ]:
                 # Mark this query as unsupported and return
-                self.unsupported_query_message = "Cross-join WHERE constraints aren't supported: %s" % query.where.get_cols()
+                self.unsupported_query_message = "Cross-join WHERE constraints aren't supported: %s" % _cols_from_where_node(query.where)
                 return
 
             from dnf import parse_dnf
