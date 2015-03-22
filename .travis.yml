@@ -2,5 +2,12 @@ language: python
 python:
   - "2.7"
 
+# command to install dependencies
+install:
+  - git submodule init
+  - git submodule update
+  - python testapp/install_deps.py
+# command to run tests
 script:
-  - ./runtests.sh
+  - cd testapp
+  - python manage.py test
