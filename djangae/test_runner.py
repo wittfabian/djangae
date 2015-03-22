@@ -59,6 +59,14 @@ class DjangaeTestSuiteRunner(DjangoTestSuiteRunner):
         suite = super(DjangaeTestSuiteRunner, self).build_suite(*args, **kwargs)
 
         for i, test in enumerate(suite._tests):
+
+            # https://docs.djangoproject.com/en/1.7/topics/testing/advanced/#django.test.TransactionTestCase.available_apps
+            # available_apis is part of an internal API that allows to speed up
+            # internal Django test,  but that breaks the integration with
+            # Djangae models and tests, so we are disabling it here
+            if hasattr(test, 'available_apps'):
+                test.available_apps = None
+
             suite._tests[i] = bed_wrap(test)
 
         return suite
