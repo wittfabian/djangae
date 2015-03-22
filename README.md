@@ -1,5 +1,7 @@
 # Djangae
 
+[![build-status-image]][travis]
+
 The best way to run Django on Google App Engine.
 
 Djangae (djan-gee) is a Django app that allows you to run Django applications on Google App Engine, including (if you
@@ -276,3 +278,6 @@ For running the tests, you just need to run:
 ## Contributing
 
 Contributions are accepted via pull request and will be reviewed as soon as possible. If you have access to master, please do not commit directly! Pull requests only!
+
+[build-status-image]: https://secure.travis-ci.org/potatolondon/djangae.png?branch=master
+[travis]: http://travis-ci.org/potatolondon/djangae?branch=master
