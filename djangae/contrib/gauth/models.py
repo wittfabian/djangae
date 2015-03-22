@@ -22,14 +22,18 @@ from django.utils import timezone, six
 from django.utils.translation import ugettext_lazy as _
 from django.db.models.loading import get_apps, get_models
 from django.contrib.auth import get_permission_codename
-
+from django.contrib.auth.management import *
 from djangae.fields import ListField, RelatedSetField
 
 
 PERMISSIONS_LIST = None
 
 #We disconnect the built-in Django permission creation when using our custom user model
-signals.post_syncdb.disconnect(dispatch_uid="django.contrib.auth.management.create_permissions")
+if hasattr(signals, "post_migrate"):
+    signals.post_migrate.disconnect(dispatch_uid="django.contrib.auth.management.create_permissions")
+
+if hasattr(signals, "post_syncdb"):
+    signals.post_syncdb.disconnect(dispatch_uid="django.contrib.auth.management.create_permissions")
 
 
 def get_permission_choices():
