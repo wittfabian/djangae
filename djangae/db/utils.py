@@ -6,6 +6,7 @@ from itertools import chain
 import warnings
 
 #LIBRARIES
+import django
 from django.conf import settings
 from django.db import models
 from django.db.backends.util import format_number
@@ -36,7 +37,16 @@ def make_timezone_naive(value):
 def get_model_from_db_table(db_table):
     # We use include_swapped=True because tests might need access to gauth User models which are
     # swapped if the user has a different custom user model
-    for model in models.get_models(include_auto_created=True, only_installed=False, include_swapped=True):
+
+    kwargs = {
+        "include_auto_created": True,
+        "include_swapped": True
+    }
+
+    if django.VERSION[1] == 6:
+        kwargs["only_installed"] = False
+
+    for model in models.get_models(**kwargs):
         if model._meta.db_table == db_table:
             return model
 
