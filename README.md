@@ -250,7 +250,7 @@ The following settings are available to control the caching:
 
  - DJANGAE_CACHE_ENABLED (default True). Setting to False it all off, I really wouldn't suggest doing that!
  - DJANGAE_CACHE_TIMEOUT_SECONDS (default 60 * 60). The length of time stuff should be kept in memcache.
- 
+
 ## Datastore Behaviours
 
 The Djangae database backend for the Datastore contains some clever optimisations and integrity checks to make working with the Datastore easier.  This means that in some cases there are behaviours which are either not the same as the Django-on-SQL behaviour or not the same as the default Datastore behaviour. So for clarity, below is a list of statements which are true:
@@ -266,6 +266,12 @@ In general, django's emulation of SQL ON DELETE constraints works with djangae o
  - [Authentication with djangae.contrib.gauth](djangae/contrib/gauth/README.md)
  - [Map-reduce integration with djangae.contrib.mappers](djangae/contrib/mappers/README.md)
  - [Pagination with djangae.contrib.pagination](djangae/contrib/pagination/README.md)
+
+## Testing
+
+For running the tests, you just need to run:
+
+    $ ./runtests.sh
 
 ## Contributing
 

@@ -1,0 +1,4 @@
+Graphy==1.0.0
+GoogleAppEngineMapReduce==1.9.17.0
+GoogleAppEnginePipeline==1.9.17.0
+Pillow

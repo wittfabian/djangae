@@ -82,7 +82,16 @@ class memoized(object):
 def find_project_root():
     """Traverse the filesystem upwards and return the directory containing app.yaml"""
     path = os.path.dirname(os.path.abspath(__file__))
+    app_yaml_path = os.environ.get('DJANGAE_APP_YAML_LOCATION', None)
 
+    # If the DJANGAE_APP_YAML_LOCATION variable is setup, will try to locate
+    # it from there.
+    if (app_yaml_path is not None and
+            os.path.exists(os.path.join(app_yaml_path, "app.yaml"))):
+        return app_yaml_path
+
+    # Failing that, iterates over the parent folders until it finds it,
+    # failing when it gets to the root
     while True:
         if os.path.exists(os.path.join(path, "app.yaml")):
             return path
