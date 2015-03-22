@@ -367,7 +367,8 @@ def _convert_ordering(query):
                         if name.lstrip("-") == "pk":
                             field_column = query.model._meta.pk.column
                         else:
-                            field_column = query.model._meta.get_field(name.lstrip("-")).column
+                            field = query.model._meta.get_field_by_name(name.lstrip("-"))[0]
+                            field_column = field.column
                         ordering.append(field_column if not name.startswith("-") else "-{}".format(field_column))
                     else:
                         ordering.append(name)
