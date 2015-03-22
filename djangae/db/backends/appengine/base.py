@@ -215,9 +215,15 @@ class DatabaseOperations(BaseDatabaseOperations):
         return self.value_to_db_decimal(value, field.max_digits, field.decimal_places)
 
     def prep_lookup_date(self, model, value, field):
+        if isinstance(value, datetime.datetime):
+            return value
+
         return self.value_to_db_date(value)
 
     def prep_lookup_time(self, model, value, field):
+        if isinstance(value, datetime.datetime):
+            return value
+
         return self.value_to_db_time(value)
 
     def prep_lookup_value(self, model, value, field, column=None):
