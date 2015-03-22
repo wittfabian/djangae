@@ -165,11 +165,10 @@ def parse_constraint(child, connection, negated=False):
         column = child.lhs.target.column
         op = child.lookup_name
         value = child.rhs
-        annotation = None
-
+        annotation = value
         was_list = isinstance(value, (list, tuple))
-        if not was_list:
-            value = [ value ]
+        if value != []:
+            value = child.process_rhs(connection.ops.quote_name, connection)[1]
 
     is_pk = field and field.primary_key
 
