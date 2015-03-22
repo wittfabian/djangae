@@ -434,6 +434,7 @@ class DatabaseFeatures(BaseDatabaseFeatures):
     supports_select_related = False
     autocommits_when_autocommit_is_off = True
     uses_savepoints = False
+    allows_auto_pk_0 = False
 
 
 class DatabaseWrapper(BaseDatabaseWrapper):
