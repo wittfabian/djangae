@@ -27,7 +27,9 @@ DJANGO_TESTS_WHICH_REQUIRE_ZERO_PKS = {
 DJANGO_TESTS_WHICH_REQUIRE_AUTH_USER = {
     'proxy_models.tests.ProxyModelAdminTests.test_cascade_delete_proxy_model_admin_warning',
     'proxy_models.tests.ProxyModelAdminTests.test_delete_str_in_model_admin',
+    'proxy_models.tests.ProxyModelTests.test_permissions_created' # Requires permissions created
 }
+
 
 DJANGO_TESTS_TO_SKIP = DJANGO_TESTS_WHICH_REQUIRE_ZERO_PKS.union(DJANGO_TESTS_WHICH_REQUIRE_AUTH_USER)
 
