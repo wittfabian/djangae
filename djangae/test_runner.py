@@ -30,8 +30,15 @@ DJANGO_TESTS_WHICH_REQUIRE_AUTH_USER = {
     'proxy_models.tests.ProxyModelTests.test_permissions_created' # Requires permissions created
 }
 
+DJANGO_TESTS_WHICH_HAVE_BUGS = {
+    'one_to_one.tests.OneToOneTests.test_foreign_key', # Uses the wrong IDs, fixed in 1.8+
+}
 
-DJANGO_TESTS_TO_SKIP = DJANGO_TESTS_WHICH_REQUIRE_ZERO_PKS.union(DJANGO_TESTS_WHICH_REQUIRE_AUTH_USER)
+
+DJANGO_TESTS_TO_SKIP = DJANGO_TESTS_WHICH_REQUIRE_ZERO_PKS.union(
+    DJANGO_TESTS_WHICH_REQUIRE_AUTH_USER).union(
+    DJANGO_TESTS_WHICH_HAVE_BUGS
+)
 
 def init_testbed():
     # We don't initialize the datastore stub here, that needs to be done by Django's create_test_db and destroy_test_db.
