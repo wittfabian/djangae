@@ -810,7 +810,11 @@ class SelectCommand(object):
                             ))
                         qry = Query(query._Query__kind, projection=query._Query__query_options.projection)
                         qry.update(query)
-                        qry.Order(*ordering)
+                        try:
+                            qry.Order(*ordering)
+                        except datastore_errors.BadArgumentError as e:
+                            raise NotSupportedError(e)
+
                         new_queries.append(qry)
 
                     query = datastore.MultiQuery(new_queries, ordering)
