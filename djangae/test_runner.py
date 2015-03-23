@@ -10,6 +10,18 @@ from djangae.utils import find_project_root
 from google.appengine.ext import testbed
 
 
+# Many Django tests require saving instances with a PK
+# of zero. App Engine doesn't allow this (it treats the key
+# as incomplete in this case) so we skip those tests here
+DJANGO_TESTS_WHICH_REQUIRE_ZERO_PKS = {
+    'model_forms.tests.ModelMultipleChoiceFieldTests.test_model_multiple_choice_required_false',
+    'model_forms.tests.ModelChoiceFieldTests.test_modelchoicefield',
+    'custom_pk.tests.CustomPKTests.test_zero_non_autoincrement_pk',
+}
+
+
+DJANGO_TESTS_TO_SKIP = DJANGO_TESTS_WHICH_REQUIRE_ZERO_PKS
+
 def init_testbed():
     # We don't initialize the datastore stub here, that needs to be done by Django's create_test_db and destroy_test_db.
     IGNORED_STUBS = [ "init_datastore_v3_stub" ]
@@ -58,6 +70,8 @@ class DjangaeTestSuiteRunner(DjangoTestSuiteRunner):
     def build_suite(self, *args, **kwargs):
         suite = super(DjangaeTestSuiteRunner, self).build_suite(*args, **kwargs)
 
+        new_tests = []
+
         for i, test in enumerate(suite._tests):
 
             # https://docs.djangoproject.com/en/1.7/topics/testing/advanced/#django.test.TransactionTestCase.available_apps
@@ -67,7 +81,12 @@ class DjangaeTestSuiteRunner(DjangoTestSuiteRunner):
             if hasattr(test, 'available_apps'):
                 test.available_apps = None
 
-            suite._tests[i] = bed_wrap(test)
+            if test.id() in DJANGO_TESTS_TO_SKIP:
+                continue #FIXME: It would be better to wrap this in skipTest or something
+
+            new_tests.append(bed_wrap(test))
+
+        suite._tests[:] = new_tests
 
         return suite
 
