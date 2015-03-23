@@ -6,6 +6,14 @@ from djangae.db.backends.appengine.dbapi import NotSupportedError
 
 from google.appengine.api import datastore
 
+try:
+    from django.db.models import Lookup # Django 1.7+ uses lookup
+except ImportError:
+    # Fake lookup, so we can test using isinstance(node, Lookup) and this
+    # will always return False on < 1.7
+    class Lookup(object):
+        pass
+
 
 IMPOSSIBLE_FILTER = ('__key__', '<', datastore.Key.from_path('', 1))
 
@@ -30,12 +38,16 @@ def check_for_inequalities(node, key=None, other=None):
             raise QueryContainsOR
 
         for literal in literals:
-            field = literal[0].field
+            # Django 1.7+ have a lhs attribute which stores column info, django 1.6 doesn't
+            field = literal.lhs.output_field if hasattr(literal, "lhs") else literal[0].field
+            field_name = field.column if field else literal[0].col
 
-            field_name = literal[0].col
-            if node.negated and literal[1] == "exact" and (field and field.primary_key):
+            # Again, Django 1.7+ has lookup_name, 1.6 doesn't
+            lookup = literal.lookup_name if hasattr(literal, "lookup_name") else literal[1]
+
+            if node.negated and lookup == "exact" and (field and field.primary_key):
                 key = field_name
-            elif ((node.negated and literal[1] == "exact") or (literal[1] in ("gt", "gte", "lt", "lte"))) and not (field and field.primary_key):
+            elif ((node.negated and lookup == "exact") or (lookup in ("gt", "gte", "lt", "lte"))) and not (field and field.primary_key):
                 other.add(field_name)
 
         for branch in branches:
@@ -127,7 +139,11 @@ def process_literal(node, is_pk_filter, excluded_pks, filtered_columns=None, neg
 
 
 def process_node(node, connection, negated=False):
-    if isinstance(node, tuple) and isinstance(node[0], Constraint):
+    if isinstance(node, Lookup):
+        field = node.lhs.output_field
+        is_pk = field and field.primary_key
+        return ('LIT', parse_constraint(node, connection, negated)), negated, is_pk
+    elif isinstance(node, tuple) and isinstance(node[0], Constraint):
         field = node[0].field
         is_pk = field and field.primary_key
         return ('LIT', parse_constraint(node, connection, negated)), negated, is_pk
@@ -158,10 +174,20 @@ def process_node(node, connection, negated=False):
             # If the connector is 'AND'
             field_equalities = {}
 
+            def get_op(constraint_or_lookup):
+                # <= 1.6 child is a tuple, else it's a lookup
+                return constraint_or_lookup[1] if isinstance(constraint_or_lookup, tuple) else constraint_or_lookup.lookup_name
+
+            def get_lhs_col(constraint_or_lookup):
+                # <= 1.6 child is a tuple, else it's a lookup
+                return constraint_or_lookup[0].col if isinstance(constraint_or_lookup, tuple) else constraint_or_lookup.lhs.target.column
+
             # Look and see if we have an exact and isnull on the same field
             for child in node.children:
-                if child[1] in ('exact', 'isnull'):
-                    field_equalities.setdefault(child[0].col, []).append(child[1])
+                op = get_op(child)
+                column = get_lhs_col(child)
+                if op in ('exact', 'isnull'):
+                    field_equalities.setdefault(column, []).append(op)
 
             # If so, remove the isnull
             for field, equalities in field_equalities.iteritems():
@@ -169,7 +195,7 @@ def process_node(node, connection, negated=False):
                     continue
 
                 # If we have more than one equality and one of them is isnull, then remove it
-                node.children = [ x for x in node.children if x[0].col != field or x[1] != 'isnull' ]
+                node.children = [ x for x in node.children if get_lhs_col(x) != field or get_op(x) != 'isnull' ]
 
 
     return (node.connector, [child for child in node.children]), negated, False

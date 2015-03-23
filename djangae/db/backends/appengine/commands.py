@@ -2,6 +2,7 @@
 from datetime import datetime
 import logging
 import copy
+import re
 from functools import partial
 from itertools import chain, groupby
 
@@ -62,6 +63,16 @@ OPERATORS_MAP = {
     'range': None,
 }
 
+EXTRA_SELECT_FUNCTIONS = {
+    '+': lambda x, y: x + y,
+    '-': lambda x, y: x - y,
+    '/': lambda x, y: x / y,
+    '*': lambda x, y: x * y,
+    '<': lambda x, y: x < y,
+    '>': lambda x, y: x > y,
+    '=': lambda x, y: x == y
+}
+
 REVERSE_OP_MAP = {
     '=':'exact',
     '>':'gt',
@@ -72,6 +83,13 @@ REVERSE_OP_MAP = {
 
 INEQUALITY_OPERATORS = frozenset(['>', '<', '<=', '>='])
 
+def _cols_from_where_node(where_node):
+    cols = where_node.get_cols() if hasattr(where_node, 'get_cols') else where_node.get_group_by_cols()
+    return cols
+
+def _get_tables_from_where(where_node):
+    cols = _cols_from_where_node(where_node)
+    return list(set([x[0] for x in cols if x[0] ]))
 
 @memoized
 def get_field_from_column(model, column):
@@ -149,16 +167,27 @@ log_once.logged = set()
 
 
 def parse_constraint(child, connection, negated=False):
-    # First, unpack the constraint
-    constraint, op, annotation, value = child
-    was_list = isinstance(value, (list, tuple))
-    packed, value = constraint.process(op, value, connection)
-    alias, column, db_type = packed
+    if isinstance(child, tuple):
+        # First, unpack the constraint
+        constraint, op, annotation, value = child
+        was_list = isinstance(value, (list, tuple))
+        packed, value = constraint.process(op, value, connection)
+        alias, column, db_type = packed
+        field = constraint.field
+    else:
+        # Django 1.7+
+        field = child.lhs.target
+        column = child.lhs.target.column
+        op = child.lookup_name
+        value = child.rhs
+        annotation = value
+        was_list = isinstance(value, (list, tuple))
+        if value != []:
+            value = child.process_rhs(connection.ops.quote_name, connection)[1]
 
-    field = constraint.field
     is_pk = field and field.primary_key
 
-    if constraint.col == "id" and op == "iexact" and is_pk and isinstance(constraint.field, AutoField):
+    if column == "id" and op == "iexact" and is_pk and isinstance(field, AutoField):
         # When new instance is created, automatic primary key 'id' does not generate '_idx_iexact_id'.
         # As the primary key 'id' (AutoField) is integer and is always case insensitive, we can deal with 'id_iexact=' query by using 'exact' rather than 'iexact'.
         op = "exact"
@@ -169,12 +198,13 @@ def parse_constraint(child, connection, negated=False):
     if op not in REQUIRES_SPECIAL_INDEXES:
         # Don't convert if this op requires special indexes, it will be handled there
         if field:
-            value = [ connection.ops.prep_lookup_value(field.model, x, field, constraint=constraint) for x in value]
+            value = [ connection.ops.prep_lookup_value(field.model, x, field, column=column) for x in value]
 
-        # Don't ask me why, but constraint.process on isnull wipes out the value (it returns an empty list)
+        # Don't ask me why, but on Django 1.6 constraint.process on isnull wipes out the value (it returns an empty list)
         # so we have to special case this to use the annotation value instead
         if op == "isnull":
-            value = [ annotation ]
+            if annotation is not None:
+                value = [ annotation ]
 
             if is_pk and value[0]:
                 raise EmptyResultSet()
@@ -188,11 +218,11 @@ def parse_constraint(child, connection, negated=False):
         if not was_list:
             value = value[0]
 
-        add_special_index(constraint.field.model, column, op)  # Add the index if we can (e.g. on dev_appserver)
+        add_special_index(field.model, column, op)  # Add the index if we can (e.g. on dev_appserver)
 
-        if op not in special_indexes_for_column(constraint.field.model, column):
+        if op not in special_indexes_for_column(field.model, column):
             raise RuntimeError("There is a missing index in your djangaeidx.yaml - \n\n{0}:\n\t{1}: [{2}]".format(
-                constraint.field.model, column, op)
+                field.model, column, op)
             )
 
         indexer = REQUIRES_SPECIAL_INDEXES[op]
@@ -334,6 +364,29 @@ def _convert_ordering(query):
     else:
         result = query.order_by or query.get_meta().ordering
 
+    if query.extra_order_by:
+        # This is a best attempt at ordering by extra select, it covers the cases
+        # in the Django tests, but use this functionality with care
+        all_fields = query.get_meta().get_all_field_names()
+        new_ordering = []
+        for col in query.extra_order_by:
+            # If the query in the extra order by is part of the extra select
+            # and the extra select is just an alias, then use the original column
+            if col in query.extra_select:
+                if query.extra_select[col][0] in all_fields:
+                    new_ordering.append(query.extra_select[col][0])
+                else:
+                    # It wasn't an alias, probably can't support it
+                    raise NotSupportedError("Unsupported extra_order_by: {}".format(query.extra_order_by))
+            else:
+                # Not in the extra select, probably just a column so use it if it is
+                if col in all_fields:
+                    new_ordering.append(col)
+                else:
+                    raise NotSupportedError("Unsupported extra_order_by: {}".format(query.extra_order_by))
+
+        result = tuple(new_ordering)
+
     if result:
         # We factor out cross-table orderings (rather than raising NotSupportedError) otherwise we'll break
         # the admin which uses them. We log a warning when this happens though
@@ -348,7 +401,8 @@ def _convert_ordering(query):
                         if name.lstrip("-") == "pk":
                             field_column = query.model._meta.pk.column
                         else:
-                            field_column = query.model._meta.get_field(name.lstrip("-")).column
+                            field = query.model._meta.get_field_by_name(name.lstrip("-"))[0]
+                            field_column = field.column
                         ordering.append(field_column if not name.startswith("-") else "-{}".format(field_column))
                     else:
                         ordering.append(name)
@@ -371,8 +425,56 @@ def _convert_ordering(query):
 
     return result
 
+def _apply_extra_to_entity(extra_select, entity, pk_col):
+    """
+        Obviously the datastore doesn't support extra columns, but we can emulate simple
+        extra selects as we iterate the results. This function does that!
+    """
+
+    def prep_value(attr):
+        if attr == pk_col:
+            attr = entity.key().id_or_name()
+        else:
+            attr = entity[attr] if attr in entity else attr
+
+        try:
+            attr = int(attr)
+        except (TypeError, ValueError):
+            pass
+
+        if isinstance(attr, basestring):
+            if (attr[0], attr[-1]) == ("'", "'"):
+                attr = attr[1:-1]
+            elif (attr[0], attr[-1]) == ('"', '"'):
+                attr = attr[1:-1]
+        return attr
+
+    for column, (select, _) in extra_select.iteritems():
+
+        arithmetic_regex = "(\w+)\s?([+|-|/|*|\=])\s?([\w|'|\"]+)"
+        match = re.match(arithmetic_regex, select)
+        if match:
+            lhs = match.group(1)
+            op = match.group(2)
+            rhs = match.group(3)
+
+            lhs = prep_value(lhs)
+            rhs = prep_value(rhs)
+
+            fun = EXTRA_SELECT_FUNCTIONS.get(op)
+            if not fun:
+                raise NotSupportedError("Unimplemented extra select operation: '%s'" % op)
+
+            entity[column] = fun(lhs, rhs)
+        else:
+            rhs = prep_value(select)
+            entity[column] = rhs
+
+    return entity
+
 class SelectCommand(object):
     def __init__(self, connection, query, keys_only=False):
+        self.where = None
 
         self.original_query = query
         self.connection = connection
@@ -393,8 +495,19 @@ class SelectCommand(object):
         self.extra_select = query.extra_select
         self._set_db_table()
 
-        self._validate_query_is_possible(query)
-        self.ordering = _convert_ordering(query)
+        try:
+            self._validate_query_is_possible(query)
+            self.ordering = _convert_ordering(query)
+        except NotSupportedError as e:
+            # If we can detect here, or when parsing the WHERE tree that a query is unsupported
+            # we set this flag, and then throw NotSupportedError when execute is called.
+            # This will then wrap the exception in Django's NotSupportedError meaning users
+            # only need to catch that one, and not both Django's and ours
+            self.unsupported_query_message = str(e)
+            return
+        else:
+            self.unsupported_query_message = ""
+
 
         # If the query uses defer()/only() then we need to process deferred. We have to get all deferred columns
         # for all (concrete) inherited models and then only include columns if they appear in that list
@@ -497,12 +610,19 @@ class SelectCommand(object):
             # Empty where means return nothing!
             raise EmptyResultSet()
         else:
-            where_tables = list(set([x[0] for x in query.where.get_cols() if x[0] ]))
+            where_tables = _get_tables_from_where(query.where)
             if where_tables and where_tables != [ query.model._meta.db_table ]:
-                raise NotSupportedError("Cross-join WHERE constraints aren't supported: %s" % query.where.get_cols())
+                # Mark this query as unsupported and return
+                self.unsupported_query_message = "Cross-join WHERE constraints aren't supported: %s" % _cols_from_where_node(query.where)
+                return
 
             from dnf import parse_dnf
-            self.where, columns, self.excluded_pks = parse_dnf(query.where, self.connection, ordering=self.ordering)
+            try:
+                self.where, columns, self.excluded_pks = parse_dnf(query.where, self.connection, ordering=self.ordering)
+            except NotSupportedError as e:
+                # Mark this query as unsupported and return
+                self.unsupported_query_message = str(e)
+                return
 
         # DISABLE PROJECTION IF WE ARE FILTERING ON ONE OF THE PROJECTION_FIELDS
         for field in self.projection or []:
@@ -518,6 +638,9 @@ class SelectCommand(object):
             pass
 
     def execute(self):
+        if self.unsupported_query_message:
+            raise NotSupportedError(self.unsupported_query_message)
+
         self.gae_query = self._build_gae_query()
         self.results = None
         self.query_done = False
@@ -638,9 +761,11 @@ class SelectCommand(object):
 
                     if key in query:
                         if type(query[key]) == list:
-                            query[key].append(value)
+                            if value not in query[key]:
+                                query[key].append(value)
                         else:
-                            query[key] = [ query[key], value ]
+                            if query[key] != value:
+                                query[key] = [ query[key], value ]
                     else:
                         query[key] = value
                 except datastore_errors.BadFilterError as e:
@@ -678,18 +803,32 @@ class SelectCommand(object):
                 if len(queries) > 1:
                     # Disable keys only queries for MultiQuery
                     new_queries = []
-                    for query in queries:
+                    for i, query in enumerate(queries):
+                        if i > 30:
+                            raise NotSupportedError("Too many subqueries (max: 30, got {}). Probably cause too many IN/!= filters".format(
+                                len(queries)
+                            ))
                         qry = Query(query._Query__kind, projection=query._Query__query_options.projection)
                         qry.update(query)
-                        qry.Order(*ordering)
+                        try:
+                            qry.Order(*ordering)
+                        except datastore_errors.BadArgumentError as e:
+                            raise NotSupportedError(e)
+
                         new_queries.append(qry)
 
                     query = datastore.MultiQuery(new_queries, ordering)
                 else:
                     query = queries[0]
-                    query.Order(*ordering)
+                    try:
+                        query.Order(*ordering)
+                    except datastore_errors.BadArgumentError as e:
+                        raise NotSupportedError(e)
         else:
-            query.Order(*ordering)
+            try:
+                query.Order(*ordering)
+            except datastore_errors.BadArgumentError as e:
+                raise NotSupportedError(e)
 
         # If the resulting query was unique, then wrap as a unique query which
         # will hit the cache first
@@ -740,63 +879,14 @@ class SelectCommand(object):
         else:
             raise RuntimeError("Unsupported query type")
 
-        if self.extra_select:
-            # Construct the extra_select into the results set, this is then sorted with fetchone()
-            for attr, query in self.extra_select.iteritems():
-                tokens = query[0].split()
-                length = len(tokens)
-                if length == 3:
-                    op = REVERSE_OP_MAP.get(tokens[1])
-                    if not op:
-                        raise RuntimeError("Unsupported extra_select operation {0}".format(tokens[1]))
-                    fun = FILTER_CMP_FUNCTION_MAP[op]
-
-                    def lazy_eval(results, attr, fun, token_a, token_b):
-                        """ Wraps a list or a generator, applies comparison function
-                        token_a is an attribute on the result, the lhs. token_b is the rhs
-                        attr is the target attribute to store the result
-                        """
-                        for result in results:
-                            if result is None:
-                                yield result
-
-                            lhs = result.get(token_a)
-                            lhs_type = type(lhs)
-                            rhs = lhs_type(token_b)
-                            if isinstance(rhs, basestring):
-                                rhs = rhs.strip("'").strip('"') # Strip quotes
-                            result[attr] = fun(lhs, rhs)
-                            yield result
-
-                    results = lazy_eval(results, attr, fun, tokens[0], tokens[2])
-
-                elif length == 1:
-
-                    def lazy_assign(results, attr, value):
-                        """ Wraps a list or a generator, applies attribute assignment
-                        """
-                        for result in results:
-                            if result is None:
-                                yield result
-                            if isinstance(value, basestring):
-                                value = value.strip("'").strip('"')
-                                # Horrible SQL type to python conversion attempt
-                                try:
-                                    value = int(value)
-                                except ValueError:
-                                    pass
-                                # Up for debate
-                                # if value == "TRUE":
-                                #     value = True
-                                # elif value == "FALSE":
-                                #     value = False
-                            result[attr] = value
-                            yield result
-
-                    results = lazy_assign(results, attr, tokens[0])
+        def lazy_results():
+            for result in results:
+                if self.extra_select:
+                    yield _apply_extra_to_entity(self.extra_select, result, self.pk_col)
                 else:
-                    raise RuntimeError("Unsupported extra_select")
-        return results
+                    yield result
+        return lazy_results()
+
 
     def next_result(self):
         if self.limits[1]:

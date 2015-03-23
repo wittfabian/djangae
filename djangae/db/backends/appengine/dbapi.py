@@ -1,22 +1,31 @@
 """ Fake DB API 2.0 for App engine """
 
-class DatabaseError(StandardError):
+class DatabaseError(Exception):
     pass
 
 class IntegrityError(DatabaseError):
     pass
 
-class NotSupportedError(DatabaseError):
+class NotSupportedError(Exception):
     pass
 
-class CouldBeSupportedError(DatabaseError):
+class CouldBeSupportedError(NotSupportedError):
     pass
 
+class DataError(DatabaseError):
+    pass
+
+class OperationalError(DatabaseError):
+    pass
+
+class InternalError(DatabaseError):
+    pass
+
+class ProgrammingError(DatabaseError):
+    pass
+
+class InterfaceError(DatabaseError):
+    pass
 
 Error = DatabaseError
 Warning = DatabaseError
-DataError = DatabaseError
-OperationalError = DatabaseError
-InternalError = DatabaseError
-ProgrammingError = DatabaseError
-InterfaceError = DatabaseError
