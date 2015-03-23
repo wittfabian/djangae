@@ -803,7 +803,11 @@ class SelectCommand(object):
                 if len(queries) > 1:
                     # Disable keys only queries for MultiQuery
                     new_queries = []
-                    for query in queries:
+                    for i, query in enumerate(queries):
+                        if i > 30:
+                            raise NotSupportedError("Too many subqueries (max: 30, got {}). Probably cause too many IN/!= filters".format(
+                                len(queries)
+                            ))
                         qry = Query(query._Query__kind, projection=query._Query__query_options.projection)
                         qry.update(query)
                         qry.Order(*ordering)

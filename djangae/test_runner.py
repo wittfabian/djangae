@@ -17,6 +17,7 @@ DJANGO_TESTS_WHICH_REQUIRE_ZERO_PKS = {
     'model_forms.tests.ModelMultipleChoiceFieldTests.test_model_multiple_choice_required_false',
     'model_forms.tests.ModelChoiceFieldTests.test_modelchoicefield',
     'custom_pk.tests.CustomPKTests.test_zero_non_autoincrement_pk',
+    'bulk_create.tests.BulkCreateTests.test_zero_as_autoval'
 }
 
 
