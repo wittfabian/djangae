@@ -816,9 +816,15 @@ class SelectCommand(object):
                     query = datastore.MultiQuery(new_queries, ordering)
                 else:
                     query = queries[0]
-                    query.Order(*ordering)
+                    try:
+                        query.Order(*ordering)
+                    except datastore_errors.BadArgumentError as e:
+                        raise NotSupportedError(e)
         else:
-            query.Order(*ordering)
+            try:
+                query.Order(*ordering)
+            except datastore_errors.BadArgumentError as e:
+                raise NotSupportedError(e)
 
         # If the resulting query was unique, then wrap as a unique query which
         # will hit the cache first
