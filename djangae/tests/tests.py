@@ -483,6 +483,29 @@ class BackendTests(TestCase):
         self.assertEqual([cherry, banana], list(TestFruit.objects.exclude(pk=pear.pk).order_by("-name")[:2]))
         self.assertEqual([banana, apple], list(TestFruit.objects.exclude(pk=pear.pk).order_by("origin", "name")[:2]))
 
+    def test_datetime_fields(self):
+        date = datetime.datetime.today()
+        dt = datetime.datetime.now()
+        time = datetime.time(0,0,0)
+
+        # check if creating objects work
+        obj = NullDate.objects.create(date=date, datetime=dt, time=time)
+
+        # check if filtering objects work
+        self.assertItemsEqual([obj], NullDate.objects.filter(datetime=dt))
+        self.assertItemsEqual([obj], NullDate.objects.filter(date=date))
+        self.assertItemsEqual([obj], NullDate.objects.filter(time=time))
+
+        # check if updating objects work
+        obj.date = date + datetime.timedelta(days=1)
+        obj.datetime = dt + datetime.timedelta(days=1)
+        obj.time = datetime.time(23,0,0)
+        obj.save()
+        self.assertItemsEqual([obj], NullDate.objects.filter(datetime=obj.datetime))
+        self.assertItemsEqual([obj], NullDate.objects.filter(date=obj.date))
+        self.assertItemsEqual([obj], NullDate.objects.filter(time=obj.time))
+
+
 class ModelFormsetTest(TestCase):
     def test_reproduce_index_error(self):
         class TestModelForm(ModelForm):

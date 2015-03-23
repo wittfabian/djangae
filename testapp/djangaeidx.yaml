@@ -1,0 +1,46 @@
+auth_customuser:
+  email: [iexact]
+auth_user:
+  email: [iexact]
+  username: [iexact]
+basic_article:
+  headline: [startswith]
+  pub_date: [year, month, day, week_day]
+djangae_integermodel:
+  integer_field: [iexact]
+djangae_related:
+  headline: [startswith]
+djangae_specialindexesmodel:
+  name: [contains, endswith, iexact, startswith, icontains, iendswith, istartswith]
+djangae_testfruit:
+  color: [icontains, contains, iexact, iendswith, endswith, istartswith, startswith]
+djangae_testuser:
+  username: [iexact, contains, startswith]
+djangae_user:
+  username: [iexact]
+lookup_article:
+  headline: [contains, endswith, startswith]
+  id: [iexact]
+  pub_date: [startswith]
+many_to_one_article:
+  headline: [startswith]
+many_to_one_null_article:
+  headline: [startswith]
+many_to_one_reporter:
+  first_name: [startswith]
+model_forms_post:
+  posted: [day, year, month]
+or_lookups_article:
+  headline: [contains, iexact, startswith, icontains]
+proxy_models_baseuser:
+  name: [icontains]
+proxy_models_bug:
+  version: [icontains]
+tests_related:
+  headline: [startswith]
+tests_specialindexesmodel:
+  name: [contains, endswith, iexact, startswith, icontains]
+tests_testuser:
+  username: [iexact, startswith]
+timezones_event:
+  dt: [year, month]
