@@ -364,6 +364,29 @@ def _convert_ordering(query):
     else:
         result = query.order_by or query.get_meta().ordering
 
+    if query.extra_order_by:
+        # This is a best attempt at ordering by extra select, it covers the cases
+        # in the Django tests, but use this functionality with care
+        all_fields = query.get_meta().get_all_field_names()
+        new_ordering = []
+        for col in query.extra_order_by:
+            # If the query in the extra order by is part of the extra select
+            # and the extra select is just an alias, then use the original column
+            if col in query.extra_select:
+                if query.extra_select[col][0] in all_fields:
+                    new_ordering.append(query.extra_select[col][0])
+                else:
+                    # It wasn't an alias, probably can't support it
+                    raise NotSupportedError("Unsupported extra_order_by: {}".format(query.extra_order_by))
+            else:
+                # Not in the extra select, probably just a column so use it if it is
+                if col in all_fields:
+                    new_ordering.append(col)
+                else:
+                    raise NotSupportedError("Unsupported extra_order_by: {}".format(query.extra_order_by))
+
+        result = tuple(new_ordering)
+
     if result:
         # We factor out cross-table orderings (rather than raising NotSupportedError) otherwise we'll break
         # the admin which uses them. We log a warning when this happens though
