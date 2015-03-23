@@ -41,6 +41,7 @@ DJANGO_TESTS_WHICH_HAVE_BUGS = {
 # values that went into the where, but that's for another day.
 DJANGO_TESTS_WHICH_EXPECT_SQL_PARAMS = {
     'model_forms.tests.ModelMultipleChoiceFieldTests.test_clean_does_deduplicate_values',
+    'model_forms.tests.OldFormForXTests.test_clean_does_deduplicate_values' #Same test, in 1.6
 }
 
 
