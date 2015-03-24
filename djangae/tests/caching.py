@@ -118,6 +118,31 @@ class MemcacheCachingTests(TestCase):
     """
 
     @disable_cache(memcache=False, context=True)
+    def test_save_inside_transaction_evicts_cache(self):
+        entity_data = {
+            "field1": "Apple",
+            "comb1": 1,
+            "comb2": "Cherry"
+        }
+
+        identifiers = unique_utils.unique_identifiers_from_entity(CachingTestModel, FakeEntity(entity_data, id=222))
+
+        instance = CachingTestModel.objects.create(id=222, **entity_data)
+        for identifier in identifiers:
+            self.assertEqual(entity_data, cache.get(identifier))
+
+        with transaction.atomic():
+            instance.field1 = "Banana"
+            instance.save()
+
+        # Make sure that altering inside the transaction evicted the item from the cache
+        # and that a get then hits the datastore (which then in turn caches)
+        with sleuth.watch("google.appengine.api.datastore.Get") as datastore_get:
+            self.assertEqual("Banana", CachingTestModel.objects.get(pk=instance.pk).field1)
+            self.assertTrue(datastore_get.called)
+
+
+    @disable_cache(memcache=False, context=True)
     def test_save_caches_outside_transaction_only(self):
         entity_data = {
             "field1": "Apple",
