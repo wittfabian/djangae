@@ -5,11 +5,11 @@ from itertools import chain
 
 from django.contrib.contenttypes.models import ContentType
 from django.db import DEFAULT_DB_ALIAS, router, connections
-from django.db.models import get_model, get_models, UnavailableApp, signals, Manager, get_apps
+from django.db.models import get_model, get_models, signals, Manager, get_apps
+from django.db.models.loading import UnavailableApp
 from django.utils.encoding import smart_text
 from django.utils import six
 from django.utils.six.moves import input
-
 from djangae.crc64 import CRC64
 
 
@@ -188,8 +188,13 @@ def update_contenttypes(app, created_models, verbosity=2, db=DEFAULT_DB_ALIAS, *
     except UnavailableApp:
         return
 
-    if not router.allow_syncdb(db, ContentType):
-        return
+    if hasattr(router, "allow_syncdb"):
+        if not router.allow_syncdb(db, ContentType):
+            return
+    else:
+        if not router.allow_migrate(db, ContentType):
+            return
+
 
     ContentType.objects.clear_cache()
     app_models = get_models(app)
@@ -271,7 +276,13 @@ If you're unsure, answer 'no'.
 
 def patch():
     from django.contrib.contenttypes.management import update_contenttypes as original
-    signals.post_syncdb.disconnect(original)
+
+
+    if hasattr(signals, "post_migrate"):
+        signals.post_migrate.disconnect(original)
+
+    if hasattr(signals, "post_syncdb"):
+        signals.post_syncdb.disconnect(original)
 
     from django.conf import settings
     if getattr(settings, "DJANGAE_SIMULATE_CONTENTTYPES", False):

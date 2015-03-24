@@ -169,6 +169,13 @@ class RelatedSetField(RelatedField):
 
         super(RelatedSetField, self).__init__(**kwargs)
 
+    def deconstruct(self):
+        name, path, args, kwargs = super(RelatedSetField, self).deconstruct()
+        args = (self._related_model,)
+        del kwargs["null"]
+        del kwargs["default"]
+        return name, path, args, kwargs
+
     def get_attname(self):
         return '%s_ids' % self.name
 

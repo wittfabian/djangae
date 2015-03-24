@@ -1,9 +1,11 @@
+import copy
 from django import forms
 from django.db import models
 from django.core.exceptions import ValidationError, ImproperlyConfigured
 from django.db.models.fields.subclassing import Creator
 from djangae.forms.fields import ListFormField
 from django.utils.text import capfirst
+
 
 class _FakeModel(object):
     """
@@ -69,8 +71,13 @@ class IterableField(models.Field):
 
         default = kwargs.get("default", [])
 
+        self._original_item_field_type = copy.deepcopy(item_field_type) # For deconstruction purposes
+
         if default is not None and not callable(default):
             kwargs["default"] = lambda: self._iterable_type(default)
+
+        if hasattr(item_field_type, 'attname'):
+            item_field_type = item_field_type.__class__
 
         if callable(item_field_type):
             item_field_type = item_field_type()
@@ -86,6 +93,12 @@ class IterableField(models.Field):
         self.item_field_type.set_attributes_from_name('value')
 
         super(IterableField, self).__init__(*args, **kwargs)
+
+    def deconstruct(self):
+        name, path, args, kwargs = super(IterableField, self).deconstruct()
+        args = (self._original_item_field_type,)
+        del kwargs["null"]
+        return name, path, args, kwargs
 
     def contribute_to_class(self, cls, name):
         self.item_field_type.model = cls
@@ -220,6 +233,10 @@ class ListField(IterableField):
     def _iterable_type(self):
         return list
 
+    def deconstruct(self):
+        name, path, args, kwargs = super(ListField, self).deconstruct()
+        kwargs['ordering'] = self.ordering
+        return name, path, args, kwargs
 
 class SetField(IterableField):
     @property

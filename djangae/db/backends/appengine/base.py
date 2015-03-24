@@ -157,6 +157,9 @@ class Cursor(object):
     def __iter__(self):
         return self
 
+    def close(self):
+        pass
+
 
 class DatabaseOperations(BaseDatabaseOperations):
     compiler_module = "djangae.db.backends.appengine.compiler"
@@ -212,19 +215,29 @@ class DatabaseOperations(BaseDatabaseOperations):
         return self.value_to_db_decimal(value, field.max_digits, field.decimal_places)
 
     def prep_lookup_date(self, model, value, field):
-        return self.value_to_db_datetime(value)
+        if isinstance(value, datetime.datetime):
+            return value
+
+        return self.value_to_db_date(value)
 
     def prep_lookup_time(self, model, value, field):
+        if isinstance(value, datetime.datetime):
+            return value
+
         return self.value_to_db_time(value)
 
-    def prep_lookup_value(self, model, value, field, constraint=None):
-        if field.primary_key and (constraint is None or constraint.col == model._meta.pk.column):
+    def prep_lookup_value(self, model, value, field, column=None):
+        if field.primary_key and (not column or column == model._meta.pk.column):
             return self.prep_lookup_key(model, value, field)
 
         db_type = field.db_type(self.connection)
 
         if db_type == 'decimal':
             return self.prep_lookup_decimal(model, value, field)
+        elif db_type == 'date':
+            return self.prep_lookup_date(model, value, field)
+        elif db_type == 'time':
+            return self.prep_lookup_time(model, value, field)
         elif db_type in ('list', 'set'):
             if hasattr(value, "__len__") and not value:
                 value = None #Convert empty lists to None
@@ -410,6 +423,9 @@ class DatabaseSchemaEditor(BaseDatabaseSchemaEditor):
         """ Don't do anything when creating tables """
         pass
 
+    def alter_unique_together(self, *args, **kwargs):
+        pass
+
 
 class DatabaseFeatures(BaseDatabaseFeatures):
     empty_fetchmany_value = []
@@ -418,6 +434,7 @@ class DatabaseFeatures(BaseDatabaseFeatures):
     supports_select_related = False
     autocommits_when_autocommit_is_off = True
     uses_savepoints = False
+    allows_auto_pk_0 = False
 
 
 class DatabaseWrapper(BaseDatabaseWrapper):

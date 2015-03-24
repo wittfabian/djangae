@@ -11,9 +11,9 @@ from django.contrib.auth.models import (
     _user_get_all_permissions,
     _user_has_perm,
     _user_has_module_perms,
-    urlquote,
     PermissionsMixin as DjangoPermissionsMixin,
 )
+from django.utils.http import urlquote
 from django.core.mail import send_mail
 from django.core import validators
 from django.db import models
@@ -22,14 +22,11 @@ from django.utils import timezone, six
 from django.utils.translation import ugettext_lazy as _
 from django.db.models.loading import get_apps, get_models
 from django.contrib.auth import get_permission_codename
-
+from django.contrib.auth.management import *
 from djangae.fields import ListField, RelatedSetField
 
 
 PERMISSIONS_LIST = None
-
-#We disconnect the built-in Django permission creation when using our custom user model
-signals.post_syncdb.disconnect(dispatch_uid="django.contrib.auth.management.create_permissions")
 
 
 def get_permission_choices():
@@ -311,3 +308,20 @@ class GaeDatastoreUser(GaeAbstractBaseUser, PermissionsMixin):
         swappable = 'AUTH_USER_MODEL'
         verbose_name = _('user')
         verbose_name_plural = _('users')
+
+
+def lazy_permission_creation(**kwargs):
+    if issubclass(auth.get_user_model(), PermissionsMixin):
+        return
+
+    # Call through to Django's create_permissions
+    create_permissions(**kwargs)
+
+#We disconnect the built-in Django permission creation when using our custom user model
+if hasattr(signals, "post_migrate"):
+    signals.post_migrate.disconnect(dispatch_uid="django.contrib.auth.management.create_permissions")
+    signals.post_migrate.connect(lazy_permission_creation, dispatch_uid="django.contrib.auth.management.create_permissions")
+
+if hasattr(signals, "post_syncdb"):
+    signals.post_syncdb.disconnect(dispatch_uid="django.contrib.auth.management.create_permissions")
+    signals.post_syncdb.connect(lazy_permission_creation, dispatch_uid="django.contrib.auth.management.create_permissions")
