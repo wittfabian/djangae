@@ -138,6 +138,9 @@ class MemcacheCachingTests(TestCase):
         # Make sure that altering inside the transaction evicted the item from the cache
         # and that a get then hits the datastore (which then in turn caches)
         with sleuth.watch("google.appengine.api.datastore.Get") as datastore_get:
+            for identifier in identifiers:
+                self.assertIsNone(cache.get(identifier))
+
             self.assertEqual("Banana", CachingTestModel.objects.get(pk=instance.pk).field1)
             self.assertTrue(datastore_get.called)
 
