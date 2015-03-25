@@ -205,6 +205,20 @@ class DatabaseOperations(BaseDatabaseOperations):
                 warnings.warn("Truncating primary key that is over 500 characters. "
                               "THIS IS AN ERROR IN YOUR PROGRAM.",
                               RuntimeWarning)
+
+            # This is a bit of a hack. Basically when you query an integer PK with a
+            # string containing an int. SQL seems to return the row regardless of type, and as far as
+            # I can tell, Django at no point tries to cast the value to an integer. So, in the
+            # case where the internal type is an AutoField, we try to cast the string value
+            # I would love a more generic solution... patches welcome!
+            # It would be nice to see the SQL output of the lookup_int_as_str test is on SQL, if
+            # the string is converted to an int, I'd love to know where!
+            if field.get_internal_type() == 'AutoField':
+                try:
+                    value = int(value)
+                except (TypeError, ValueError):
+                    pass
+
             value = get_datastore_key(model, value)
         else:
             value = get_datastore_key(model, value)
