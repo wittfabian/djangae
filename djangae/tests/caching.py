@@ -2,6 +2,7 @@ import unittest
 
 from google.appengine.api import datastore
 from google.appengine.api import datastore_errors
+from google.appengine.ext.db import non_transactional
 
 from django.db import models
 from django.http import HttpRequest
@@ -195,6 +196,33 @@ class MemcacheCachingTests(TestCase):
 
         with transaction.atomic():
             instance.save()
+
+        for identifier in identifiers:
+            self.assertIsNone(cache.get(identifier))
+
+    @disable_cache(memcache=False, context=True)
+    def test_transactional_save_wipes_the_cache_only_after_its_result_is_consistently_available(self):
+        entity_data = {
+            "field1": "old",
+        }
+        identifiers = unique_utils.unique_identifiers_from_entity(CachingTestModel, FakeEntity(entity_data, id=222))
+
+        for identifier in identifiers:
+            self.assertIsNone(cache.get(identifier))
+
+        instance = CachingTestModel.objects.create(id=222, **entity_data)
+
+        for identifier in identifiers:
+            self.assertEqual("old", cache.get(identifier)["field1"])
+
+        @non_transactional
+        def non_transactional_read(instance_pk):
+            CachingTestModel.objects.get(pk=instance_pk)
+
+        with transaction.atomic():
+            instance.field1 = "new"
+            instance.save()
+            non_transactional_read(instance.pk)  # could potentially recache the old object
 
         for identifier in identifiers:
             self.assertIsNone(cache.get(identifier))
