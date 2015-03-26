@@ -616,7 +616,14 @@ class SelectCommand(object):
             # Empty where means return nothing!
             raise EmptyResultSet()
         else:
-            where_tables = _get_tables_from_where(query.where)
+            try:
+                where_tables = _get_tables_from_where(query.where)
+            except TypeError:
+                # This exception is thrown by get_group_by_cols if one of the constraints is a SubQueryConstraint
+                # yeah, we can't do that.
+                self.unsupported_query_message = "Subquery WHERE constraints aren't supported"
+                return
+
             if where_tables and where_tables != [ query.model._meta.db_table ]:
                 # Mark this query as unsupported and return
                 self.unsupported_query_message = "Cross-join WHERE constraints aren't supported: %s" % _cols_from_where_node(query.where)
