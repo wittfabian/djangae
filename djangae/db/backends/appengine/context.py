@@ -1,7 +1,7 @@
 import copy
-from google.appengine.api import datastore
-
 import collections
+
+from google.appengine.api import datastore
 
 class CopyDict(collections.MutableMapping):
     """
@@ -108,6 +108,9 @@ class ContextStack(object):
             The staged queue will be wiped out if the pop makes the size of the stack one,
             regardless of whether you pass clear_staged or not. This is for safety!
         """
+        from . import caching
+
+
         if not discard:
             self.staged.insert(0, self.stack.pop())
         else:
@@ -115,7 +118,11 @@ class ContextStack(object):
 
         if apply_staged:
             while self.staged:
-                self.top.apply(self.staged.pop())
+                to_apply = self.staged.pop()
+                for key in to_apply.reverse_cache.keys():
+                    caching.remove_entity_from_cache_by_key(key, memcache_only=True)
+
+                self.top.apply(to_apply)
 
         if clear_staged or len(self.stack) == 1:
             self.staged = []
