@@ -14,6 +14,7 @@ from django.db.models.fields import FieldDoesNotExist
 from django.core.cache import cache
 from django.db import IntegrityError
 from django.db.models.sql.datastructures import EmptyResultSet
+from django.db.models.sql import query
 from django.db.models.sql.where import EmptyWhere
 from django.db.models.fields import AutoField
 from google.appengine.api import datastore, datastore_errors
@@ -182,8 +183,13 @@ def parse_constraint(child, connection, negated=False):
         value = child.rhs
         annotation = value
         was_list = isinstance(value, (list, tuple))
-        if value != []:
-            value = child.process_rhs(connection.ops.quote_name, connection)[1]
+
+        if isinstance(value, query.Query):
+            value = value.get_compiler(connection.alias).as_sql()[0].execute()
+        elif value != []:
+            value = child.lhs.output_field.get_db_prep_lookup(
+                child.lookup_name, child.rhs, connection, prepared=True)
+
 
     is_pk = field and field.primary_key
 
