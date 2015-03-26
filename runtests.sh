@@ -3,10 +3,9 @@
 virtualenv venv
 . venv/bin/activate
 
-git submodule init && git submodule update
-
-python testapp/install_deps.py
-cd testapp; ./runtests.sh
+cd testapp; python install_deps.py
+./runtests.sh
 
 deactivate
+rm -r django_tests
 cd ..; rm -rf venv

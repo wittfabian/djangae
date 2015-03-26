@@ -51,3 +51,15 @@ if __name__ == '__main__':
     args = ["pip", "install", "--no-deps", "-r", REQUIREMENTS_FILE, "-t", TARGET_DIR, "-I"]
     p = subprocess.Popen(args)
     p.wait()
+
+    print("Installing Django 1.7.7")
+    args = ["pip", "install", "--editable", "git+https://github.com/django/django@1.7.7#egg=django_tests"]
+    p = subprocess.Popen(args)
+    p.wait()
+
+    # now, using virtualenv's path we can infer where the tests are, and then
+    # we can symlink those in
+    tests_path = os.path.join(os.environ['VIRTUAL_ENV'], 'src', 'django-tests', 'tests')
+    args = ["ln", "-s", tests_path, "django_tests"]
+    p = subprocess.Popen(args)
+    p.wait()
