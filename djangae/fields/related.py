@@ -55,14 +55,15 @@ def create_related_set_manager(superclass, rel):
             db = self._db or router.db_for_read(self.instance.__class__, instance=self.instance)
             return super(RelatedSetManager, self).get_queryset().using(db)._next_is_sticky().filter(**self.core_filters)
 
-        def add(self, value):
-            if not isinstance(value, self.model):
-                raise TypeError("'%s' instance expected, got %r" % (self.model._meta.object_name, value))
+        def add(self, *values):
+            for value in values:
+                if not isinstance(value, self.model):
+                    raise TypeError("'%s' instance expected, got %r" % (self.model._meta.object_name, value))
 
-            if not value.pk:
-                raise ValueError("Model instances must be saved before they can be added to a related set")
+                if not value.pk:
+                    raise ValueError("Model instances must be saved before they can be added to a related set")
 
-            self.field.value_from_object(self.instance).add(value.pk)
+                self.field.value_from_object(self.instance).add(value.pk)
 
         def remove(self, value):
             self.field.value_from_object(self.instance).discard(value.pk)

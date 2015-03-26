@@ -1752,6 +1752,17 @@ class InstanceSetFieldTests(TestCase):
         main_from_db.related_things.add(other2)
         main_from_db.save()
 
+    def test_multiple_objects(self):
+        main = ISModel.objects.create()
+        other1 = ISOther.objects.create()
+        other2 = ISOther.objects.create()
+
+        main.related_things.add(other1, other2)
+        main.save()
+
+        main_from_db = ISModel.objects.get(pk=main.pk)
+        self.assertEqual(main_from_db.related_things.count(), 2)
+
     def test_deletion(self):
         """
         Delete one of the objects referred to by the related field
