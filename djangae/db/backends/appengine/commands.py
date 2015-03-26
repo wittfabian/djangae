@@ -962,12 +962,10 @@ class FlushCommand(object):
 
 @db.non_transactional
 def reserve_id(kind, id_or_name):
-    if isinstance(id_or_name, (int, long)):
-        try:
-            db.allocate_id_range(datastore.Key.from_path(kind, 1), id_or_name, id_or_name)
-        except:
-            # We don't re-raise because it's not terminal, but if this happens we need to know why
-            logging.exception("An error occurred when notifying app engine that an ID has been used. Please report.")
+    from google.appengine.api.datastore import _GetConnection
+    key = datastore.Key.from_path(kind, id_or_name)
+    _GetConnection()._async_reserve_keys(None, [key])
+
 
 class InsertCommand(object):
     def __init__(self, connection, model, objs, fields, raw):
