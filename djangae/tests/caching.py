@@ -27,7 +27,7 @@ class FakeEntity(dict):
         self.update(data)
 
     def key(self):
-        return datastore.Key.from_path("table", self.id)
+        return datastore.Key.from_path("auth_user", self.id)
 
 
 class ContextStackTests(TestCase):

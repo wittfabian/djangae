@@ -105,15 +105,17 @@ def remove_entity_from_cache(entity):
     remove_entity_from_cache_by_key(key)
 
 
-def remove_entity_from_cache_by_key(key):
+def remove_entity_from_cache_by_key(key, memcache_only=False):
     """
         Removes an entity from all caches (both context and memcache)
+        or just memcache if specified
     """
     ensure_context()
 
-    for identifier in _context.stack.top.reverse_cache.get(key, []):
-        if identifier in _context.stack.top.cache:
-            del _context.stack.top.cache[identifier]
+    if not memcache_only:
+        for identifier in _context.stack.top.reverse_cache.get(key, []):
+            if identifier in _context.stack.top.cache:
+                del _context.stack.top.cache[identifier]
 
     _remove_entity_from_memcache_by_key(key)
 
