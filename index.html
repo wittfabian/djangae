@@ -1,38 +1,28 @@
 <!DOCTYPE html>
-<html>
-
+<html lang="en-us">
   <head>
-    <meta charset='utf-8'>
-    <meta http-equiv="X-UA-Compatible" content="chrome=1">
-    <meta name="description" content="Djangae : The best way to run Django on Google App Engine">
-
-    <link rel="stylesheet" type="text/css" media="screen" href="stylesheets/stylesheet.css">
-
-    <title>Djangae</title>
+    <meta charset="UTF-8">
+    <title>Djangae by potatolondon</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" type="text/css" href="stylesheets/normalize.css" media="screen">
+    <link href='http://fonts.googleapis.com/css?family=Open+Sans:400,700' rel='stylesheet' type='text/css'>
+    <link rel="stylesheet" type="text/css" href="stylesheets/stylesheet.css" media="screen">
+    <link rel="stylesheet" type="text/css" href="stylesheets/github-light.css" media="screen">
   </head>
-
   <body>
+    <section class="page-header">
+      <h1 class="project-name">Djangae</h1>
+      <h2 class="project-tagline">The best way to run Django on Google App Engine</h2>
+      <a href="https://github.com/potatolondon/djangae" class="btn">View on GitHub</a>
+      <a href="https://github.com/potatolondon/djangae/zipball/master" class="btn">Download .zip</a>
+      <a href="https://github.com/potatolondon/djangae/tarball/master" class="btn">Download .tar.gz</a>
+    </section>
 
-    <!-- HEADER -->
-    <div id="header_wrap" class="outer">
-        <header class="inner">
-          <a id="forkme_banner" href="https://github.com/potatolondon/djangae">View on GitHub</a>
-
-          <h1 id="project_title">Djangae</h1>
-          <h2 id="project_tagline">The best way to run Django on Google App Engine</h2>
-
-            <section id="downloads">
-              <a class="zip_download_link" href="https://github.com/potatolondon/djangae/zipball/master">Download this project as a .zip file</a>
-              <a class="tar_download_link" href="https://github.com/potatolondon/djangae/tarball/master">Download this project as a tar.gz file</a>
-            </section>
-        </header>
-    </div>
-
-    <!-- MAIN CONTENT -->
-    <div id="main_content_wrap" class="outer">
-      <section id="main_content" class="inner">
-        <h1>
+    <section class="main-content">
+      <h1>
 <a id="djangae" class="anchor" href="#djangae" aria-hidden="true"><span class="octicon octicon-link"></span></a>Djangae</h1>
+
+<p><a href="http://travis-ci.org/potatolondon/djangae?branch=master"><img src="https://secure.travis-ci.org/potatolondon/djangae.png?branch=master" alt="build-status-image"></a></p>
 
 <p>The best way to run Django on Google App Engine.</p>
 
@@ -67,8 +57,8 @@ custom commands as well, see TODO.md).</li>
 <h2>
 <a id="supported-django-versions" class="anchor" href="#supported-django-versions" aria-hidden="true"><span class="octicon octicon-link"></span></a>Supported Django Versions</h2>
 
-<p>The intention is always to support the last two versions of Django, although older versions may work. Currently only
-Django 1.6 is supported, but 1.7 support is in the pipeline.</p>
+<p>The intention is always to support the last two versions of Django, although older versions may work. Currently
+Django 1.6 and 1.7 are supported. 1.8 support will come soon after it's released.</p>
 
 <h1>
 <a id="installation" class="anchor" href="#installation" aria-hidden="true"><span class="octicon octicon-link"></span></a>Installation</h1>
@@ -84,18 +74,18 @@ default settings.</li>
 <li>
 <p>In app.yaml add the following handlers:</p>
 
-<div class="highlight highlight-yml"><pre><span class="pl-s1">- <span class="pl-ent">url:</span> <span class="pl-s1">/_ah/(mapreduce|queue|warmup).*</span></span>
-  <span class="pl-s1"><span class="pl-ent">script:</span> <span class="pl-s1">YOUR_DJANGO_APP.wsgi.application</span></span>
-  <span class="pl-s1"><span class="pl-ent">login:</span> <span class="pl-s1">admin</span></span>
+<div class="highlight highlight-yml"><pre><span class="pl-s">- <span class="pl-ent">url:</span> <span class="pl-s">/_ah/(mapreduce|queue|warmup).*</span></span>
+  <span class="pl-s"><span class="pl-ent">script:</span> <span class="pl-s">YOUR_DJANGO_APP.wsgi.application</span></span>
+  <span class="pl-s"><span class="pl-ent">login:</span> <span class="pl-s">admin</span></span>
 
-<span class="pl-s1">- <span class="pl-ent">url:</span> <span class="pl-s1">/.*</span></span>
-  <span class="pl-s1"><span class="pl-ent">script:</span> <span class="pl-s1">YOUR_DJANGO_APP.wsgi.application</span></span></pre></div>
+<span class="pl-s">- <span class="pl-ent">url:</span> <span class="pl-s">/.*</span></span>
+  <span class="pl-s"><span class="pl-ent">script:</span> <span class="pl-s">YOUR_DJANGO_APP.wsgi.application</span></span></pre></div>
 </li>
 <li>
 <p>Make your manage.py look something like this:</p>
 
-<div class="highlight highlight-python"><pre><span class="pl-k">if</span> <span class="pl-sv">__name__</span> <span class="pl-k">==</span> <span class="pl-s1"><span class="pl-pds">"</span>__main__<span class="pl-pds">"</span></span>:
-    os.environ.setdefault(<span class="pl-s1"><span class="pl-pds">"</span>DJANGO_SETTINGS_MODULE<span class="pl-pds">"</span></span>, <span class="pl-s1"><span class="pl-pds">"</span>myapp.settings<span class="pl-pds">"</span></span>)
+<div class="highlight highlight-python"><pre><span class="pl-k">if</span> <span class="pl-c1">__name__</span> <span class="pl-k">==</span> <span class="pl-s"><span class="pl-pds">"</span>__main__<span class="pl-pds">"</span></span>:
+    os.environ.setdefault(<span class="pl-s"><span class="pl-pds">"</span>DJANGO_SETTINGS_MODULE<span class="pl-pds">"</span></span>, <span class="pl-s"><span class="pl-pds">"</span>myapp.settings<span class="pl-pds">"</span></span>)
 
     <span class="pl-k">from</span> djangae.core.management <span class="pl-k">import</span> execute_from_command_line
 
@@ -221,22 +211,22 @@ live database!</p>
 <div class="highlight highlight-python"><pre>    <span class="pl-k">from</span> djangae.utils <span class="pl-k">import</span> on_production
 
     DATABASES <span class="pl-k">=</span> {
-        <span class="pl-s1"><span class="pl-pds">'</span>default<span class="pl-pds">'</span></span>: {
-            <span class="pl-s1"><span class="pl-pds">'</span>ENGINE<span class="pl-pds">'</span></span>: <span class="pl-s1"><span class="pl-pds">'</span>djangae.db.backends.appengine<span class="pl-pds">'</span></span>
+        <span class="pl-s"><span class="pl-pds">'</span>default<span class="pl-pds">'</span></span>: {
+            <span class="pl-s"><span class="pl-pds">'</span>ENGINE<span class="pl-pds">'</span></span>: <span class="pl-s"><span class="pl-pds">'</span>djangae.db.backends.appengine<span class="pl-pds">'</span></span>
         }
     }
 
     <span class="pl-k">if</span> on_production():
-        DATABASES[<span class="pl-s1"><span class="pl-pds">'</span>sql<span class="pl-pds">'</span></span>] <span class="pl-k">=</span> {
-            <span class="pl-s1"><span class="pl-pds">'</span>ENGINE<span class="pl-pds">'</span></span>: <span class="pl-s1"><span class="pl-pds">'</span>django.db.backends.mysql<span class="pl-pds">'</span></span>,
-            <span class="pl-s1"><span class="pl-pds">'</span>HOST<span class="pl-pds">'</span></span>: <span class="pl-s1"><span class="pl-pds">'</span>/cloudsql/YOUR_GOOGLE_CLOUD_PROJECT:YOUR_INSTANCE_NAME<span class="pl-pds">'</span></span>,
-            <span class="pl-s1"><span class="pl-pds">'</span>NAME<span class="pl-pds">'</span></span>: <span class="pl-s1"><span class="pl-pds">'</span>YOUR_DATABASE_NAME<span class="pl-pds">'</span></span>,
-            <span class="pl-s1"><span class="pl-pds">'</span>USER<span class="pl-pds">'</span></span>: <span class="pl-s1"><span class="pl-pds">'</span>root<span class="pl-pds">'</span></span>,
+        DATABASES[<span class="pl-s"><span class="pl-pds">'</span>sql<span class="pl-pds">'</span></span>] <span class="pl-k">=</span> {
+            <span class="pl-s"><span class="pl-pds">'</span>ENGINE<span class="pl-pds">'</span></span>: <span class="pl-s"><span class="pl-pds">'</span>django.db.backends.mysql<span class="pl-pds">'</span></span>,
+            <span class="pl-s"><span class="pl-pds">'</span>HOST<span class="pl-pds">'</span></span>: <span class="pl-s"><span class="pl-pds">'</span>/cloudsql/YOUR_GOOGLE_CLOUD_PROJECT:YOUR_INSTANCE_NAME<span class="pl-pds">'</span></span>,
+            <span class="pl-s"><span class="pl-pds">'</span>NAME<span class="pl-pds">'</span></span>: <span class="pl-s"><span class="pl-pds">'</span>YOUR_DATABASE_NAME<span class="pl-pds">'</span></span>,
+            <span class="pl-s"><span class="pl-pds">'</span>USER<span class="pl-pds">'</span></span>: <span class="pl-s"><span class="pl-pds">'</span>root<span class="pl-pds">'</span></span>,
         }
     <span class="pl-k">else</span>:
-        DATABASES[<span class="pl-s1"><span class="pl-pds">'</span>sql<span class="pl-pds">'</span></span>] <span class="pl-k">=</span> {
-            <span class="pl-s1"><span class="pl-pds">'</span>ENGINE<span class="pl-pds">'</span></span>: <span class="pl-s1"><span class="pl-pds">'</span>django.db.backends.sqlite3<span class="pl-pds">'</span></span>,
-            <span class="pl-s1"><span class="pl-pds">'</span>NAME<span class="pl-pds">'</span></span>: <span class="pl-s1"><span class="pl-pds">'</span>development.sqlite3<span class="pl-pds">'</span></span>
+        DATABASES[<span class="pl-s"><span class="pl-pds">'</span>sql<span class="pl-pds">'</span></span>] <span class="pl-k">=</span> {
+            <span class="pl-s"><span class="pl-pds">'</span>ENGINE<span class="pl-pds">'</span></span>: <span class="pl-s"><span class="pl-pds">'</span>django.db.backends.sqlite3<span class="pl-pds">'</span></span>,
+            <span class="pl-s"><span class="pl-pds">'</span>NAME<span class="pl-pds">'</span></span>: <span class="pl-s"><span class="pl-pds">'</span>development.sqlite3<span class="pl-pds">'</span></span>
         }</pre></div>
 
 <p>See the Google documentation for more information on connecting to Cloud SQL via the
@@ -334,21 +324,27 @@ gives you the right results at the right time</li>
 </ul>
 
 <h2>
+<a id="testing" class="anchor" href="#testing" aria-hidden="true"><span class="octicon octicon-link"></span></a>Testing</h2>
+
+<p>For running the tests, you just need to run:</p>
+
+<pre><code>$ ./runtests.sh
+</code></pre>
+
+<h2>
 <a id="contributing" class="anchor" href="#contributing" aria-hidden="true"><span class="octicon octicon-link"></span></a>Contributing</h2>
 
 <p>Contributions are accepted via pull request and will be reviewed as soon as possible. If you have access to master, please do not commit directly! Pull requests only!</p>
-      </section>
-    </div>
 
-    <!-- FOOTER  -->
-    <div id="footer_wrap" class="outer">
-      <footer class="inner">
-        <p class="copyright">Djangae maintained by <a href="https://github.com/potatolondon">potatolondon</a></p>
-        <p>Published with <a href="http://pages.github.com">GitHub Pages</a></p>
+      <footer class="site-footer">
+        <span class="site-footer-owner"><a href="https://github.com/potatolondon/djangae">Djangae</a> is maintained by <a href="https://github.com/potatolondon">potatolondon</a>.</span>
+
+        <span class="site-footer-credits">This page was generated by <a href="https://pages.github.com">GitHub Pages</a> using the <a href="https://github.com/jasonlong/cayman-theme">Cayman theme</a> by <a href="https://twitter.com/jasonlong">Jason Long</a>.</span>
       </footer>
-    </div>
 
-              <script type="text/javascript">
+    </section>
+
+            <script type="text/javascript">
             var gaJsHost = (("https:" == document.location.protocol) ? "https://ssl." : "http://www.");
             document.write(unescape("%3Cscript src='" + gaJsHost + "google-analytics.com/ga.js' type='text/javascript'%3E%3C/script%3E"));
           </script>
@@ -359,6 +355,6 @@ gives you the right results at the right time</li>
             } catch(err) {}
           </script>
 
-
   </body>
 </html>
+
