@@ -30,8 +30,8 @@ GitHub: https://github.com/potatolondon/djangae
 
 ## Supported Django Versions
 
-The intention is always to support the last two versions of Django, although older versions may work. Currently only
-Django 1.6 is supported, but 1.7 support is in the pipeline.
+The intention is always to support the last two versions of Django, although older versions may work. Currently
+Django 1.6 and 1.7 are supported. 1.8 support will come soon after it's released.
 
 # Installation
 
