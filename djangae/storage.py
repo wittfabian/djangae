@@ -81,7 +81,7 @@ def serve_file(request, blob_key_or_info, as_download=False, content_type=None, 
 
     if as_download:
         response['Content-Disposition'] = smart_str(
-            u'attachment; filename="%s"' % filename or info.filename
+            u'attachment; filename="%s"' % (filename or info.filename)
         )
     elif filename:
         raise ValueError("You can't specify a filename without also specifying as_download")
