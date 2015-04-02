@@ -22,7 +22,8 @@ APPENGINE_SDK_FILENAME = "google_appengine_%s.zip" % APPENGINE_SDK_VERSION
 FEATURED_SDK_REPO = "https://storage.googleapis.com/appengine-sdks/featured/"
 DEPRECATED_SDK_REPO = "https://storage.googleapis.com/appengine-sdks/deprecated/%s/" % APPENGINE_SDK_VERSION.replace('.', '')
 
-DJANGO_VERSION = "1.8"
+DJANGO_VERSION = os.environ.get("DJANGO_VERSION", "1.6")
+
 if __name__ == '__main__':
 
     if os.path.exists(TARGET_DIR):
