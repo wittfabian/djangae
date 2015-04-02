@@ -706,10 +706,16 @@ class SelectCommand(object):
             tables = tables - select_related_tables
 
         if len(tables) > 1:
+            if hasattr(query, "join_map"):
+                join_map = query.join_map
+            else:
+                from django.db.models.sql.datastructures import Join
+                join_map = { x: y for x, y in query.alias_map.iteritems() if isinstance(y, Join) }
+
             raise NotSupportedError("""
                 The appengine database connector does not support JOINs. The requested join map follows\n
                 %s
-            """ % query.join_map)
+            """ % join_map)
 
         if query.aggregates:
             if query.aggregates.keys() == [ None ]:

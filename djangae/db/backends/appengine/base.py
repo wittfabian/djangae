@@ -186,6 +186,9 @@ class DatabaseOperations(BaseDatabaseOperations):
     def quote_name(self, name):
         return name
 
+    def date_trunc_sql(self, lookup_type, field_name):
+        return None
+
     def get_db_converters(self, internal_type):
         converters = super(DatabaseOperations, self).get_db_converters(internal_type)
 
@@ -525,6 +528,9 @@ class DatabaseSchemaEditor(BaseDatabaseSchemaEditor):
     def alter_field(self, from_model, from_field, to_field):
         pass
 
+    def remove_field(self, from_model, field):
+        pass
+
 
 class DatabaseFeatures(BaseDatabaseFeatures):
     empty_fetchmany_value = []
@@ -537,6 +543,9 @@ class DatabaseFeatures(BaseDatabaseFeatures):
 
 
 class DatabaseWrapper(BaseDatabaseWrapper):
+
+    data_types = DatabaseCreation.data_types # These moved in 1.8
+
     operators = {
         'exact': '= %s',
         'gt': '> %s',
