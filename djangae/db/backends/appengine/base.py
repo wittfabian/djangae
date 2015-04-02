@@ -5,6 +5,7 @@ import warnings
 import logging
 
 #LIBRARIES
+import django
 from django.conf import settings
 
 try:
@@ -143,7 +144,11 @@ class Cursor(object):
                 result.append(key.id_or_name())
             else:
                 field = get_field_from_column(self.last_select_command.model, col)
-                value = self.connection.ops.convert_values(entity.get(col), field)
+                if django.VERSION[1] < 8:
+                    value = self.connection.ops.convert_values(entity.get(col), field)
+                else:
+                    # On Django 1.8, convert_values is gone, and the db_converters stuff kicks in (we don't need to do it)
+                    value = entity.get(col)
                 result.append(value)
 
         return result
@@ -181,14 +186,69 @@ class DatabaseOperations(BaseDatabaseOperations):
     def quote_name(self, name):
         return name
 
+    def get_db_converters(self, internal_type):
+        converters = super(DatabaseOperations, self).get_db_converters(internal_type)
+
+        if internal_type == 'TextField':
+            converters.append(self.convert_textfield_value)
+        elif internal_type == 'DateTimeField':
+            converters.append(self.convert_datetime_value)
+        elif internal_type == 'DateField':
+            converters.append(self.convert_date_value)
+        elif internal_type == 'TimeField':
+            converters.append(self.convert_time_value)
+        elif internal_type == 'DecimalField':
+            converters.append(self.convert_time_value)
+
+        converters.append(self.convert_list_value)
+        converters.append(self.convert_set_value)
+
+        return converters
+
+    def convert_textfield_value(self, value, expression, connection, context):
+        if isinstance(value, str):
+            value = value.decode("utf-8")
+        return value
+
+    def convert_datetime_value(self, value, expression, connection, context):
+        return self.connection.ops.value_from_db_datetime(value)
+
+    def convert_date_value(self, value, expression, connection, context):
+        return self.connection.ops.value_from_db_date(value)
+
+    def convert_time_value(self, value, expression, connection, context):
+        return self.connection.ops.value_from_db_time(value)
+
+    def convert_decimal_value(self, value, expression, connection, context):
+        return self.connection.ops.value_from_db_decimal(value)
+
+    def convert_list_value(self, value, expression, connection, context):
+        if expression.output_field.db_type(connection) != "list":
+            return value
+
+        if not value:
+            value = []
+        return value
+
+    def convert_set_value(self, value, expression, connection, context):
+        if expression.output_field.db_type(connection) != "set":
+            return value
+
+        if not value:
+            value = set()
+        else:
+            value = set(value)
+        return value
+
+
     def convert_values(self, value, field):
-        """ Called when returning values from the datastore"""
+        """ Called when returning values from the datastore ONLY USED ON DJANGO <= 1.7"""
 
         value = super(DatabaseOperations, self).convert_values(value, field)
 
         db_type = field.db_type(self.connection)
         if db_type == 'string' and isinstance(value, str):
-            value = value.decode("utf-8")
+            value = self.convert_textfield_value(value, field)
         elif db_type == "datetime":
             value = self.connection.ops.value_from_db_datetime(value)
         elif db_type == "date":

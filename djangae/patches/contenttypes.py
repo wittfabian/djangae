@@ -277,6 +277,8 @@ If you're unsure, answer 'no'.
 def patch():
     from django.contrib.contenttypes.management import update_contenttypes as original
 
+    if original == update_contenttypes:
+        return
 
     if hasattr(signals, "post_migrate"):
         signals.post_migrate.disconnect(original)

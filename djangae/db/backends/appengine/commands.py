@@ -7,6 +7,7 @@ from functools import partial
 from itertools import chain, groupby
 
 #LIBRARIES
+import django
 from django.db import DatabaseError
 from django.core.exceptions import FieldError
 from django.db.models.fields import FieldDoesNotExist
@@ -90,7 +91,10 @@ def _cols_from_where_node(where_node):
 
 def _get_tables_from_where(where_node):
     cols = _cols_from_where_node(where_node)
-    return list(set([x[0] for x in cols if x[0] ]))
+    if django.VERSION[1] < 8:
+        return list(set([x[0] for x in cols if x[0] ]))
+    else:
+        return list(set([x.alias for x in cols]))
 
 @memoized
 def get_field_from_column(model, column):
@@ -696,8 +700,10 @@ class SelectCommand(object):
         # related as unsupported in its features)
         tables = [ k for k, v in query.alias_refcount.items() if v ]
         inherited_tables = set([x._meta.db_table for x in query.model._meta.parents ])
-        select_related_tables = set([y[0][0] for y in query.related_select_cols ])
-        tables = set(tables) - inherited_tables - select_related_tables
+        tables = set(tables) - inherited_tables
+        if query.select_related:
+            select_related_tables = set([y[0][0] for y in query.related_select_cols ])
+            tables = tables - select_related_tables
 
         if len(tables) > 1:
             raise NotSupportedError("""
