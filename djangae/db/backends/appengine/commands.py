@@ -172,7 +172,10 @@ def parse_constraint(child, connection, negated=False):
         # First, unpack the constraint
         constraint, op, annotation, value = child
         was_list = isinstance(value, (list, tuple))
-        packed, value = constraint.process(op, value, connection)
+        if isinstance(value, query.Query):
+            value = value.get_compiler(connection.alias).as_sql()[0].execute()
+        else:
+            packed, value = constraint.process(op, value, connection)
         alias, column, db_type = packed
         field = constraint.field
     else:
