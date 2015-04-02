@@ -41,7 +41,6 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'django.contrib.humanize',
-    'django.contrib.formtools',
     'djangae.contrib.mappers',
     'djangae.contrib.pagination',
     'djangae.contrib.uniquetool',
