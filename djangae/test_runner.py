@@ -2,7 +2,8 @@ import unittest
 import os
 from unittest import TextTestResult
 
-from django.test.simple import DjangoTestSuiteRunner
+
+from django.test.runner import DiscoverRunner as DjangoTestSuiteRunner
 
 from django.db import NotSupportedError
 from djangae.utils import find_project_root

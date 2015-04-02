@@ -2,26 +2,40 @@
 import datetime
 import decimal
 import warnings
+import logging
 
 #LIBRARIES
 from django.conf import settings
-from django.db.backends import (
-    BaseDatabaseOperations,
-    BaseDatabaseClient,
-    BaseDatabaseIntrospection,
-    BaseDatabaseWrapper,
-    BaseDatabaseFeatures,
-    BaseDatabaseValidation
-)
 
 try:
-    from django.db.backends.schema import BaseDatabaseSchemaEditor
+    from django.db.backends.base.operations import BaseDatabaseOperations
+    from django.db.backends.base.client import BaseDatabaseClient
+    from django.db.backends.base.introspection import BaseDatabaseIntrospection
+    from django.db.backends.base.base import BaseDatabaseWrapper
+    from django.db.backends.base.features import BaseDatabaseFeatures
+    from django.db.backends.base.validation import BaseDatabaseValidation
+    from django.db.backends.base.creation import BaseDatabaseCreation
+    from django.db.backends.base.schema import BaseDatabaseSchemaEditor
 except ImportError:
-    #Django < 1.7 doesn't have BaseDatabaseSchemaEditor
-    class BaseDatabaseSchemaEditor(object):
-        pass
+    # Django <= 1.7 (I think, at least 1.6)
+    from django.db.backends import (
+        BaseDatabaseOperations,
+        BaseDatabaseClient,
+        BaseDatabaseIntrospection,
+        BaseDatabaseWrapper,
+        BaseDatabaseFeatures,
+        BaseDatabaseValidation
+    )
+    from django.db.backends.creation import BaseDatabaseCreation
 
-from django.db.backends.creation import BaseDatabaseCreation
+    try:
+        from django.db.backends.schema import BaseDatabaseSchemaEditor
+    except ImportError:
+        #Django < 1.7 doesn't have BaseDatabaseSchemaEditor
+        class BaseDatabaseSchemaEditor(object):
+            pass
+
+
 from django.utils import timezone
 from google.appengine.api.datastore_types import Blob, Text
 from google.appengine.ext.db import metadata
@@ -397,8 +411,11 @@ class DatabaseCreation(BaseDatabaseCreation):
     def sql_indexes_for_model(self, model, *args, **kwargs):
         return []
 
-    def _create_test_db(self, verbosity, autoclobber):
+    def _create_test_db(self, verbosity, autoclobber, *args):
         assert not self.testbed
+
+        if args:
+            logging.warning("'keepdb' argument is not currently supported on the AppEngine backend")
 
         # We allow users to disable scattered IDs in tests. This primarily for running Django tests that
         # assume implicit ordering (yeah, annoying)
@@ -426,7 +443,12 @@ class DatabaseCreation(BaseDatabaseCreation):
 class DatabaseIntrospection(BaseDatabaseIntrospection):
     @datastore.NonTransactional
     def get_table_list(self, cursor):
-        return metadata.get_kinds()
+        kinds = metadata.get_kinds()
+        try:
+            from django.db.backends.base.introspection import TableInfo
+            return [ TableInfo(x, "t") for x in kinds ]
+        except ImportError:
+            return kinds # Django <= 1.7
 
 
 class DatabaseSchemaEditor(BaseDatabaseSchemaEditor):
@@ -438,6 +460,9 @@ class DatabaseSchemaEditor(BaseDatabaseSchemaEditor):
         pass
 
     def alter_unique_together(self, *args, **kwargs):
+        pass
+
+    def alter_field(self, from_model, from_field, to_field):
         pass
 
 

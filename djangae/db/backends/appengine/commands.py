@@ -518,7 +518,12 @@ class SelectCommand(object):
         # If the query uses defer()/only() then we need to process deferred. We have to get all deferred columns
         # for all (concrete) inherited models and then only include columns if they appear in that list
         deferred_columns = {}
-        query.deferred_to_data(deferred_columns, query.deferred_to_columns_cb)
+
+        cb = getattr(query, "get_loaded_field_names_cb", None) # Django 1.8
+        if not cb:
+            cb = getattr(query, "deferred_to_columns_cb") # <= 1.7
+
+        query.deferred_to_data(deferred_columns, cb)
         inherited_db_tables = [x._meta.db_table for x in get_concrete_parents(self.model)]
         only_load = list(chain(*[list(deferred_columns.get(x, [])) for x in inherited_db_tables]))
 

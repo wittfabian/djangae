@@ -1,3 +1,4 @@
+import django
 from django import forms
 from django.db import router, models
 from django.db.models.fields.related import RelatedField, ForeignObjectRel
@@ -9,18 +10,14 @@ from djangae.forms.fields import (
 )
 
 class RelatedSetRel(ForeignObjectRel):
-    def __init__(self, to, related_name=None, limit_choices_to=None):
-        self.to = to
-        self.related_name = related_name
-        self.related_query_name = None
-        self.field_name = None
-        self.parent_link = None
-        self.on_delete = models.DO_NOTHING
+    def __init__(self, *args, **kwargs):
+        for kwarg in ("parent_link", "on_delete", "related_query_name"):
+            if kwargs.get(kwarg):
+                raise ValueError("{} is not a supported argument for RelatedSetRel".format(kwarg))
 
-        if limit_choices_to is None:
-            limit_choices_to = {}
-        self.limit_choices_to = limit_choices_to
-        self.multiple = True
+        kwargs["on_delete"] = models.DO_NOTHING
+        super(RelatedSetRel, self).__init__(*args, **kwargs)
+        self.field_name = None
 
     def is_hidden(self):
         "Should the related object be hidden?"
@@ -159,11 +156,19 @@ class RelatedSetField(RelatedField):
         return 'set'
 
     def __init__(self, model, limit_choices_to=None, related_name=None, **kwargs):
-        kwargs["rel"] = RelatedSetRel(
-            model,
-            related_name=related_name,
-            limit_choices_to=limit_choices_to
-        )
+        if django.VERSION[1] >= 8:
+            kwargs["rel"] = RelatedSetRel(
+                self,
+                model,
+                related_name=related_name,
+                limit_choices_to=limit_choices_to
+            )
+        else:
+            kwargs["rel"] = RelatedSetRel(
+                model,
+                related_name=related_name,
+                limit_choices_to=limit_choices_to
+            )
 
         kwargs["default"] = set
         kwargs["null"] = True
