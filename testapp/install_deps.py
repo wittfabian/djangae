@@ -1,6 +1,7 @@
 import os
 import stat
 import subprocess
+import shutil
 
 from StringIO import StringIO
 from zipfile import ZipFile
@@ -21,8 +22,13 @@ APPENGINE_SDK_FILENAME = "google_appengine_%s.zip" % APPENGINE_SDK_VERSION
 FEATURED_SDK_REPO = "https://storage.googleapis.com/appengine-sdks/featured/"
 DEPRECATED_SDK_REPO = "https://storage.googleapis.com/appengine-sdks/deprecated/%s/" % APPENGINE_SDK_VERSION.replace('.', '')
 
-DJANGO_VERSION = "1.6.11"
+DJANGO_VERSION = os.environ.get("DJANGO_VERSION", "1.6")
+
 if __name__ == '__main__':
+
+    if os.path.exists(TARGET_DIR):
+        shutil.rmtree(TARGET_DIR)
+
     if not os.path.exists(APPENGINE_TARGET_DIR):
         print('Downloading the AppEngine SDK...')
 
@@ -52,8 +58,13 @@ if __name__ == '__main__':
     p = subprocess.Popen(args)
     p.wait()
 
-    print("Installing Django 1.7.7")
-    args = ["pip", "install", "--editable", "git+https://github.com/django/django@1.7.7#egg=django_tests"]
+    print("Installing Django {}".format(DJANGO_VERSION))
+    args = ["pip", "install", "--no-deps", "django=={}".format(DJANGO_VERSION), "-t", TARGET_DIR, "-I", "--no-use-wheel"]
+    p = subprocess.Popen(args)
+    p.wait()
+
+    print("Installing Django tests from {}".format(DJANGO_VERSION))
+    args = ["pip", "install", "--editable", "git+https://github.com/django/django@stable/{}.x#egg=django_tests".format(DJANGO_VERSION)]
     p = subprocess.Popen(args)
     p.wait()
 
