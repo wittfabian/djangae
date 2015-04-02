@@ -40,7 +40,7 @@ class SimulatedContentTypeManager(Manager):
         """
         conn = connections[router.db_for_write(ContentType)]
 
-        if conn.use_debug_cursor:
+        if getattr(conn, "use_debug_cursor", getattr(conn, "force_debug_cursor", False)):
             for model in models or []:
                 if model not in self._store.queried_models:
                     conn.queries.append("select * from {}".format(ContentType._meta.db_table))
