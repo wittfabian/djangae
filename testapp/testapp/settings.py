@@ -52,7 +52,11 @@ INSTALLED_APPS = [
 if "test" in sys.argv:
     import sys
     import tempfile
-    sys.path.insert(0, "django_tests")
+    import django
+
+    tests_dir = os.path.join(BASE_DIR, "libs", "django-stable-{}.{}.x/tests".format(*django.VERSION[:2]))
+
+    sys.path.insert(0, tests_dir)
 
     TEMP_DIR = tempfile.mkdtemp(prefix='django_')
     os.environ['DJANGO_TEST_TEMP_DIR'] = TEMP_DIR
@@ -84,7 +88,7 @@ if "test" in sys.argv:
     ]
 
     for folder in TO_TEST:
-        if os.path.exists(os.path.join("django_tests", folder, "tests.py")):
+        if os.path.exists(os.path.join(tests_dir, folder, "tests.py")):
             INSTALLED_APPS.append(folder)
 
 INSTALLED_APPS = tuple(INSTALLED_APPS)

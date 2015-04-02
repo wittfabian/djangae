@@ -64,13 +64,10 @@ if __name__ == '__main__':
     p.wait()
 
     print("Installing Django tests from {}".format(DJANGO_VERSION))
-    args = ["pip", "install", "--editable", "git+https://github.com/django/django@stable/{}.x#egg=django_tests".format(DJANGO_VERSION)]
-    p = subprocess.Popen(args)
-    p.wait()
 
-    # now, using virtualenv's path we can infer where the tests are, and then
-    # we can symlink those in
-    tests_path = os.path.join(os.environ['VIRTUAL_ENV'], 'src', 'django-tests', 'tests')
-    args = ["ln", "-s", tests_path, "django_tests"]
-    p = subprocess.Popen(args)
-    p.wait()
+    url = "https://github.com/django/django/archive/stable/{}.x.zip".format(DJANGO_VERSION)
+    django_zip = urlopen(url)
+    zipfile = ZipFile(StringIO(django_zip.read()))
+    for filename in zipfile.namelist():
+        if filename.startswith("django-stable-{}.x/tests/".format(DJANGO_VERSION)):
+            zipfile.extract(filename, os.path.join(TARGET_DIR))
