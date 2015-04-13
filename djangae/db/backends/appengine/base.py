@@ -314,7 +314,7 @@ class DatabaseOperations(BaseDatabaseOperations):
     # Unlike value_to_db, these are not overridden or standard Django, it's just nice to have symmetry
     def value_from_db_datetime(self, value):
         if isinstance(value, (int, long)):
-            # App Engine Query's don't return datetime fields (unlike Get) I HAVE NO IDEA WHY, APP ENGINE SUCKS MONKEY BALLS
+            # App Engine Query's don't return datetime fields (unlike Get) I HAVE NO IDEA WHY
             value = datetime.datetime.fromtimestamp(float(value) / 1000000.0)
 
         if value is not None and settings.USE_TZ and timezone.is_naive(value):
@@ -323,7 +323,7 @@ class DatabaseOperations(BaseDatabaseOperations):
 
     def value_from_db_date(self, value):
         if isinstance(value, (int, long)):
-            # App Engine Query's don't return datetime fields (unlike Get) I HAVE NO IDEA WHY, APP ENGINE SUCKS MONKEY BALLS
+            # App Engine Query's don't return datetime fields (unlike Get) I HAVE NO IDEA WHY
             value = datetime.datetime.fromtimestamp(float(value) / 1000000.0)
 
         if value:
@@ -332,7 +332,7 @@ class DatabaseOperations(BaseDatabaseOperations):
 
     def value_from_db_time(self, value):
         if isinstance(value, (int, long)):
-            # App Engine Query's don't return datetime fields (unlike Get) I HAVE NO IDEA WHY, APP ENGINE SUCKS MONKEY BALLS
+            # App Engine Query's don't return datetime fields (unlike Get) I HAVE NO IDEA WHY
             value = datetime.datetime.fromtimestamp(float(value) / 1000000.0).time()
 
         if value is not None and settings.USE_TZ and timezone.is_naive(value):
