@@ -663,6 +663,15 @@ class SelectCommand(object):
         self.aggregate_type = "count" if self.is_count else None
         self._do_fetch()
 
+    def lower(self):
+        """
+            This exists solely for django-debug-toolbar compatibility.
+            At some point I hope to investigate making SelectCommand a GQL string
+            so that we don't need to do this hackery
+        """
+
+        return str(self).lower()
+
     def __eq__(self, other):
         if not isinstance(other, self.__class__):
             return False
@@ -670,8 +679,8 @@ class SelectCommand(object):
         return self.__repr__() == other.__repr__()
 
     def __repr__(self):
-        return "<SelectCommand - SELECT {} FROM {} WHERE {}>".format(
-            ", ".join(self.queried_fields or []),
+        return "SELECT {} FROM {} WHERE {}".format(
+            ", ".join(self.queried_fields or [] if not self.is_count else ["COUNT"]),
             self.db_table,
             self.where
         )
