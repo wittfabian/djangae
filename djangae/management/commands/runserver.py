@@ -5,6 +5,11 @@ from django.core.management.commands.runserver import BaseRunserverCommand
 from datetime import datetime
 
 from google.appengine.tools.devappserver2 import shutdown
+from google.appengine.tools.sdk_update_checker import (
+    GetVersionObject,
+    _VersionList
+)
+
 
 class Command(BaseRunserverCommand):
     """
@@ -78,6 +83,11 @@ class Command(BaseRunserverCommand):
 
         if self.addr != sandbox._OPTIONS.host:
             sandbox._OPTIONS.host = sandbox._OPTIONS.admin_host = sandbox._OPTIONS.api_host = self.addr
+
+        # External port is a new flag introduced in 1.9.19
+        current_version = _VersionList(GetVersionObject()['release'])
+        if current_version >= _VersionList('1.9.19'):
+            sandbox._OPTIONS.external_port = None
 
         sandbox._OPTIONS.automatic_restart = self.use_reloader
 
