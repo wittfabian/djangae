@@ -64,11 +64,13 @@ def _create_dispatcher(configuration, options):
     from google.appengine.tools.devappserver2.devappserver2 import (
         DevelopmentServer, _LOG_LEVEL_TO_RUNTIME_CONSTANT
     )
+    from google.appengine.tools.sdk_update_checker import GetVersionObject, \
+                                                          _VersionList
 
     if hasattr(_create_dispatcher, "singleton"):
         return _create_dispatcher.singleton
 
-    _create_dispatcher.singleton = dispatcher.Dispatcher(
+    dispatcher_args = [
         configuration,
         options.host,
         options.port,
@@ -86,7 +88,14 @@ def _create_dispatcher(configuration, options):
         options.allow_skipped_files,
         DevelopmentServer._create_module_to_setting(options.threadsafe_override,
                                        configuration, '--threadsafe_override')
-    )
+    ]
+
+    # External port is a new flag introduced in 1.9.19
+    current_version = _VersionList(GetVersionObject()['release'])
+    if current_version >= _VersionList('1.9.19'):
+        dispatcher_args.append(options.external_port)
+
+    _create_dispatcher.singleton = dispatcher.Dispatcher(*dispatcher_args)
 
     return _create_dispatcher.singleton
 
