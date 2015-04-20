@@ -215,12 +215,8 @@ class CleanMapper(RawMapperMixin, MapReduceTask):
 
         model = decode_model(model)
 
-        if entity.key() < datastore.Key.from_path(UniqueMarker.kind(), model._meta.db_table):
-            # If the entity key is less than the first possible unique marker key for this table, bail
-            return
-
-        if entity.key() > datastore.Key.from_path(UniqueMarker.kind(), u"{}{}".format(model._meta.db_table, u'\ufffd')):
-            # Likewise if the entity key is greater than the last possible unique marker key for this table, then bail
+        if not entity.key().id_or_name().startswith(model._meta.db_table + "|"):
+            # Only include markers which are for this model
             return
 
         with disable_cache():
