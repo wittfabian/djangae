@@ -1,6 +1,9 @@
 from hashlib import md5
 from django.db import models
-from google.appengine.api import datastore
+from django.core.cache import cache
+from google.appengine.api import datastore, datastore_errors
+
+from djangae.db.caching import disable_cache
 
 from .models import UniqueAction, encode_model
 from djangae.test import TestCase, process_task_queues
@@ -142,3 +145,19 @@ class MapperTests(TestCase):
         marker = datastore.Get(marker_key)
         self.assertTrue(marker)
         self.assertEqual(marker['instance'], instance_key)
+
+    def test_clean_after_instance_deleted(self):
+        marker1 = "{}|name:{}".format(TestModel._meta.db_table, md5(self.i1.name).hexdigest())
+        marker_key = datastore.Key.from_path(UniqueMarker.kind(), marker1)
+
+        self.assertTrue(datastore.Get(marker_key))
+
+        datastore.Delete(datastore.Key.from_path(TestModel._meta.db_table, self.i1.pk)) # Delete the first instance
+
+        self.assertTrue(datastore.Get(marker_key))
+
+        cache.clear()
+        UniqueAction.objects.create(action_type="clean", model=encode_model(TestModel))
+        process_task_queues()
+
+        self.assertRaises(datastore_errors.EntityNotFoundError, datastore.Get, marker_key)
