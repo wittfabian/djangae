@@ -15,7 +15,7 @@ from djangae.contrib.mappers.pipes import MapReduceTask, DjangaeMapperPipeline, 
 from djangae.db.utils import django_instance_to_entity
 from djangae.db.unique_utils import unique_identifiers_from_entity
 from djangae.db.constraints import UniqueMarker
-
+from djangae.db.caching import disable_cache
 
 ACTION_TYPES = [
     ('check', 'Check'),  # Verify all models unique contraint markers exist and are assigned to it.
@@ -223,19 +223,20 @@ class CleanMapper(RawMapperMixin, MapReduceTask):
             # Likewise if the entity key is greater than the last possible unique marker key for this table, then bail
             return
 
-        # At this point, the entity is a unique marker that is linked to an instance of 'model', now we should see if that instance exists!
-        instance_id = entity["instance"].id_or_name()
-        try:
-            instance = model.objects.get(pk=instance_id)
-        except model.DoesNotExist:
-            logging.info("Deleting unique marker {} because the associated instance no longer exists".format(entity.key().id_or_name()))
-            datastore.Delete(entity)
-            return
+        with disable_cache():
+            # At this point, the entity is a unique marker that is linked to an instance of 'model', now we should see if that instance exists!
+            instance_id = entity["instance"].id_or_name()
+            try:
+                instance = model.objects.get(pk=instance_id)
+            except model.DoesNotExist:
+                logging.info("Deleting unique marker {} because the associated instance no longer exists".format(entity.key().id_or_name()))
+                datastore.Delete(entity)
+                return
 
-        # Get the possible unique markers for the entity, if this one doesn't exist in that list then delete it
-        instance = django_instance_to_entity(connection, model, instance._meta.fields, raw=True, instance=instance, check_null=False)
-        identifiers = unique_identifiers_from_entity(model, instance, ignore_pk=True)
-        identifier_keys = [datastore.Key.from_path(UniqueMarker.kind(), i) for i in identifiers]
-        if entity.key() not in identifier_keys:
-            logging.info("Deleting unique marker {} because the it no longer represents the associated instance state".format(entity.key().id_or_name()))
-            datastore.Delete(entity)
+            # Get the possible unique markers for the entity, if this one doesn't exist in that list then delete it
+            instance = django_instance_to_entity(connection, model, instance._meta.fields, raw=True, instance=instance, check_null=False)
+            identifiers = unique_identifiers_from_entity(model, instance, ignore_pk=True)
+            identifier_keys = [datastore.Key.from_path(UniqueMarker.kind(), i) for i in identifiers]
+            if entity.key() not in identifier_keys:
+                logging.info("Deleting unique marker {} because the it no longer represents the associated instance state".format(entity.key().id_or_name()))
+                datastore.Delete(entity)

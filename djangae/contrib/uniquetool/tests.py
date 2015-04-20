@@ -156,8 +156,25 @@ class MapperTests(TestCase):
 
         self.assertTrue(datastore.Get(marker_key))
 
-        cache.clear()
         UniqueAction.objects.create(action_type="clean", model=encode_model(TestModel))
         process_task_queues()
 
         self.assertRaises(datastore_errors.EntityNotFoundError, datastore.Get, marker_key)
+
+    def test_clean_removes_markers_with_different_values(self):
+        marker1 = "{}|name:{}".format(TestModel._meta.db_table, md5(self.i1.name).hexdigest())
+        marker_key = datastore.Key.from_path(UniqueMarker.kind(), marker1)
+
+        original_marker = datastore.Get(marker_key)
+
+        marker2 = "{}|name:{}".format(TestModel._meta.db_table, md5("bananas").hexdigest())
+
+        new_marker = datastore.Entity(UniqueMarker.kind(), name=marker2)
+        new_marker.update(original_marker)
+        datastore.Put(new_marker)
+
+        UniqueAction.objects.create(action_type="clean", model=encode_model(TestModel))
+        process_task_queues()
+
+        self.assertRaises(datastore_errors.EntityNotFoundError, datastore.Get, new_marker.key())
+        self.assertTrue(datastore.Get(marker_key))
