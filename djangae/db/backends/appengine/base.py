@@ -25,7 +25,6 @@ from django.db.backends.creation import BaseDatabaseCreation
 from django.utils import timezone
 from google.appengine.api.datastore_types import Blob, Text
 from google.appengine.ext.db import metadata
-from google.appengine.ext import testbed
 from google.appengine.datastore import datastore_stub_util
 from google.appengine.api.datastore import Key
 from google.appengine.api import datastore
@@ -398,6 +397,8 @@ class DatabaseCreation(BaseDatabaseCreation):
         return []
 
     def _create_test_db(self, verbosity, autoclobber):
+        from google.appengine.ext import testbed # Imported lazily to prevent warnings on GAE
+
         assert not self.testbed
 
         # We allow users to disable scattered IDs in tests. This primarily for running Django tests that
