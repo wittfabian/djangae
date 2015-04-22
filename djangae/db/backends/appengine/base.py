@@ -159,9 +159,19 @@ class Cursor(object):
     def close(self):
         pass
 
+MAXINT = 9223372036854775808
 
 class DatabaseOperations(BaseDatabaseOperations):
     compiler_module = "djangae.db.backends.appengine.compiler"
+
+    # Datastore will store all integers as 64bit long values
+    integer_field_ranges = {
+        'SmallIntegerField': (-MAXINT, MAXINT-1),
+        'IntegerField': (-MAXINT, MAXINT-1),
+        'BigIntegerField': (-MAXINT, MAXINT-1),
+        'PositiveSmallIntegerField': (0, MAXINT-1),
+        'PositiveIntegerField': (0, MAXINT-1),
+    }
 
     def quote_name(self, name):
         return name
