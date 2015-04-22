@@ -2,7 +2,7 @@ from django.contrib.auth import authenticate, login, logout, get_user, BACKEND_S
 from django.contrib.auth.middleware import AuthenticationMiddleware as DjangoMiddleware
 from django.contrib.auth.models import BaseUserManager, AnonymousUser
 
-from djangae.contrib.gauth.backends import AppEngineUserAPI
+from djangae.contrib.gauth.common.backends import BaseAppEngineUserAPIBackend
 
 from google.appengine.api import users
 
@@ -39,7 +39,7 @@ class AuthenticationMiddleware(DjangoMiddleware):
 
             # We only do this next bit if the user was authenticated with the AppEngineUserAPI
             # backend, or one of its subclasses
-            if isinstance(backend, AppEngineUserAPI):
+            if isinstance(backend, BaseAppEngineUserAPIBackend):
                 # Now make sure we update is_superuser and is_staff appropriately
                 is_superuser = users.is_current_user_admin()
                 google_email = BaseUserManager.normalize_email(google_user.email())
