@@ -353,7 +353,7 @@ class UniqueQuery(object):
             return self._gae_query.Run(limit=limit, offset=offset)
 
         ret = caching.get_from_cache(self._identifier)
-        if not utils.entity_matches_query(ret, self._gae_query):
+        if ret is not None and not utils.entity_matches_query(ret, self._gae_query):
             ret = None
 
         if ret is None:
@@ -366,7 +366,7 @@ class UniqueQuery(object):
 
     def Count(self, limit, offset):
         ret = caching.get_from_cache(self._identifier)
-        if not utils.entity_matches_query(ret, self._gae_query):
+        if ret is not None and not utils.entity_matches_query(ret, self._gae_query):
             ret = None
 
         if ret is None:
