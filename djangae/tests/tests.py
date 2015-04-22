@@ -99,7 +99,7 @@ class UniqueModelWithLongPK(models.Model):
 
 
 class IntegerModel(models.Model):
-    integer_field = models.IntegerField(default=0)
+    integer_field = models.IntegerField()
 
     class Meta:
         app_label = "djangae"
@@ -315,6 +315,22 @@ class BackendTests(TestCase):
         # query then it's a match
         entity["name"] = [ "Bob", "Fred", "Dave" ]
         self.assertTrue(entity_matches_query(entity, query))  # ListField test
+
+    def test_defaults(self):
+        fruit = TestFruit.objects.create(name="Apple", color="Red")
+        self.assertEqual("Unknown", fruit.origin)
+
+        instance = datastore.Get(datastore.Key.from_path(TestFruit._meta.db_table, fruit.pk))
+        del instance["origin"]
+        datastore.Put(instance)
+
+        fruit = TestFruit.objects.get()
+        self.assertIsNone(fruit.origin)
+        fruit.save()
+
+        fruit = TestFruit.objects.get()
+        self.assertEqual("Unknown", fruit.origin)
+
 
     def test_get_or_create(self):
         """
