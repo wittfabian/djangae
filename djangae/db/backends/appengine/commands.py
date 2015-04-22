@@ -357,7 +357,13 @@ class UniqueQuery(object):
             ret = None
 
         if ret is None:
-            ret = [ x for x in self._gae_query.Run(limit=limit, offset=offset) ]
+            # We do a fast keys_only query to get the result
+            keys_query = Query(self._gae_query._Query__kind, keys_only=True)
+            keys_query.update(self._gae_query)
+            keys = keys_query.Run(limit=limit, offset=offset)
+
+            # Do a consistent get so we don't cache stale data, and recheck the result matches the query
+            ret = [ x for x in datastore.Get(keys) if utils.entity_matches_query(x, self._gae_query) ]
             if len(ret) == 1:
                 caching.add_entity_to_cache(self._model, ret[0], caching.CachingSituation.DATASTORE_GET)
             return iter(ret)
