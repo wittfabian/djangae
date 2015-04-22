@@ -9,8 +9,7 @@ from google.appengine.datastore.datastore_rpc import TransactionOptions
 
 from .unique_utils import unique_identifiers_from_entity
 from .utils import key_exists
-from djangae.db.backends.appengine.dbapi import IntegrityError
-
+from djangae.db.backends.appengine.dbapi import IntegrityError, NotSupportedError
 from django.conf import settings
 
 DJANGAE_LOG = logging.getLogger("djangae")
@@ -188,7 +187,7 @@ class UniquenessMixin(object):
                     continue
 
                 ##########################################################################
-                # This is the only modification to Django's native implementation of this method;
+                # This is a modification to Django's native implementation of this method;
                 # we conditionally build a __in lookup if the value is an iterable.
                 lookup = str(field_name)
                 if isinstance(lookup_value, (list, set, tuple)):
@@ -200,14 +199,48 @@ class UniquenessMixin(object):
 
             if len(unique_check) != len(lookup_kwargs):
                 continue
-            qs = model_class._default_manager.filter(**lookup_kwargs)
-            model_class_pk = self._get_pk_val(model_class._meta)
-            if not self._state.adding and model_class_pk is not None:
-                qs = qs.exclude(pk=model_class_pk)
-            if qs.exists():
-                if len(unique_check) == 1:
-                    key = unique_check[0]
-                else:
-                    key = NON_FIELD_ERRORS
-                errors.setdefault(key, []).append(self.unique_error_message(model_class, unique_check))
+
+            #######################################################
+            # Deal with long __in lookups by doing multiple queries in that case
+            # This is a bit hacky, but we really have no choice due to App Engine's
+            # 30 multi-query limit. This also means we can't support multiple list fields in
+            # a unique combination
+            #######################################################
+
+            if len([x for x in lookup_kwargs if x.endswith("__in") ]) > 1:
+                raise NotSupportedError("You cannot currently have two list fields in a unique combination")
+
+            # Split IN queries into multiple lookups if they are too long
+            lookups = []
+            for k, v in lookup_kwargs.iteritems():
+                if k.endswith("__in") and len(v) > 30:
+                    while v:
+                        new_lookup = lookup_kwargs.copy()
+                        new_lookup[k] = v[:30]
+                        v = v[30:]
+                        lookups.append(new_lookup)
+                    break
+            else:
+                # Otherwise just use the one lookup
+                lookups = [ lookup_kwargs ]
+
+            for lookup_kwargs in lookups:
+                qs = model_class._default_manager.filter(**lookup_kwargs).values_list("pk", flat=True)
+                model_class_pk = self._get_pk_val(model_class._meta)
+                result = list(qs)
+
+                if not self._state.adding and model_class_pk is not None:
+                    # If we are saving an instance, we ignore it's PK in the result
+                    try:
+                        result.remove(model_class_pk)
+                    except ValueError:
+                        pass
+
+                if result:
+                    if len(unique_check) == 1:
+                        key = unique_check[0]
+                    else:
+                        key = NON_FIELD_ERRORS
+                    errors.setdefault(key, []).append(self.unique_error_message(model_class, unique_check))
+                    break
         return errors

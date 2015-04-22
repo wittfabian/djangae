@@ -1005,6 +1005,14 @@ class ConstraintTests(TestCase):
         instance1.full_clean()
         instance1.save()
 
+        # Check the uniqueness mixing works with long lists
+        instance1.unique_list_field = [ x for x in range(31) ]
+        try:
+            instance1.full_clean()
+        except NotSupportedError:
+            self.fail("Couldn't run unique check on long list field")
+            return
+
         instance2 = UniqueModel(
             unique_set_field={"B"},
             unique_together_list_field=[2],
@@ -1012,6 +1020,7 @@ class ConstraintTests(TestCase):
             unique_combo_one=2,
             unique_list_field=["B", "C"]  # duplicate value C!
         )
+
         self.assertRaises(ValidationError, instance2.full_clean)
         UniqueModel.__bases__ = (models.Model,)
 
