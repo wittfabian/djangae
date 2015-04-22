@@ -1,5 +1,4 @@
 import logging
-from itertools import chain
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import BaseUserManager
@@ -13,7 +12,10 @@ from djangae.contrib.gauth.common.models import GaeAbstractBaseUser
 
 # This is here so that we only log once on import, not on each authentication
 if hasattr(settings, "ALLOW_USER_PRE_CREATION"):
-    logging.warning("settings.ALLOW_USER_PRE_CREATION is deprecated, please use DJANGAE_ALLOW_USER_PRECREATION instead")
+    logging.warning(
+        "settings.ALLOW_USER_PRE_CREATION is deprecated, "
+        "please use DJANGAE_ALLOW_USER_PRECREATION instead"
+    )
 
 
 class BaseAppEngineUserAPIBackend(ModelBackend):
@@ -28,7 +30,8 @@ class BaseAppEngineUserAPIBackend(ModelBackend):
         """
         Handles authentication of a user from the given credentials.
         Credentials must be a combination of 'request' and 'google_user'.
-         If any other combination of credentials are given then we raise a TypeError, see authenticate() in django.contrib.auth.__init__.py.
+        If any other combination of credentials are given then we raise a TypeError, see
+        authenticate() in django.contrib.auth.__init__.py.
         """
 
         User = get_user_model()
@@ -73,5 +76,3 @@ class BaseAppEngineUserAPIBackend(ModelBackend):
             return user
         else:
             raise TypeError()  # Django expects to be able to pass in whatever credentials it has, and for you to raise a TypeError if they mean nothing to you
-
-

@@ -1,5 +1,4 @@
 from django.contrib import auth
-from django.contrib.auth.hashers import make_password
 from django.contrib.auth.management import create_permissions
 from django.contrib.auth.models import (
     python_2_unicode_compatible,
@@ -8,10 +7,8 @@ from django.contrib.auth.models import (
     _user_has_perm,
     _user_has_module_perms
 )
-from django.contrib.auth import get_permission_codename
 from django.db import models
 from django.db.models import signals
-from django.db.models.loading import get_apps, get_models
 from django.utils.translation import ugettext_lazy as _
 from django.utils.functional import lazy
 

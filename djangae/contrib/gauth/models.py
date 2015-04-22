@@ -6,10 +6,10 @@ database backend
 """
 
 import warnings
-from exceptions import DeprecationWarning
 
 from djangae.contrib.gauth.gauth_datastore.models import (
-    GaeAbstractDatastoreUser, GaeDatastoreUser)
+    GaeAbstractDatastoreUser, GaeDatastoreUser
+)
 
 
 warnings.warn(

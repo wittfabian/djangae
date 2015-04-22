@@ -1,15 +1,5 @@
-from django.contrib import auth
-from django.contrib.auth.models import (
-    _user_get_all_permissions,
-    _user_has_perm,
-    _user_has_module_perms
-)
-from django.db import models
-from django.utils.translation import ugettext_lazy as _
 from django.db.models.loading import get_apps, get_models
 from django.contrib.auth import get_permission_codename
-
-from djangae.fields import ListField, RelatedSetField
 
 
 PERMISSIONS_LIST = None

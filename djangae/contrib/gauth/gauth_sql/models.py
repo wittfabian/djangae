@@ -1,4 +1,4 @@
-from django.contrib.auth.models import PermissionsMixin 
+from django.contrib.auth.models import PermissionsMixin
 from django.utils.translation import ugettext_lazy as _
 
 from djangae.contrib.gauth.common.models import GaeAbstractBaseUser
@@ -24,4 +24,3 @@ class GaeUser(GaeAbstractBaseUser, PermissionsMixin):
         swappable = 'AUTH_USER_MODEL'
         verbose_name = _('user')
         verbose_name_plural = _('users')
-
