@@ -214,6 +214,7 @@ class UniquenessMixin(object):
             lookups = []
             for k, v in lookup_kwargs.iteritems():
                 if k.endswith("__in") and len(v) > 30:
+                    v = list(v)
                     while v:
                         new_lookup = lookup_kwargs.copy()
                         new_lookup[k] = v[:30]
