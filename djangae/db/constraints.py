@@ -210,6 +210,7 @@ class UniquenessMixin(object):
             if len([x for x in lookup_kwargs if x.endswith("__in") ]) > 1:
                 raise NotSupportedError("You cannot currently have two list fields in a unique combination")
 
+            # Split IN queries into multiple lookups if they are too long
             lookups = []
             for k, v in lookup_kwargs.iteritems():
                 if k.endswith("__in") and len(v) > 30:
@@ -220,6 +221,7 @@ class UniquenessMixin(object):
                         lookups.append(new_lookup)
                     break
             else:
+                # Otherwise just use the one lookup
                 lookups = [ lookup_kwargs ]
 
             for lookup_kwargs in lookups:
@@ -228,7 +230,11 @@ class UniquenessMixin(object):
                 result = list(qs)
 
                 if not self._state.adding and model_class_pk is not None:
-                    result = [ x for x in result if x != model_class_pk ]
+                    # If we are saving an instance, we ignore it's PK in the result
+                    try:
+                        result.remove(model_class_pk)
+                    except ValueError:
+                        pass
 
                 if result:
                     if len(unique_check) == 1:
