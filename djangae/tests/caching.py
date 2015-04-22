@@ -300,6 +300,21 @@ class MemcacheCachingTests(TestCase):
         self.assertFalse(datastore_query.called)
 
     @disable_cache(memcache=False, context=True)
+    def test_unique_filter_applies_all_filters(self):
+        entity_data = {
+            "field1": "Apple",
+            "comb1": 1,
+            "comb2": "Cherry"
+        }
+
+        original = CachingTestModel.objects.create(**entity_data)
+
+        with sleuth.watch("google.appengine.api.datastore.Query.Run") as datastore_query:
+            # Expect no matches
+            num_instances = CachingTestModel.objects.filter(field1="Apple", comb1=0).count()
+            self.assertEqual(num_instances, 0)
+
+    @disable_cache(memcache=False, context=True)
     def test_non_unique_filter_hits_datastore(self):
         entity_data = {
             "field1": "Apple",
@@ -625,6 +640,21 @@ class ContextCachingTests(TestCase):
             list(CachingTestModel.objects.filter(field1="Apple"))
 
         self.assertFalse(datastore_get.called)
+
+    @disable_cache(memcache=True, context=False)
+    def test_unique_filter_applies_all_filters(self):
+        entity_data = {
+            "field1": "Apple",
+            "comb1": 1,
+            "comb2": "Cherry"
+        }
+
+        original = CachingTestModel.objects.create(**entity_data)
+
+        with sleuth.watch("google.appengine.api.datastore.Query.Run") as datastore_query:
+            # Expect no matches
+            num_instances = CachingTestModel.objects.filter(field1="Apple", comb1=0).count()
+            self.assertEqual(num_instances, 0)
 
     @disable_cache(memcache=True, context=False)
     def test_get_by_key_hits_cache(self):
