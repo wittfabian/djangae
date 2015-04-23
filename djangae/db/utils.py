@@ -286,12 +286,32 @@ def entity_matches_query(entity, query):
         Return True if the entity would potentially be returned by the datastore
         query
     """
+
+    def lt(x, y):
+        if x is None and y is not None:
+            return True
+        elif x is not None and y is None:
+            return False
+        else:
+            return x < y
+
+    def gt(x, y):
+        if x is None and y is not None:
+            return False
+        elif x is not None and y is None:
+            return True
+        else:
+            return x > y
+
+    gte = lambda x, y: not lt(x, y)
+    lte = lambda x, y: not gt(x, y)
+
     OPERATORS = {
         "=": lambda x, y: x == y,
-        "<": lambda x, y: x < y,
-        ">": lambda x, y: x > y,
-        "<=": lambda x, y: x <= y,
-        ">=": lambda x, y: x >= y
+        "<": lt,
+        ">": gt,
+        "<=": lte,
+        ">=": gte
     }
 
     queries = [query]
