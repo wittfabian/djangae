@@ -38,14 +38,13 @@ from djangae.indexing import add_special_index
 from djangae.db.utils import entity_matches_query, decimal_to_string, normalise_field_value
 from djangae.db.caching import disable_cache
 from djangae.db import transaction
-from djangae.fields import ComputedCharField, ShardedCounterField, SetField, ListField, GenericRelationField
+from djangae.fields import ComputedCharField, ShardedCounterField, SetField, ListField, GenericRelationField, RelatedSetField
 from djangae.models import CounterShard
 from djangae.db.backends.appengine.dnf import parse_dnf
 from djangae.storage import BlobstoreFileUploadHandler
 from djangae.wsgi import DjangaeApplication
 from djangae.core import paginator
 from django.template import Template, Context
-from djangae.fields import RelatedSetField
 
 try:
     import webtest
@@ -176,6 +175,13 @@ class NullDate(models.Model):
     date = models.DateField(null=True, default=None)
     datetime = models.DateTimeField(null=True, default=None)
     time = models.TimeField(null=True, default=None)
+
+    class Meta:
+        app_label = "djangae"
+
+
+class NullDateSet(models.Model):
+    dates = RelatedSetField(NullDate, blank=True, unique=True)
 
     class Meta:
         app_label = "djangae"
@@ -510,6 +516,28 @@ class BackendTests(TestCase):
         self.assertItemsEqual([obj], NullDate.objects.filter(datetime=obj.datetime))
         self.assertItemsEqual([obj], NullDate.objects.filter(date=obj.date))
         self.assertItemsEqual([obj], NullDate.objects.filter(time=obj.time))
+
+    def test_related_datetime_nullable(self):
+        date = datetime.datetime.today()
+        dt = datetime.datetime.now()
+        time = datetime.time(0,0,0)
+
+        date_set = NullDateSet.objects.create()
+        empty_obj = NullDate.objects.create(date=None, datetime=None, time=None)
+        date_set.dates.add(empty_obj)
+
+        obj = NullDate.objects.create(date=date, datetime=dt, time=time)
+        date_set.dates.add(obj)
+        date_set.save()
+
+        # check if filtering/excluding of None works in RelatedSetField
+        self.assertItemsEqual([obj], date_set.dates.filter(datetime__isnull=False))
+        self.assertItemsEqual([obj], date_set.dates.filter(date__isnull=False))
+        self.assertItemsEqual([obj], date_set.dates.filter(time__isnull=False))
+
+        self.assertItemsEqual([obj], date_set.dates.exclude(datetime=None))
+        self.assertItemsEqual([obj], date_set.dates.exclude(date=None))
+        self.assertItemsEqual([obj], date_set.dates.exclude(time=None))
 
 
 class ModelFormsetTest(TestCase):
