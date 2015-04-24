@@ -1,6 +1,6 @@
 ## Gauth
 
-Djangae includes two applications to aid authentication and user management with 
+Djangae includes two applications to aid authentication and user management with
 App Engine. Each provides both an abstract class, to extend if you're defining your own custom User model, or a concrete version to use in place of `'django.contrib.auth.models.User'`.  Also provided are custom authentication backends which delegate to the App Engine users API and a middleware to handle the link between the Django's user object and App Engine's (amongst other things).
 
 
@@ -12,7 +12,7 @@ Allows the use of Django's permissions system on the Datastore, despite it usual
 
 1. Add `'djangae.contrib.gauth.datastore'` to `INSTALLED_APPS` probably
 after `'django.contrib.auth'`.
-2. Replace '`django.contrib.auth.middleware.AuthenticationMiddleware'` with 
+2. Replace `'django.contrib.auth.middleware.AuthenticationMiddleware'` with
 `'djangae.contrib.gauth.middleware.AuthenticationMiddleware'`.
 3. Set `AUTH_USER_MODEL = 'djangae.GaeUser'` in your settings file to use the supplied user model, or create your own by subclassing `'djangae.contrib.gauth.datastore.models.AbstractBaseUser'`.
 4. Add the backend to `AUTHENTICATION_BACKENDS` in your settings file eg:
@@ -36,7 +36,7 @@ The Datastore-based user models have a `user_permissions` list field, which take
 
 1. Add `'djangae.contrib.gauth.sql'` to `INSTALLED_APPS` probably
 after `'django.contrib.auth'`.
-2. Replace '`django.contrib.auth.middleware.AuthenticationMiddleware'` with 
+2. Replace `'django.contrib.auth.middleware.AuthenticationMiddleware'` with
 `'djangae.contrib.gauth.middleware.AuthenticationMiddleware'`.
 3. Set `AUTH_USER_MODEL = 'djangae.GaeUser'` in your settings file to use the supplied user model or create your own by subclassing `'djangae.contrib.gauth.sql.models.AbstractBaseUser'`.
 4. Add the backend to `AUTHENTICATION_BACKENDS` in your settings file eg:
