@@ -1741,6 +1741,9 @@ class IterableFieldTests(TestCase):
 
 class InstanceSetFieldTests(TestCase):
 
+    def test_deserialization(self):
+        self.assertEqual(set([1, 2]), ISModel._meta.get_field("related_things").to_python("[1, 2]"))
+
     def test_basic_usage(self):
         main = ISModel.objects.create()
         other = ISOther.objects.create(name="test")
