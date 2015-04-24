@@ -23,6 +23,14 @@ FEATURED_SDK_REPO = "https://storage.googleapis.com/appengine-sdks/featured/"
 DEPRECATED_SDK_REPO = "https://storage.googleapis.com/appengine-sdks/deprecated/%s/" % APPENGINE_SDK_VERSION.replace('.', '')
 
 DJANGO_VERSION = os.environ.get("DJANGO_VERSION", "1.6")
+NEXT_DJANGO_VERSION = {
+    "1.5": "1.6",
+    "1.6": "1.7",
+    "1.7": "1.8",
+    "1.8": "1.9",
+    "1.9": "2.0",
+    "2.0": "2.1",
+}
 
 if __name__ == '__main__':
 
@@ -59,7 +67,7 @@ if __name__ == '__main__':
     p.wait()
 
     print("Installing Django {}".format(DJANGO_VERSION))
-    args = ["pip", "install", "--no-deps", "django=={}".format(DJANGO_VERSION), "-t", TARGET_DIR, "-I", "--no-use-wheel"]
+    args = ["pip", "install", "--no-deps", "django>={},<{}".format(DJANGO_VERSION, NEXT_DJANGO_VERSION[DJANGO_VERSION]), "-t", TARGET_DIR, "-I", "--no-use-wheel"]
     p = subprocess.Popen(args)
     p.wait()
 
