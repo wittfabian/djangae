@@ -271,7 +271,7 @@ In general, django's emulation of SQL ON DELETE constraints works with djangae o
 
 ## Testing
 
-For running the tests, you just need to run:
+For running the tests, (the first time only) you just need to run:
 
     $ ./runtests.sh
 
@@ -281,6 +281,13 @@ tests on a specific Django version, simply do:
     $ DJANGO_VERSION=1.8 ./runtests.sh
 
 Currently the default is 1.6. TravisCI runs on 1.6 and 1.7 currently, and 1.8 in the 1-8-support branch.
+
+After you have run the tests once, you can do
+
+    $ cd testapp
+    ./runtests.sh
+    
+This will avoid the re-downloading of the SDK and libraries.  Note that if you want to switch Django version then you need to use the `runtests.sh` command in the parent directory again.
 
 ## Contributing
 
