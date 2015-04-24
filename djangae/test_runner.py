@@ -116,7 +116,9 @@ class DjangaeTestSuiteRunner(DiscoverRunner):
             mod = import_module(app)
             if mod:
                 folder = mod.__path__[0]
-                extra_tests.extend(self.test_loader.discover(start_dir=folder, top_level_dir=os.path.dirname(folder)))
+                new_tests = self.test_loader.discover(start_dir=folder, top_level_dir=os.path.dirname(folder))
+
+                extra_tests.extend(new_tests._tests)
                 self.test_loader._top_level_dir = None
         return extra_tests
 
@@ -137,6 +139,9 @@ class DjangaeTestSuiteRunner(DiscoverRunner):
             # Djangae models and tests, so we are disabling it here
             if hasattr(test, 'available_apps'):
                 test.available_apps = None
+
+            if args[0] and not any([test.id().startswith(x) for x in args[0]]):
+                continue
 
             if test.id() in DJANGO_TESTS_TO_SKIP:
                 continue #FIXME: It would be better to wrap this in skipTest or something
