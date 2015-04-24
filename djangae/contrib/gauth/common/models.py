@@ -5,10 +5,10 @@ from django.contrib.auth.models import (
     AbstractBaseUser,
     python_2_unicode_compatible,
     UserManager,
-    urlquote
 )
 from django.core.mail import send_mail
 from django.core import validators
+from django.utils.http import urlquote
 from django.db import models
 from django.utils import timezone, six
 from django.utils.translation import ugettext_lazy as _
