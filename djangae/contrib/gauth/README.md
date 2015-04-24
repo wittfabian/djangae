@@ -10,16 +10,16 @@ Allows the use of Django's permissions system on the Datastore, despite it usual
 
 #### Setup:
 
-1. Add `'djangae.contrib.gauth.gauth_datastore'` to `INSTALLED_APPS` probably 
+1. Add `'djangae.contrib.gauth.datastore'` to `INSTALLED_APPS` probably
 after `'django.contrib.auth'`.
 2. Replace '`django.contrib.auth.middleware.AuthenticationMiddleware'` with 
 `'djangae.contrib.gauth.middleware.AuthenticationMiddleware'`.
-3. Set `AUTH_USER_MODEL = 'djangae.GaeUser'` in your settings file to use the supplied user model, or create your own by subclassing `'djangae.contrib.gauth.gauth_datastore.models.AbstractBaseUser'`.
+3. Set `AUTH_USER_MODEL = 'djangae.GaeUser'` in your settings file to use the supplied user model, or create your own by subclassing `'djangae.contrib.gauth.datastore.models.AbstractBaseUser'`.
 4. Add the backend to `AUTHENTICATION_BACKENDS` in your settings file eg:
 
     ```
 AUTHENTICATION_BACKENDS (
-	'djangae.contrib.gauth.gauth_datastore.backends.AppEngineUserAPIBackend',
+	'djangae.contrib.gauth.datastore.backends.AppEngineUserAPIBackend',
 	 ...
 )
     ```
@@ -34,16 +34,16 @@ The Datastore-based user models have a `user_permissions` list field, which take
 
 #### Setup:
 
-1. Add `'djangae.contrib.gauth.gauth_sql'` to `INSTALLED_APPS` probably 
+1. Add `'djangae.contrib.gauth.sql'` to `INSTALLED_APPS` probably
 after `'django.contrib.auth'`.
 2. Replace '`django.contrib.auth.middleware.AuthenticationMiddleware'` with 
 `'djangae.contrib.gauth.middleware.AuthenticationMiddleware'`.
-3. Set `AUTH_USER_MODEL = 'djangae.GaeUser'` in your settings file to use the supplied user model or create your own by subclassing `'djangae.contrib.gauth.gauth_sql.models.AbstractBaseUser'`.
+3. Set `AUTH_USER_MODEL = 'djangae.GaeUser'` in your settings file to use the supplied user model or create your own by subclassing `'djangae.contrib.gauth.sql.models.AbstractBaseUser'`.
 4. Add the backend to `AUTHENTICATION_BACKENDS` in your settings file eg:
 
     ```
 AUTHENTICATION_BACKENDS (
-	'djangae.contrib.gauth_sql.backends.AppEngineUserAPIBackend',
+	'djangae.contrib.sql.backends.AppEngineUserAPIBackend',
 	 ...
 )
     ```
@@ -68,7 +68,7 @@ As well as using Djangae's Google Accounts-based authentication, you can also us
 
 ```
 AUTHENTICATION_BACKENDS = (
-    'djangae.contrib.gauth.gauth_datastore.backends.AppEngineUserAPI',
+    'djangae.contrib.gauth.datastore.backends.AppEngineUserAPI',
     'django.contrib.auth.backends.ModelBackend',
 )
 

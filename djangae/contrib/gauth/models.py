@@ -7,7 +7,7 @@ database backend
 
 import warnings
 
-from djangae.contrib.gauth.gauth_datastore.models import (
+from djangae.contrib.gauth.datastore.models import (
     GaeAbstractDatastoreUser, GaeDatastoreUser
 )
 

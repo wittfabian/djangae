@@ -8,7 +8,7 @@ signals.post_syncdb.disconnect(dispatch_uid="django.contrib.auth.management.crea
 
 def create_permissions_wrapper(*args, **kwargs):
     from django.contrib.auth import get_user_model
-    from djangae.contrib.gauth.gauth_datastore.models import PermissionsMixin
+    from djangae.contrib.gauth.datastore.models import PermissionsMixin
 
     try:
         if not issubclass(get_user_model(), PermissionsMixin):

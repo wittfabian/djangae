@@ -14,7 +14,7 @@ from django.utils.functional import lazy
 
 from djangae.fields import ListField, RelatedSetField
 from djangae.contrib.gauth.common.models import GaeAbstractBaseUser
-from djangae.contrib.gauth.gauth_datastore.permissions import get_permission_choices
+from djangae.contrib.gauth.datastore.permissions import get_permission_choices
 
 
 @python_2_unicode_compatible

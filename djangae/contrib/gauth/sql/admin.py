@@ -1,6 +1,6 @@
 from django.contrib import admin
 
 # DJANGAE
-from djangae.contrib.gauth.gauth_sql.models import GaeUser
+from djangae.contrib.gauth.sql.models import GaeUser
 
 admin.site.register(GaeUser)
