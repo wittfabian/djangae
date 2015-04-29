@@ -213,7 +213,11 @@ class RelatedSetField(RelatedField):
 
             value = value[1:-1].strip()
             ids = [ self.rel.to._meta.pk.to_python(x) for x in value.split(",") ]
-            return set(ids)
+
+            # Annoyingly Django special cases FK and M2M in the Python deserialization code,
+            # to assign to the attname, whereas all other fields (including this one) are required to
+            # populate field.name instead. So we have to query here... we have no choice :(
+            return set(self.rel.to._default_manager.db_manager('default').filter(pk__in=ids))
 
         return set(value)
 
