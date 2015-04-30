@@ -3,7 +3,7 @@ from django import forms
 from django.db import router, models
 from django.db.models.fields.related import RelatedField, ForeignObjectRel
 from django.utils.functional import cached_property
-from django.core.exceptions import ImproperlyConfigured
+from django.core.exceptions import ImproperlyConfigured, ValidationError
 from djangae.forms.fields import (
     encode_pk,
     GenericRelationFormfield
@@ -210,6 +210,15 @@ class RelatedSetField(RelatedField):
     def to_python(self, value):
         if value is None:
             return set()
+
+        # Deal with deserialization from a string
+        if isinstance(value, basestring):
+            if not (value.startswith("[") and value.endswith("]")):
+                raise ValidationError("Invalid input for RelatedSetField instance")
+
+            value = value[1:-1].strip()
+            ids = [ self.rel.to._meta.pk.to_python(x) for x in value.split(",") ]
+            return set(ids)
 
         return set(value)
 

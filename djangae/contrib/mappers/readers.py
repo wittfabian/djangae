@@ -3,7 +3,7 @@ import itertools
 import logging
 from django.db.models.loading import cache as model_cache
 from djangae import utils
-from google.appengine.ext import blobstore
+from djangae.storage import UniversalNewLineBlobReader
 
 
 class DjangoInputReader(input_readers.InputReader):
@@ -171,99 +171,23 @@ class DjangoQuerySpec(object):
 class BlobstoreUniversalLineInputReader(input_readers.BlobstoreLineInputReader):
     """A version of the BlobstoreLineInputReader that works with Mac, Windows and Linux line endings"""
 
-    def next(self):
-        """Returns the next input from as an (offset, line) tuple."""
-        self._has_iterated = True
+    def __init__(self, blob_key, start_position, end_position):
+        """Initializes this instance with the given blob key and character range.
 
-        if self._read_before_start:
-            self._read_line()
-            self._read_before_start = False
-        start_position = self._blob_reader.tell()
-
-        if start_position > self._end_position:
-            raise StopIteration()
-
-        line = self._read_line()
-
-        if not line:
-            raise StopIteration()
-
-        return start_position, line.rstrip("\n")
-
-    def _read_line(self):
-        buf = []  # A buffer to store our line
-        #Read characters until we find a \r or \n
-        c = self._blob_reader.read(size=1)
-        while c != '\n' and c != '\r':
-            if not c:
-                break
-
-            buf.append(c)
-            c = self._blob_reader.read(size=1)
-
-        # If we found a \r, it could be "\r\n" so read the next char
-        if c == '\r':
-            n = self._blob_reader.read(size=1)
-
-            #If the \r wasn't followed by a \n, then it was a mac line ending
-            #so we seek backwards 1
-            if n and n != '\n':
-                #We only check n != '\n' if we weren't EOF (e.g. n evaluates to False) otherwise
-                #we'd read nothing, and then seek back 1 which would then be re-read next loop etc.
-                self._blob_reader.seek(-1, 1)  # The second 1 means to seek relative to the current position
-
-        if buf:
-            buf.append("\n")  # Add our trailing \n, no matter what the line endings were
-
-            #Return the line, that ends with a \n
-            return "".join(buf)
-
-    @classmethod
-    def from_json(cls, json):
-        """Instantiates an instance of this InputReader for the given shard spec."""
-        return cls(json[cls.BLOB_KEY_PARAM],
-                   json[cls.INITIAL_POSITION_PARAM],
-                   json[cls.END_POSITION_PARAM])
-
-    @classmethod
-    def split_input(cls, mapper_spec):
-        """Returns a list of shard_count input_spec_shards for input_spec.
+        This BlobstoreInputReader will read from the first record starting after
+        strictly after start_position until the first record ending at or after
+        end_position (exclusive). As an exception, if start_position is 0, then
+        this InputReader starts reading at the first record.
 
         Args:
-          mapper_spec: The mapper specification to split from. Must contain
-              'blob_keys' parameter with one or more blob keys.
-
-        Returns:
-          A list of BlobstoreInputReaders corresponding to the specified shards.
+          blob_key: the BlobKey that this input reader is processing.
+          start_position: the position to start reading at.
+          end_position: a position in the last record to read.
         """
-        params = input_readers._get_params(mapper_spec)
-        blob_keys = params[cls.BLOB_KEYS_PARAM]
-        if isinstance(blob_keys, basestring):
-            blob_keys = blob_keys.split(",")
-
-        blob_sizes = {}
-        for blob_key in blob_keys:
-            blob_info = blobstore.BlobInfo.get(blobstore.BlobKey(blob_key))
-            blob_sizes[blob_key] = blob_info.size
-
-        shard_count = min(cls._MAX_SHARD_COUNT, mapper_spec.shard_count)
-        shards_per_blob = shard_count // len(blob_keys)
-        if shards_per_blob == 0:
-            shards_per_blob = 1
-
-        chunks = []
-        for blob_key, blob_size in blob_sizes.items():
-            blob_chunk_size = blob_size // shards_per_blob
-
-            for i in xrange(shards_per_blob - 1):
-                chunks.append(BlobstoreUniversalLineInputReader.from_json({
-                    cls.BLOB_KEY_PARAM: blob_key,
-                    cls.INITIAL_POSITION_PARAM: blob_chunk_size * i,
-                    cls.END_POSITION_PARAM: blob_chunk_size * (i + 1)
-                }))
-            chunks.append(BlobstoreUniversalLineInputReader.from_json({
-                cls.BLOB_KEY_PARAM: blob_key,
-                cls.INITIAL_POSITION_PARAM: blob_chunk_size * (shards_per_blob - 1),
-                cls.END_POSITION_PARAM: blob_size
-            }))
-        return chunks
+        self._blob_key = blob_key
+        self._blob_reader = UniversalNewLineBlobReader(blob_key,
+            self._BLOB_BUFFER_SIZE,
+            start_position)
+        self._end_position = end_position
+        self._has_iterated = False
+        self._read_before_start = bool(start_position)

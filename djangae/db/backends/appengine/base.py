@@ -5,7 +5,6 @@ import warnings
 import logging
 
 #LIBRARIES
-import django
 from django.conf import settings
 
 try:
@@ -40,7 +39,6 @@ except ImportError:
 from django.utils import timezone
 from google.appengine.api.datastore_types import Blob, Text
 from google.appengine.ext.db import metadata
-from google.appengine.ext import testbed
 from google.appengine.datastore import datastore_stub_util
 from google.appengine.api.datastore import Key
 from google.appengine.api import datastore
@@ -144,11 +142,7 @@ class Cursor(object):
                 result.append(key.id_or_name())
             else:
                 field = get_field_from_column(self.last_select_command.model, col)
-                if django.VERSION[1] < 8:
-                    value = self.connection.ops.convert_values(entity.get(col), field)
-                else:
-                    # On Django 1.8, convert_values is gone, and the db_converters stuff kicks in (we don't need to do it)
-                    value = entity.get(col)
+                value = self.connection.ops.convert_values(entity.get(col), field)
                 result.append(value)
 
         return result
@@ -179,9 +173,19 @@ class Cursor(object):
     def close(self):
         pass
 
+MAXINT = 9223372036854775808
 
 class DatabaseOperations(BaseDatabaseOperations):
     compiler_module = "djangae.db.backends.appengine.compiler"
+
+    # Datastore will store all integers as 64bit long values
+    integer_field_ranges = {
+        'SmallIntegerField': (-MAXINT, MAXINT-1),
+        'IntegerField': (-MAXINT, MAXINT-1),
+        'BigIntegerField': (-MAXINT, MAXINT-1),
+        'PositiveSmallIntegerField': (0, MAXINT-1),
+        'PositiveIntegerField': (0, MAXINT-1),
+    }
 
     def quote_name(self, name):
         return name
@@ -391,7 +395,7 @@ class DatabaseOperations(BaseDatabaseOperations):
     # Unlike value_to_db, these are not overridden or standard Django, it's just nice to have symmetry
     def value_from_db_datetime(self, value):
         if isinstance(value, (int, long)):
-            # App Engine Query's don't return datetime fields (unlike Get) I HAVE NO IDEA WHY, APP ENGINE SUCKS MONKEY BALLS
+            # App Engine Query's don't return datetime fields (unlike Get) I HAVE NO IDEA WHY
             value = datetime.datetime.fromtimestamp(float(value) / 1000000.0)
 
         if value is not None and settings.USE_TZ and timezone.is_naive(value):
@@ -400,7 +404,7 @@ class DatabaseOperations(BaseDatabaseOperations):
 
     def value_from_db_date(self, value):
         if isinstance(value, (int, long)):
-            # App Engine Query's don't return datetime fields (unlike Get) I HAVE NO IDEA WHY, APP ENGINE SUCKS MONKEY BALLS
+            # App Engine Query's don't return datetime fields (unlike Get) I HAVE NO IDEA WHY
             value = datetime.datetime.fromtimestamp(float(value) / 1000000.0)
 
         if value:
@@ -409,7 +413,7 @@ class DatabaseOperations(BaseDatabaseOperations):
 
     def value_from_db_time(self, value):
         if isinstance(value, (int, long)):
-            # App Engine Query's don't return datetime fields (unlike Get) I HAVE NO IDEA WHY, APP ENGINE SUCKS MONKEY BALLS
+            # App Engine Query's don't return datetime fields (unlike Get) I HAVE NO IDEA WHY
             value = datetime.datetime.fromtimestamp(float(value) / 1000000.0).time()
 
         if value is not None and settings.USE_TZ and timezone.is_naive(value):
@@ -475,6 +479,8 @@ class DatabaseCreation(BaseDatabaseCreation):
         return []
 
     def _create_test_db(self, verbosity, autoclobber, *args):
+        from google.appengine.ext import testbed # Imported lazily to prevent warnings on GAE
+
         assert not self.testbed
 
         if args:

@@ -38,14 +38,13 @@ from djangae.indexing import add_special_index
 from djangae.db.utils import entity_matches_query, decimal_to_string, normalise_field_value
 from djangae.db.caching import disable_cache
 from djangae.db import transaction
-from djangae.fields import ComputedCharField, ShardedCounterField, SetField, ListField, GenericRelationField
+from djangae.fields import ComputedCharField, ShardedCounterField, SetField, ListField, GenericRelationField, RelatedSetField
 from djangae.models import CounterShard
 from djangae.db.backends.appengine.dnf import parse_dnf
 from djangae.storage import BlobstoreFileUploadHandler
 from djangae.wsgi import DjangaeApplication
 from djangae.core import paginator
 from django.template import Template, Context
-from djangae.fields import RelatedSetField
 
 try:
     import webtest
@@ -99,7 +98,7 @@ class UniqueModelWithLongPK(models.Model):
 
 
 class IntegerModel(models.Model):
-    integer_field = models.IntegerField(default=0)
+    integer_field = models.IntegerField()
 
     class Meta:
         app_label = "djangae"
@@ -176,6 +175,13 @@ class NullDate(models.Model):
     date = models.DateField(null=True, default=None)
     datetime = models.DateTimeField(null=True, default=None)
     time = models.TimeField(null=True, default=None)
+
+    class Meta:
+        app_label = "djangae"
+
+
+class NullDateSet(models.Model):
+    dates = RelatedSetField(NullDate, blank=True, unique=True)
 
     class Meta:
         app_label = "djangae"
@@ -315,6 +321,22 @@ class BackendTests(TestCase):
         # query then it's a match
         entity["name"] = [ "Bob", "Fred", "Dave" ]
         self.assertTrue(entity_matches_query(entity, query))  # ListField test
+
+    def test_defaults(self):
+        fruit = TestFruit.objects.create(name="Apple", color="Red")
+        self.assertEqual("Unknown", fruit.origin)
+
+        instance = datastore.Get(datastore.Key.from_path(TestFruit._meta.db_table, fruit.pk))
+        del instance["origin"]
+        datastore.Put(instance)
+
+        fruit = TestFruit.objects.get()
+        self.assertIsNone(fruit.origin)
+        fruit.save()
+
+        fruit = TestFruit.objects.get()
+        self.assertEqual("Unknown", fruit.origin)
+
 
     def test_get_or_create(self):
         """
@@ -510,6 +532,28 @@ class BackendTests(TestCase):
         self.assertItemsEqual([obj], NullDate.objects.filter(datetime=obj.datetime))
         self.assertItemsEqual([obj], NullDate.objects.filter(date=obj.date))
         self.assertItemsEqual([obj], NullDate.objects.filter(time=obj.time))
+
+    def test_related_datetime_nullable(self):
+        date = datetime.datetime.today()
+        dt = datetime.datetime.now()
+        time = datetime.time(0,0,0)
+
+        date_set = NullDateSet.objects.create()
+        empty_obj = NullDate.objects.create(date=None, datetime=None, time=None)
+        date_set.dates.add(empty_obj)
+
+        obj = NullDate.objects.create(date=date, datetime=dt, time=time)
+        date_set.dates.add(obj)
+        date_set.save()
+
+        # check if filtering/excluding of None works in RelatedSetField
+        self.assertItemsEqual([obj], date_set.dates.filter(datetime__isnull=False))
+        self.assertItemsEqual([obj], date_set.dates.filter(date__isnull=False))
+        self.assertItemsEqual([obj], date_set.dates.filter(time__isnull=False))
+
+        self.assertItemsEqual([obj], date_set.dates.exclude(datetime=None))
+        self.assertItemsEqual([obj], date_set.dates.exclude(date=None))
+        self.assertItemsEqual([obj], date_set.dates.exclude(time=None))
 
 
 class ModelFormsetTest(TestCase):
@@ -1005,6 +1049,14 @@ class ConstraintTests(TestCase):
         instance1.full_clean()
         instance1.save()
 
+        # Check the uniqueness mixing works with long lists
+        instance1.unique_list_field = [ x for x in range(31) ]
+        try:
+            instance1.full_clean()
+        except NotSupportedError:
+            self.fail("Couldn't run unique check on long list field")
+            return
+
         instance2 = UniqueModel(
             unique_set_field={"B"},
             unique_together_list_field=[2],
@@ -1012,6 +1064,7 @@ class ConstraintTests(TestCase):
             unique_combo_one=2,
             unique_list_field=["B", "C"]  # duplicate value C!
         )
+
         self.assertRaises(ValidationError, instance2.full_clean)
         UniqueModel.__bases__ = (models.Model,)
 
@@ -1687,6 +1740,9 @@ class IterableFieldTests(TestCase):
 
 
 class InstanceSetFieldTests(TestCase):
+
+    def test_deserialization(self):
+        self.assertEqual(set([1, 2]), ISModel._meta.get_field("related_things").to_python("[1, 2]"))
 
     def test_basic_usage(self):
         main = ISModel.objects.create()

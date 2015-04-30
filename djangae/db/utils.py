@@ -151,6 +151,11 @@ def django_instance_to_entity(connection, model, fields, raw, instance, check_nu
     def value_from_instance(_instance, _field):
         value = get_prepared_db_value(connection, _instance, _field, raw)
 
+        # If value is None, but there is a default, and the field is not nullable then we should populate it
+        # Otherwise thing get hairy when you add new fields to models
+        if value is None and _field.has_default() and not _field.null:
+            value = connection.ops.value_for_db(_field.get_default(), _field)
+
         if check_null and (not _field.null and not _field.primary_key) and value is None:
             raise IntegrityError("You can't set %s (a non-nullable "
                                      "field) to None!" % _field.name)
@@ -281,12 +286,32 @@ def entity_matches_query(entity, query):
         Return True if the entity would potentially be returned by the datastore
         query
     """
+
+    def lt(x, y):
+        if x is None and y is not None:
+            return True
+        elif x is not None and y is None:
+            return False
+        else:
+            return x < y
+
+    def gt(x, y):
+        if x is None and y is not None:
+            return False
+        elif x is not None and y is None:
+            return True
+        else:
+            return x > y
+
+    gte = lambda x, y: not lt(x, y)
+    lte = lambda x, y: not gt(x, y)
+
     OPERATORS = {
         "=": lambda x, y: x == y,
-        "<": lambda x, y: x < y,
-        ">": lambda x, y: x > y,
-        "<=": lambda x, y: x <= y,
-        ">=": lambda x, y: x >= y
+        "<": lt,
+        ">": gt,
+        "<=": lte,
+        ">=": gte
     }
 
     queries = [query]

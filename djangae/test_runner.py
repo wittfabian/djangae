@@ -2,8 +2,7 @@ import unittest
 import os
 from unittest import TextTestResult
 
-
-from django.test.runner import DiscoverRunner as DjangoTestSuiteRunner
+from django.test.runner import DiscoverRunner
 
 from django.db import NotSupportedError
 from djangae.utils import find_project_root
@@ -96,8 +95,38 @@ class SkipUnsupportedTestResult(TextTestResult):
         else:
             super(SkipUnsupportedTestResult, self).addError(test, err)
 
-class DjangaeTestSuiteRunner(DjangoTestSuiteRunner):
+class DjangaeTestSuiteRunner(DiscoverRunner):
+    def _discover_additional_tests(self):
+        """
+            Django's DiscoverRunner only detects apps that are below
+            manage.py, which isn't particularly useful if you have other apps
+            on the path that need testing (arguably all INSTALLED_APPS should be tested
+            as they all form part of your project and a bug in them could bring your site down).
+
+            This method looks for a setting called DJANGAE_ADDITIONAL_TEST_APPS in
+            and will add extra test cases found in those apps. By default this adds the
+            djangae tests to your app, but you can of course override that.
+        """
+        from django.conf import settings
+        from django.utils.importlib import import_module
+
+        ADDITIONAL_APPS = getattr(settings, "DJANGAE_ADDITIONAL_TEST_APPS", ("djangae",))
+        extra_tests = []
+        for app in ADDITIONAL_APPS:
+            mod = import_module(app)
+            if mod:
+                folder = mod.__path__[0]
+                new_tests = self.test_loader.discover(start_dir=folder, top_level_dir=os.path.dirname(folder))
+
+                extra_tests.extend(new_tests._tests)
+                self.test_loader._top_level_dir = None
+        return extra_tests
+
+
     def build_suite(self, *args, **kwargs):
+        extra_tests = self._discover_additional_tests()
+        args = list(args)
+        args[1] = extra_tests
         suite = super(DjangaeTestSuiteRunner, self).build_suite(*args, **kwargs)
 
         new_tests = []
@@ -110,6 +139,9 @@ class DjangaeTestSuiteRunner(DjangoTestSuiteRunner):
             # Djangae models and tests, so we are disabling it here
             if hasattr(test, 'available_apps'):
                 test.available_apps = None
+
+            if args[0] and not any([test.id().startswith(x) for x in args[0]]):
+                continue
 
             if test.id() in DJANGO_TESTS_TO_SKIP:
                 continue #FIXME: It would be better to wrap this in skipTest or something

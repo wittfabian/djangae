@@ -176,7 +176,10 @@ def parse_constraint(child, connection, negated=False):
         # First, unpack the constraint
         constraint, op, annotation, value = child
         was_list = isinstance(value, (list, tuple))
-        packed, value = constraint.process(op, value, connection)
+        if isinstance(value, query.Query):
+            value = value.get_compiler(connection.alias).as_sql()[0].execute()
+        else:
+            packed, value = constraint.process(op, value, connection)
         alias, column, db_type = packed
         field = constraint.field
     else:
@@ -354,8 +357,17 @@ class UniqueQuery(object):
             return self._gae_query.Run(limit=limit, offset=offset)
 
         ret = caching.get_from_cache(self._identifier)
+        if ret is not None and not utils.entity_matches_query(ret, self._gae_query):
+            ret = None
+
         if ret is None:
-            ret = [ x for x in self._gae_query.Run(limit=limit, offset=offset) ]
+            # We do a fast keys_only query to get the result
+            keys_query = Query(self._gae_query._Query__kind, keys_only=True)
+            keys_query.update(self._gae_query)
+            keys = keys_query.Run(limit=limit, offset=offset)
+
+            # Do a consistent get so we don't cache stale data, and recheck the result matches the query
+            ret = [ x for x in datastore.Get(keys) if utils.entity_matches_query(x, self._gae_query) ]
             if len(ret) == 1:
                 caching.add_entity_to_cache(self._model, ret[0], caching.CachingSituation.DATASTORE_GET)
             return iter(ret)
@@ -364,6 +376,9 @@ class UniqueQuery(object):
 
     def Count(self, limit, offset):
         ret = caching.get_from_cache(self._identifier)
+        if ret is not None and not utils.entity_matches_query(ret, self._gae_query):
+            ret = None
+
         if ret is None:
             return self._gae_query.Count(limit=limit, offset=offset)
         return 1
@@ -669,6 +684,15 @@ class SelectCommand(object):
         self.aggregate_type = "count" if self.is_count else None
         self._do_fetch()
 
+    def lower(self):
+        """
+            This exists solely for django-debug-toolbar compatibility.
+            At some point I hope to investigate making SelectCommand a GQL string
+            so that we don't need to do this hackery
+        """
+
+        return str(self).lower()
+
     def __eq__(self, other):
         if not isinstance(other, self.__class__):
             return False
@@ -676,8 +700,8 @@ class SelectCommand(object):
         return self.__repr__() == other.__repr__()
 
     def __repr__(self):
-        return "<SelectCommand - SELECT {} FROM {} WHERE {}>".format(
-            ", ".join(self.queried_fields or []),
+        return "SELECT {} FROM {} WHERE {}".format(
+            ", ".join(self.queried_fields or [] if not self.is_count else ["COUNT"]),
             self.db_table,
             self.where
         )

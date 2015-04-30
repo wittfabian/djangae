@@ -12,7 +12,7 @@ from django.contrib.auth.tests.test_auth_backends import BaseModelBackendTest
 from google.appengine.api import users
 
 # DJANGAE
-from djangae.contrib.gauth.models import GaeDatastoreUser, Group, get_permission_choices
+from djangae.contrib.gauth.datastore.models import GaeDatastoreUser, Group, get_permission_choices
 from djangae.contrib.gauth.backends import AppEngineUserAPI
 from djangae.contrib.gauth.middleware import AuthenticationMiddleware
 from djangae.contrib.gauth.settings import AUTHENTICATION_BACKENDS
