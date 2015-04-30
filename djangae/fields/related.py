@@ -212,6 +212,10 @@ class RelatedSetField(RelatedField):
                 raise ValidationError("Invalid input for RelatedSetField instance")
 
             value = value[1:-1].strip()
+
+            if not value:
+                return set()
+
             ids = [ self.rel.to._meta.pk.to_python(x) for x in value.split(",") ]
 
             # Annoyingly Django special cases FK and M2M in the Python deserialization code,
