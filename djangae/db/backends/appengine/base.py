@@ -5,6 +5,7 @@ import warnings
 import logging
 
 #LIBRARIES
+import django
 from django.conf import settings
 
 try:
@@ -142,7 +143,12 @@ class Cursor(object):
                 result.append(key.id_or_name())
             else:
                 field = get_field_from_column(self.last_select_command.model, col)
-                value = self.connection.ops.convert_values(entity.get(col), field)
+                if django.VERSION[1] < 8:
+                    value = self.connection.ops.convert_values(entity.get(col), field)
+                else:
+                    # On Django 1.8, convert_values is gone, and the db_converters stuff kicks in (we don't need to do it)
+                    value = entity.get(col)
+
                 result.append(value)
 
         return result
