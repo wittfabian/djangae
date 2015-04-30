@@ -726,8 +726,14 @@ class SelectCommand(object):
         inherited_tables = set([x._meta.db_table for x in query.model._meta.parents ])
         tables = set(tables) - inherited_tables
         if query.select_related:
-            select_related_tables = set([y[0][0] for y in query.related_select_cols ])
+            if django.VERSION[1] < 8:
+                select_related_tables = set([y[0][0] for y in query.related_select_cols ])
+            else:
+                #FIXME: Lookup the right connection here (although it probably doesn't matter)
+                related_selections = query.get_compiler('default').get_related_selections(query.select)
+                select_related_tables = set([rel['model']._meta.db_table for rel in related_selections])
             tables = tables - select_related_tables
+
 
         if len(tables) > 1:
             if hasattr(query, "join_map"):
