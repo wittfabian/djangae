@@ -90,14 +90,14 @@ class RelatedSetObjectsDescriptor(object):
         # model's default manager.
         return create_related_set_manager(
             self.related.model._default_manager.__class__,
-            self.related.field.rel
+            self.related
         )
 
     def __get__(self, instance, instance_type=None):
         if instance is None:
             return self
 
-        rel_model = self.related.model
+        rel_model = self.related.related_model
         rel_field = self.related.field
 
         manager = self.related_manager_cls(
@@ -127,8 +127,8 @@ class ReverseRelatedSetObjectsDescriptor(object):
         # Dynamically create a class that subclasses the related model's
         # default manager.
         return create_related_set_manager(
-            self.field.rel.to._default_manager.__class__,
-            self.field.rel.to
+            self.field.rel.related_model._default_manager.__class__,
+            self.field.rel.related_model
         )
 
     def __get__(self, instance, instance_type=None):
