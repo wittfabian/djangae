@@ -106,3 +106,10 @@ class AtomicDecorator(ContextDecorator):
 
 atomic = AtomicDecorator
 commit_on_success = AtomicDecorator  # Alias to the old Django name for this kinda thing
+
+
+def in_atomic_block():
+    # At the moment just a wrapper around App Engine so that
+    # users don't have to use two different APIs
+    from google.appengine.ext.db import is_in_transaction
+    return is_in_transaction()

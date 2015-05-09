@@ -11,6 +11,7 @@ class TransactionTests(TestCase):
         @transaction.atomic
         def txn():
             TestUser.objects.create(username="foo", field2="bar")
+            self.assertTrue(transaction.in_atomic_block())
             raise ValueError()
 
         with self.assertRaises(ValueError):
