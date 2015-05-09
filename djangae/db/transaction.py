@@ -12,6 +12,13 @@ from google.appengine.datastore.datastore_rpc import TransactionOptions
 from djangae.db.backends.appengine import caching
 
 
+def in_atomic_block():
+    # At the moment just a wrapper around App Engine so that
+    # users don't have to use two different APIs
+    from google.appengine.ext.db import is_in_transaction
+    return is_in_transaction()
+
+
 class ContextDecorator(object):
     def __init__(self, func=None):
         self.func = func
@@ -108,8 +115,23 @@ atomic = AtomicDecorator
 commit_on_success = AtomicDecorator  # Alias to the old Django name for this kinda thing
 
 
-def in_atomic_block():
-    # At the moment just a wrapper around App Engine so that
-    # users don't have to use two different APIs
-    from google.appengine.ext.db import is_in_transaction
-    return is_in_transaction()
+class NonAtomicDecorator(ContextDecorator):
+    def _do_enter(self):
+        self._original_connection = None
+
+        if not in_atomic_block():
+            return # Do nothing if we aren't even in a transaction
+
+        self._original_connection = _PopConnection()
+
+    def _do_exit(self, exception):
+        if self._original_connection:
+            _PushConnection(self._original_connection)
+
+    def __enter__(self):
+        self._do_enter()
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self._do_exit(exc_type)
+
+non_atomic = NonAtomicDecorator

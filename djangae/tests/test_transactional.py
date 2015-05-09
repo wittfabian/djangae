@@ -74,6 +74,28 @@ class TransactionTests(TestCase):
 
         self.assertEqual(0, TestUser.objects.count())
 
+
+    def test_non_atomic_context_manager(self):
+        with transaction.atomic():
+            self.assertTrue(transaction.in_atomic_block())
+
+            with transaction.non_atomic():
+                self.assertFalse(transaction.in_atomic_block())
+
+            with transaction.atomic(independent=True):
+                self.assertTrue(transaction.in_atomic_block())
+
+                with transaction.non_atomic():
+                    self.assertFalse(transaction.in_atomic_block())
+
+                    with transaction.non_atomic():
+                        self.assertFalse(transaction.in_atomic_block())
+
+                    self.assertFalse(transaction.in_atomic_block())
+
+                self.assertTrue(transaction.in_atomic_block())
+
+
     def test_xg_argument(self):
 
         @transaction.atomic(xg=True)
