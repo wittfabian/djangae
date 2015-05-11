@@ -263,6 +263,14 @@ The Djangae database backend for the Datastore contains some clever optimisation
 
 In general, django's emulation of SQL ON DELETE constraints works with djangae on the datastore. Due to eventual consistency however, the constraints can fail. Take care when deleting related objects in quick succession, a PROTECT constraint can wrongly cause a ProtectedError when deleting an object that references a recently deleted one. Constraints can also fail to raise an error if a referencing object was created just prior to deleting the referenced one. Similarly, when using ON CASCADE DELETE (the default behaviour), a newly created referencing object might not be deleted along with the referenced one.
 
+## Transactions
+
+The following functions are available to manage transactions. **Do not use `google.appengine.ext.db.run_in_transaction` and friends, it will break**
+
+ - `djangae.db.transaction.atomic` - Decorator and Context Manager. Starts a new transaction, accepted `xg`, `indepedendent` and `mandatory` args
+ - `djangae.db.transaction.non_atomic` - Decorator and Context Manager. Breaks out of any current transactions so you can run queries outside the transaction
+ - `djangae.db.transaction.in_atomic_block` - Returns True if inside a transaction, False otherwise
+
 ## Contrib Applications
 
  - [Authentication with djangae.contrib.gauth](djangae/contrib/gauth/README.md)
@@ -286,7 +294,7 @@ After you have run the tests once, you can do:
 
     $ cd testapp
     ./runtests.sh
-    
+
 This will avoid the re-downloading of the SDK and libraries.  Note that if you want to switch Django version then you need to use the `runtests.sh` command in the parent directory again.
 
 You can run specific tests in the usual way by doing:
