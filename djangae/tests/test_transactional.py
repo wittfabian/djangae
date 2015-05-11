@@ -79,20 +79,29 @@ class TransactionTests(TestCase):
         with transaction.atomic():
             self.assertTrue(transaction.in_atomic_block())
 
+            user = TestUser.objects.create(username="foo", field2="bar")
+
             with transaction.non_atomic():
+                # We're outside the transaction, so the user should not exist
+                self.assertRaises(TestUser.DoesNotExist, TestUser.objects.get, pk=user.pk)
                 self.assertFalse(transaction.in_atomic_block())
 
             with transaction.atomic(independent=True):
+                user2 = TestUser.objects.create(username="foo2", field2="bar2")
                 self.assertTrue(transaction.in_atomic_block())
 
                 with transaction.non_atomic():
                     self.assertFalse(transaction.in_atomic_block())
+                    self.assertRaises(TestUser.DoesNotExist, TestUser.objects.get, pk=user2.pk)
 
                     with transaction.non_atomic():
                         self.assertFalse(transaction.in_atomic_block())
+                        self.assertRaises(TestUser.DoesNotExist, TestUser.objects.get, pk=user2.pk)
 
                     self.assertFalse(transaction.in_atomic_block())
+                    self.assertRaises(TestUser.DoesNotExist, TestUser.objects.get, pk=user2.pk)
 
+                self.assertTrue(TestUser.objects.filter(pk=user2.pk).exists())
                 self.assertTrue(transaction.in_atomic_block())
 
 
