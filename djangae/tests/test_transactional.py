@@ -106,6 +106,9 @@ class TransactionTests(TestCase):
                         self.assertFalse(transaction.in_atomic_block())
                         self.assertRaises(TestUser.DoesNotExist, TestUser.objects.get, pk=user2.pk)
 
+                        with sleuth.watch("google.appengine.api.datastore.Get") as datastore_get:
+                            TestUser.objects.get(pk=existing.pk) #Should hit the cache, not the datastore
+
                     self.assertFalse(transaction.in_atomic_block())
                     self.assertRaises(TestUser.DoesNotExist, TestUser.objects.get, pk=user2.pk)
 
