@@ -1,3 +1,5 @@
+import copy
+
 from google.appengine.api.datastore import (
     CreateTransactionOptions,
     _GetConnection,
@@ -123,10 +125,16 @@ class NonAtomicDecorator(ContextDecorator):
             return # Do nothing if we aren't even in a transaction
 
         self._original_connection = _PopConnection()
+        self._original_context = copy.deepcopy(caching._context)
+
+        while len(caching._context.stack.stack) > 1:
+            caching._context.stack.pop(discard=True)
+
 
     def _do_exit(self, exception):
         if self._original_connection:
             _PushConnection(self._original_connection)
+            caching._context = self._original_context
 
     def __enter__(self):
         self._do_enter()
