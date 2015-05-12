@@ -8,7 +8,6 @@ from google.appengine.api.datastore import (
     _SetConnection,
     IsInTransaction
 )
-
 from google.appengine.datastore.datastore_rpc import TransactionOptions
 
 from djangae.db.backends.appengine import caching
@@ -17,8 +16,7 @@ from djangae.db.backends.appengine import caching
 def in_atomic_block():
     # At the moment just a wrapper around App Engine so that
     # users don't have to use two different APIs
-    from google.appengine.ext.db import is_in_transaction
-    return is_in_transaction()
+    return IsInTransaction()
 
 
 class ContextDecorator(object):
@@ -36,8 +34,10 @@ class ContextDecorator(object):
 
         return decorated(*args, **kwargs)
 
+
 class TransactionFailedError(Exception):
     pass
+
 
 class AtomicDecorator(ContextDecorator):
     def __init__(self, func=None, xg=False, independent=False, mandatory=False):
