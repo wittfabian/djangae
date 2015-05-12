@@ -44,7 +44,9 @@ class ContextDecorator(object):
     def __call__(self, *args, **kwargs):
         # This method is only called if this has been used as a decorator (not as a context manager)
         def decorated(*_args, **_kwargs):
-            with self:
+            # To allow subclasses to use attributes on `self` in a thread-safe way, we need to make
+            # a copy of ourself here
+            with copy.deepcopy(self):
                 return self.func(*_args, **_kwargs)
 
         # If this has been used as `@decorator` without parenthesis
