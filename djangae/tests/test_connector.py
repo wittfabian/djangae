@@ -607,6 +607,15 @@ class TransactionTests(TestCase):
 
         self.assertEqual(0, TestUser.objects.count())
 
+        # Test on a class method: should pass correct number of args
+        class Cls(object):
+            @transaction.atomic
+            def txn(self, arg):
+                return arg
+
+        obj = Cls()
+        self.assertEqual(7, obj.txn(7))
+
     def test_interaction_with_datastore_txn(self):
         from google.appengine.ext import db
         from google.appengine.datastore.datastore_rpc import TransactionOptions
@@ -675,6 +684,15 @@ class TransactionTests(TestCase):
 
         self.assertEqual(0, TestUser.objects.count())
         self.assertEqual(0, TestFruit.objects.count())
+
+        # Test on a class method: should pass correct number of args
+        class Cls(object):
+            @transaction.atomic(xg=True)
+            def txn(self, arg):
+                return arg
+
+        obj = Cls()
+        self.assertEqual(7, obj.txn(7))
 
     def test_independent_argument(self):
         """
