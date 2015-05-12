@@ -20,18 +20,39 @@ def in_atomic_block():
 
 
 class ContextDecorator(object):
+    """ Base class for objects creating dual purpose decorators and context managers.
+        Sub classes need to define __enter__ and __exit__ to define the desired functionality;
+        these methods will be called whether the object is used as a decorator or a context manager.
+        Possible usages for subclasses:
+
+        @my_context_decorator
+        def my_function():
+            pass
+
+        @my_context_decorator()
+        def my_function():
+            pass
+
+        with my_context_decorator():
+            pass
+    """
     def __init__(self, func=None):
+        # If this has been used as `@decorator` without parenthesis, then the decorated function
+        # will be passed in here.
         self.func = func
 
     def __call__(self, *args, **kwargs):
+        # This method is only called if this has been used as a decorator (not as a context manager)
         def decorated(*_args, **_kwargs):
             with self:
                 return self.func(*_args, **_kwargs)
 
+        # If this has been used as `@decorator` without parenthesis
         if not self.func:
             self.func = args[0]
             return decorated
 
+        # Else... if this has been used as `@decorator()` with parenthesis
         return decorated(*args, **kwargs)
 
 
