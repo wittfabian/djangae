@@ -108,6 +108,8 @@ class AtomicDecorator(ContextDecorator):
             else:
                 caching._context.stack.pop(apply_staged=True, clear_staged=True)
 
+            # Reset this; in case this method is called again
+            self.transaction_started = False
 
     def __enter__(self):
         self._do_enter()
