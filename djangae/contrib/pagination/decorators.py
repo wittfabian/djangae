@@ -1,8 +1,10 @@
 import random
 from functools import partial
 from djangae.fields import ComputedCharField
+from django.db.models.fields import FieldDoesNotExist
 
 NULL_CHARACTER = u"\0"
+
 
 def generator(fields, instance):
     """
@@ -13,7 +15,12 @@ def generator(fields, instance):
     for field in fields:
         neg = field.startswith("-")
 
-        value = unicode(instance._meta.get_field(field.lstrip("-")).value_from_object(instance))
+        value = instance._meta.get_field(field.lstrip("-")).value_from_object(instance)
+
+        if hasattr(value, "isoformat"):
+            value = value.isoformat()
+
+        value = unicode(value)
 
         if neg:
             # this creates the alphabetical mirror of a string, e.g. ab => zy, but for the full
@@ -65,9 +72,12 @@ class PaginatedModel(object):
         """
         for ordering in self.orderings:
             new_field_name = _field_name_for_ordering(ordering)
-            ComputedCharField(
-                partial(generator, ordering), max_length=500, editable=False
-            ).contribute_to_class(cls, new_field_name)
+            try:
+                cls._meta.get_field(new_field_name)
+            except FieldDoesNotExist:
+                ComputedCharField(
+                    partial(generator, ordering), max_length=500, editable=False
+                ).contribute_to_class(cls, new_field_name)
 
         return cls
 
