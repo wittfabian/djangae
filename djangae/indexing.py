@@ -259,6 +259,8 @@ class ContainsIndexer(Indexer):
 
 class IContainsIndexer(ContainsIndexer):
     def prep_value_for_database(self, value):
+        if value is None:
+            return None
         result = super(IContainsIndexer, self).prep_value_for_database(value.lower())
         return result if result else None
 
@@ -302,6 +304,8 @@ class IEndsWithIndexer(EndsWithIndexer):
         Same as above, just all lower cased
     """
     def prep_value_for_database(self, value):
+        if value is None:
+            return None
         result = super(IEndsWithIndexer, self).prep_value_for_database(value.lower())
         return result or None
 
