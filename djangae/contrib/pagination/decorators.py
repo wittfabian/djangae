@@ -18,7 +18,6 @@ def generator(fields, instance):
         value = instance._meta.get_field(field.lstrip("-")).value_from_object(instance)
 
         if hasattr(value, "isoformat"):
-            # import pdb; pdb.set_trace()
             value = value.isoformat()
 
         value = unicode(value)
