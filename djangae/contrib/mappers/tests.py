@@ -117,7 +117,7 @@ class TestDeferIteration(TestCase):
         super(TestDeferIteration, self).setUp()
 
         for x in xrange(10):
-            TestNode.objects.create(data="TestNode".format(x), counter=x+1)
+            TestNode.objects.create(data="TestNode {}".format(x), counter=x+1)
 
     def test_that_sharding_works(self):
         _shard(
@@ -129,7 +129,8 @@ class TestDeferIteration(TestCase):
         )
 
         self.assertNumTasksEquals(10)
-
+        self.process_task_queues()
+        self.assertEqual(10, TestNode.objects.filter(counter=0).count())
 
     def test_that_processing_works(self):
         " By adding 100, we can check that everything is called exactly once"
