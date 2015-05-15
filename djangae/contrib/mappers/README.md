@@ -13,3 +13,12 @@ Instructions:
 1. You can optionally pass any additional args and/or kwargs to the `.start()` method, which will then be passed into to each call of the `.map()` method for you.
 
 Note that currently only the 'map' stage is implemented.  There is currently no reduce stage, but you could contribute it :-).
+
+
+# Helpful functions
+
+## djangae.contrib.mappers.defer_iteration
+
+This function takes a queryset and a callback, and also optionally a shard_size and a _queue. It
+defers background tasks to iterate over the entire queryset on the specified task queue calling your
+callback function each time.
