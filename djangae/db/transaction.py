@@ -1,4 +1,5 @@
 import copy
+import functools
 
 from google.appengine.api.datastore import (
     CreateTransactionOptions,
@@ -40,6 +41,15 @@ class ContextDecorator(object):
         # If this has been used as `@decorator` without parenthesis, then the decorated function
         # will be passed in here.
         self.func = func
+
+    def __get__(self, obj, objtype=None):
+        """ Implement descriptor protocol to support instance methods. """
+        # Invoked whenever this is accessed as an attribute of *another* object
+        # - as it is when wrapping an instance method: `instance.method` will be
+        # the ContextDecorator, so this is called.
+        # We make sure __call__ is passed the `instance`, which it will pass onto
+        # `self.func()`
+        return functools.partial(self.__call__, obj)
 
     def __call__(self, *args, **kwargs):
         # This method is only called if this has been used as a decorator (not as a context manager)
@@ -129,6 +139,8 @@ class AtomicDecorator(ContextDecorator):
             else:
                 caching._context.stack.pop(apply_staged=True, clear_staged=True)
 
+            # Reset this; in case this method is called again
+            self.transaction_started = False
 
     def __enter__(self):
         self._do_enter()

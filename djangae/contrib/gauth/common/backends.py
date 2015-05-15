@@ -14,7 +14,7 @@ from djangae.contrib.gauth.common.models import GaeAbstractBaseUser
 if hasattr(settings, "ALLOW_USER_PRE_CREATION"):
     logging.warning(
         "settings.ALLOW_USER_PRE_CREATION is deprecated, "
-        "please use DJANGAE_ALLOW_USER_PRECREATION instead"
+        "please use DJANGAE_ALLOW_USER_PRE_CREATION instead"
     )
 
 

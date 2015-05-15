@@ -148,3 +148,21 @@ class TransactionTests(TestCase):
 
         with self.assertRaises(ValueError):
             txn1("test", "banana")
+
+
+    def test_nested_decorator(self):
+        # Nested decorator pattern we discovered can cause a connection_stack
+        # underflow.
+
+        @transaction.atomic
+        def inner_txn():
+            pass
+
+        @transaction.atomic
+        def outer_txn():
+            inner_txn()
+
+        # Calling inner_txn first puts it in a state which means it doesn't
+        # then behave properly in a nested transaction.
+        inner_txn()
+        outer_txn()
