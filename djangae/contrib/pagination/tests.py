@@ -14,11 +14,14 @@ from .paginator import queryset_identifier, _get_marker
     ("first_name",),
     ("last_name",),
     ("first_name", "last_name"),
-    ("first_name", "-last_name")
+    ("first_name", "-last_name"),
+    ("created",),
+    ("-created",)
 ])
 class TestUser(models.Model):
     first_name = models.CharField(max_length=200)
     last_name = models.CharField(max_length=200)
+    created = models.DateTimeField(auto_now_add=True)
 
     def __unicode__(self):
         return u" ".join([self.first_name, self.last_name])
@@ -26,13 +29,14 @@ class TestUser(models.Model):
     class Meta:
         db_table = "pagination"
 
+
 class PaginatedModelTests(TestCase):
     def test_fields_added_correctly(self):
         self.assertIsNotNone(TestUser._meta.get_field("pagination_first_name"))
         self.assertIsNotNone(TestUser._meta.get_field("pagination_last_name"))
         self.assertIsNotNone(TestUser._meta.get_field("pagination_first_name_last_name"))
         self.assertIsNotNone(TestUser._meta.get_field("pagination_first_name_neg_last_name"))
-
+        self.assertIsNotNone(TestUser._meta.get_field("pagination_created"))
 
     def test_precalculate_field_values(self):
         user = TestUser.objects.create(pk=1, first_name="Luke", last_name="Benstead")
@@ -40,6 +44,7 @@ class PaginatedModelTests(TestCase):
         self.assertEqual(u"Luke\x001", user.pagination_first_name)
         self.assertEqual(u"Benstead\x001", user.pagination_last_name)
         self.assertEqual(u"Luke\x00Benstead\x001", user.pagination_first_name_last_name)
+        self.assertEqual("%s\x001" % user.created.isoformat(), user.pagination_created)
 
         reversed_last_name = "".join([ unichr(0xffff - ord(x)) for x in "Benstead" ])
 
@@ -54,6 +59,15 @@ class DatastorePaginatorTests(TestCase):
         self.u2 = TestUser.objects.create(id=2, first_name="A", last_name="B")
         self.u3 = TestUser.objects.create(id=3, first_name="B", last_name="A")
         self.u4 = TestUser.objects.create(id=4, first_name="B", last_name="B")
+
+    def test_ordering(self):
+        paginator = Paginator(TestUser.objects.all().order_by("created"), 1, readahead=2)
+        paginator.page(1)
+        self.assertEqual([self.u1, self.u2, self.u3, self.u4], list(paginator.object_list))
+
+        paginator = Paginator(TestUser.objects.all().order_by("-created"), 1, readahead=2)
+        paginator.page(1)
+        self.assertEqual([self.u4, self.u3, self.u2, self.u1], list(paginator.object_list))
 
     def test_count_up_to(self):
         paginator = Paginator(TestUser.objects.all().order_by("first_name"), 1, readahead=2)
@@ -72,7 +86,6 @@ class DatastorePaginatorTests(TestCase):
 
         paginator.page(3)
         self.assertEqual(4, paginator.count)
-
 
     def test_page_jump_updates_count_correctly(self):
         paginator = Paginator(TestUser.objects.all().order_by("first_name"), 1, readahead=1)
