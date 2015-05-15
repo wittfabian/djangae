@@ -607,6 +607,32 @@ class TransactionTests(TestCase):
 
         self.assertEqual(0, TestUser.objects.count())
 
+        # Test on a class method: should pass correct number of args
+        class Cls(object):
+            @transaction.atomic
+            def txn(self, arg):
+                return arg
+
+        obj = Cls()
+        self.assertEqual(7, obj.txn(7))
+
+    def test_nested_decorator(self):
+        # Nested decorator pattern we discovered can cause a connection_stack
+        # underflow.
+
+        @transaction.atomic
+        def inner_txn():
+            pass
+
+        @transaction.atomic
+        def outer_txn():
+            inner_txn()
+
+        # Calling inner_txn first puts it in a state which means it doesn't
+        # then behave properly in a nested transaction.
+        inner_txn()
+        outer_txn()
+
     def test_interaction_with_datastore_txn(self):
         from google.appengine.ext import db
         from google.appengine.datastore.datastore_rpc import TransactionOptions
@@ -675,6 +701,15 @@ class TransactionTests(TestCase):
 
         self.assertEqual(0, TestUser.objects.count())
         self.assertEqual(0, TestFruit.objects.count())
+
+        # Test on a class method: should pass correct number of args
+        class Cls(object):
+            @transaction.atomic(xg=True)
+            def txn(self, arg):
+                return arg
+
+        obj = Cls()
+        self.assertEqual(7, obj.txn(7))
 
     def test_independent_argument(self):
         """

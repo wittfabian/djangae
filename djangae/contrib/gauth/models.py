@@ -13,6 +13,5 @@ from djangae.contrib.gauth.datastore.models import (
 
 
 warnings.warn(
-    'GaeAbstractDatastoreUser and GaeDatastoreUser have moved to '
-    'djangae.contrib.gauth.datastore.models '
+    'GaeAbstractDatastoreUser and GaeDatastoreUser have moved to djangae.contrib.gauth.datastore.models'
 )
