@@ -116,6 +116,35 @@ class ShardedCounterTest(TestCase):
         instance.counter.decrement()
         self.assertEqual(0, instance.counter.value())
 
+    def test_create_in_transaction(self):
+        """ ShardedCounterField shouldn't prevent us from saving the model object inside a transaction.
+        """
+        with transaction.atomic():
+            ModelWithCounter.objects.create()
+
+    def test_increment_step(self):
+        """ Test the behvaviour of incrementing in steps of more than 1. """
+        raise NotImplementedError
+
+    def test_decrement_step(self):
+        """ Test the behvaviour of decrementing in steps of more than 1. """
+        raise NotImplementedError
+
+    def test_reset(self):
+        """ Test the behaviour of calling reset() on the field. """
+        raise NotImplementedError
+
+    def test_populate(self):
+        """ Test that the populate() method correctly generates all of the CounterShard objects. """
+        raise NotImplementedError
+
+    def test_name_reference_is_saved(self):
+        """ Test that each CounterShard which the field creates is saved with the name of the
+            model and field to which it belongs.
+        """
+        raise NotImplementedError
+
+
 
 class IterableFieldTests(TestCase):
     def test_filtering_on_iterable_fields(self):
