@@ -124,26 +124,53 @@ class ShardedCounterTest(TestCase):
 
     def test_increment_step(self):
         """ Test the behvaviour of incrementing in steps of more than 1. """
-        raise NotImplementedError
+        instance = ModelWithCounter.objects.create()
+        self.assertEqual(instance.counter.value(), 0)
+        instance.counter.increment(3)
+        instance.counter.increment(2)
+        self.assertEqual(instance.counter.value(), 5)
+
 
     def test_decrement_step(self):
         """ Test the behvaviour of decrementing in steps of more than 1. """
-        raise NotImplementedError
+        instance = ModelWithCounter.objects.create()
+        self.assertEqual(instance.counter.value(), 0)
+        instance.counter.increment(2)
+        instance.counter.increment(7)
+        instance.counter.increment(3)
+        instance.counter.decrement(7)
+        self.assertEqual(instance.counter.value(), 5)
 
     def test_reset(self):
         """ Test the behaviour of calling reset() on the field. """
-        raise NotImplementedError
+        instance = ModelWithCounter.objects.create()
+        self.assertEqual(instance.counter.value(), 0)
+        instance.counter.increment(7)
+        self.assertEqual(instance.counter.value(), 7)
+        instance.counter.reset()
+        self.assertEqual(instance.counter.value(), 0)
 
     def test_populate(self):
         """ Test that the populate() method correctly generates all of the CounterShard objects. """
-        raise NotImplementedError
+        instance = ModelWithCounter.objects.create()
+        # Initially, none of the CounterShard objects should have been created
+        self.assertEqual(len(instance.counter), 0)
+        self.assertEqual(CounterShard.objects.count(), 0)
+        instance.counter.populate()
+        expected_num_shards = instance._meta.get_field('counter').shard_count
+        self.assertEqual(len(instance.counter), expected_num_shards)
 
-    def test_name_reference_is_saved(self):
-        """ Test that each CounterShard which the field creates is saved with the name of the
+    def test_label_reference_is_saved(self):
+        """ Test that each CounterShard which the field creates is saved with the label of the
             model and field to which it belongs.
         """
-        raise NotImplementedError
-
+        instance = ModelWithCounter.objects.create()
+        instance.counter.populate()
+        expected_shard_label = '%s.%s' % (ModelWithCounter._meta.db_table, 'counter')
+        self.assertEqual(
+            CounterShard.objects.filter(label=expected_shard_label).count(),
+            len(instance.counter)
+        )
 
 
 class IterableFieldTests(TestCase):
