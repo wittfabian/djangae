@@ -116,15 +116,12 @@ class ReverseRelatedShardsDescriptor(ReverseRelatedSetObjectsDescriptor):
 
 class ShardedCounterField(RelatedSetField):
 
-    def __init__(self, shard_count=30, *args, **kwargs):
+    def __init__(self, shard_count=30, related_name="+", *args, **kwargs):
+        # Note that by removing the related_name by default we avoid reverse name clashes caused by
+        # having multiple ShardedCounterFields on the same model.
         self.shard_count = shard_count
         super(ShardedCounterField, self).__init__(CounterShard, *args, **kwargs)
 
     def contribute_to_class(self, cls, name):
         super(ShardedCounterField, self).contribute_to_class(cls, name)
-        # In order to allow multiple ShardedCounterFields on the same model without requiring
-        # each one to manually specify its 'related_name', we automatically generate a related_name
-        # based on the field name.  This way we don't get clashes.
-        if not self.rel.related_name:
-            self.rel.related_name = "%s_%s_set" % (cls.__name__.lower(), name.lower())
         setattr(cls, self.name, ReverseRelatedShardsDescriptor(self))
