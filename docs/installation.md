@@ -2,13 +2,18 @@
 
 **If you just want to get started on a fresh Django project, take a look at [djangae-scaffold](https://github.com/potatolondon/djangae-scaffold)**
 
-Create a Django project, add app.yaml to the root. Make sure Django 1.6+ is in your project and importable
+Alternatively, you can also follow this guide:
+
+1. Create a Django project, add app.yaml to the root. Make sure Django 1.6+ is in your project and importable
  
-Install Djangae into your project, make sure it's importable (you'll likely need to manipulate the path in manage.py and wsgi.py)
+
+2. Install Djangae into your project, make sure it's importable (you'll likely need to manipulate the path in manage.py and wsgi.py)
  
-Add djangae to `INSTALLED_APPS`.
+
+3. Add djangae to `INSTALLED_APPS`.
  
-At the top of your `settings.py`, insert the following line to setup some default settings: 
+ 
+4. At the top of your `settings.py`, insert the following line to setup some default settings: 
 
 ```python
 from djangae.settings_base import *`

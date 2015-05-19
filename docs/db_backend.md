@@ -7,7 +7,7 @@ used, and makes use of many of the Datastore's speed and efficiency features suc
 
 Here's the full list of magic:
 
-* Database-level enforcement of `unique` and `unique_together` constraints.
+* [Database-level enforcement of unique and unique_together constraints](unique_constraints.md).
 * A transparent caching layer for queries which return a single result (`.get` or any query filtering on a unique field
   or unique-together fields). This helps to avoid Datastore
   [consistency issues](https://developers.google.com/appengine/docs/python/datastore/structuring_for_strong_consistency).
@@ -15,7 +15,7 @@ Here's the full list of magic:
   work out of the box. These index fields are created automatically when you use the queries.  Use
   `settings.GENERATE_SPECIAL_INDEXES_DURING_TESTING` to control whether that automatic creation happens during tests.
 * Support for queries which weren't possible with djangoappengine, such as OR queries using `Q` objects.
-* A collection of Django model fields which provide useful functionality when using the Datastore.  A `ListField`, `SetField`, `RelatedSetField`, `ShardedCounterField` and `JSONField`.  See the [model fields README](djangae/fields/README.md) for full details.
+* A collection of Django model fields which provide useful functionality when using the Datastore.  A `ListField`, `SetField`, `RelatedSetField`, `ShardedCounterField` and `JSONField`.  See the [Djangae Model Fields](fields.md) for full details.
 
 ## Roadmap
 
@@ -38,8 +38,8 @@ a quick list:
 * `__in` queries with more than 30 values.  This is a limitation of the Datastore.  You can filter for up to 500 values
   on the primary key field though.
 * More than one inequality filter, i.e. you can't do `.exclude(a=1, b=2)`.  This is a limitation of the Datastore.
-* Transactions.  The Datastore has transactions, but they are not "normal" transactions in the SQL sense. Transactions
-  should be done using `djangae.db.transactional.atomic`.
+* Transactions.  The Datastore has transactions, but they are not "normal" transactions in the SQL sense. [Transactions
+  should be done using djangae.db.transactional.atomic](db_backend.md#transactions).
 
 
 ## Other Considerations
@@ -62,26 +62,26 @@ live database!
 Here's an example of how your `DATABASES` might look in settings.py if you're using both Cloud SQL and the Datastore.
 
 ```python
-    from djangae.utils import on_production
+from djangae.utils import on_production
 
-    DATABASES = {
-        'default': {
-            'ENGINE': 'djangae.db.backends.appengine'
-        }
+DATABASES = {
+    'default': {
+        'ENGINE': 'djangae.db.backends.appengine'
     }
+}
 
-    if on_production():
-        DATABASES['sql'] = {
-            'ENGINE': 'django.db.backends.mysql',
-            'HOST': '/cloudsql/YOUR_GOOGLE_CLOUD_PROJECT:YOUR_INSTANCE_NAME',
-            'NAME': 'YOUR_DATABASE_NAME',
-            'USER': 'root',
-        }
-    else:
-        DATABASES['sql'] = {
-            'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': 'development.sqlite3'
-        }
+if on_production():
+    DATABASES['sql'] = {
+        'ENGINE': 'django.db.backends.mysql',
+        'HOST': '/cloudsql/YOUR_GOOGLE_CLOUD_PROJECT:YOUR_INSTANCE_NAME',
+        'NAME': 'YOUR_DATABASE_NAME',
+        'USER': 'root',
+    }
+else:
+    DATABASES['sql'] = {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': 'development.sqlite3'
+    }
 ```
 
 See the Google documentation for more information on connecting to Cloud SQL via the
@@ -119,7 +119,7 @@ The Djangae database backend for the Datastore contains some clever optimisation
 
 ## On Delete Constraints
 
-In general, django's emulation of SQL ON DELETE constraints works with djangae on the datastore. Due to eventual consistency however, the constraints can fail. Take care when deleting related objects in quick succession, a PROTECT constraint can wrongly cause a ProtectedError when deleting an object that references a recently deleted one. Constraints can also fail to raise an error if a referencing object was created just prior to deleting the referenced one. Similarly, when using ON CASCADE DELETE (the default behaviour), a newly created referencing object might not be deleted along with the referenced one.
+In general, Django's emulation of SQL ON DELETE constraints works with djangae on the datastore. Due to eventual consistency however, the constraints can fail. Take care when deleting related objects in quick succession, a PROTECT constraint can wrongly cause a ProtectedError when deleting an object that references a recently deleted one. Constraints can also fail to raise an error if a referencing object was created just prior to deleting the referenced one. Similarly, when using ON CASCADE DELETE (the default behaviour), a newly created referencing object might not be deleted along with the referenced one.
 
 ## Transactions
 

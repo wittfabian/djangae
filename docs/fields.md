@@ -1,10 +1,9 @@
 # Djangae Model Fields
 
-
 ## ListField / SetField
 
 These allows you to store a list/set of values (strings, floats, integers dates) in a single field.
-This is often useful when structuring data for a non-relational database.
+This is often useful when structuring data for a non-relational database. [See example usage](fields.md#example-usages).
 
 ```ListField(item_field_type, **kwargs)```
 
@@ -36,7 +35,7 @@ Djangae makes some effort to provide a sensible form field for `ListField`/`SetF
 ## RelatedSetField
 
 This is essentially a substitue for `ManyToManyField`, but which works on the non-relational App Engine Datastore.
-It works by storing a list of primary keys of the related objects.  Think of it as a `SetField` with a layer of manager/query magic on top which allow you to create it much like a `ManyToManyField`.
+It works by storing a list of primary keys of the related objects.  Think of it as a `SetField` with a layer of manager/query magic on top which allow you to create it much like a `ManyToManyField`. [See example usage](fields.md#example-usages).
 
 ```RelatedSetField(related_model, **kwargs)```
 
@@ -50,7 +49,7 @@ The `RelatedSetField` also accepts most of the same kwargs as `SetField`.
 
 ## ShardedCounterField
 
-This field allows you to store a counter which can be incremented/decremented at an extremely high rate without causing database contention.  Given that the Datastore is not performant at doing `count()` queries, this is an excellent way of counting large numbers on the Datastore.
+This field allows you to store a counter which can be incremented/decremented at an extremely high rate without causing database contention.  Given that the Datastore is not performant at doing `count()` queries, this is an excellent way of counting large numbers on the Datastore. [See example usage](fields.md#example-usages).
 
 It works by creating a set of `CounterShard` objects, each of which stores a count, and each time you call `.increment()` or `.decrement()` on the field it randomly picks one of its `CounterShard` objects to increment or decrement.  When you call `.value()` on the field it sums the counts of all the shards to give you the total.  The more shards you specify the higher the rate at which it can handle `.increment()`/`.decrement()` calls.
 
@@ -75,7 +74,7 @@ When you access the attribute of your sharded counter field on your model, you g
     - If possible (i.e. if you have few enough shards) and if `save` is `True`, the whole operation will be done transactionally.
 
 
-Additional notes:
+### Additional notes:
 
 * `ShardedCounterField` is a subclass of `RelatedSetField`, so in addition to the above API you also have the manager methods from `RelatedSetField` such as `.filter()`, etc.  These probably aren't very useful though!
 * For convenience (or more likely, disaster recovery), each `CounterShard` has a `label` field which contains a reference to the model and field for which it is used in the format `"db_table.field_name"`.  So should you ever need to go and actually look at/alter the `CounterShard` objects, you can see which ones are used for what.
@@ -88,7 +87,7 @@ Documentation needed.
 
 ## JSONField
 
-Documentation needed.
+Documentation needed. [See example usage](fields.md#example-usages).
 
 ## TrueOrNullField
 
