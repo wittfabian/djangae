@@ -8,6 +8,7 @@ from django.contrib.auth.backends import ModelBackend
 from django.utils import timezone
 
 # DJANGAE
+from djangae.db import transaction
 from djangae.contrib.gauth.common.models import GaeAbstractBaseUser
 from djangae.contrib.gauth.common.backends import BaseAppEngineUserAPIBackend
 from djangae.contrib.gauth.datastore.permissions import get_permission_choices
@@ -19,6 +20,9 @@ if hasattr(settings, "ALLOW_USER_PRE_CREATION"):
 
 
 class AppEngineUserAPIBackend(BaseAppEngineUserAPIBackend):
+    atomic = transaction.atomic
+    atomic_kwargs = {'xg': True}
+
     def get_group_permissions(self, user_obj, obj=None):
         """
         Returns a set of permission strings that this user has through his/her

@@ -1,4 +1,5 @@
 import logging
+from django.db import transaction
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import BaseUserManager
@@ -23,7 +24,8 @@ class BaseAppEngineUserAPIBackend(ModelBackend):
         A custom Django authentication backend, which lets us authenticate against the Google
         users API
     """
-
+    atomic = transaction.atomic
+    atomic_kwargs = {}
     supports_anonymous_user = True
 
     def authenticate(self, **credentials):
@@ -55,23 +57,41 @@ class BaseAppEngineUserAPIBackend(ModelBackend):
                 user = User.objects.get(username=user_id)
 
             except User.DoesNotExist:
-                if (
-                    getattr(settings, 'DJANGAE_ALLOW_USER_PRE_CREATION', False) or
-                    # Backwards compatibility, remove before 1.0
-                    getattr(settings, 'ALLOW_USER_PRE_CREATION', False)
-                ):
-                    # Check to see if a User object for this email address has been pre-created.
-                    try:
+                try:
+                    old_user = User.objects.get(email=BaseUserManager.normalize_email(email))
+                except User.DoesNotExist:
+                    return User.objects.create_user(user_id, email)
+
+                # If the existing user was precreated, update and reuse it
+                if old_user.username is None:
+                    if (
+                        getattr(settings, 'DJANGAE_ALLOW_USER_PRE_CREATION', False) or
+                        # Backwards compatibility, remove before 1.0
+                        getattr(settings, 'ALLOW_USER_PRE_CREATION', False)
+                    ):
                         # Convert the pre-created User object so that the user can now login via
                         # Google Accounts, and ONLY via Google Accounts.
-                        user = User.objects.get(email=BaseUserManager.normalize_email(email), username=None)
-                        user.username = user_id
-                        user.last_login = timezone.now()
-                        user.save()
-                        return user
-                    except User.DoesNotExist:
-                        pass
-                user = User.objects.create_user(user_id, email)
+                        old_user.username = user_id
+                        old_user.last_login = timezone.now()
+                        old_user.save()
+                        return old_user
+
+                    # There's a precreated user but user precreation is disabled
+                    # This will fail with an integrity error
+                    #return User.objects.create_user(user_id, email)
+                    from django.db import IntegrityError
+                    raise IntegrityError("Tried to create a User(email=%s) conflicting with a pre created object, whicle precreation is disabled." % email)
+
+                # The existing user is tied to an existing Google user id, most likely
+                # it's the same person, we blank their old account's email (so it remains unique)
+                # and create them a new user
+                else:
+                    logging.info("GAUTH: Creating a new user with an existing email address (User(email=%s, pk=%s))" % (email, old_user.pk))
+                    with self.atomic(**self.atomic_kwargs):
+                        old_user = User.objects.get(pk=old_user.pk)
+                        old_user.email = None
+                        old_user.save()
+                        return User.objects.create_user(user_id, email)
 
             return user
         else:
