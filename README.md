@@ -109,7 +109,7 @@ Here's the full list of magic:
   work out of the box. These index fields are created automatically when you use the queries.  Use
   `settings.GENERATE_SPECIAL_INDEXES_DURING_TESTING` to control whether that automatic creation happens during tests.
 * Support for queries which weren't possible with djangoappengine, such as OR queries using `Q` objects.
-* A `ListField` which provides a "normal" django model field for storing lists (a feature of the Datastore).
+* A collection of Django model fields which provide useful functionality when using the Datastore.  A `ListField`, `SetField`, `RelatedSetField`, `ShardedCounterField` and `JSONField`.  See the [model fields README](djangae/fields/README.md) for full details.
 
 ## Roadmap
 
