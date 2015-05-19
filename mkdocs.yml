@@ -10,4 +10,6 @@ pages:
     - [pagination.md, Pagination]
     - [gauth.md, Gauth]
     - [uniquetool.md, Unique constraint tool]
+    - [sandbox.md, Local/remote management commands]
+    - [contributing.md, Contributing & Testing]
 theme: readthedocs

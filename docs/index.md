@@ -34,55 +34,9 @@ Currently Django 1.6 and 1.7 are supported.
 Django 1.8 support is under development.
 
 
-
-
-
-## Local/remote management commands
-
-If you set your manage.py up as described above, djangae will allow you to run management commands locally or
-remotely, by specifying a `--sandbox`. Eg.
-
-  ```
-  ./manage.py --sandbox=local shell   # Starts a shell locally (the default)
-  ./manage.py --sandbox=remote shell  # Starts a shell using the remote datastore
-  ```
-
-With no arguments, management commands are run locally.
-
-
 ## Contrib Applications
 
- - [Authentication with djangae.contrib.gauth](djangae/contrib/gauth/README.md)
- - [Map-reduce integration with djangae.contrib.mappers](djangae/contrib/mappers/README.md)
- - [Pagination with djangae.contrib.pagination](djangae/contrib/pagination/README.md)
+ - [Authentication with djangae.contrib.gauth](gauth.md)
+ - [Map-reduce integration with djangae.contrib.mappers](mappers.md)
+ - [Pagination with djangae.contrib.pagination](pagination.md)
 
-## Testing
-
-For running the tests, (the first time only) you just need to run:
-
-    $ ./runtests.sh
-
-This will download the App Engine SDK, pip install a bunch of stuff locally, download the Django tests and run them. If you want to run the
-tests on a specific Django version, simply do:
-
-    $ DJANGO_VERSION=1.8 ./runtests.sh
-
-Currently the default is 1.6. TravisCI runs on 1.6 and 1.7 currently, and 1.8 in the 1-8-support branch.
-
-After you have run the tests once, you can do:
-
-    $ cd testapp
-    ./runtests.sh
-
-This will avoid the re-downloading of the SDK and libraries.  Note that if you want to switch Django version then you need to use the `runtests.sh` command in the parent directory again.
-
-You can run specific tests in the usual way by doing:
-
-    ./runtests.sh some_app.SomeTestCase.some_test_method
-
-## Contributing
-
-Contributions are accepted via pull request and will be reviewed as soon as possible. If you have access to master, please do not commit directly! Pull requests only!
-
-[build-status-image]: https://secure.travis-ci.org/potatolondon/djangae.png?branch=master
-[travis]: http://travis-ci.org/potatolondon/djangae?branch=master
