@@ -78,15 +78,21 @@ class BaseAppEngineUserAPIBackend(ModelBackend):
 
                     # There's a precreated user but user precreation is disabled
                     # This will fail with an integrity error
-                    #return User.objects.create_user(user_id, email)
                     from django.db import IntegrityError
-                    raise IntegrityError("Tried to create a User(email=%s) conflicting with a pre created object, whicle precreation is disabled." % email)
+                    raise IntegrityError(
+                        "GAUTH: Found existing User with email=%s and username=None, "
+                        "but user precreation is disabled." % email
+                    )
 
-                # The existing user is tied to an existing Google user id, most likely
-                # it's the same person, we blank their old account's email (so it remains unique)
-                # and create them a new user
+                # There is an existing user with this email address, but it is tied to a different
+                # Google user id.  As we treat the user id as the primary identifier, not the email
+                # address, we leave the existing user in place and blank its email address (as the
+                # email field is unique), then create a new user with the new user id.
                 else:
-                    logging.info("GAUTH: Creating a new user with an existing email address (User(email=%s, pk=%s))" % (email, old_user.pk))
+                    logging.info(
+                        "GAUTH: Creating a new user with an existing email address "
+                        "(User(email=%s, pk=%s))" % (email, old_user.pk)
+                    )
                     with self.atomic(**self.atomic_kwargs):
                         old_user = User.objects.get(pk=old_user.pk)
                         old_user.email = None

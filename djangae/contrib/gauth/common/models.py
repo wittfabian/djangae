@@ -48,6 +48,7 @@ class GaeAbstractBaseUser(AbstractBaseUser):
     )
     first_name = models.CharField(_('first name'), max_length=30, blank=True)
     last_name = models.CharField(_('last name'), max_length=30, blank=True)
+    # The null-able-ness of the email is only to deal with when an email address moves between Google Accounts
     email = models.EmailField(_('email address'), unique=True, null=True)
     is_staff = models.BooleanField(
         _('staff status'), default=False,
