@@ -6,10 +6,10 @@ pages:
     - [unique_constraints.md, Unique Constraint Checking]
     - [db_backend.md, The Database Backend]
     - [fields.md, Djangae Model Fields]
-    - [mappers.md, Map Reduce]
+    - [sandbox.md, Local/remote management commands]
     - [pagination.md, Pagination]
     - [gauth.md, Gauth]
+    - [mappers.md, Map Reduce]
     - [uniquetool.md, Unique constraint tool]
-    - [sandbox.md, Local/remote management commands]
     - [contributing.md, Contributing & Testing]
 theme: readthedocs
