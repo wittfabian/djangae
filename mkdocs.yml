@@ -2,7 +2,8 @@ site_name: Djangae Documentation
 repo_url: https://github.com/potatolondon/djangae
 pages:
     - [index.md, Home]
-    - [installation.md, Installation & deployment]
+    - [installation.md, Installation & Deployment]
+    - [db_backend.md, The Database Backend]
     - [fields.md, Model Fields]
     - [mappers.md, Map Reduce]
     - [pagination.md, Pagination]
