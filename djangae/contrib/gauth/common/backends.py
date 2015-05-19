@@ -57,12 +57,12 @@ class BaseAppEngineUserAPIBackend(ModelBackend):
                 return User.objects.get(username=user_id)
             except User.DoesNotExist:
                 try:
-                    old_user = User.objects.get(email=BaseUserManager.normalize_email(email))
+                    existing_user = User.objects.get(email=BaseUserManager.normalize_email(email))
                 except User.DoesNotExist:
                     return User.objects.create_user(user_id, email)
 
                 # If the existing user was precreated, update and reuse it
-                if old_user.username is None:
+                if existing_user.username is None:
                     if (
                         getattr(settings, 'DJANGAE_ALLOW_USER_PRE_CREATION', False) or
                         # Backwards compatibility, remove before 1.0
@@ -70,10 +70,10 @@ class BaseAppEngineUserAPIBackend(ModelBackend):
                     ):
                         # Convert the pre-created User object so that the user can now login via
                         # Google Accounts, and ONLY via Google Accounts.
-                        old_user.username = user_id
-                        old_user.last_login = timezone.now()
-                        old_user.save()
-                        return old_user
+                        existing_user.username = user_id
+                        existing_user.last_login = timezone.now()
+                        existing_user.save()
+                        return existing_user
 
                     # There's a precreated user but user precreation is disabled
                     # This will fail with an integrity error
@@ -90,12 +90,12 @@ class BaseAppEngineUserAPIBackend(ModelBackend):
                 else:
                     logging.info(
                         "GAUTH: Creating a new user with an existing email address "
-                        "(User(email=%s, pk=%s))" % (email, old_user.pk)
+                        "(User(email=%s, pk=%s))" % (email, existing_user.pk)
                     )
                     with self.atomic(**self.atomic_kwargs):
-                        old_user = User.objects.get(pk=old_user.pk)
-                        old_user.email = None
-                        old_user.save()
+                        existing_user = User.objects.get(pk=existing_user.pk)
+                        existing_user.email = None
+                        existing_user.save()
                         return User.objects.create_user(user_id, email)
         else:
             raise TypeError()  # Django expects to be able to pass in whatever credentials it has, and for you to raise a TypeError if they mean nothing to you
