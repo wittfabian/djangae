@@ -99,13 +99,9 @@ class IterableFieldModel(models.Model):
 class ShardedCounterTest(TestCase):
     def test_basic_usage(self):
         instance = ModelWithCounter.objects.create()
-
         self.assertEqual(0, instance.counter.value())
 
         instance.counter.increment()
-
-        self.assertEqual(30, len(instance.counter))
-        self.assertEqual(30, CounterShard.objects.count())
         self.assertEqual(1, instance.counter.value())
 
         instance.counter.increment()
@@ -115,11 +111,8 @@ class ShardedCounterTest(TestCase):
         self.assertEqual(1, instance.counter.value())
 
         instance.counter.decrement()
-
         self.assertEqual(0, instance.counter.value())
 
-        instance.counter.decrement()
-        self.assertEqual(0, instance.counter.value())
     def test_negative_counts(self):
         instance = ModelWithCounter.objects.create()
         self.assertEqual(instance.counter.value(), 0)
