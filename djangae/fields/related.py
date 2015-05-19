@@ -37,45 +37,52 @@ class RelatedSetRel(ForeignObjectRel):
         """
         return self.to._meta.pk
 
+
+class RelatedSetManagerBase(object):
+    def __init__(self, model, field, instance, reverse):
+        super(RelatedSetManagerBase, self).__init__()
+        self.model = model
+        self.instance = instance
+        self.field = field
+
+        if reverse:
+            self.core_filters = {'%s__exact' % self.field.column: instance.pk}
+        else:
+            self.core_filters = {'pk__in': field.value_from_object(instance)}
+
+    def get_queryset(self):
+        db = self._db or router.db_for_read(self.instance.__class__, instance=self.instance)
+        return (
+            super(RelatedSetManagerBase, self).get_queryset().using(db)
+            ._next_is_sticky().filter(**self.core_filters)
+        )
+
+    def add(self, *values):
+        for value in values:
+            if not isinstance(value, self.model):
+                raise TypeError("'%s' instance expected, got %r" % (self.model._meta.object_name, value))
+
+            if not value.pk:
+                raise ValueError("Model instances must be saved before they can be added to a related set")
+
+            self.field.value_from_object(self.instance).add(value.pk)
+
+    def remove(self, value):
+        self.field.value_from_object(self.instance).discard(value.pk)
+
+    def clear(self):
+        setattr(self.instance, self.field.attname, set())
+
+    def __len__(self):
+        return len(self.field.value_from_object(self.instance))
+
+
 def create_related_set_manager(superclass, rel):
-
-    class RelatedSetManager(superclass):
-        def __init__(self, model, field, instance, reverse):
-            super(RelatedSetManager, self).__init__()
-            self.model = model
-            self.instance = instance
-            self.field = field
-
-            if reverse:
-                self.core_filters = { '%s__exact' % self.field.column: instance.pk }
-            else:
-                self.core_filters= {'pk__in': field.value_from_object(instance) }
-
-        def get_queryset(self):
-            db = self._db or router.db_for_read(self.instance.__class__, instance=self.instance)
-            return super(RelatedSetManager, self).get_queryset().using(db)._next_is_sticky().filter(**self.core_filters)
-
-        def add(self, *values):
-            for value in values:
-                if not isinstance(value, self.model):
-                    raise TypeError("'%s' instance expected, got %r" % (self.model._meta.object_name, value))
-
-                if not value.pk:
-                    raise ValueError("Model instances must be saved before they can be added to a related set")
-
-                self.field.value_from_object(self.instance).add(value.pk)
-
-        def remove(self, value):
-            self.field.value_from_object(self.instance).discard(value.pk)
-
-        def clear(self):
-            setattr(self.instance, self.field.attname, set())
-
-        def __len__(self):
-            return len(self.field.value_from_object(self.instance))
-
-
+    """ Create a manager for the (reverse) relation which subclasses the related model's default manager. """
+    class RelatedSetManager(RelatedSetManagerBase, superclass):
+        pass
     return RelatedSetManager
+
 
 class RelatedSetObjectsDescriptor(object):
     # This class provides the functionality that makes the related-object
@@ -115,6 +122,7 @@ class RelatedSetObjectsDescriptor(object):
     def __set__(self, obj, value):
         raise AttributeError("You can't set the reverse relation directly")
 
+
 class ReverseRelatedSetObjectsDescriptor(object):
     # This class provides the functionality that makes the related-object
     # managers available as attributes on a model class, for fields that have
@@ -149,6 +157,7 @@ class ReverseRelatedSetObjectsDescriptor(object):
 
     def __set__(self, obj, value):
         obj.__dict__[self.field.attname] = self.field.to_python([x.pk for x in value])
+
 
 class RelatedSetField(RelatedField):
     requires_unique_target = False
