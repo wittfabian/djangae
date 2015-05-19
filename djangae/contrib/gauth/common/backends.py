@@ -54,8 +54,7 @@ class BaseAppEngineUserAPIBackend(ModelBackend):
             user_id = google_user.user_id()
             email = google_user.email().lower()
             try:
-                user = User.objects.get(username=user_id)
-
+                return User.objects.get(username=user_id)
             except User.DoesNotExist:
                 try:
                     old_user = User.objects.get(email=BaseUserManager.normalize_email(email))
@@ -98,7 +97,5 @@ class BaseAppEngineUserAPIBackend(ModelBackend):
                         old_user.email = None
                         old_user.save()
                         return User.objects.create_user(user_id, email)
-
-            return user
         else:
             raise TypeError()  # Django expects to be able to pass in whatever credentials it has, and for you to raise a TypeError if they mean nothing to you
