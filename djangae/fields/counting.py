@@ -1,6 +1,5 @@
 import random
 
-from django.db import models
 
 from djangae.fields.related import (
     RelatedSetField,
@@ -12,6 +11,10 @@ from djangae.db import transaction
 
 
 MAX_ENTITY_GROUPS_PER_TRANSACTION = 25
+
+# If all the shards plus the object to which they belong is <= MAX_ENTITY_GROUPS_PER_TRANSACTION
+# then we can do the populate() and reset() operations transactionally, which is nice, hence:
+DEFAULT_SHARD_COUNT = MAX_ENTITY_GROUPS_PER_TRANSACTION - 1
 
 
 class RelatedShardManager(RelatedSetManagerBase, CounterShard._default_manager.__class__):
@@ -116,7 +119,7 @@ class ReverseRelatedShardsDescriptor(ReverseRelatedSetObjectsDescriptor):
 
 class ShardedCounterField(RelatedSetField):
 
-    def __init__(self, shard_count=30, related_name="+", *args, **kwargs):
+    def __init__(self, shard_count=DEFAULT_SHARD_COUNT, related_name="+", *args, **kwargs):
         # Note that by removing the related_name by default we avoid reverse name clashes caused by
         # having multiple ShardedCounterFields on the same model.
         self.shard_count = shard_count
