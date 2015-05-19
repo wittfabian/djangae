@@ -43,6 +43,11 @@ class ModelWithCounter(models.Model):
     counter = ShardedCounterField()
 
 
+class ModelWithManyCounters(models.Model):
+    counter1 = ShardedCounterField()
+    counter2 = ShardedCounterField()
+
+
 class ISOther(models.Model):
     name = models.CharField(max_length=500)
 
@@ -115,6 +120,12 @@ class ShardedCounterTest(TestCase):
 
         instance.counter.decrement()
         self.assertEqual(0, instance.counter.value())
+    def test_negative_counts(self):
+        instance = ModelWithCounter.objects.create()
+        self.assertEqual(instance.counter.value(), 0)
+        instance.counter.decrement(5)
+        instance.counter.increment()
+        self.assertEqual(instance.counter.value(), -4)
 
     def test_create_in_transaction(self):
         """ ShardedCounterField shouldn't prevent us from saving the model object inside a transaction.
@@ -171,6 +182,21 @@ class ShardedCounterTest(TestCase):
             CounterShard.objects.filter(label=expected_shard_label).count(),
             len(instance.counter)
         )
+
+    def test_many_counters_on_one_model(self):
+        """ Test that have multiple counters on the same model doesn't cause any issues.
+            This is mostly to test that the multiple reverse relations to the CounterShard model
+            don't clash.
+        """
+        instance = ModelWithManyCounters.objects.create()
+        instance.counter1.increment(5)
+        instance.counter1.increment(5)
+        instance.counter2.increment(1)
+        self.assertEqual(instance.counter1.value(), 10)
+        self.assertEqual(instance.counter2.value(), 1)
+        instance.counter1.reset()
+        self.assertEqual(instance.counter1.value(), 0)
+        self.assertEqual(instance.counter2.value(), 1)
 
 
 class IterableFieldTests(TestCase):
