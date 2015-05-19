@@ -1,0 +1,11 @@
+site_name: Djangae Documentation
+repo_url: https://github.com/potatolondon/djangae
+pages:
+    - [index.md, Home]
+    - [installation.md, Installation & deployment]
+    - [fields.md, Model Fields]
+    - [mappers.md, Map Reduce]
+    - [pagination.md, Pagination]
+    - [gauth.md, Gauth]
+    - [uniquetool.md, Unique constraint tool]
+theme: readthedocs
