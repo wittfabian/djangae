@@ -10,7 +10,7 @@ from django.utils import timezone
 # DJANGAE
 from djangae.contrib.gauth.common.models import GaeAbstractBaseUser
 
-
+# Backwards compatibility, remove before 1.0
 # This is here so that we only log once on import, not on each authentication
 if hasattr(settings, "ALLOW_USER_PRE_CREATION"):
     logging.warning(
