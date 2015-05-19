@@ -24,11 +24,15 @@ class RelatedShardManager(RelatedSetManagerBase, CounterShard._default_manager._
     """
 
     def increment(self, step=1):
+        if step < 0:
+            raise ValueError("Tried to increment with a negative number, use decrement instead")
+
         self._update_or_create_shard(step)
 
     def decrement(self, step=1):
-        step = -abs(step) # handle people passing in 1 or -1 or +/- whatever
-        self._update_or_create_shard(step)
+        if step < 0:
+            raise ValueError("Tried to decrement with a negative number, use increment instead")
+        self._update_or_create_shard(-step)
 
     def value(self):
         """ Calcuate the aggregated sum of all the shard values. """
