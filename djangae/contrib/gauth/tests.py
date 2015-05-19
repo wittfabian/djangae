@@ -62,6 +62,32 @@ class BackendTests(TestCase):
         self.assertIsNotNone(user.last_login)
         self.assertFalse(user.has_usable_password())
 
+    @override_settings(ALLOW_USER_PRE_CREATION=True)
+    def test_user_id_switch(self):
+        """ Users sometimes login with the same email, but a different google user id. We handle those cases by
+            blanking out the email on the old user object and creating a new one with the new user id.
+        """
+        email = 'user@customexample.com'
+        old_user = users.User(email=email, _user_id='111111111100000000001')
+        new_user = users.User(email=email, _user_id='111111111100000000002')
+        User = get_user_model()
+        backend = AppEngineUserAPI()
+        # Authenticate 1st time, creating the user
+        user1 = backend.authenticate(google_user=old_user)
+        self.assertEqual(user1.email, email)
+        self.assertTrue(user1.username.endswith('1'))
+        self.assertEqual(1, User.objects.count())
+
+        # Now another user logs in using the same email
+        user2 = backend.authenticate(google_user=new_user)
+        self.assertEqual(user2.email, email)
+        self.assertTrue(user2.username.endswith('2'))
+        self.assertEqual(2, User.objects.count())
+
+        # The old account is kept around, but the email is blanked
+        user1 = User.objects.get(pk=user1.pk)
+        self.assertEqual(user1.email, None)
+
 
 @override_settings(AUTHENTICATION_BACKENDS=AUTHENTICATION_BACKENDS)
 class MiddlewareTests(TestCase):
