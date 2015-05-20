@@ -15,9 +15,9 @@ Instructions:
 Note that currently only the 'map' stage is implemented.  There is currently no reduce stage, but you could contribute it :-).
 
 
-# Helpful functions
+## Helpful functions
 
-## djangae.contrib.mappers.defer_iteration
+### djangae.contrib.mappers.defer_iteration
 
 This function takes a queryset and a callback, and also optionally a shard_size and a _queue. It
 defers background tasks to iterate over the entire queryset on the specified task queue calling your
