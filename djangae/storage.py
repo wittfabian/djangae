@@ -94,11 +94,25 @@ def serve_file(request, blob_key_or_info, as_download=False, content_type=None, 
     return response
 
 
-class BlobstoreStorage(Storage):
+class BlobstoreFileapiStorage(Storage):
     """Google App Engine Blobstore storage backend."""
 
     def _open(self, name, mode='rb'):
         return BlobstoreFile(name, mode, self)
+
+    def _upload_to_blobstore(self, name, content):
+        from google.appengine.api import files
+        guessed_type = mimetypes.guess_type(name)[0]
+        file_name = files.blobstore.create(mime_type=guessed_type or 'application/octet-stream',
+                                           _blobinfo_uploaded_filename=name)
+
+        with files.open(file_name, 'a') as f:
+            for chunk in content.chunks():
+                f.write(chunk)
+
+        files.finalize(file_name)
+        data = files.blobstore.get_blob_key(file_name)
+        return '%s/%s' % (data, name.lstrip('/'))
 
     def _save(self, name, content):
         name = name.replace('\\', '/')
@@ -108,18 +122,7 @@ class BlobstoreStorage(Storage):
         elif hasattr(content, 'blobstore_info'):
             data = content.blobstore_info
         elif isinstance(content, File):
-            # With the files api deprecated, we provide a workaround here, an inline upload
-            # to the blobstore, using the djangae.views.internalupload handler to return the blob key
-            response = urlfetch.fetch(url=create_upload_url(reverse('djangae_internal_upload_handler')),
-                payload=encode_multipart(BOUNDARY, {'file': content}),
-                method=urlfetch.POST,
-                deadline=60,
-                follow_redirects=False,
-                headers={'Content-Type': MULTIPART_CONTENT}
-            )
-            if response.status_code != 200 or response.content == "error":
-                raise ValueError("The internal upload to blobstore failed, check the app's logs.")
-            return '%s/%s' % (response.content, name.lstrip('/'))
+            return self._upload_to_blobstore(name, content)
         else:
             raise ValueError("The App Engine storage backend only supports "
                              "BlobstoreFile instances or File instances.")
@@ -167,6 +170,24 @@ class BlobstoreStorage(Storage):
 
     def _get_blobinfo(self, name):
         return BlobInfo.get(self._get_key(name))
+
+
+class BlobstoreStorage(BlobstoreFileapiStorage):  #Storage):
+    """Google App Engine Blobstore storage backend (posting to blobstore with urlfetch)."""
+
+    def _upload_to_blobstore(self, name, content):
+        # With the files api deprecated, we provide a workaround here, an inline upload
+        # to the blobstore, using the djangae.views.internalupload handler to return the blob key
+        response = urlfetch.fetch(url=create_upload_url(reverse('djangae_internal_upload_handler')),
+            payload=encode_multipart(BOUNDARY, {'file': content}),
+            method=urlfetch.POST,
+            deadline=60,
+            follow_redirects=False,
+            headers={'Content-Type': MULTIPART_CONTENT}
+        )
+        if response.status_code != 200 or response.content == "error":
+            raise ValueError("The internal upload to blobstore failed, check the app's logs.")
+        return '%s/%s' % (response.content, name.lstrip('/'))
 
 
 class UniversalNewLineBlobReader(BlobReader):
