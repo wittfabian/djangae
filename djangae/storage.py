@@ -6,6 +6,7 @@ try:
 except ImportError:
     from StringIO import StringIO
 
+from django.core.urlresolvers import reverse
 from django.core.files.base import File
 from django.core.files.storage import Storage
 from django.core.files.uploadedfile import UploadedFile
@@ -13,8 +14,9 @@ from django.core.files.uploadhandler import FileUploadHandler, \
     StopFutureHandlers
 from django.http import HttpResponse
 from django.utils.encoding import smart_str, force_unicode
+from django.test.client import encode_multipart, MULTIPART_CONTENT, BOUNDARY
 
-from google.appengine.api import files
+from google.appengine.api import urlfetch
 from google.appengine.api.images import get_serving_url, NotImageError
 from google.appengine.ext.blobstore import (
     BlobInfo,
@@ -24,6 +26,7 @@ from google.appengine.ext.blobstore import (
     BLOB_RANGE_HEADER,
     BlobReader,
     create_gs_key,
+    create_upload_url,
 )
 
 try:
@@ -105,17 +108,18 @@ class BlobstoreStorage(Storage):
         elif hasattr(content, 'blobstore_info'):
             data = content.blobstore_info
         elif isinstance(content, File):
-            guessed_type = mimetypes.guess_type(name)[0]
-            file_name = files.blobstore.create(mime_type=guessed_type or 'application/octet-stream',
-                                               _blobinfo_uploaded_filename=name)
-
-            with files.open(file_name, 'a') as f:
-                for chunk in content.chunks():
-                    f.write(chunk)
-
-            files.finalize(file_name)
-
-            data = files.blobstore.get_blob_key(file_name)
+            # With the files api deprecated, we provide a workaround here, an inline upload
+            # to the blobstore, using the djangae.views.internalupload handler to return the blob key
+            response = urlfetch.fetch(url=create_upload_url(reverse('djangae_internal_upload_handler')),
+                payload=encode_multipart(BOUNDARY, {'file': content}),
+                method=urlfetch.POST,
+                deadline=60,
+                follow_redirects=False,
+                headers={'Content-Type': MULTIPART_CONTENT}
+            )
+            if response.status_code != 200 or response.content == "error":
+                raise ValueError("The internal upload to blobstore failed, check the app's logs.")
+            return '%s/%s' % (response.content, name.lstrip('/'))
         else:
             raise ValueError("The App Engine storage backend only supports "
                              "BlobstoreFile instances or File instances.")
