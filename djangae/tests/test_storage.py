@@ -11,7 +11,7 @@ from django.core.files.base import File, ContentFile
 from django.http import HttpResponse
 
 from djangae.test import TestCase
-from djangae.storage import BlobstoreStorage
+from djangae.storage import BlobstoreStorage, BlobstoreFileapiStorage
 
 from testapp.wsgi import application
 
@@ -116,3 +116,43 @@ class BlobstoreStorageTests(TestCase):
         # Delete it
         storage.delete(filename)
         self.assertFalse(storage.exists(filename))
+
+    def test_supports_nameless_files(self):
+        storage = BlobstoreStorage()
+        f2 = ContentFile('nameless-content')
+        storage.save('tmp2', f2)
+
+    def test_backward_compatibility(self):
+        # Ensures BlobstoreStorage can retrieve files written with the old
+        # BlobstoreFileapiStorage backend.
+        old_storage = BlobstoreFileapiStorage()
+        new_storage = BlobstoreStorage()
+
+        # Save with old backend
+        f = ContentFile('oldcontent', name='my_file')
+        filename = old_storage.save('tmp', f)
+
+        # # Check .exists(), .size() and .url() on the _new_ storage backend
+        self.assertTrue(new_storage.exists(filename))
+        self.assertEqual(new_storage.size(filename), len('oldcontent'))
+        url = new_storage.url(filename)
+        self.assertIsInstance(url, basestring)
+        self.assertNotEqual(url, '')
+
+        # Check URL can still be fetched
+        abs_url = urlparse.urlunparse(
+            ('http', os.environ['HTTP_HOST'], url, None, None, None)
+        )
+        response = urlfetch.fetch(abs_url)
+        self.assertEqual(response.status_code, httplib.OK)
+        self.assertEqual(response.content, 'oldcontent')
+
+        # Open it, read it
+        # NOTE: Blobstore doesn’t support updating existing files.
+        f = new_storage.open(filename)
+        self.assertIsInstance(f, File)
+        self.assertEqual(f.read(), 'oldcontent')
+
+        # Delete it using the _new_ storage backend
+        new_storage.delete(filename)
+        self.assertFalse(new_storage.exists(filename))
