@@ -8,12 +8,12 @@ from google.appengine.api import urlfetch
 from google.appengine.tools.devappserver2 import blob_upload, blob_image
 
 from django.core.files.base import File, ContentFile
+from django.core.wsgi import get_wsgi_application
 from django.http import HttpResponse
 
-from djangae.test import TestCase
 from djangae.storage import BlobstoreStorage, BlobstoreFileapiStorage
-
-from testapp.wsgi import application
+from djangae.test import TestCase
+from djangae.wsgi import DjangaeApplication
 
 
 # _URL_STRING_MAP is {'GET': 1, etc} so reverse dict to convert int to string
@@ -34,6 +34,7 @@ def urlfetch_wrapper(url, payload=None, method=urlfetch.GET, headers={},
     if path.startswith('/_ah/upload/'):
         # Blobstore upload handler is a WSGI application. `forward_app=...`
         # tells it to route the _subsequent_ POST back to Django
+        application = DjangaeApplication(get_wsgi_application())
         app = blob_upload.Application(forward_app=application)
 
     elif path.startswith('/_ah/img/'):
