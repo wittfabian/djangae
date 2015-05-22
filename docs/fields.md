@@ -58,24 +58,23 @@ It works by creating a set of `CounterShard` objects, each of which stores a cou
 * `shard_count`: the number of `CounterShard` objects to use.  The default number is deliberately set to allow all of the shards to be created (and the object to which they belong updated) in a single transaction.  See the `.populate()` method below.
 * `related_name`: the name of the reverse relation lookup which is added to the `CounterShard` model.  This is deliberately set to `"+"` to avoid the reverse lookup being set, as in most cases you will never need it and setting it gives you the problem of avoiding clashes when you have multiple ShardedCounterFields on the same model.
 
-When you access the attribute of your sharded counter field on your model, you get a `ShardedCounter` object, which has the following API:
+When you access the attribute of your sharded counter field on your model, you get a `RelatedShardManager` object, which has the following API:
 
 * `.value()`: Gives you the value of counter.
 * `.increment(step=1)`: Transactionally increment the counter by the given step.
     - If you have not yet called `.populate()` then this might also cause your model object to be re-saved, depending on whether or not it needs to create a new shard.
 * `.decrement(step=1)`: Transactionally decrement the counter by the given step.
     - If you have not yet called `.populate()` then this might also cause your model object to be re-saved, depending on whether or not it needs to create a new shard.
-* `.populate(save=True)`: Creates all the shards that the counter will need.
+* `.populate()`: Creates all the shards that the counter will need.
      - This is useful if you want to ensure that additional saves to your model object are avoided when calling `.increment()` or `.decrement()`, as these saves may cause issues if you're doing things inside a transaction or at such a rate that they cause DB contention on your model object.
-     - If `save` is `True` then it saves the updated list of shard IDs on the model object.  The only reason you would want to pass this as `False` is if you're doing other changes to the object at the same time and want to combine the saves.
-     - If possible (i.e. if the number of shards to create is few enough) and if `save` is `True`, the whole operation will be done transactionally.
-* `.reset(True)`: Deletes all of the shards, thereby setting the counter to 0.
-    - If `save` is `True` then it saves the updated (empty) list of shard IDs on the model object.  The only reason you would want to pass this as `False` is if you're doing other changes to the object at the same time and want to combine the saves.
-    - If possible (i.e. if you have few enough shards) and if `save` is `True`, the whole operation will be done transactionally.
+     - Note that this causes your model instance to be re-saved.
+* `.reset()`: Transactionally resets the counter to 0.
+    - This is done by changing the value of the shards, not by deleting them.  So you can continue to use your counter afterwards without having to call `populate()` again first.
 
 
 ### Additional notes:
 
+* Counts can be negative.
 * `ShardedCounterField` is a subclass of `RelatedSetField`, so in addition to the above API you also have the manager methods from `RelatedSetField` such as `.filter()`, etc.  These probably aren't very useful though!
 * For convenience (or more likely, disaster recovery), each `CounterShard` has a `label` field which contains a reference to the model and field for which it is used in the format `"db_table.field_name"`.  So should you ever need to go and actually look at/alter the `CounterShard` objects, you can see which ones are used for what.
 
