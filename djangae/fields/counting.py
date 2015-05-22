@@ -1,5 +1,6 @@
 import random
 
+from django.core.exceptions import ImproperlyConfigured
 
 from djangae.fields.related import (
     RelatedSetField,
@@ -11,6 +12,7 @@ from djangae.db import transaction
 
 
 MAX_ENTITY_GROUPS_PER_TRANSACTION = 25
+MAX_ENTITIES_PER_GET = 1000
 
 # If all the shards plus the object to which they belong is <= MAX_ENTITY_GROUPS_PER_TRANSACTION
 # then we can do the populate() and reset() operations transactionally, which is nice, hence:
@@ -39,50 +41,45 @@ class RelatedShardManager(RelatedSetManagerBase, CounterShard._default_manager._
         shards = self.all().values_list('count', flat=True)
         return sum(shards)
 
-    def reset(self, save=True):
-        """ Delete all of the shards for this counter (setting it to 0). """
-        def _reset():
-            self.all().delete()
-            setattr(self.instance, self.field.attname, set())
-            if save:
-                self.instance.save()
-
-        # If we have few enough shards then we can do this transactionally.
-        # There is only point in doing this if we're saving the model instance.
-        if save and len(self) < MAX_ENTITY_GROUPS_PER_TRANSACTION:
-            _reset = transaction.atomic(xg=True)(_reset)
-
-        _reset()
+    def reset(self):
+        """ Reset the counter to 0. """
+        with transaction.atomic(xg=True):
+            value = self.value()
+            if value > 0:
+                self.decrement(value)
+            elif value < 0:
+                self.increment(value)
 
     def clear(self):
         # Override the default `clear` method of the parent class, as that only clears the list of
         # PKs but doesn't delete the related objects.  We want to delete the objects (shards) as well.
         self.reset()
 
-    def populate(self, save=True):
+    def populate(self):
         """ Create all the CounterShard objects which will be used by this field. Useful to prevent
             additional saves being caused when you call increment() or decrement() due to having to
             update the list of shard PKs on the instance.
         """
-        num_to_create = self.field.shard_count - len(self)
-        if not num_to_create:
-            return
-
-        def _populate():
-            # TODO: use a bulk-create thing here
-            for x in xrange(num_to_create):
-                self.add(self._create_shard(count=0))
-            if save:
-                self.instance.save()
-
-        # If we have few enough shards then we can do this transactionally
-        # There is only point in doing this if we're saving the model instance.
-        if save and num_to_create < MAX_ENTITY_GROUPS_PER_TRANSACTION:
-            _populate = transaction.atomic(xg=save)(_populate)
-
-        _populate()
+        total_to_create = self.field.shard_count - len(self)
+        max_to_create_per_transaction = MAX_ENTITY_GROUPS_PER_TRANSACTION - 1
+        while total_to_create:
+            num_to_create = min(total_to_create, max_to_create_per_transaction)
+            with transaction.atomic(xg=True):
+                new_shard_pks = set()
+                for x in xrange(num_to_create):
+                    new_shard_pks.add(self._create_shard(count=0).pk)
+                # We must re-fetch the instance to ensure that we do this atomically, but we must
+                # also update self.instance so that the calling code which is referencing
+                # self.instance also gets the updated list of shard PKs
+                new_instance = self.instance._default_manager.get(pk=self.instance.pk)
+                new_instance_shard_pks = getattr(new_instance, self.field.attname, set())
+                new_instance_shard_pks.update(new_shard_pks)
+                setattr(self.instance, self.field.attname, new_instance_shard_pks)
+                new_instance.save()
+                total_to_create -= num_to_create
 
     def _update_or_create_shard(self, step):
+        """ Find or create a random shard and alter its `count` by the given step. """
         shard_index = random.randint(0, self.field.shard_count - 1)
         # Converting the set to a list introduces some randomness in the ordering, but that's fine
         shard_pks = list(self.field.value_from_object(self.instance)) # needs to be indexable
@@ -91,9 +88,15 @@ class RelatedShardManager(RelatedSetManagerBase, CounterShard._default_manager._
         except IndexError:
             # We don't have this many shards yet, so create a new one
             with transaction.atomic(xg=True):
+                # We must re-fetch the instance to ensure that we do this atomically, but we must
+                # also update self.instance so that the calling code which is referencing
+                # self.instance also gets the updated list of shard PKs
                 new_shard = self._create_shard(count=step)
-                self.add(new_shard)
-                self.instance.save()
+                new_instance = self.instance._default_manager.get(pk=self.instance.pk)
+                new_instance_shard_pks = getattr(new_instance, self.field.attname, set())
+                new_instance_shard_pks.add(new_shard.pk)
+                setattr(self.instance, self.field.attname, new_instance_shard_pks)
+                new_instance.save()
         else:
             with transaction.atomic():
                 shard = CounterShard.objects.get(pk=shard_pk)
@@ -127,6 +130,11 @@ class ShardedCounterField(RelatedSetField):
         # Note that by removing the related_name by default we avoid reverse name clashes caused by
         # having multiple ShardedCounterFields on the same model.
         self.shard_count = shard_count
+        if shard_count > MAX_ENTITIES_PER_GET:
+            raise ImproperlyConfigured(
+                "ShardedCounterField.shard_count cannot be more than the Datastore is capable of "
+                "fetching in a single Get operation (%d)" % MAX_ENTITIES_PER_GET
+            )
         kwargs.setdefault("related_name", "+")
         super(ShardedCounterField, self).__init__(CounterShard, *args, **kwargs)
 
