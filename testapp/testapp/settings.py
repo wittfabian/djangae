@@ -8,6 +8,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/dev/ref/settings/
 """
 import sys
+import django
 from djangae.settings_base import *
 
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
@@ -48,6 +49,10 @@ INSTALLED_APPS = [
     'djangae',
     'testapp'
 ]
+# In 1.7+, djangae needs to come first in INSTALLED_APPS
+if django.VERSION >= (1, 7, 0, 0, 0):
+    INSTALLED_APPS.remove('djangae')
+    INSTALLED_APPS = ['djangae'] + INSTALLED_APPS
 
 if "test" in sys.argv:
     import sys

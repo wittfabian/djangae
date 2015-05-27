@@ -1,3 +1,4 @@
+# coding: utf-8
 import mimetypes
 import re
 
@@ -178,6 +179,12 @@ class BlobstoreStorage(BlobstoreFileapiStorage):  #Storage):
     def _upload_to_blobstore(self, name, content):
         # With the files api deprecated, we provide a workaround here, an inline upload
         # to the blobstore, using the djangae.views.internalupload handler to return the blob key
+
+        # `encode_multipart()` expects files to have a `name`, even though
+        # they’re optional
+        if not content.name:
+            content.name = 'untitled'
+
         response = urlfetch.fetch(url=create_upload_url(reverse('djangae_internal_upload_handler')),
             payload=encode_multipart(BOUNDARY, {'file': content}),
             method=urlfetch.POST,
