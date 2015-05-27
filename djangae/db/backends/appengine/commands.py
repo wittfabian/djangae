@@ -363,7 +363,7 @@ class UniqueQuery(object):
             keys = keys_query.Run(limit=limit, offset=offset)
 
             # Do a consistent get so we don't cache stale data, and recheck the result matches the query
-            ret = [ x for x in datastore.Get(keys) if utils.entity_matches_query(x, self._gae_query) ]
+            ret = [ x for x in datastore.Get(keys) if x and utils.entity_matches_query(x, self._gae_query) ]
             if len(ret) == 1:
                 caching.add_entity_to_cache(self._model, ret[0], caching.CachingSituation.DATASTORE_GET)
             return iter(ret)
