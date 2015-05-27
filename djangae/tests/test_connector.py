@@ -731,6 +731,12 @@ class ConstraintTests(TestCase):
         with self.assertRaises(IntegrityError):
             UniqueModel.objects.create(unique_field="One")
 
+    def test_recently_deleted_unique_doesnt_come_back(self):
+        instance = ModelWithUniques.objects.create(name="One")
+
+        with inconsistent_db():
+            instance.delete()
+            self.assertFalse(ModelWithUniques.objects.filter(name="One").exists())
 
     def test_conflicting_update_throws_integrity_error(self):
         ModelWithUniques.objects.create(name="One")
