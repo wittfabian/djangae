@@ -66,6 +66,6 @@ def deferred(request):
 def internalupload(request):
     try:
         return HttpResponse(str(request.FILES['file'].blobstore_info.key()))
-    except e:
+    except Exception:
         logging.exception("DJANGAE UPLOAD FAILED: The internal upload handler couldn't retrieve the blob info key.")
         return "error"
