@@ -371,13 +371,8 @@ class UniqueQuery(object):
         return iter([ ret ])
 
     def Count(self, limit, offset):
-        ret = caching.get_from_cache(self._identifier)
-        if ret is not None and not utils.entity_matches_query(ret, self._gae_query):
-            ret = None
+        return sum(1 for x in self.Run(limit, offset))
 
-        if ret is None:
-            return self._gae_query.Count(limit=limit, offset=offset)
-        return 1
 
 def _convert_ordering(query):
     if not query.default_ordering:

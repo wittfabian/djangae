@@ -736,7 +736,9 @@ class ConstraintTests(TestCase):
 
         with inconsistent_db():
             instance.delete()
+            self.assertEqual(0, ModelWithUniques.objects.filter(name="One").count())
             self.assertFalse(ModelWithUniques.objects.filter(name="One").exists())
+            self.assertFalse(list(ModelWithUniques.objects.all())) # Triple-check
 
     def test_conflicting_update_throws_integrity_error(self):
         ModelWithUniques.objects.create(name="One")
