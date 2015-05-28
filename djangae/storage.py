@@ -174,7 +174,7 @@ class BlobstoreStorage(Storage):
             follow_redirects=False,
             headers={'Content-Type': MULTIPART_CONTENT}
         )
-        if response.status_code != 200 or response.content == "error":
+        if response.status_code != 200:
             raise ValueError("The internal upload to blobstore failed, check the app's logs.")
         return '%s/%s' % (response.content, name.lstrip('/'))
 
