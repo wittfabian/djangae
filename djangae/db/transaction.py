@@ -1,3 +1,6 @@
+import copy
+import functools
+
 from google.appengine.api.datastore import (
     CreateTransactionOptions,
     _GetConnection,
@@ -6,29 +9,68 @@ from google.appengine.api.datastore import (
     _SetConnection,
     IsInTransaction
 )
-
 from google.appengine.datastore.datastore_rpc import TransactionOptions
 
 from djangae.db.backends.appengine import caching
 
 
+def in_atomic_block():
+    # At the moment just a wrapper around App Engine so that
+    # users don't have to use two different APIs
+    return IsInTransaction()
+
+
 class ContextDecorator(object):
+    """ Base class for objects creating dual purpose decorators and context managers.
+        Sub classes need to define __enter__ and __exit__ to define the desired functionality;
+        these methods will be called whether the object is used as a decorator or a context manager.
+        Possible usages for subclasses:
+
+        @my_context_decorator
+        def my_function():
+            pass
+
+        @my_context_decorator()
+        def my_function():
+            pass
+
+        with my_context_decorator():
+            pass
+    """
     def __init__(self, func=None):
+        # If this has been used as `@decorator` without parenthesis, then the decorated function
+        # will be passed in here.
         self.func = func
 
+    def __get__(self, obj, objtype=None):
+        """ Implement descriptor protocol to support instance methods. """
+        # Invoked whenever this is accessed as an attribute of *another* object
+        # - as it is when wrapping an instance method: `instance.method` will be
+        # the ContextDecorator, so this is called.
+        # We make sure __call__ is passed the `instance`, which it will pass onto
+        # `self.func()`
+        return functools.partial(self.__call__, obj)
+
     def __call__(self, *args, **kwargs):
+        # This method is only called if this has been used as a decorator (not as a context manager)
         def decorated(*_args, **_kwargs):
-            with self:
+            # To allow subclasses to use attributes on `self` in a thread-safe way, we need to make
+            # a copy of ourself here
+            with copy.deepcopy(self):
                 return self.func(*_args, **_kwargs)
 
+        # If this has been used as `@decorator` without parenthesis
         if not self.func:
             self.func = args[0]
             return decorated
 
+        # Else... if this has been used as `@decorator()` with parenthesis
         return decorated(*args, **kwargs)
+
 
 class TransactionFailedError(Exception):
     pass
+
 
 class AtomicDecorator(ContextDecorator):
     def __init__(self, func=None, xg=False, independent=False, mandatory=False):
@@ -97,6 +139,8 @@ class AtomicDecorator(ContextDecorator):
             else:
                 caching._context.stack.pop(apply_staged=True, clear_staged=True)
 
+            # Reset this; in case this method is called again
+            self.transaction_started = False
 
     def __enter__(self):
         self._do_enter()
@@ -106,3 +150,31 @@ class AtomicDecorator(ContextDecorator):
 
 atomic = AtomicDecorator
 commit_on_success = AtomicDecorator  # Alias to the old Django name for this kinda thing
+
+
+class NonAtomicDecorator(ContextDecorator):
+    def _do_enter(self):
+        self._original_connection = None
+
+        if not in_atomic_block():
+            return # Do nothing if we aren't even in a transaction
+
+        self._original_connection = _PopConnection()
+        self._original_context = copy.deepcopy(caching._context)
+
+        while len(caching._context.stack.stack) > 1:
+            caching._context.stack.pop(discard=True)
+
+
+    def _do_exit(self, exception):
+        if self._original_connection:
+            _PushConnection(self._original_connection)
+            caching._context = self._original_context
+
+    def __enter__(self):
+        self._do_enter()
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self._do_exit(exc_type)
+
+non_atomic = NonAtomicDecorator

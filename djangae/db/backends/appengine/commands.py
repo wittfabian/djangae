@@ -367,7 +367,7 @@ class UniqueQuery(object):
             keys = keys_query.Run(limit=limit, offset=offset)
 
             # Do a consistent get so we don't cache stale data, and recheck the result matches the query
-            ret = [ x for x in datastore.Get(keys) if utils.entity_matches_query(x, self._gae_query) ]
+            ret = [ x for x in datastore.Get(keys) if x and utils.entity_matches_query(x, self._gae_query) ]
             if len(ret) == 1:
                 caching.add_entity_to_cache(self._model, ret[0], caching.CachingSituation.DATASTORE_GET)
             return iter(ret)
@@ -375,13 +375,8 @@ class UniqueQuery(object):
         return iter([ ret ])
 
     def Count(self, limit, offset):
-        ret = caching.get_from_cache(self._identifier)
-        if ret is not None and not utils.entity_matches_query(ret, self._gae_query):
-            ret = None
+        return sum(1 for x in self.Run(limit, offset))
 
-        if ret is None:
-            return self._gae_query.Count(limit=limit, offset=offset)
-        return 1
 
 def _convert_ordering(query):
     if not query.default_ordering:

@@ -110,15 +110,14 @@ def _local(devappserver2=None, configuration=None, options=None, wsgi_request_in
     # Silence warnings about this being unset, localhost:8080 is the dev_appserver default
     os.environ.setdefault("HTTP_HOST", "localhost:8080")
     os.environ['SERVER_NAME'] = os.environ['HTTP_HOST'].split(':', 1)[0]
-    os.environ['DEFAULT_VERSION_HOSTNAME'] = '%s:%s' % (os.environ['SERVER_NAME'], 8000)
+    os.environ['SERVER_PORT'] = os.environ['HTTP_HOST'].split(':', 1)[1]
+    os.environ['DEFAULT_VERSION_HOSTNAME'] = '%s:%s' % (os.environ['SERVER_NAME'], os.environ['SERVER_PORT'])
 
     devappserver2._setup_environ(configuration.app_id)
     storage_path = devappserver2._get_storage_path(options.storage_path, configuration.app_id)
 
-    dispatcher = _create_dispatcher(configuration, options)
-    request_data = wsgi_request_info.WSGIRequestInfo(dispatcher)
-    # Remember the wsgi request info object so it can be reused to avoid duplication.
-    dispatcher._request_data = request_data
+    from google.appengine.api import request_info
+    request_data = request_info._LocalRequestInfo()
 
     _API_SERVER = devappserver2.DevelopmentServer._create_api_server(
         request_data, storage_path, options, configuration)

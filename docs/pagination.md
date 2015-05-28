@@ -1,12 +1,12 @@
-# djangae.contrib.pagination
-## Easy Efficient Pagination for the Datastore
+
+# Easy Efficient Pagination for the Datastore
 
 Pagination on the datastore is *slow*. This is for a couple of reasons:
 
  - Counting on the datastore is slow; traditional pagination counts the dataset
  - Skipping results on the datastore is slow; if you slice a query, App Engine literally skips the entities up to the lower bound
 
-## So, what does this app do?
+## So, what does djangae.contrib.pagination do?
 
 This app provides two things that work together to efficiently paginate datasets on the datastore:
 
@@ -17,7 +17,10 @@ efficiently paginate and doesn't count all the results.
 
 ### Can you explain that a bit more?
 
-Supposing you have a queryset like `queryset = MyModel.objects.order_by('first_name', 'last_name')`,
+Supposing you have a queryset like this:
+
+    queryset = MyModel.objects.order_by('first_name', 'last_name')
+
 and you then want to paginate with 100 objects per page.  Your query for page 2 will be
 `queryset[200:299]`, which will cause the Datastore iterate over the first 200 entities before then
 returning entities 200-299, which is inefficient.  However, if we create a pre-calculated field,
@@ -25,7 +28,9 @@ made up of the fields we want to order by, plus a unique-ifier, (e.g.
 `"%s|%s|%s" % (first_name, last_name, pk)`), then we can order by that single field.  For
 pagination, when we fetch page 1, we can store the value of this field from the last object of page 1.
 The query for page 2 can then be
-`MyModel.objects.order_by('pre_calculated_field').filter(pre_calculated_field__gt=page_1_last_value)`,
+
+    MyModel.objects.order_by('pre_calculated_field').filter(pre_calculated_field__gt=page_1_last_value)
+
 which avoids any slicing at all.  The whole query and offset is based on Datastore indexes, and is efficient.
 
 The `@paginated_model` decorator allows you to specify which fields on your model you want to order

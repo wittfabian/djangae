@@ -1,9 +1,12 @@
-from django.test import TestCase
+import logging
+
 from django.db import models
 
+from djangae.test import TestCase
 from djangae.test import process_task_queues
 from djangae.contrib.mappers.pipes import MapReduceTask
-import logging
+from djangae.contrib.mappers.defer import defer_iteration, _shard
+
 
 class TestNode(models.Model):
     data = models.CharField(max_length=32)
@@ -98,3 +101,47 @@ class MapReduceTestCase(TestCase):
         process_task_queues()
         nodes = TestNode.objects.all()
         self.assertTrue(all(x.data == 'hit' for x in nodes))
+
+def zero_count(node):
+    node.counter = 0
+    node.save()
+
+
+def add_onehundred(node):
+    node.counter += 100
+    node.save()
+
+
+class TestDeferIteration(TestCase):
+    def setUp(self):
+        super(TestDeferIteration, self).setUp()
+
+        for x in xrange(10):
+            TestNode.objects.create(data="TestNode {}".format(x), counter=x+1)
+
+    def test_that_sharding_works(self):
+        _shard(
+            TestNode,
+            TestNode.objects.all().query,
+            zero_count,
+            shard_size=1,
+            queue="default"
+        )
+
+        self.assertNumTasksEquals(10)
+        self.process_task_queues()
+        self.assertEqual(10, TestNode.objects.filter(counter=0).count())
+
+    def test_that_processing_works(self):
+        " By adding 100, we can check that everything is called exactly once"
+
+        defer_iteration(TestNode.objects.all(), add_onehundred)
+
+        self.assertTrue(sum(TestNode.objects.values_list("counter", flat=True)))
+
+        self.process_task_queues()
+
+        self.assertEqual(
+            sum([(x+1) + 100 for x in xrange(10)]),
+            sum(TestNode.objects.values_list("counter", flat=True))
+        )

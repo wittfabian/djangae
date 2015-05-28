@@ -2,7 +2,8 @@ import os
 import logging
 
 from django.conf import settings
-from django.http import HttpResponse
+from django.http import HttpResponse, HttpResponseServerError
+from django.views.decorators.http import require_POST
 from django.utils.importlib import import_module
 from django.views.decorators.csrf import csrf_exempt
 
@@ -58,3 +59,13 @@ def deferred(request):
         logging.exception("Permanent failure attempting to execute task")
 
     return response
+
+
+@csrf_exempt
+@require_POST
+def internalupload(request):
+    try:
+        return HttpResponse(str(request.FILES['file'].blobstore_info.key()))
+    except Exception:
+        logging.exception("DJANGAE UPLOAD FAILED: The internal upload handler couldn't retrieve the blob info key.")
+        return HttpResponseServerError()

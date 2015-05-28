@@ -1,4 +1,4 @@
-## Gauth
+# Gauth
 
 Djangae includes two applications to aid authentication and user management with
 App Engine. Each provides both an abstract class, to extend if you're defining your own custom User model, or a concrete version to use in place of `'django.contrib.auth.models.User'`.  Also provided are custom authentication backends which delegate to the App Engine users API and a middleware to handle the link between the Django's user object and App Engine's (amongst other things).
@@ -8,7 +8,7 @@ App Engine. Each provides both an abstract class, to extend if you're defining y
 
 Allows the use of Django's permissions system on the Datastore, despite it usually requiring many-to-many relationships, which are not supported on the Datastore.
 
-#### Setup:
+### Setup
 
 1. Add `'djangae.contrib.gauth.datastore'` to `INSTALLED_APPS` probably
 after `'django.contrib.auth'`.
@@ -17,14 +17,14 @@ after `'django.contrib.auth'`.
 3. Set `AUTH_USER_MODEL = 'djangae.GaeUser'` in your settings file to use the supplied user model, or create your own by subclassing `'djangae.contrib.gauth.datastore.models.AbstractBaseUser'`.
 4. Add the backend to `AUTHENTICATION_BACKENDS` in your settings file eg:
 
-    ```
+```python
 AUTHENTICATION_BACKENDS (
 	'djangae.contrib.gauth.datastore.backends.AppEngineUserAPIBackend',
 	 ...
 )
-    ```
+```
 
-#### Permissions
+### Permissions
 
 The Datastore-based user models have a `user_permissions` list field, which takes the place of the usual many-to-many relationship to a `Permission` model.  For groups, Djangae provides `djangae.contrib.gauth.Group`, which again has a list field for storing the permissions.  This `Group` model is registered with the Django admin automatically for you.
 
@@ -32,7 +32,7 @@ The Datastore-based user models have a `user_permissions` list field, which take
 ## Using a relational database (CloudSQL)
 
 
-#### Setup:
+### Setup
 
 1. Add `'djangae.contrib.gauth.sql'` to `INSTALLED_APPS` probably
 after `'django.contrib.auth'`.
@@ -41,12 +41,12 @@ after `'django.contrib.auth'`.
 3. Set `AUTH_USER_MODEL = 'djangae.GaeUser'` in your settings file to use the supplied user model or create your own by subclassing `'djangae.contrib.gauth.sql.models.AbstractBaseUser'`.
 4. Add the backend to `AUTHENTICATION_BACKENDS` in your settings file eg:
 
-    ```
+```python
 AUTHENTICATION_BACKENDS (
 	'djangae.contrib.sql.backends.AppEngineUserAPIBackend',
 	 ...
 )
-    ```
+```
 
 
 ## Using your own permissions system
@@ -65,8 +65,7 @@ Djangae allows you to pre-create users by specifying their email address.  First
 
 As well as using Djangae's Google Accounts-based authentication, you can also use the standard authentication backend from django.contrib.auth.  They can work alongside each other.  Simply include both, like this:
 
-
-```
+```python
 AUTHENTICATION_BACKENDS = (
     'djangae.contrib.gauth.datastore.backends.AppEngineUserAPI',
     'django.contrib.auth.backends.ModelBackend',
