@@ -91,26 +91,27 @@ class Command(BaseRunserverCommand):
 
         sandbox._OPTIONS.automatic_restart = self.use_reloader
 
+        if sandbox._OPTIONS.host == "127.0.0.1" and os.environ["HTTP_HOST"].startswith("localhost"):
+            hostname = "localhost"
+        else:
+            hostname = sandbox._OPTIONS.host
+
+        os.environ["HTTP_HOST"] = "%s:%s" % (hostname, sandbox._OPTIONS.port)
+        os.environ['SERVER_NAME'] = os.environ['HTTP_HOST'].split(':', 1)[0]
+        os.environ['SERVER_PORT'] = os.environ['HTTP_HOST'].split(':', 1)[1]
+        os.environ['DEFAULT_VERSION_HOSTNAME'] = '%s:%s' % (os.environ['SERVER_NAME'], os.environ['SERVER_PORT'])
+
         class NoConfigDevServer(devappserver2.DevelopmentServer):
             def _create_api_server(self, request_data, storage_path, options, configuration):
                 self._dispatcher = sandbox._create_dispatcher(configuration, options)
                 self._dispatcher._port = options.port
                 self._dispatcher._host = options.host
 
-                # Make sure the dispatcher uses the WSGIRequestInfo object already instantiated in local sandbox.
-                # Without this, there will be references to two different request info objects, causing errors when trying
-                # to access a request in one that was started in the other.
-                def request_data_override(func, _request_data):
-                    def _wrapped(api_host, api_port, request_data):
-                        return func(api_host, api_port, _request_data)
-
-                    return _wrapped
-                self._dispatcher.start = request_data_override(self._dispatcher.start, self._dispatcher._request_data)
+                self._dispatcher.request_data = request_data
+                request_data._dispatcher = self._dispatcher
 
                 sandbox._API_SERVER._host = options.api_host
                 sandbox._API_SERVER.bind_addr = (options.api_host, options.api_port)
-
-                request_data._dispatcher = self._dispatcher
 
                 from google.appengine.api import apiproxy_stub_map
                 task_queue = apiproxy_stub_map.apiproxy.GetStub('taskqueue')
