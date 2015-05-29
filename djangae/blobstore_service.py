@@ -20,12 +20,25 @@ def start_blobstore_service():
     global blobstore_service
     global server
 
-    from wsgiref.simple_server import make_server, demo_app
+    from wsgiref.simple_server import make_server
     from google.appengine.tools.devappserver2.blob_upload import Application
+
+    from djangae.views import internalupload
+    from django.core.handlers.wsgi import WSGIRequest
+    from django.utils.encoding import force_str
+
+    def handler(environ, start_response):
+        request = WSGIRequest(environ)
+        response = internalupload(request)
+
+        status = '%s %s' % (response.status_code, response.reason_phrase)
+        response_headers = [(str(k), str(v)) for k, v in response.items()]
+        start_response(force_str(status), response_headers)
+        return response
 
     port = int(os.environ['SERVER_PORT'])
     logging.info("Starting blobstore service on port %s", port)
-    server = make_server('', port, Application(demo_app))
+    server = make_server('', port, Application(handler))
     blobstore_service = threading.Thread(target=server.serve_forever)
     blobstore_service.daemon = True
     blobstore_service.start()
