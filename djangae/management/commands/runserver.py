@@ -34,9 +34,12 @@ class Command(BaseRunserverCommand):
 
         from djangae.utils import find_project_root
         from djangae.sandbox import _find_sdk_from_python_path
+        from djangae.blobstore_service import stop_blobstore_service
 
         from django.conf import settings
         from django.utils import translation
+
+        stop_blobstore_service()
 
         # Check for app.yaml
         expected_path = os.path.join(find_project_root(), "app.yaml")
