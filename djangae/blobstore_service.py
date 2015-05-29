@@ -37,8 +37,9 @@ def start_blobstore_service():
         return response
 
     port = int(os.environ['SERVER_PORT'])
-    logging.info("Starting blobstore service on port %s", port)
-    server = make_server('', port, Application(handler))
+    host = os.environ['SERVER_NAME']
+    logging.info("Starting blobstore service on %s:%s", host, port)
+    server = make_server(host, port, Application(handler))
     blobstore_service = threading.Thread(target=server.serve_forever)
     blobstore_service.daemon = True
     blobstore_service.start()
