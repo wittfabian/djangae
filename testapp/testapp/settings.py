@@ -54,6 +54,8 @@ if django.VERSION >= (1, 7, 0, 0, 0):
     INSTALLED_APPS.remove('djangae')
     INSTALLED_APPS = ['djangae'] + INSTALLED_APPS
 
+TO_TEST = []
+
 if "test" in sys.argv:
     import sys
     import tempfile

@@ -122,10 +122,14 @@ def _local(devappserver2=None, configuration=None, options=None, wsgi_request_in
     _API_SERVER = devappserver2.DevelopmentServer._create_api_server(
         request_data, storage_path, options, configuration)
 
+    from .blobstore_service import start_blobstore_service, stop_blobstore_service
+
+    start_blobstore_service()
     try:
         yield
     finally:
         os.environ = original_environ
+        stop_blobstore_service()
 
 
 @contextlib.contextmanager
@@ -254,6 +258,7 @@ def activate(sandbox_name, add_sdk_to_path=False, **overrides):
     # The argparser is the easiest way to get the default options.
     options = devappserver2.PARSER.parse_args([project_root])
     options.enable_task_running = False # Disable task running by default, it won't work without a running server
+    options.skip_sdk_update_check = True
 
     for option in overrides:
         if not hasattr(options, option):
