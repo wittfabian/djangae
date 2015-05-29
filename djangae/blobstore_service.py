@@ -28,13 +28,7 @@ def start_blobstore_service():
     from django.core.handlers.wsgi import WSGIRequest
     from django.utils.encoding import force_str
 
-    def handler(environ, start_response):
-        path = environ["PATH_INFO"]
-
-        # If this is an image serving URL, then use use the blob_image WSGI app
-        if re.match(blob_image.BLOBIMAGE_URL_PATTERN, path):
-            return blob_image.Application()(environ, start_response)
-
+    def call_internal_upload(environ, start_response):
         # Otherwise, just assume it's our internalupload handler
         request = WSGIRequest(environ)
         response = internalupload(request)
@@ -44,10 +38,19 @@ def start_blobstore_service():
         start_response(force_str(status), response_headers)
         return response
 
+    def handler(environ, start_response):
+        path = environ["PATH_INFO"]
+
+        # If this is an image serving URL, then use use the blob_image WSGI app
+        if re.match(blob_image.BLOBIMAGE_URL_PATTERN, path.lstrip("/")):
+            return blob_image.Application()(environ, start_response)
+
+        return blob_upload.Application(call_internal_upload)(environ, start_response)
+
     port = int(os.environ['SERVER_PORT'])
     host = os.environ['SERVER_NAME']
     logging.info("Starting blobstore service on %s:%s", host, port)
-    server = make_server(host, port, blob_upload.Application(handler))
+    server = make_server(host, port, handler)
     blobstore_service = threading.Thread(target=server.serve_forever)
     blobstore_service.daemon = True
     blobstore_service.start()
