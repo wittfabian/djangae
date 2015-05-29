@@ -218,24 +218,24 @@ class DatabaseOperations(BaseDatabaseOperations):
 
         return converters
 
-    def convert_textfield_value(self, value, expression, connection, context):
+    def convert_textfield_value(self, value, expression, connection, context=None):
         if isinstance(value, str):
             value = value.decode("utf-8")
         return value
 
-    def convert_datetime_value(self, value, expression, connection, context):
+    def convert_datetime_value(self, value, expression, connection, context=None):
         return self.connection.ops.value_from_db_datetime(value)
 
-    def convert_date_value(self, value, expression, connection, context):
+    def convert_date_value(self, value, expression, connection, context=None):
         return self.connection.ops.value_from_db_date(value)
 
-    def convert_time_value(self, value, expression, connection, context):
+    def convert_time_value(self, value, expression, connection, context=None):
         return self.connection.ops.value_from_db_time(value)
 
-    def convert_decimal_value(self, value, expression, connection, context):
+    def convert_decimal_value(self, value, expression, connection, context=None):
         return self.connection.ops.value_from_db_decimal(value)
 
-    def convert_list_value(self, value, expression, connection, context):
+    def convert_list_value(self, value, expression, connection, context=None):
         if expression.output_field.db_type(connection) != "list":
             return value
 
@@ -243,7 +243,7 @@ class DatabaseOperations(BaseDatabaseOperations):
             value = []
         return value
 
-    def convert_set_value(self, value, expression, connection, context):
+    def convert_set_value(self, value, expression, connection, context=None):
         if expression.output_field.db_type(connection) != "set":
             return value
 
@@ -261,7 +261,7 @@ class DatabaseOperations(BaseDatabaseOperations):
 
         db_type = field.db_type(self.connection)
         if db_type == 'string' and isinstance(value, str):
-            value = self.convert_textfield_value(value, field)
+            value = self.convert_textfield_value(value, field, self.connection)
         elif db_type == "datetime":
             value = self.connection.ops.value_from_db_datetime(value)
         elif db_type == "date":
