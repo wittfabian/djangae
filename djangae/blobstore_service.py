@@ -24,13 +24,14 @@ def start_blobstore_service():
     from google.appengine.tools.devappserver2 import blob_upload
     from google.appengine.tools.devappserver2 import blob_image
 
-    from djangae.views import internalupload
     from django.core.handlers.wsgi import WSGIRequest
     from django.utils.encoding import force_str
 
     def call_internal_upload(environ, start_response):
         # Otherwise, just assume it's our internalupload handler
         request = WSGIRequest(environ)
+
+        from djangae.views import internalupload
         response = internalupload(request)
 
         status = '%s %s' % (response.status_code, response.reason_phrase)
