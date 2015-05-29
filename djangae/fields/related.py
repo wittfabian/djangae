@@ -104,7 +104,7 @@ class RelatedSetObjectsDescriptor(object):
         if instance is None:
             return self
 
-        rel_model = self.related.related_model
+        rel_model = self.related.related_model if django.VERSION[1]>=8 else self.related.to
         rel_field = self.related.field
 
         manager = self.related_manager_cls(
@@ -134,9 +134,10 @@ class ReverseRelatedSetObjectsDescriptor(object):
     def related_manager_cls(self):
         # Dynamically create a class that subclasses the related model's
         # default manager.
+        rel_model = self.field.rel.related_model if django.VERSION[1]>=8 else self.field.rel.to
         return create_related_set_manager(
-            self.field.rel.related_model._default_manager.__class__,
-            self.field.rel.related_model
+            rel_model._default_manager.__class__,
+            rel_model
         )
 
     def __get__(self, instance, instance_type=None):
@@ -165,19 +166,12 @@ class RelatedSetField(RelatedField):
         return 'set'
 
     def __init__(self, model, limit_choices_to=None, related_name=None, **kwargs):
-        if django.VERSION[1] >= 8:
-            kwargs["rel"] = RelatedSetRel(
-                self,
-                model,
-                related_name=related_name,
-                limit_choices_to=limit_choices_to
-            )
-        else:
-            kwargs["rel"] = RelatedSetRel(
-                model,
-                related_name=related_name,
-                limit_choices_to=limit_choices_to
-            )
+        kwargs["rel"] = RelatedSetRel(
+            self,
+            model,
+            related_name=related_name,
+            limit_choices_to=limit_choices_to
+        )
 
         kwargs["default"] = set
         kwargs["null"] = True
