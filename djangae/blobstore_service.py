@@ -20,12 +20,16 @@ def start_blobstore_service():
     global blobstore_service
     global server
 
+    if blobstore_service:
+        return
+
     from wsgiref.simple_server import make_server
     from google.appengine.tools.devappserver2 import blob_upload
     from google.appengine.tools.devappserver2 import blob_image
 
     from django.core.handlers.wsgi import WSGIRequest
     from django.utils.encoding import force_str
+    from socket import error as socket_error
 
     def call_internal_upload(environ, start_response):
         # Otherwise, just assume it's our internalupload handler
@@ -51,7 +55,12 @@ def start_blobstore_service():
     port = int(os.environ['SERVER_PORT'])
     host = os.environ['SERVER_NAME']
     logging.info("Starting blobstore service on %s:%s", host, port)
-    server = make_server(host, port, handler)
+    try:
+        server = make_server(host, port, handler)
+    except socket_error:
+        logging.warning("Not starting blobstore service, it may already be running")
+        return
+
     blobstore_service = threading.Thread(target=server.serve_forever)
     blobstore_service.daemon = True
     blobstore_service.start()
