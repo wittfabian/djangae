@@ -248,7 +248,7 @@ class RelatedSetField(RelatedField):
         ret =  super(RelatedSetField, self).get_db_prep_lookup(*args, **kwargs)
 
         if not ret:
-            return None
+            return []
 
         if isinstance(ret, set):
             ret = list(ret)

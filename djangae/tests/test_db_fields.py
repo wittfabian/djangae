@@ -389,6 +389,12 @@ class InstanceSetFieldTests(TestCase):
         other.delete()
         self.assertEqual(main.related_things.count(), 0)
 
+    def test_querying_with_isnull(self):
+        obj = ISModel.objects.create()
+
+        self.assertItemsEqual([obj], ISModel.objects.filter(related_things__isnull=True))
+        self.assertItemsEqual([obj], ISModel.objects.filter(related_things_ids__isnull=True))
+
 
 class TestGenericRelationField(TestCase):
     def test_basic_usage(self):
