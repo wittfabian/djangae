@@ -39,6 +39,30 @@ class RelatedIterRel(ForeignObjectRel):
         return self.to._meta.pk
 
 
+from django.db.models.query import QuerySet
+
+
+class OrderedQuerySet(QuerySet):
+
+    def _fetch_all(self):
+        if self._result_cache is None:
+            results = list(self.iterator())
+            ordered_results = []
+            pk_hash = {x.pk: x for x in results}
+            for pk in self.ordered_pks:
+                obj = pk_hash.get(pk)
+                if obj:
+                    ordered_results.append(obj)
+            self._result_cache = ordered_results
+        if self._prefetch_related_lookups and not self._prefetch_done:
+            self._prefetch_related_objects()
+
+    def _clone(self, *args, **kwargs):
+        c = super(OrderedQuerySet, self)._clone(*args, **kwargs)
+        c.ordered_pks = self.ordered_pks[:]
+        return c
+
+
 class RelatedIterManagerBase(object):
     def __init__(self, model, field, instance, reverse):
         super(RelatedIterManagerBase, self).__init__()
@@ -54,24 +78,15 @@ class RelatedIterManagerBase(object):
 
     def get_queryset(self):
         db = self._db or router.db_for_read(self.instance.__class__, instance=self.instance)
-        return (
-            super(RelatedIterManagerBase, self).get_queryset().using(db)
-            ._next_is_sticky().filter(**self.core_filters)
-        )
-
-    def all(self):
-        qs = self.get_queryset()
         if self.field.default == list and not self.reverse:
             values = self.field.value_from_object(self.instance)
-            out = []
-            pk_hash = {x.pk: x for x in qs}
-            for pk in values:
-                obj = pk_hash.get(pk)
-                if obj:
-                    out.append(obj)
-            return out
+            qcls = OrderedQuerySet(self.model, using=db)
+            qcls.ordered_pks = values[:]
         else:
-            return qs
+            qcls = super(RelatedIterManagerBase, self).get_queryset()
+        return (
+            qcls.using(db)._next_is_sticky().filter(**self.core_filters)
+        )
 
     def add(self, *values):
         for value in values:

@@ -401,8 +401,7 @@ class InstanceListFieldTests(TestCase):
         main.save()
         self.assertEqual(main.related_list.count(), 4)
         self.assertEqual([other.pk, other1.pk, other2.pk, other3.pk, ], main.related_list_ids)
-        alll = main.related_list.all()
-        self.assertEqual([other, other1, other2, other3, ], alll)
+        self.assertItemsEqual([other, other1, other2, other3, ], main.related_list.all())
         main.related_list.clear()
         main.save()
         self.assertEqual([], main.related_list_ids)
@@ -420,10 +419,7 @@ class InstanceListFieldTests(TestCase):
         main.related_list.add(other, other1, other2, other1, other3,)
         main.save()
         self.assertEqual([other.pk, other1.pk, other2.pk, other1.pk, other3.pk, ], main.related_list_ids)
-        alll = main.related_list.all()
-        self.assertEqual([other, other1, other2, other1, other3, ], alll)
-
-
+        self.assertItemsEqual([other, other1, other2, other1, other3, ], main.related_list.all())
 
 
 class InstanceSetFieldTests(TestCase):
