@@ -113,6 +113,7 @@ class AtomicDecorator(ContextDecorator):
         assert(_GetConnection())
 
         # Clear the context cache at the start of a transaction
+        caching.ensure_context()
         caching._context.stack.push()
 
     def _do_exit(self, exception):
