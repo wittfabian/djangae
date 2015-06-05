@@ -10,7 +10,7 @@ from djangae.forms.fields import (
 )
 import six
 
-class RelatedIterRel(ForeignObjectRel):
+class RelatedIteratorRel(ForeignObjectRel):
     def __init__(self, to, related_name=None, limit_choices_to=None):
         self.to = to
         self.related_name = related_name
@@ -101,9 +101,9 @@ class OrderedQuerySet(QuerySet):
         return list(qs)[0]
 
 
-class RelatedIterManagerBase(object):
+class RelatedIteratorManagerBase(object):
     def __init__(self, model, field, instance, reverse):
-        super(RelatedIterManagerBase, self).__init__()
+        super(RelatedIteratorManagerBase, self).__init__()
         self.model = model
         self.instance = instance
         self.field = field
@@ -121,7 +121,7 @@ class RelatedIterManagerBase(object):
             qcls = OrderedQuerySet(self.model, using=db)
             qcls.ordered_pks = values[:]
         else:
-            qcls = super(RelatedIterManagerBase, self).get_queryset()
+            qcls = super(RelatedIteratorManagerBase, self).get_queryset()
         return (
             qcls.using(db)._next_is_sticky().filter(**self.core_filters)
         )
@@ -160,12 +160,12 @@ class RelatedIterManagerBase(object):
 
 def create_related_iter_manager(superclass, rel):
     """ Create a manager for the (reverse) relation which subclasses the related model's default manager. """
-    class RelatedIterManager(RelatedIterManagerBase, superclass):
+    class RelatedIteratorManager(RelatedIteratorManagerBase, superclass):
         pass
-    return RelatedIterManager
+    return RelatedIteratorManager
 
 
-class RelatedIterObjectsDescriptor(object):
+class RelatedIteratorObjectsDescriptor(object):
     # This class provides the functionality that makes the related-object
     # managers available as attributes on a model class, for fields that have
     # multiple "remote" values and have a ManyToManyField pointed at them by
@@ -243,7 +243,7 @@ class ReverseRelatedObjectsDescriptor(object):
 from abc import ABCMeta
 
 
-class RelatedIterField(RelatedField):
+class RelatedIteratorField(RelatedField):
 
     __metaclass__ = ABCMeta
 
@@ -255,12 +255,12 @@ class RelatedIterField(RelatedField):
         return 'set'
 
     def __init__(self, model, limit_choices_to=None, related_name=None, **kwargs):
-        kwargs["rel"] = RelatedIterRel(
+        kwargs["rel"] = RelatedIteratorRel(
             model,
             related_name=related_name,
             limit_choices_to=limit_choices_to
         )
-        super(RelatedIterField, self).__init__(**kwargs)
+        super(RelatedIteratorField, self).__init__(**kwargs)
 
     def deconstruct(self):
         name, path, args, kwargs = super(RelatedSetField, self).deconstruct()
@@ -282,7 +282,7 @@ class RelatedIterField(RelatedField):
         if (self.rel.to == "self" or self.rel.to == cls._meta.object_name):
             self.rel.related_name = "%s_rel_+" % name
 
-        super(RelatedIterField, self).contribute_to_class(cls, name)
+        super(RelatedIteratorField, self).contribute_to_class(cls, name)
 
         # Add the descriptor for the m2m relation
         setattr(cls, self.name, ReverseRelatedObjectsDescriptor(self))
@@ -291,11 +291,11 @@ class RelatedIterField(RelatedField):
         # Internal M2Ms (i.e., those with a related name ending with '+')
         # and swapped models don't get a related descriptor.
         if not self.rel.is_hidden() and not related.model._meta.swapped:
-            setattr(cls, related.get_accessor_name(), RelatedIterObjectsDescriptor(related))
+            setattr(cls, related.get_accessor_name(), RelatedIteratorObjectsDescriptor(related))
 
 
     def get_db_prep_save(self, *args, **kwargs):
-        ret = super(RelatedIterField, self).get_db_prep_save(*args, **kwargs)
+        ret = super(RelatedIteratorField, self).get_db_prep_save(*args, **kwargs)
 
         if not ret:
             return None
@@ -305,7 +305,7 @@ class RelatedIterField(RelatedField):
         return ret
 
     def get_db_prep_lookup(self, *args, **kwargs):
-        ret = super(RelatedIterField, self).get_db_prep_lookup(*args, **kwargs)
+        ret = super(RelatedIteratorField, self).get_db_prep_lookup(*args, **kwargs)
 
         if not ret:
             return None
@@ -344,10 +344,10 @@ class RelatedIterField(RelatedField):
             if callable(initial):
                 initial = initial()
             defaults['initial'] = [i._get_pk_val() for i in initial]
-        return super(RelatedIterField, self).formfield(**defaults)
+        return super(RelatedIteratorField, self).formfield(**defaults)
 
 
-class RelatedSetField(RelatedIterField):
+class RelatedSetField(RelatedIteratorField):
 
     def db_type(self, connection):
         return 'set'
@@ -383,7 +383,7 @@ class RelatedSetField(RelatedIterField):
         return set(value)
 
 
-class RelatedListField(RelatedIterField):
+class RelatedListField(RelatedIteratorField):
 
     def db_type(self, connection):
         return 'list'

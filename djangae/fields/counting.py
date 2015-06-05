@@ -4,7 +4,7 @@ from django.core.exceptions import ImproperlyConfigured
 
 from djangae.fields.related import (
     RelatedSetField,
-    RelatedIterManagerBase,
+    RelatedIteratorManagerBase,
     ReverseRelatedObjectsDescriptor,
 )
 from djangae.models import CounterShard
@@ -19,7 +19,7 @@ MAX_ENTITIES_PER_GET = 1000
 DEFAULT_SHARD_COUNT = MAX_ENTITY_GROUPS_PER_TRANSACTION - 1
 
 
-class RelatedShardManager(RelatedIterManagerBase, CounterShard._default_manager.__class__):
+class RelatedShardManager(RelatedIteratorManagerBase, CounterShard._default_manager.__class__):
     """ This is what is given to you when you access the field attribute on an instance.  It's a
         model manager with the usual queryset methods (the same as for RelatedSetField) but with
         the additional increment()/decrement()/reset() methods for the counting.
