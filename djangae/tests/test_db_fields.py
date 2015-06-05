@@ -325,7 +325,6 @@ class InstanceListFieldTests(TestCase):
 
         self.assertEqual([other.pk,], main.related_list_ids)
         self.assertEqual(list(ISOther.objects.filter(pk__in=main.related_list_ids)), list(main.related_list.all()))
-        alll = other.ismodel_list.all()
         self.assertEqual([main], list(other.ismodel_list.all()))
 
         main.related_list.remove(other)
@@ -420,6 +419,29 @@ class InstanceListFieldTests(TestCase):
         main.save()
         self.assertEqual([other.pk, other1.pk, other2.pk, other1.pk, other3.pk, ], main.related_list_ids)
         self.assertItemsEqual([other, other1, other2, other1, other3, ], main.related_list.all())
+
+    def test_slicing(self):
+        main = ISModel.objects.create()
+        other = ISOther.objects.create()
+        other1 = ISOther.objects.create()
+        other2 = ISOther.objects.create()
+        other3 = ISOther.objects.create()
+        main.related_list.add(other, other1, other2, other1, other3,)
+        main.save()
+        self.assertItemsEqual([other, other1, ], main.related_list.all()[:2])
+        self.assertItemsEqual([other1, ], main.related_list.all()[1:2])
+        self.assertEqual(other1, main.related_list.all()[1:2][0])
+
+    def test_filtering(self):
+        main = ISModel.objects.create()
+        other = ISOther.objects.create(name="one")
+        other1 = ISOther.objects.create(name="two")
+        other2 = ISOther.objects.create(name="one")
+        other3 = ISOther.objects.create(name="three")
+        main.related_list.add(other, other1, other2, other1, other2,)
+        main.save()
+        self.assertItemsEqual([other, other2, other2], main.related_list.filter(name="one"))
+
 
 
 class InstanceSetFieldTests(TestCase):

@@ -1,5 +1,6 @@
 from django import forms
 from django.db import router, models
+from django.db.models.query import QuerySet
 from django.db.models.fields.related import RelatedField, ForeignObjectRel
 from django.utils.functional import cached_property
 from django.core.exceptions import ImproperlyConfigured, ValidationError
@@ -7,7 +8,7 @@ from djangae.forms.fields import (
     encode_pk,
     GenericRelationFormfield
 )
-
+import six
 
 class RelatedIterRel(ForeignObjectRel):
     def __init__(self, to, related_name=None, limit_choices_to=None):
@@ -39,12 +40,13 @@ class RelatedIterRel(ForeignObjectRel):
         return self.to._meta.pk
 
 
-from django.db.models.query import QuerySet
-
-
 class OrderedQuerySet(QuerySet):
 
     def _fetch_all(self):
+        """
+            Fetch all uses the standard iterator but sorts the values on the
+            way out, this maintains the lazy evaluation of querysets
+        """
         if self._result_cache is None:
             results = list(self.iterator())
             ordered_results = []
@@ -58,9 +60,45 @@ class OrderedQuerySet(QuerySet):
             self._prefetch_related_objects()
 
     def _clone(self, *args, **kwargs):
+        """
+            We need to attach the ordered_pk list on the clone to it continues
+            through the chain
+        """
         c = super(OrderedQuerySet, self)._clone(*args, **kwargs)
         c.ordered_pks = self.ordered_pks[:]
         return c
+
+    def __getitem__(self, k):
+        """
+            Ok to get query slicing working properly we can't allow it
+            to set limits on the internal query, because that is not the
+            behavior we want, instead we slice the internal ordered_pk list
+        """
+        if not isinstance(k, (slice,) + six.integer_types):
+            raise TypeError
+        assert ((not isinstance(k, slice) and (k >= 0))
+                or (isinstance(k, slice) and (k.start is None or k.start >= 0)
+                    and (k.stop is None or k.stop >= 0))), \
+                "Negative indexing is not supported."
+        if self._result_cache is not None:
+            return self._result_cache[k]
+
+        if isinstance(k, slice):
+            qs = self._clone()
+            if k.start is not None:
+                start = int(k.start)
+            else:
+                start = None
+            if k.stop is not None:
+                stop = int(k.stop)
+            else:
+                stop = None
+            qs.ordered_pks = qs.ordered_pks[start:stop]
+            return list(qs)[::k.step] if k.step else qs
+
+        qs = self._clone()
+        qs.ordered_pks = [qs.ordered_pks[k], ]
+        return list(qs)[0]
 
 
 class RelatedIterManagerBase(object):
