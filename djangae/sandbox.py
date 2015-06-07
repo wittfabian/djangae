@@ -6,6 +6,7 @@ import contextlib
 import subprocess
 import getpass
 import logging
+import urllib
 import djangae.utils as utils
 
 _SCRIPT_NAME = 'dev_appserver.py'
@@ -101,6 +102,34 @@ def _create_dispatcher(configuration, options):
 
 @contextlib.contextmanager
 def _local(devappserver2=None, configuration=None, options=None, wsgi_request_info=None, **kwargs):
+
+    # If we use `_LocalRequestInfo`, deferred tasks don't seem to work,
+    # but with the default `WSGIRequestInfo`, building the request url for
+    # blobstore uploads fails. So we inherit from `WSGIRequestInfo` and copy
+    # the `get_request_url` from `_LocalRequestInfo`
+    class CustomWSGIRequestInfo(wsgi_request_info.WSGIRequestInfo):
+        def get_request_url(self, request_id):
+            """Returns the URL the request e.g. 'http://localhost:8080/foo?bar=baz'.
+
+            Args:
+              request_id: The string id of the request making the API call.
+
+            Returns:
+              The URL of the request as a string.
+            """
+            try:
+                host = os.environ['HTTP_HOST']
+            except KeyError:
+                host = os.environ['SERVER_NAME']
+                port = os.environ['SERVER_PORT']
+                if port != '80':
+                    host += ':' + port
+            url = 'http://' + host
+            url += urllib.quote(os.environ.get('PATH_INFO', '/'))
+            if os.environ.get('QUERY_STRING'):
+                url += '?' + os.environ['QUERY_STRING']
+            return url
+
     global _API_SERVER
 
     _disable_sqlite_stub_logging()
@@ -116,8 +145,10 @@ def _local(devappserver2=None, configuration=None, options=None, wsgi_request_in
     devappserver2._setup_environ(configuration.app_id)
     storage_path = devappserver2._get_storage_path(options.storage_path, configuration.app_id)
 
-    from google.appengine.api import request_info
-    request_data = request_info._LocalRequestInfo()
+    dispatcher = _create_dispatcher(configuration, options)
+    request_data = CustomWSGIRequestInfo(dispatcher)
+    # Remember the wsgi request info object so it can be reused to avoid duplication.
+    dispatcher._request_data = request_data
 
     _API_SERVER = devappserver2.DevelopmentServer._create_api_server(
         request_data, storage_path, options, configuration)

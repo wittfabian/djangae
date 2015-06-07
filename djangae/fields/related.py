@@ -305,7 +305,7 @@ class RelatedIteratorField(RelatedField):
         ret = super(RelatedIteratorField, self).get_db_prep_lookup(*args, **kwargs)
 
         if not ret:
-            return None
+            return []
 
         if isinstance(ret, set):
             ret = list(ret)
