@@ -301,8 +301,9 @@ class InstanceListFieldTests(TestCase):
     def test_deserialization(self):
         i1 = ISOther.objects.create(pk=1)
         i2 = ISOther.objects.create(pk=2)
-
-        self.assertEqual([i1, i2], ISModel._meta.get_field("related_list").to_python("[1, 2]"))
+        # Does the to_python need to return ordered list? SetField test only passes because the set
+        # happens to order it correctly
+        self.assertItemsEqual([i1, i2], ISModel._meta.get_field("related_list").to_python("[1, 2]"))
 
     def test_save_and_load_empty(self):
         """

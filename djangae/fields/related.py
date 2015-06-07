@@ -251,9 +251,6 @@ class RelatedIteratorField(RelatedField):
     generate_reverse_relation = True
     empty_strings_allowed = False
 
-    def db_type(self, connection):
-        return 'set'
-
     def __init__(self, model, limit_choices_to=None, related_name=None, **kwargs):
         kwargs["rel"] = RelatedIteratorRel(
             model,
@@ -374,7 +371,6 @@ class RelatedSetField(RelatedIteratorField):
                 return set()
 
             ids = [self.rel.to._meta.pk.to_python(x) for x in value.split(",")]
-
             # Annoyingly Django special cases FK and M2M in the Python deserialization code,
             # to assign to the attname, whereas all other fields (including this one) are required to
             # populate field.name instead. So we have to query here... we have no choice :(
@@ -410,7 +406,6 @@ class RelatedListField(RelatedIteratorField):
                 return list()
 
             ids = [self.rel.to._meta.pk.to_python(x) for x in value.split(",")]
-
             # Annoyingly Django special cases FK and M2M in the Python deserialization code,
             # to assign to the attname, whereas all other fields (including this one) are required to
             # populate field.name instead. So we have to query here... we have no choice :(
