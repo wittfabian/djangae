@@ -260,7 +260,7 @@ class RelatedIteratorField(RelatedField):
         super(RelatedIteratorField, self).__init__(**kwargs)
 
     def deconstruct(self):
-        name, path, args, kwargs = super(RelatedSetField, self).deconstruct()
+        name, path, args, kwargs = super(RelatedIteratorField, self).deconstruct()
         args = (self.rel.to,)
         del kwargs["null"]
         del kwargs["default"]
