@@ -8,7 +8,7 @@ from djangae.forms.fields import (
     encode_pk,
     GenericRelationFormfield
 )
-import six
+from django.utils import six
 
 class RelatedIteratorRel(ForeignObjectRel):
     def __init__(self, to, related_name=None, limit_choices_to=None):
