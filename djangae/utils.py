@@ -2,6 +2,7 @@ import os
 import sys
 import time
 import logging
+from socket import socket, SHUT_RDWR
 
 
 def application_id():
@@ -178,3 +179,21 @@ def djangae_webapp(request_handler):
         return django_response
 
     return request_handler_wrapper
+
+
+def port_is_open(port, url):
+    s = socket()
+    try:
+        s.connect((url, int(port)))
+        s.shutdown(SHUT_RDWR)
+        return True
+    except:
+        return False
+
+
+def get_next_available_port(url, port):
+    for offset in xrange(10):
+        if port_is_open(url, port + offset):
+            port = port + offset
+            break
+    return port
