@@ -8,6 +8,7 @@ import getpass
 import logging
 import urllib
 import djangae.utils as utils
+from .utils import port_is_open, get_next_available_port
 
 _SCRIPT_NAME = 'dev_appserver.py'
 
@@ -100,6 +101,7 @@ def _create_dispatcher(configuration, options):
 
     return _create_dispatcher.singleton
 
+
 @contextlib.contextmanager
 def _local(devappserver2=None, configuration=None, options=None, wsgi_request_info=None, **kwargs):
 
@@ -137,9 +139,11 @@ def _local(devappserver2=None, configuration=None, options=None, wsgi_request_in
     original_environ = os.environ.copy()
 
     # Silence warnings about this being unset, localhost:8080 is the dev_appserver default
-    os.environ.setdefault("HTTP_HOST", "localhost:8080")
-    os.environ['SERVER_NAME'] = os.environ['HTTP_HOST'].split(':', 1)[0]
-    os.environ['SERVER_PORT'] = os.environ['HTTP_HOST'].split(':', 1)[1]
+    url = "localhost"
+    port = get_next_available_port(url, 8080)
+    os.environ.setdefault("HTTP_HOST", "{}:{}".format(url, port))
+    os.environ['SERVER_NAME'] = url
+    os.environ['SERVER_PORT'] = str(port)
     os.environ['DEFAULT_VERSION_HOSTNAME'] = '%s:%s' % (os.environ['SERVER_NAME'], os.environ['SERVER_PORT'])
 
     devappserver2._setup_environ(configuration.app_id)
