@@ -1416,34 +1416,6 @@ class BlobstoreFileUploadHandlerTest(TestCase):
         self.assertTrue(response.startswith("http://localhost:8080/_ah/upload/"))
 
 
-class ApplicationTests(TestCase):
-
-    @unittest.skipIf(webtest is NotImplemented, "pip install webtest to run functional tests")
-    def test_environ_is_patched_when_request_processed(self):
-        def application(environ, start_response):
-            # As we're not going through a thread pool the environ is unset.
-            # Set it up manually here.
-            # TODO: Find a way to get it to be auto-set by webtest
-            from google.appengine.runtime import request_environment
-            request_environment.current_request.environ = environ
-
-            # Check if the os.environ is the same as what we expect from our
-            # wsgi environ
-            import os
-            self.assertEqual(environ, os.environ)
-            start_response("200 OK", [])
-            return ["OK"]
-
-        djangae_app = DjangaeApplication(application)
-        test_app = webtest.TestApp(djangae_app)
-        old_environ = os.environ
-        try:
-            test_app.get("/")
-        finally:
-            os.environ = old_environ
-
-
-
 class DatastorePaginatorTest(TestCase):
 
     def setUp(self):
