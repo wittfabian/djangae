@@ -1104,6 +1104,12 @@ class InsertCommand(object):
 
                 return results
 
+    def lower(self):
+        """
+            This exists solely for django-debug-toolbar compatibility.
+        """
+        return str(self).lower()
+
 
 class DeleteCommand(object):
     def __init__(self, connection, query):
@@ -1135,6 +1141,12 @@ class DeleteCommand(object):
             caching.remove_entity_from_cache_by_key(entity.key())
         datastore.Delete(keys)
 
+    def lower(self):
+        """
+            This exists solely for django-debug-toolbar compatibility.
+        """
+        return str(self).lower()
+
 
 class UpdateCommand(object):
     def __init__(self, connection, query):
@@ -1142,6 +1154,12 @@ class UpdateCommand(object):
         self.select = SelectCommand(connection, query, keys_only=True)
         self.values = query.values
         self.connection = connection
+
+    def lower(self):
+        """
+            This exists solely for django-debug-toolbar compatibility.
+        """
+        return str(self).lower()
 
     @db.transactional
     def _update_entity(self, key):

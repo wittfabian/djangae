@@ -1,6 +1,6 @@
-import django
 from django import forms
 from django.db import router, models
+from django.db.models.query import QuerySet
 from django.db.models.fields.related import RelatedField, ForeignObjectRel
 from django.utils.functional import cached_property
 from django.core.exceptions import ImproperlyConfigured, ValidationError
@@ -8,16 +8,21 @@ from djangae.forms.fields import (
     encode_pk,
     GenericRelationFormfield
 )
+from django.utils import six
 
-class RelatedSetRel(ForeignObjectRel):
-    def __init__(self, *args, **kwargs):
-        for kwarg in ("parent_link", "on_delete", "related_query_name"):
-            if kwargs.get(kwarg):
-                raise ValueError("{} is not a supported argument for RelatedSetRel".format(kwarg))
-
-        kwargs["on_delete"] = models.DO_NOTHING
-        super(RelatedSetRel, self).__init__(*args, **kwargs)
+class RelatedIteratorRel(ForeignObjectRel):
+    def __init__(self, to, related_name=None, limit_choices_to=None):
+        self.to = to
+        self.related_name = related_name
+        self.related_query_name = None
         self.field_name = None
+        self.parent_link = None
+        self.on_delete = models.DO_NOTHING
+
+        if limit_choices_to is None:
+            limit_choices_to = {}
+        self.limit_choices_to = limit_choices_to
+        self.multiple = True
 
     def is_hidden(self):
         "Should the related object be hidden?"
@@ -35,12 +40,74 @@ class RelatedSetRel(ForeignObjectRel):
         return self.to._meta.pk
 
 
-class RelatedSetManagerBase(object):
+class OrderedQuerySet(QuerySet):
+
+    def _fetch_all(self):
+        """
+            Fetch all uses the standard iterator but sorts the values on the
+            way out, this maintains the lazy evaluation of querysets
+        """
+        if self._result_cache is None:
+            results = list(self.iterator())
+            ordered_results = []
+            pk_hash = {x.pk: x for x in results}
+            for pk in self.ordered_pks:
+                obj = pk_hash.get(pk)
+                if obj:
+                    ordered_results.append(obj)
+            self._result_cache = ordered_results
+        if self._prefetch_related_lookups and not self._prefetch_done:
+            self._prefetch_related_objects()
+
+    def _clone(self, *args, **kwargs):
+        """
+            We need to attach the ordered_pk list on the clone to it continues
+            through the chain
+        """
+        c = super(OrderedQuerySet, self)._clone(*args, **kwargs)
+        c.ordered_pks = self.ordered_pks[:]
+        return c
+
+    def __getitem__(self, k):
+        """
+            Ok to get query slicing working properly we can't allow it
+            to set limits on the internal query, because that is not the
+            behavior we want, instead we slice the internal ordered_pk list
+        """
+        if not isinstance(k, (slice,) + six.integer_types):
+            raise TypeError
+        assert ((not isinstance(k, slice) and (k >= 0))
+                or (isinstance(k, slice) and (k.start is None or k.start >= 0)
+                    and (k.stop is None or k.stop >= 0))), \
+                "Negative indexing is not supported."
+        if self._result_cache is not None:
+            return self._result_cache[k]
+
+        if isinstance(k, slice):
+            qs = self._clone()
+            if k.start is not None:
+                start = int(k.start)
+            else:
+                start = None
+            if k.stop is not None:
+                stop = int(k.stop)
+            else:
+                stop = None
+            qs.ordered_pks = qs.ordered_pks[start:stop]
+            return list(qs)[::k.step] if k.step else qs
+
+        qs = self._clone()
+        qs.ordered_pks = [qs.ordered_pks[k], ]
+        return list(qs)[0]
+
+
+class RelatedIteratorManagerBase(object):
     def __init__(self, model, field, instance, reverse):
-        super(RelatedSetManagerBase, self).__init__()
+        super(RelatedIteratorManagerBase, self).__init__()
         self.model = model
         self.instance = instance
         self.field = field
+        self.reverse = reverse
 
         if reverse:
             self.core_filters = {'%s__exact' % self.field.column: instance.pk}
@@ -49,9 +116,14 @@ class RelatedSetManagerBase(object):
 
     def get_queryset(self):
         db = self._db or router.db_for_read(self.instance.__class__, instance=self.instance)
+        if self.field.default == list and not self.reverse:
+            values = self.field.value_from_object(self.instance)
+            qcls = OrderedQuerySet(self.model, using=db)
+            qcls.ordered_pks = values[:]
+        else:
+            qcls = super(RelatedIteratorManagerBase, self).get_queryset()
         return (
-            super(RelatedSetManagerBase, self).get_queryset().using(db)
-            ._next_is_sticky().filter(**self.core_filters)
+            qcls.using(db)._next_is_sticky().filter(**self.core_filters)
         )
 
     def add(self, *values):
@@ -62,26 +134,38 @@ class RelatedSetManagerBase(object):
             if not value.pk:
                 raise ValueError("Model instances must be saved before they can be added to a related set")
 
-            self.field.value_from_object(self.instance).add(value.pk)
+            field_value = self.field.value_from_object(self.instance)
+            # Depending on the type of iterable, but we want to maintain the
+            # related .add() behavior
+            if isinstance(field_value, list):
+                field_value.append(value.pk)
+            elif isinstance(field_value, set):
+                field_value.add(value.pk)
 
     def remove(self, value):
-        self.field.value_from_object(self.instance).discard(value.pk)
+        field_value = self.field.value_from_object(self.instance)
+        # Depending on the type of iterable, but we want to maintain the
+        # related .remove() behavior
+        if isinstance(field_value, list):
+            field_value.remove(value.pk)
+        elif isinstance(field_value, set):
+            field_value.discard(value.pk)
 
     def clear(self):
-        setattr(self.instance, self.field.attname, set())
+        setattr(self.instance, self.field.attname, self.field.default())
 
     def __len__(self):
         return len(self.field.value_from_object(self.instance))
 
 
-def create_related_set_manager(superclass, rel):
+def create_related_iter_manager(superclass, rel):
     """ Create a manager for the (reverse) relation which subclasses the related model's default manager. """
-    class RelatedSetManager(RelatedSetManagerBase, superclass):
+    class RelatedIteratorManager(RelatedIteratorManagerBase, superclass):
         pass
-    return RelatedSetManager
+    return RelatedIteratorManager
 
 
-class RelatedSetObjectsDescriptor(object):
+class RelatedIteratorObjectsDescriptor(object):
     # This class provides the functionality that makes the related-object
     # managers available as attributes on a model class, for fields that have
     # multiple "remote" values and have a ManyToManyField pointed at them by
@@ -95,16 +179,16 @@ class RelatedSetObjectsDescriptor(object):
     def related_manager_cls(self):
         # Dynamically create a class that subclasses the related
         # model's default manager.
-        return create_related_set_manager(
+        return create_related_iter_manager(
             self.related.model._default_manager.__class__,
-            self.related
+            self.related.field.rel
         )
 
     def __get__(self, instance, instance_type=None):
         if instance is None:
             return self
 
-        rel_model = self.related.related_model if django.VERSION[1]>=8 else self.related.to
+        rel_model = self.related.model
         rel_field = self.related.field
 
         manager = self.related_manager_cls(
@@ -120,7 +204,7 @@ class RelatedSetObjectsDescriptor(object):
         raise AttributeError("You can't set the reverse relation directly")
 
 
-class ReverseRelatedSetObjectsDescriptor(object):
+class ReverseRelatedObjectsDescriptor(object):
     # This class provides the functionality that makes the related-object
     # managers available as attributes on a model class, for fields that have
     # multiple "remote" values and have a ManyToManyField defined in their
@@ -134,10 +218,9 @@ class ReverseRelatedSetObjectsDescriptor(object):
     def related_manager_cls(self):
         # Dynamically create a class that subclasses the related model's
         # default manager.
-        rel_model = self.field.rel.related_model if django.VERSION[1]>=8 else self.field.rel.to
-        return create_related_set_manager(
-            rel_model._default_manager.__class__,
-            rel_model
+        return create_related_iter_manager(
+            self.field.rel.to._default_manager.__class__,
+            self.field.rel.to
         )
 
     def __get__(self, instance, instance_type=None):
@@ -157,29 +240,27 @@ class ReverseRelatedSetObjectsDescriptor(object):
         obj.__dict__[self.field.attname] = self.field.to_python([x.pk for x in value])
 
 
-class RelatedSetField(RelatedField):
+from abc import ABCMeta
+
+
+class RelatedIteratorField(RelatedField):
+
+    __metaclass__ = ABCMeta
+
     requires_unique_target = False
     generate_reverse_relation = True
     empty_strings_allowed = False
 
-    def db_type(self, connection):
-        return 'set'
-
     def __init__(self, model, limit_choices_to=None, related_name=None, **kwargs):
-        kwargs["rel"] = RelatedSetRel(
-            self,
+        kwargs["rel"] = RelatedIteratorRel(
             model,
             related_name=related_name,
             limit_choices_to=limit_choices_to
         )
-
-        kwargs["default"] = set
-        kwargs["null"] = True
-
-        super(RelatedSetField, self).__init__(**kwargs)
+        super(RelatedIteratorField, self).__init__(**kwargs)
 
     def deconstruct(self):
-        name, path, args, kwargs = super(RelatedSetField, self).deconstruct()
+        name, path, args, kwargs = super(RelatedIteratorField, self).deconstruct()
         args = (self.rel.to,)
         del kwargs["null"]
         del kwargs["default"]
@@ -198,43 +279,20 @@ class RelatedSetField(RelatedField):
         if (self.rel.to == "self" or self.rel.to == cls._meta.object_name):
             self.rel.related_name = "%s_rel_+" % name
 
-        super(RelatedSetField, self).contribute_to_class(cls, name)
+        super(RelatedIteratorField, self).contribute_to_class(cls, name)
 
         # Add the descriptor for the m2m relation
-        setattr(cls, self.name, ReverseRelatedSetObjectsDescriptor(self))
-
+        setattr(cls, self.name, ReverseRelatedObjectsDescriptor(self))
 
     def contribute_to_related_class(self, cls, related):
         # Internal M2Ms (i.e., those with a related name ending with '+')
         # and swapped models don't get a related descriptor.
         if not self.rel.is_hidden() and not related.model._meta.swapped:
-            setattr(cls, related.get_accessor_name(), RelatedSetObjectsDescriptor(related))
+            setattr(cls, related.get_accessor_name(), RelatedIteratorObjectsDescriptor(related))
 
-    def to_python(self, value):
-        if value is None:
-            return set()
-
-        # Deal with deserialization from a string
-        if isinstance(value, basestring):
-            if not (value.startswith("[") and value.endswith("]")):
-                raise ValidationError("Invalid input for RelatedSetField instance")
-
-            value = value[1:-1].strip()
-
-            if not value:
-                return set()
-
-            ids = [ self.rel.to._meta.pk.to_python(x) for x in value.split(",") ]
-
-            # Annoyingly Django special cases FK and M2M in the Python deserialization code,
-            # to assign to the attname, whereas all other fields (including this one) are required to
-            # populate field.name instead. So we have to query here... we have no choice :(
-            return set(self.rel.to._default_manager.db_manager('default').filter(pk__in=ids))
-
-        return set(value)
 
     def get_db_prep_save(self, *args, **kwargs):
-        ret = super(RelatedSetField, self).get_db_prep_save(*args, **kwargs)
+        ret = super(RelatedIteratorField, self).get_db_prep_save(*args, **kwargs)
 
         if not ret:
             return None
@@ -244,10 +302,10 @@ class RelatedSetField(RelatedField):
         return ret
 
     def get_db_prep_lookup(self, *args, **kwargs):
-        ret =  super(RelatedSetField, self).get_db_prep_lookup(*args, **kwargs)
+        ret = super(RelatedIteratorField, self).get_db_prep_lookup(*args, **kwargs)
 
         if not ret:
-            return None
+            return []
 
         if isinstance(ret, set):
             ret = list(ret)
@@ -283,7 +341,77 @@ class RelatedSetField(RelatedField):
             if callable(initial):
                 initial = initial()
             defaults['initial'] = [i._get_pk_val() for i in initial]
-        return super(RelatedSetField, self).formfield(**defaults)
+        return super(RelatedIteratorField, self).formfield(**defaults)
+
+
+class RelatedSetField(RelatedIteratorField):
+
+    def db_type(self, connection):
+        return 'set'
+
+    def __init__(self, *args, **kwargs):
+
+        kwargs["default"] = set
+        kwargs["null"] = True
+
+        super(RelatedSetField, self).__init__(*args, **kwargs)
+
+    def to_python(self, value):
+        if value is None:
+            return set()
+
+        # Deal with deserialization from a string
+        if isinstance(value, basestring):
+            if not (value.startswith("[") and value.endswith("]")):
+                raise ValidationError("Invalid input for RelatedSetField instance")
+
+            value = value[1:-1].strip()
+
+            if not value:
+                return set()
+
+            ids = [self.rel.to._meta.pk.to_python(x) for x in value.split(",")]
+            # Annoyingly Django special cases FK and M2M in the Python deserialization code,
+            # to assign to the attname, whereas all other fields (including this one) are required to
+            # populate field.name instead. So we have to query here... we have no choice :(
+            return set(self.rel.to._default_manager.db_manager('default').filter(pk__in=ids))
+
+        return set(value)
+
+
+class RelatedListField(RelatedIteratorField):
+
+    def db_type(self, connection):
+        return 'list'
+
+    def __init__(self, *args, **kwargs):
+
+        kwargs["default"] = list
+        kwargs["null"] = True
+
+        super(RelatedListField, self).__init__(*args, **kwargs)
+
+    def to_python(self, value):
+        if value is None:
+            return list()
+
+        # Deal with deserialization from a string
+        if isinstance(value, basestring):
+            if not (value.startswith("[") and value.endswith("]")):
+                raise ValidationError("Invalid input for RelatedListField instance")
+
+            value = value[1:-1].strip()
+
+            if not value:
+                return list()
+
+            ids = [self.rel.to._meta.pk.to_python(x) for x in value.split(",")]
+            # Annoyingly Django special cases FK and M2M in the Python deserialization code,
+            # to assign to the attname, whereas all other fields (including this one) are required to
+            # populate field.name instead. So we have to query here... we have no choice :(
+            return list(self.rel.to._default_manager.db_manager('default').filter(pk__in=ids))
+
+        return list(value)
 
 
 class GRCreator(property):

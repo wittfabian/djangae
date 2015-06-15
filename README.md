@@ -1,5 +1,7 @@
 # Djangae
 
+[![Join the chat at https://gitter.im/potatolondon/djangae](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/potatolondon/djangae?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+
 [![build-status-image]][travis]
 
 The best way to run Django on Google App Engine.

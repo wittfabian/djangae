@@ -321,7 +321,7 @@ def entity_matches_query(entity, query):
 
     for query in queries:
         comparisons = chain(
-            [("kind", "=", "_Query__kind") ],
+            [("_Query__kind", "=", "_Query__kind") ],
             [tuple(x.split(" ") + [ x ]) for x in query.keys()]
         )
 
@@ -331,7 +331,7 @@ def entity_matches_query(entity, query):
 
             op = OPERATORS[op]  # We want this to throw if there's some op we don't know about
 
-            if ent_attr == "kind":
+            if ent_attr == "_Query__kind":
                 ent_attr = entity.kind()
             else:
                 ent_attr = entity.get(ent_attr)

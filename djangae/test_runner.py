@@ -131,6 +131,10 @@ class DjangaeTestSuiteRunner(DiscoverRunner):
 
         new_tests = []
 
+        # Django's DiscoveryRunner can create duplicate tests when passing
+        # extra_tests argument. Getting rid of that:
+        suite._tests = list(set(suite._tests))
+
         for i, test in enumerate(suite._tests):
 
             # https://docs.djangoproject.com/en/1.7/topics/testing/advanced/#django.test.TransactionTestCase.available_apps

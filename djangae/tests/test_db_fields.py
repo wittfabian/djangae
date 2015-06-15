@@ -9,6 +9,7 @@ from djangae.fields import (
     GenericRelationField,
     ListField,
     RelatedSetField,
+    RelatedListField,
     ShardedCounterField,
     SetField,
 )
@@ -81,6 +82,7 @@ class GenericRelationModel(models.Model):
 
 class ISModel(models.Model):
     related_things = RelatedSetField(ISOther)
+    related_list = RelatedListField(ISOther, related_name="ismodel_list")
     limted_related = RelatedSetField(RelationWithoutReverse, limit_choices_to={'name': 'banana'}, related_name="+")
     children = RelatedSetField("self", related_name="+")
 
@@ -294,6 +296,155 @@ class IterableFieldTests(TestCase):
         self.assertTrue(IterableFieldModel.objects.exclude(set_field__isnull=True).exists())
 
 
+class InstanceListFieldTests(TestCase):
+
+    def test_deserialization(self):
+        i1 = ISOther.objects.create(pk=1)
+        i2 = ISOther.objects.create(pk=2)
+        # Does the to_python need to return ordered list? SetField test only passes because the set
+        # happens to order it correctly
+        self.assertItemsEqual([i1, i2], ISModel._meta.get_field("related_list").to_python("[1, 2]"))
+
+    def test_save_and_load_empty(self):
+        """
+        Create a main object with no related items,
+        get a copy of it back from the db and try to read items.
+        """
+        main = ISModel.objects.create()
+        main_from_db = ISModel.objects.get(pk=main.pk)
+
+        # Fetch the container from the database and read its items
+        self.assertItemsEqual(main_from_db.related_list.all(), [])
+
+    def test_basic_usage(self):
+        main = ISModel.objects.create()
+        other = ISOther.objects.create(name="test")
+        other2 = ISOther.objects.create(name="test2")
+
+        main.related_list.add(other)
+        main.save()
+
+        self.assertEqual([other.pk,], main.related_list_ids)
+        self.assertEqual(list(ISOther.objects.filter(pk__in=main.related_list_ids)), list(main.related_list.all()))
+        self.assertEqual([main], list(other.ismodel_list.all()))
+
+        main.related_list.remove(other)
+        self.assertFalse(main.related_list)
+
+        main.related_list = [other2, ]
+        self.assertEqual([other2.pk, ], main.related_list_ids)
+
+        with self.assertRaises(AttributeError):
+            other.ismodel_list = [main, ]
+
+        without_reverse = RelationWithoutReverse.objects.create(name="test3")
+        self.assertFalse(hasattr(without_reverse, "ismodel_list"))
+
+    def test_add_to_empty(self):
+        """
+        Create a main object with no related items,
+        get a copy of it back from the db and try to add items.
+        """
+        main = ISModel.objects.create()
+        main_from_db = ISModel.objects.get(pk=main.pk)
+
+        other = ISOther.objects.create()
+        main_from_db.related_list.add(other)
+        main_from_db.save()
+
+    def test_add_another(self):
+        """
+        Create a main object with related items,
+        get a copy of it back from the db and try to add more.
+        """
+        main = ISModel.objects.create()
+        other1 = ISOther.objects.create()
+        main.related_things.add(other1)
+        main.save()
+
+        main_from_db = ISModel.objects.get(pk=main.pk)
+        other2 = ISOther.objects.create()
+
+        main_from_db.related_list.add(other2)
+        main_from_db.save()
+
+    def test_multiple_objects(self):
+        main = ISModel.objects.create()
+        other1 = ISOther.objects.create()
+        other2 = ISOther.objects.create()
+
+        main.related_list.add(other1, other2)
+        main.save()
+
+        main_from_db = ISModel.objects.get(pk=main.pk)
+        self.assertEqual(main_from_db.related_list.count(), 2)
+
+    def test_deletion(self):
+        """
+        Delete one of the objects referred to by the related field
+        """
+        main = ISModel.objects.create()
+        other = ISOther.objects.create()
+        main.related_list.add(other)
+        main.save()
+
+        other.delete()
+        self.assertEqual(main.related_list.count(), 0)
+
+    def test_ordering_is_maintained(self):
+        main = ISModel.objects.create()
+        other = ISOther.objects.create()
+        other1 = ISOther.objects.create()
+        other2 = ISOther.objects.create()
+        other3 = ISOther.objects.create()
+        main.related_list.add(other, other1, other2, other3)
+        main.save()
+        self.assertEqual(main.related_list.count(), 4)
+        self.assertEqual([other.pk, other1.pk, other2.pk, other3.pk, ], main.related_list_ids)
+        self.assertItemsEqual([other, other1, other2, other3, ], main.related_list.all())
+        main.related_list.clear()
+        main.save()
+        self.assertEqual([], main.related_list_ids)
+
+    def test_duplicates_maintained(self):
+        """
+            For whatever reason you might want many of the same relation in the
+            list
+        """
+        main = ISModel.objects.create()
+        other = ISOther.objects.create()
+        other1 = ISOther.objects.create()
+        other2 = ISOther.objects.create()
+        other3 = ISOther.objects.create()
+        main.related_list.add(other, other1, other2, other1, other3,)
+        main.save()
+        self.assertEqual([other.pk, other1.pk, other2.pk, other1.pk, other3.pk, ], main.related_list_ids)
+        self.assertItemsEqual([other, other1, other2, other1, other3, ], main.related_list.all())
+
+    def test_slicing(self):
+        main = ISModel.objects.create()
+        other = ISOther.objects.create()
+        other1 = ISOther.objects.create()
+        other2 = ISOther.objects.create()
+        other3 = ISOther.objects.create()
+        main.related_list.add(other, other1, other2, other1, other3,)
+        main.save()
+        self.assertItemsEqual([other, other1, ], main.related_list.all()[:2])
+        self.assertItemsEqual([other1, ], main.related_list.all()[1:2])
+        self.assertEqual(other1, main.related_list.all()[1:2][0])
+
+    def test_filtering(self):
+        main = ISModel.objects.create()
+        other = ISOther.objects.create(name="one")
+        other1 = ISOther.objects.create(name="two")
+        other2 = ISOther.objects.create(name="one")
+        other3 = ISOther.objects.create(name="three")
+        main.related_list.add(other, other1, other2, other1, other2,)
+        main.save()
+        self.assertItemsEqual([other, other2, other2], main.related_list.filter(name="one"))
+
+
+
 class InstanceSetFieldTests(TestCase):
 
     def test_deserialization(self):
@@ -388,6 +539,12 @@ class InstanceSetFieldTests(TestCase):
 
         other.delete()
         self.assertEqual(main.related_things.count(), 0)
+
+    def test_querying_with_isnull(self):
+        obj = ISModel.objects.create()
+
+        self.assertItemsEqual([obj], ISModel.objects.filter(related_things__isnull=True))
+        self.assertItemsEqual([obj], ISModel.objects.filter(related_things_ids__isnull=True))
 
 
 class TestGenericRelationField(TestCase):

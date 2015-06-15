@@ -53,6 +53,8 @@ if django.VERSION >= (1, 7, 0, 0, 0):
     INSTALLED_APPS.remove('djangae')
     INSTALLED_APPS = ['djangae'] + INSTALLED_APPS
 
+TO_TEST = []
+
 if "test" in sys.argv:
     import sys
     import tempfile
@@ -148,6 +150,6 @@ DJANGAE_SEQUENTIAL_IDS_IN_TESTS = True
 DJANGAE_SIMULATE_CONTENTTYPES = True
 
 TEST_RUNNER = 'djangae.test_runner.SkipUnsupportedRunner'
-DJANGAE_ADDITIONAL_TEST_APPS = ["djangae"] + TO_TEST
+DJANGAE_ADDITIONAL_TEST_APPS = ["djangae"]
 
 from djangae.contrib.gauth.settings import *
