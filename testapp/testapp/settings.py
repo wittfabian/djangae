@@ -151,6 +151,6 @@ DJANGAE_SEQUENTIAL_IDS_IN_TESTS = True
 DJANGAE_SIMULATE_CONTENTTYPES = True
 
 TEST_RUNNER = 'djangae.test_runner.SkipUnsupportedRunner'
-DJANGAE_ADDITIONAL_TEST_APPS = ["djangae"] + TO_TEST
+DJANGAE_ADDITIONAL_TEST_APPS = ["djangae"]
 
 from djangae.contrib.gauth.settings import *
