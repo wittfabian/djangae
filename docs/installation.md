@@ -61,7 +61,7 @@ It is recommended that for improved security you add `djangae.contrib.security.m
 
 > If you wish to use the App Engine's Google Accounts-based authentication to authenticate your users, and/or you wish to use Django's permissions system with the Datastore as you DB, then see the section on **Authentication**.
 
-> **It is highly recommended that you read the section on [Unique Constraints](#unique-constraint-checking)**
+> **It is highly recommended that you read the section on [Unique Constraints](db_backend/#unique-constraint-checking)**
 
 ## Deployment
 
