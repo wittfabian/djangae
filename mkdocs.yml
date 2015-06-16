@@ -3,7 +3,6 @@ repo_url: https://github.com/potatolondon/djangae
 pages:
     - [index.md, Home]
     - [installation.md, Installation & Deployment]
-    - [unique_constraints.md, Unique Constraint Checking]
     - [db_backend.md, The Database Backend]
     - [fields.md, Djangae Model Fields]
     - [sandbox.md, Local/remote management commands]
