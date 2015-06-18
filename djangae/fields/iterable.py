@@ -117,10 +117,13 @@ class IterableField(models.Field):
         if value is None:
             return self._iterable_type([])
 
-        # Because a set cannot be defined in JSON, we must allow a list to be passed as the value
-        # of a SetField, as otherwise SetField data can't be loaded from fixtures
+        # If possible, parse the string into the iterable
         if not hasattr(value, "__iter__"): # Allows list/set, not string
-            raise ValueError("Tried to assign a {} to a {}".format(value.__class__.__name__, self.__class__.__name__))
+            if (self._iterable_type == set and value.startswith("{") and value.endswith("}")) or \
+               (self._iterable_type == list and value.startswith("[") and value.endswith("]")):
+                value = [x.strip() for x in value[1:-1].split(",") ]
+            else:
+                raise ValueError("Unable to parse string into iterable field")
 
         return self._map(self.item_field_type.to_python, value)
 
