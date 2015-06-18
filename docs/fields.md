@@ -47,6 +47,17 @@ It works by storing a list of primary keys of the related objects.  Think of it 
 The `RelatedSetField` also accepts most of the same kwargs as `SetField`.
 
 
+## RelatedListField
+
+RelatedListField shares the same behavior as RelatedSetField but has the qualities of a list; it maintains the ordering of related objects and allows duplicates.
+
+```RelatedListField(related_model, **kwargs)```
+
+* `model`: the model of the related items.
+* `limit_choices_to`: a ditionary of query kwargs for limiting the possible related items.
+* `related_name` - the name of the reverse lookup attribute which is added to the model class of the related items.
+
+
 ## ShardedCounterField
 
 This field allows you to store a counter which can be incremented/decremented at an extremely high rate without causing database contention.  Given that the Datastore is not performant at doing `count()` queries, this is an excellent way of counting large numbers on the Datastore. [See example usage](fields.md#example-usages).
@@ -103,6 +114,7 @@ from djangae import fields
 class KittenSanctuary(models.Model):
 
     kittens = fields.RelatedSetField('Kitten')
+    kitten_rota = fields.RelatedListField('Kitten')
     inspection_dates = fields.SetField(models.DateField())
     historic_weekly_kitten_count = fields.ListField(models.PositiveIntegerField())
     number_of_meows = fields.ShardedCounterField()
