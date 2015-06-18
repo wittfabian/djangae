@@ -1,7 +1,3 @@
-import warnings
-
-from google.appengine.runtime import request_environment
-
 from djangae.utils import on_production
 
 
@@ -34,6 +30,12 @@ class DjangaeApplication(object):
                 '_socket'
             ])
 
+
+            # Reload the system socket.py, because of bug #9246
+            import imp
+            import os
+            psocket = os.path.join(os.path.dirname(os.__file__), 'socket.py')
+            imp.load_source('socket', psocket)
 
     def __init__(self, application):
         from django.conf import settings
