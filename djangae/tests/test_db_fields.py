@@ -262,6 +262,8 @@ class IterableFieldTests(TestCase):
         results = IterableFieldModel.objects.filter(list_field="One")
         self.assertEqual([instance], list(results))
 
+        self.assertEqual([1, 2], ListField(models.IntegerField).to_python("[1, 2]"))
+
     def test_set_field(self):
         instance = IterableFieldModel.objects.create()
         self.assertEqual(set(), instance.set_field)
@@ -280,6 +282,8 @@ class IterableFieldTests(TestCase):
         with self.assertRaises(ValueError):
             instance.set_field = "Bananas"
             instance.save()
+
+        self.assertEqual({1, 2}, SetField(models.IntegerField).to_python("{1, 2}"))
 
     def test_empty_list_queryable_with_is_null(self):
         instance = IterableFieldModel.objects.create()
