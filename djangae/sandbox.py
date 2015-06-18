@@ -97,6 +97,9 @@ def _create_dispatcher(configuration, options):
     if current_version >= _VersionList('1.9.19'):
         dispatcher_args.append(options.external_port)
 
+    if current_version >= _VersionList('1.9.22'):
+        dispatcher_args.insert(8, None) # Custom config setting
+
     _create_dispatcher.singleton = dispatcher.Dispatcher(*dispatcher_args)
 
     return _create_dispatcher.singleton
