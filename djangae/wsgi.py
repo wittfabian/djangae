@@ -29,7 +29,9 @@ class DjangaeApplication(object):
 
         if '_sqlite3' not in sandbox._WHITE_LIST_C_MODULES:
             sandbox._WHITE_LIST_C_MODULES.extend([
-                '_sqlite3'
+                '_sqlite3',
+                '_ssl', # Workaround for App Engine bug #9246
+                '_socket'
             ])
 
 
