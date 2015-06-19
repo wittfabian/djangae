@@ -30,11 +30,12 @@ class DjangaeApplication(object):
                 '_socket'
             ])
 
-
             # Reload the system socket.py, because of bug #9246
             import imp
             import os
-            psocket = os.path.join(os.path.dirname(os.__file__), 'socket.py')
+            import ast
+
+            psocket = os.path.join(os.path.dirname(ast.__file__), 'socket.py')
             imp.load_source('socket', psocket)
 
     def __init__(self, application):
