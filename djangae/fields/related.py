@@ -362,7 +362,8 @@ class RelatedSetField(RelatedIteratorField):
 
         # Deal with deserialization from a string
         if isinstance(value, basestring):
-            if not (value.startswith("[") and value.endswith("]")):
+            if not (value.startswith("[") and value.endswith("]")) and \
+               not (value.startswith("{") and value.endswith("}")):
                 raise ValidationError("Invalid input for RelatedSetField instance")
 
             value = value[1:-1].strip()
