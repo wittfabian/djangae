@@ -5,9 +5,11 @@ import os
 import urlparse
 
 from google.appengine.api import urlfetch
+from google.appengine.api.images import TransformationError
 
 from django.core.files.base import File, ContentFile
 
+from djangae.contrib import sleuth
 from djangae.storage import BlobstoreStorage
 from djangae.test import TestCase
 
@@ -57,3 +59,8 @@ class BlobstoreStorageTests(TestCase):
         storage = BlobstoreStorage()
         f2 = ContentFile('nameless-content')
         storage.save('tmp2', f2)
+
+    def test_transformation_error(self):
+        storage = BlobstoreStorage()
+        with sleuth.detonate('djangae.storage.get_serving_url', TransformationError):
+            self.assertIsNone(storage.url('thing'))
