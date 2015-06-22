@@ -18,7 +18,12 @@ from django.utils.encoding import smart_str, force_unicode
 from django.test.client import encode_multipart, MULTIPART_CONTENT, BOUNDARY
 
 from google.appengine.api import urlfetch
-from google.appengine.api.images import get_serving_url, NotImageError, BlobKeyRequiredError
+from google.appengine.api.images import (
+    get_serving_url,
+    NotImageError,
+    BlobKeyRequiredError,
+    TransformationError,
+)
 from google.appengine.ext.blobstore import (
     BlobInfo,
     BlobKey,
@@ -140,7 +145,7 @@ class BlobstoreStorage(Storage):
             # down an argument saying whether it should be secure or not
             url = get_serving_url(self._get_blobinfo(name))
             return re.sub("http://", "//", url)
-        except (NotImageError, BlobKeyRequiredError):
+        except (NotImageError, BlobKeyRequiredError, TransformationError):
             return None
 
     def created_time(self, name):
