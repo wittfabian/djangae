@@ -1148,6 +1148,14 @@ class UpdateCommand(object):
             # Return false to indicate update failure
             return False
 
+        if (
+            isinstance(self.select.gae_query, (Query, UniqueQuery)) # ignore QueryByKeys and NoOpQuery
+            and not utils.entity_matches_query(result, self.select.gae_query)
+        ):
+            # Due to eventual consistency they query may have returned an entity which no longer
+            # matches the query
+            return False
+
         original = copy.deepcopy(result)
 
         instance_kwargs = {field.attname:value for field, param, value in self.values}
