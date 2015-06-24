@@ -1,14 +1,14 @@
 site_name: Djangae Documentation
 repo_url: https://github.com/potatolondon/djangae
 pages:
-    - [index.md, Home]
-    - [installation.md, Installation & Deployment]
-    - [db_backend.md, The Database Backend]
-    - [fields.md, Djangae Model Fields]
-    - [sandbox.md, Local/remote management commands]
-    - [pagination.md, Pagination]
-    - [gauth.md, Gauth]
-    - [mappers.md, Map Reduce]
-    - [uniquetool.md, Unique constraint tool]
-    - [contributing.md, Contributing & Testing]
+- Home: index.md
+- Installation & Deployment: installation.md
+- The Database Backend: db_backend.md
+- Djangae Model Fields: fields.md
+- Local/remote management commands: sandbox.md
+- Pagination: pagination.md
+- Gauth: gauth.md
+- Map Reduce: mappers.md
+- Unique constraint tool: uniquetool.md
+- Contributing & Testing: contributing.md
 theme: readthedocs
