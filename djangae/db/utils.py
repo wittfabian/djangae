@@ -262,8 +262,9 @@ def key_exists(key):
     return qry.Count(limit=1) > 0
 
 
+# Null-friendly comparison functions
+
 def lt(x, y):
-    """ x < y comparison which handles Nones """
     if x is None and y is not None:
         return True
     elif x is not None and y is None:
@@ -273,13 +274,20 @@ def lt(x, y):
 
 
 def gt(x, y):
-    """ x > y comparison which handles Nones """
     if x is None and y is not None:
         return False
     elif x is not None and y is None:
         return True
     else:
         return x > y
+
+
+def gte(x, y):
+    return not lt(x, y)
+
+
+def lte(x, y):
+    return not gt(x, y)
 
 
 def django_ordering_comparison(ordering, lhs, rhs):
@@ -306,10 +314,6 @@ def entity_matches_query(entity, query):
         Return True if the entity would potentially be returned by the datastore
         query
     """
-
-    gte = lambda x, y: not lt(x, y)
-    lte = lambda x, y: not gt(x, y)
-
     OPERATORS = {
         "=": lambda x, y: x == y,
         "<": lt,
