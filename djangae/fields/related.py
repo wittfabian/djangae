@@ -468,8 +468,6 @@ class GenericRelationField(models.Field):
     form_class = GenericRelationFormfield
 
     def __init__(self, *args, **kwargs):
-        self.vc_encoded = True
-
         kwargs.update(
             max_length=255,
             blank=True,
