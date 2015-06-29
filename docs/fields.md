@@ -103,7 +103,9 @@ Documentation needed. [See example usage](fields.md#example-usages).
 
 ## TrueOrNullField
 
-Documentation needed.
+This field is not specific to to the App Engine Datastore (or any non-relational database), but is included in Djangae for convenience.
+
+Its primary use case is for when you want a boolean field which can only be set to true for *one* object.  This is done by making use of the fact that Django (and most databases) ignore `None` values in unique constraints, so by having a field which can only store values of `True` or `None` and by setting the field to unique, you get a field which can only be `True` on one object.  See example usage below.
 
 
 ## Example Usages
@@ -115,6 +117,7 @@ from djangae import fields
 
 class KittenSanctuary(models.Model):
 
+	is_best = fields.TrueOrNullField(unique=True)
     kittens = fields.RelatedSetField('Kitten')
     kitten_rota = fields.RelatedListField('Kitten')
     inspection_dates = fields.SetField(models.DateField())
