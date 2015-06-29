@@ -92,7 +92,9 @@ When you access the attribute of your sharded counter field on your model, you g
 
 ## GenericRelationField
 
-Documentation needed.
+This is a replacement for Django's `GenericForeignKey` field, which doesn't use Django's contenttypes, and consequently it allows querying by the related object even on the non-relational Datastore.  (Django's `GenericForeignKey` would cause a JOIN if you tried to do do that.)
+
+This field requires no special kwargs, and should accept all standard Django field kwargs as normal.
 
 
 ## JSONField
