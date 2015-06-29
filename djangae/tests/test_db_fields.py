@@ -1,5 +1,6 @@
 # LIBRARIES
 from django.db import models
+from django.db.utils import IntegrityError
 from django.contrib.contenttypes.models import ContentType
 
 # DJANGAE
@@ -73,8 +74,8 @@ class RelationWithOverriddenDbTable(models.Model):
 
 
 class GenericRelationModel(models.Model):
-    relation_to_content_type = GenericRelationField(ContentType, null=True)
-    relation_to_weird = GenericRelationField(RelationWithOverriddenDbTable, null=True)
+    relation_to_anything = GenericRelationField(null=True)
+    unique_relation_to_anything = GenericRelationField(null=True, unique=True)
 
     class Meta:
         app_label = "djangae"
@@ -554,26 +555,43 @@ class InstanceSetFieldTests(TestCase):
 class TestGenericRelationField(TestCase):
     def test_basic_usage(self):
         instance = GenericRelationModel.objects.create()
-        self.assertIsNone(instance.relation_to_content_type)
+        self.assertIsNone(instance.relation_to_anything)
 
-        ct = ContentType.objects.create()
-        instance.relation_to_content_type = ct
+        thing = ISOther.objects.create()
+        instance.relation_to_anything = thing
         instance.save()
 
-        self.assertTrue(instance.relation_to_content_type_id)
+        self.assertTrue(instance.relation_to_anything_id)
 
         instance = GenericRelationModel.objects.get()
-        self.assertEqual(ct, instance.relation_to_content_type)
+        self.assertEqual(thing, instance.relation_to_anything)
 
     def test_overridden_dbtable(self):
+        """ Check that the related object having a custom `db_table` doesn't affect the functionality. """
         instance = GenericRelationModel.objects.create()
-        self.assertIsNone(instance.relation_to_weird)
+        self.assertIsNone(instance.relation_to_anything)
 
-        ct = ContentType.objects.create()
-        instance.relation_to_weird = ct
+        weird = RelationWithOverriddenDbTable.objects.create()
+        instance.relation_to_anything = weird
         instance.save()
 
-        self.assertTrue(instance.relation_to_weird_id)
+        self.assertTrue(instance.relation_to_anything)
 
         instance = GenericRelationModel.objects.get()
-        self.assertEqual(ct, instance.relation_to_weird)
+        self.assertEqual(weird, instance.relation_to_anything)
+
+    def test_querying(self):
+        thing = ISOther.objects.create()
+        instance = GenericRelationModel.objects.create(relation_to_anything=thing)
+        self.assertEqual(GenericRelationModel.objects.filter(relation_to_anything=thing)[0], instance)
+
+    def test_unique(self):
+        thing = ISOther.objects.create()
+        instance = GenericRelationModel.objects.create(unique_relation_to_anything=thing)
+        # Trying to create another instance which relates to the same 'thing' should fail
+        self.assertRaises(IntegrityError, GenericRelationModel.objects.create, unique_relation_to_anything=thing)
+        # But creating 2 objects which both have `unique_relation_to_anything` set to None should be fine
+        instance.unique_relation_to_anything = None
+        instance.save()
+        GenericRelationModel.objects.create(unique_relation_to_anything=None)
+        GenericRelationModel.objects.create() # It should work even if we don't explicitly set it to None
