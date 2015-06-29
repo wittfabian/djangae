@@ -594,3 +594,4 @@ class TestGenericRelationField(TestCase):
         instance.unique_relation_to_anything = None
         instance.save()
         GenericRelationModel.objects.create(unique_relation_to_anything=None)
+        GenericRelationModel.objects.create() # It should work even if we don't explicitly set it to None

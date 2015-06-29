@@ -470,8 +470,6 @@ class GenericRelationField(models.Field):
     def __init__(self, *args, **kwargs):
         kwargs.update(
             max_length=255,
-            blank=True,
-            null=True
         )
 
         if 'db_index' not in kwargs:
