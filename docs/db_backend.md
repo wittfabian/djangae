@@ -115,7 +115,45 @@ The following settings are available to control the caching:
 
 The Djangae database backend for the Datastore contains some clever optimisations and integrity checks to make working with the Datastore easier.  This means that in some cases there are behaviours which are either not the same as the Django-on-SQL behaviour or not the same as the default Datastore behaviour. So for clarity, below is a list of statements which are true:
 
+### General Behaviours
+
 * Doing `MyModel.objects.create(primary_key_field=value)` will do an insert, so will explicitly check that an object with that PK doesn't already exist before inserting, and will raise an IntegrityError if it does. This is done in a transaction, so there is no need for any kind of manual transaction or existence checking.
+* Doing an `update(field=new_value)` query is transactionally safe (i.e. it uses transactions to ensure that only the specified field is updated), and it also automatically avoids the *Stale objects* issue (see [Eventual consistency](#eventual-consistency) below) so it only updates objects which definitely match the query.  But it still may suffer from the *Missing objects* issue.  See notes about the speed of `update()` queries in the [Speed](#speed) section below.
+* A `.distinct()` query is only possible if the query can be done as a projection query (see 'Speed' section below).
+
+### Eventual Consistency
+
+See [App Engine documentation](https://cloud.google.com/appengine/docs/python/datastore/structuring_for_strong_consistency) for background.
+
+The Datastore's eventual consistency behaviour gives us 2 main issues:
+
+* __Stale objects:__ This is where querying for objects by a non-primary key field may return objects which no longer match the query (because they were recently modified) or which were recently deleted.
+* __Missing objects:__ This is where querying for objects by a non-primary key may *not* return recently created or recently modified objects which *do* match the query.
+
+There are various solutions and workarounds for these issues.
+
+* If `pk__in` is used in the query (with or without other filters) then the query will be consistent and will returning all matching objects and will not return any non-matching objects.
+* Accessing the queryset of a `RelatedSetField` or `RelatedListField` automatically gives you the consistency of a `pk__in` filter (because that's exactly what it's doing underneath).  So `my_obj.my_related_set_field.all()` is consistent.
+* To avoid the *Stale objects* issue, you can do an initial `values_list('pk')` query and pass the result to a second query, e.g. `MyModel.objects.filter(size='large', pk__in=list(MyModel.objects.filter(size='large').values_list('pk', flat=True)))`.  Notes:
+    - This causes 2 queries, so is slightly slower, although the nested `values_list('pk')` query is fast as it uses a Datastore keys-only.
+    - You need to cast the nested PKs query to list, as otherwise Django will try to combine the inner query as a subquery, which the Datastore cannot handle.
+    - You need to include the additional filters (in this case `size=large`) in both the inner and outer queries.
+    - This technique only avoids the *Stale objects* issue, it does not avoid the *Missing objects* issue.
+
+
+### Speed
+
+* Using a `pk__in` filter in addition to other filters will usually make the query faster.  This is because Djangae uses the PKs to do a Datastore `Get` operation (which is much faster than a Datastore `Query`) and then does the other filtering in Python.
+* Doing `.values('pk')` or `.values_list('pk')` will make a query significantly faster because Djangae performs a keys-only query.
+* Doing `.values('other')` type queries will be faster if Djangae is able to perform a Datastore projection query.  This is only possible if:
+    - None of the fetched fields are also being filtered on (which would be a weird thing to do anyway).
+    - The query is not ordered by primary key.
+    - All of the fetched fields are indexed by the Datastore (i.e. are not list/set fields, blob fields or text (as opposed to char) fields).
+    - The model has got concrete parents.
+* Due to the way it has to be implemented on the Datastore, an `update()` query is not particularly fast, and other than avoiding calling the `save()` method on each object it doesn't offer much speed advantage over iterating over the objects and modifying them.  However, it does offer significant integrity advantages, see [General behaviours](#general-behaviours) section above.
+
+
+
 
 ## Unique Constraint Checking
 
