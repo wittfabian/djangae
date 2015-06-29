@@ -99,13 +99,14 @@ This field requires no special kwargs, and should accept all standard Django fie
 
 ## JSONField
 
-Documentation needed. [See example usage](fields.md#example-usages).
+This field is not specific to to the App Engine Datastore (or any non-relational database), but is included in Djangae for convenience, especially as in a non-relational database it's often useful to be able to store structured data in a single table rather than in a complex structure of related tables.
+
 
 ## TrueOrNullField
 
 This field is not specific to to the App Engine Datastore (or any non-relational database), but is included in Djangae for convenience.
 
-Its primary use case is for when you want a boolean field which can only be set to true for *one* object.  This is done by making use of the fact that Django (and most databases) ignore `None` values in unique constraints, so by having a field which can only store values of `True` or `None` and by setting the field to unique, you get a field which can only be `True` on one object.  See example usage below.
+Its primary use case is for when you want a boolean field which can only be set to true for *one* object.  This is done by making use of the fact that Django (and most databases) ignore `None` values in unique constraints, so by having a field which can only store values of `True` or `None` and by setting the field to unique, you get a field which can only be `True` on one object.
 
 
 ## Example Usages
