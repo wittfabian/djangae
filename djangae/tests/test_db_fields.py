@@ -73,8 +73,7 @@ class RelationWithOverriddenDbTable(models.Model):
 
 
 class GenericRelationModel(models.Model):
-    relation_to_content_type = GenericRelationField(ContentType, null=True)
-    relation_to_weird = GenericRelationField(RelationWithOverriddenDbTable, null=True)
+    relation_to_anything = GenericRelationField(null=True)
 
     class Meta:
         app_label = "djangae"
@@ -554,26 +553,27 @@ class InstanceSetFieldTests(TestCase):
 class TestGenericRelationField(TestCase):
     def test_basic_usage(self):
         instance = GenericRelationModel.objects.create()
-        self.assertIsNone(instance.relation_to_content_type)
+        self.assertIsNone(instance.relation_to_anything)
 
-        ct = ContentType.objects.create()
-        instance.relation_to_content_type = ct
+        thing = ISOther.objects.create()
+        instance.relation_to_anything = thing
         instance.save()
 
-        self.assertTrue(instance.relation_to_content_type_id)
+        self.assertTrue(instance.relation_to_anything_id)
 
         instance = GenericRelationModel.objects.get()
-        self.assertEqual(ct, instance.relation_to_content_type)
+        self.assertEqual(thing, instance.relation_to_anything)
 
     def test_overridden_dbtable(self):
+        """ Check that the related object having a custom `db_table` doesn't affect the functionality. """
         instance = GenericRelationModel.objects.create()
-        self.assertIsNone(instance.relation_to_weird)
+        self.assertIsNone(instance.relation_to_anything)
 
-        ct = ContentType.objects.create()
-        instance.relation_to_weird = ct
+        weird = RelationWithOverriddenDbTable.objects.create()
+        instance.relation_to_anything = weird
         instance.save()
 
-        self.assertTrue(instance.relation_to_weird_id)
+        self.assertTrue(instance.relation_to_anything)
 
         instance = GenericRelationModel.objects.get()
-        self.assertEqual(ct, instance.relation_to_weird)
+        self.assertEqual(weird, instance.relation_to_anything)
