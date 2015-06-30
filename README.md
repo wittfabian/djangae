@@ -74,5 +74,7 @@ You can run specific tests in the usual way by doing:
 
 Contributions are accepted via pull request and will be reviewed as soon as possible. If you have access to master, please do not commit directly! Pull requests only!
 
+Code style should follow PEP-8 with a maximum line length of 100 characters.
+
 [build-status-image]: https://secure.travis-ci.org/potatolondon/djangae.png?branch=master
 [travis]: http://travis-ci.org/potatolondon/djangae?branch=master
