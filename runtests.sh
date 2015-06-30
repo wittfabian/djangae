@@ -11,6 +11,5 @@ else
 fi
 
 python manage.py test "$@"
-asdlfkjasdklfj
 
 cd ..;
