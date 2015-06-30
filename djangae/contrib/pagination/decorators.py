@@ -70,8 +70,8 @@ class PaginatedModel(object):
             if isinstance(ordering, basestring):
                 _orderings.append((ordering,))
             else:
-                orderings.append(ordering)
-        self.orderings = orderings
+                _orderings.append(ordering)
+        self.orderings = _orderings
 
     def __call__(self, cls):
         """
