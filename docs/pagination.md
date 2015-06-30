@@ -78,9 +78,11 @@ Sure!
 ```
 from djangae.contrib.pagination import paginated_model
 
+# The paginated_model decorator takes a list of orderings, where each ordering is a field name or a list of field names
+
 @paginated_model(orderings=[
-    ("first_name",),
-    ("last_name",),
+    "first_name",
+    "last_name",
     ("first_name", "last_name"),
     ("first_name", "-last_name")
 ])

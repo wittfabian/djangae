@@ -50,6 +50,7 @@ def _field_name_for_ordering(ordering):
     new_field_name = "pagination_{}".format("_".join(names))
     return new_field_name
 
+
 class PaginatedModel(object):
     """
         A class decorator which automatically generates pre-calculated fields for pagination.
@@ -63,6 +64,13 @@ class PaginatedModel(object):
         is fast even when there are many pages.
     """
     def __init__(self, orderings):
+        # Allow orderings to be specified either as single fields, or tuples/lists of fields
+        _orderings = []
+        for ordering in orderings:
+            if isinstance(ordering, basestring):
+                _orderings.append((ordering,))
+            else:
+                orderings.append(ordering)
         self.orderings = orderings
 
     def __call__(self, cls):
