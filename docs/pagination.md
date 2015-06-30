@@ -6,6 +6,11 @@ Pagination on the datastore is *slow*. This is for a couple of reasons:
  - Counting on the datastore is slow; traditional pagination counts the dataset
  - Skipping results on the datastore is slow; if you slice a query, App Engine literally skips the entities up to the lower bound
 
+Djangae provides two pagination tools:
+
+1. `djangae.core.paginator`.  This just provides a `Paginator` class similar to Django's, mostly just for compatability.  It avoids the issue of counting large numbers by not supporting the counting aspects, but it doesn't solve the issue of offsets being slow.
+2. `djangae.contrib.pagination`.  This provides a complete pagination solution for the Datastore.  This article focusses on this.
+
 ## So, what does djangae.contrib.pagination do?
 
 This app provides two things that work together to efficiently paginate datasets on the datastore:
@@ -33,7 +38,7 @@ The query for page 2 can then be
 
 which avoids any slicing at all.  The whole query and offset is based on Datastore indexes, and is efficient.
 
-The `@paginated_model` decorator allows you to specify which fields on your model you want to order
+The `@paginated_model` decorator allows you to specify which field(s) on your model you want to order
 by (you can specify multiple orderings for a model) and generates the pre-calculated fields for you.
 The `DatastorePaginator` then seemlessly uses these pre-calculated fields and does the offset/limiting for you.
 
@@ -71,6 +76,8 @@ or rethink your design.
 Sure!
 
 ```
+from djangae.contrib.pagination import paginated_model
+
 @paginated_model(orderings=[
     ("first_name",),
     ("last_name",),
