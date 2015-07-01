@@ -1,4 +1,5 @@
 import os
+from optparse import make_option
 
 from django.core.management.commands.runserver import BaseRunserverCommand
 
@@ -20,6 +21,39 @@ class Command(BaseRunserverCommand):
     dev_appserver that emulates the live environment your application
     will be deployed to.
     """
+
+    def __new__(cls, *args, **kwargs):
+        # We need to dynamically populate the `option_list` attribute
+        # in order to Django allow extra parameters that we're going to pass
+        # to GAE's `dev_appserver.py`
+        instance = BaseRunserverCommand.__new__(cls, *args, **kwargs)
+        sandbox_options = cls._get_sandbox_options()
+        for option in sandbox_options:
+            instance.option_list += (
+                make_option('--%s' % option, action='store', dest=option),
+            )
+        return instance
+
+    @classmethod
+    def _get_sandbox_options(cls):
+        # We read the options from Djangae's sandbox
+        from djangae import sandbox
+        return [option for option in dir(sandbox._OPTIONS) if not option.startswith('_')]
+
+    def handle(self, addrport='', *args, **options):
+        from djangae import sandbox
+
+        self.gae_options = {}
+        sandbox_options = self._get_sandbox_options()
+
+        # this way we populate the dictionary with the options that relevant
+        # just for `dev_appserver.py`
+        for option, value in options.items():
+            if option in sandbox_options and value is not None:
+                self.gae_options[option] = value
+
+        super(Command, self).handle(addrport='', *args, **options)
+
     def run(self, *args, **options):
         self.use_reloader = options.get("use_reloader")
         options["use_reloader"] = False
@@ -86,6 +120,10 @@ class Command(BaseRunserverCommand):
 
         if self.addr != sandbox._OPTIONS.host:
             sandbox._OPTIONS.host = sandbox._OPTIONS.admin_host = sandbox._OPTIONS.api_host = self.addr
+
+        # Extra options for `dev_appserver.py`
+        for param, value in self.gae_options.items():
+            setattr(sandbox._OPTIONS, param, value)
 
         # External port is a new flag introduced in 1.9.19
         current_version = _VersionList(GetVersionObject()['release'])
