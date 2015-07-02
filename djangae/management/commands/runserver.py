@@ -14,6 +14,8 @@ from google.appengine.tools.sdk_update_checker import (
 # We use this list to prevent user using certain dev_appserver options that
 # might collide with some Django settings.
 BLACKLISTED_DEV_APPSERVER_OPTIONS = [
+    'port',
+    'host',
     'threadsafe_override',
     'php_executable_path',
     'php_remote_debugging',
@@ -73,7 +75,7 @@ class Command(BaseRunserverCommand):
             if option in sandbox_options and value is not None:
                 self.gae_options[option] = value
 
-        super(Command, self).handle(addrport='', *args, **options)
+        super(Command, self).handle(addrport=addrport, *args, **options)
 
     def run(self, *args, **options):
         self.use_reloader = options.get("use_reloader")
