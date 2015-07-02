@@ -11,28 +11,6 @@ from google.appengine.tools.sdk_update_checker import (
     _VersionList
 )
 
-# We use this list to prevent user using certain dev_appserver options that
-# might collide with some Django settings.
-BLACKLISTED_DEV_APPSERVER_OPTIONS = [
-    'port',
-    'host',
-    'threadsafe_override',
-    'php_executable_path',
-    'php_remote_debugging',
-    'python_startup_script',
-    'python_startup_args',
-    'mysql_host',
-    'mysql_port',
-    'mysql_user',
-    'mysql_password',
-    'mysql_socket',
-    'smtp_host',
-    'smtp_user',
-    'smtp_password',
-    'smtp_allow_tls',
-    'automatic_restart',
-]
-
 
 class Command(BaseRunserverCommand):
     """
@@ -43,6 +21,27 @@ class Command(BaseRunserverCommand):
     dev_appserver that emulates the live environment your application
     will be deployed to.
     """
+    # We use this list to prevent user using certain dev_appserver options that
+    # might collide with some Django settings.
+    BLACKLISTED_DEV_APPSERVER_OPTIONS = [
+        'port',
+        'host',
+        'threadsafe_override',
+        'php_executable_path',
+        'php_remote_debugging',
+        'python_startup_script',
+        'python_startup_args',
+        'mysql_host',
+        'mysql_port',
+        'mysql_user',
+        'mysql_password',
+        'mysql_socket',
+        'smtp_host',
+        'smtp_user',
+        'smtp_password',
+        'smtp_allow_tls',
+        'automatic_restart',
+    ]
 
     def __new__(cls, *args, **kwargs):
         # We need to dynamically populate the `option_list` attribute
@@ -51,7 +50,7 @@ class Command(BaseRunserverCommand):
         instance = BaseRunserverCommand.__new__(cls, *args, **kwargs)
         sandbox_options = cls._get_sandbox_options()
         for option in sandbox_options:
-            if not option in BLACKLISTED_DEV_APPSERVER_OPTIONS:
+            if not option in self.BLACKLISTED_DEV_APPSERVER_OPTIONS:
                 instance.option_list += (
                     make_option('--%s' % option, action='store', dest=option),
                 )
