@@ -1132,6 +1132,27 @@ class EdgeCaseTests(TestCase):
         self.assertEqual(2, len(results))
         self.assertItemsEqual(["A", "B"], [x.username for x in results])
 
+    def test_empty_string_key(self):
+        # Creating
+        with self.assertRaises(IntegrityError):
+            TestFruit.objects.create(name='')
+
+        # Getting
+        with self.assertRaises(TestFruit.DoesNotExist):
+            TestFruit.objects.get(name='')
+
+        # Filtering
+        results = list(TestFruit.objects.filter(name=''))
+        self.assertItemsEqual([], results)
+
+        # Combined filtering
+        results = list(TestFruit.objects.filter(name='', color='red'))
+        self.assertItemsEqual([], results)
+
+        # IN query
+        results = list(TestFruit.objects.filter(name__in=['', 'apple']))
+        self.assertItemsEqual([self.apple], results)
+
     def test_or_queryset(self):
         """
             This constructs an OR query, this is currently broken in the parse_where_and_check_projection
