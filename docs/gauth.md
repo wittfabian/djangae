@@ -18,7 +18,7 @@ after `'django.contrib.auth'`.
 4. Add the backend to `AUTHENTICATION_BACKENDS` in your settings file eg:
 
 ```python
-AUTHENTICATION_BACKENDS (
+AUTHENTICATION_BACKENDS = (
 	'djangae.contrib.gauth.datastore.backends.AppEngineUserAPIBackend',
 	 ...
 )
@@ -42,7 +42,7 @@ after `'django.contrib.auth'`.
 4. Add the backend to `AUTHENTICATION_BACKENDS` in your settings file eg:
 
 ```python
-AUTHENTICATION_BACKENDS (
+AUTHENTICATION_BACKENDS = (
 	'djangae.contrib.sql.backends.AppEngineUserAPIBackend',
 	 ...
 )
