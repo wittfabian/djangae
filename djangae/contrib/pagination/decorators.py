@@ -15,6 +15,10 @@ def generator(fields, instance):
     for field in fields:
         neg = field.startswith("-")
 
+        # If the field we have to paginate by is the pk, get the pk field name.
+        if field == 'pk':
+            field = instance._meta.pk.name
+
         value = instance._meta.get_field(field.lstrip("-")).value_from_object(instance)
 
         if hasattr(value, "isoformat"):
