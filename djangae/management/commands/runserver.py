@@ -23,24 +23,36 @@ class Command(BaseRunserverCommand):
     """
     # We use this list to prevent user using certain dev_appserver options that
     # might collide with some Django settings.
-    BLACKLISTED_DEV_APPSERVER_OPTIONS = [
-        'port',
-        'host',
-        'threadsafe_override',
-        'php_executable_path',
-        'php_remote_debugging',
-        'python_startup_script',
-        'python_startup_args',
-        'mysql_host',
-        'mysql_port',
-        'mysql_user',
-        'mysql_password',
-        'mysql_socket',
-        'smtp_host',
-        'smtp_user',
-        'smtp_password',
-        'smtp_allow_tls',
-        'automatic_restart',
+    WHITELISTED_DEV_APPSERVER_OPTIONS = [
+        'A',
+        'admin_host',
+        'admin_port',
+        'auth_domain',
+        'storage_path',
+        'log_level',
+        'max_module_instances',
+        'use_mtime_file_watcher',
+        'appidentity_email_address',
+        'appidentity_private_key_path',
+        'blobstore_path',
+        'datastore_path',
+        'clear_datastore',
+        'datastore_consistency_policy',
+        'require_indexes',
+        'auto_id_policy',
+        'logs_path',
+        'show_mail_body',
+        'enable_sendmail',
+        'prospective_search_path',
+        'clear_prospective_search',
+        'search_indexes_path',
+        'clear_search_indexes',
+        'enable_task_running',
+        'allow_skipped_files',
+        'api_port',
+        'dev_appserver_log_level',
+        'skip_sdk_update_check',
+        'default_gcs_bucket_name',
     ]
 
     def __new__(cls, *args, **kwargs):
@@ -50,7 +62,7 @@ class Command(BaseRunserverCommand):
         instance = BaseRunserverCommand.__new__(cls, *args, **kwargs)
         sandbox_options = cls._get_sandbox_options()
         for option in sandbox_options:
-            if not option in self.BLACKLISTED_DEV_APPSERVER_OPTIONS:
+            if option in cls.WHITELISTED_DEV_APPSERVER_OPTIONS:
                 instance.option_list += (
                     make_option('--%s' % option, action='store', dest=option),
                 )
