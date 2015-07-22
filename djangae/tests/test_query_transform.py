@@ -119,3 +119,12 @@ class TransformQueryTest(TestCase):
 
         self.assertIsNone(query.where.children[0].value)
         self.assertEqual("=", query.where.children[0].operator)
+
+    def test_distinct(self):
+        query = transform_query(
+            connections['default'],
+            "SELECT",
+            TransformTestModel.objects.distinct("field2", "field3").query
+        )
+
+        self.assertTrue(query.distinct)
