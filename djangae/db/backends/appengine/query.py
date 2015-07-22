@@ -6,7 +6,7 @@ from django.core.exceptions import FieldError
 from django.db.models.fields import FieldDoesNotExist
 from django.db.models.sql.datastructures import EmptyResultSet
 from django.db.models.sql.where import EmptyWhere
-
+from django.db.models import AutoField
 from itertools import chain, imap
 
 from djangae.utils import on_production
@@ -28,6 +28,13 @@ VALID_QUERY_KINDS = (
     "AVERAGE"
 )
 
+VALID_ANNOTATIONS = {
+    "MIN": min,
+    "MAX": max,
+    "SUM": sum,
+    "COUNT": len,
+    "AVG": lambda x: (sum(x) / len(x))
+}
 
 VALID_CONNECTORS = (
     'AND', 'OR'
@@ -49,6 +56,7 @@ class WhereNode(object):
         self.column = None
         self.operator = None
         self.value = None
+        self.output_field = None
 
         self.children = []
         self.connector = 'AND'
@@ -64,10 +72,17 @@ class WhereNode(object):
     def append_child(self, node):
         self.children.append(node)
 
-    def set_leaf(self, column, operator, value):
+    def set_leaf(self, column, operator, value, output_field=None):
+        if operator == "iexact" and isinstance(output_field, AutoField):
+            # When new instance is created, automatic primary key 'id' does not generate '_idx_iexact_id'.
+            # As the primary key 'id' (AutoField) is integer and is always case insensitive,
+            # we can deal with 'id_iexact=' query by using 'exact' rather than 'iexact'.
+            operator = "exact"
+
         self.column = column
         self.operator = convert_operator(operator)
         self.value = value
+
 
     def __iter__(self):
         for child in chain(*imap(iter, self.children)):
@@ -277,9 +292,13 @@ def _transform_query_17(connection, kind, query):
                     prepared=True
                 )[0]
 
-                new_node.column = lhs
-                new_node.operator = child.lookup_name
-                new_node.value = rhs
+                new_node.set_leaf(
+                    lhs,
+                    child.lookup_name,
+                    rhs,
+                    child.lhs.output_field
+                )
+
             else:
                 new_node.connector = child.connector
                 new_node.negated = child.negated
