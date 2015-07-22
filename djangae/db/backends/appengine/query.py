@@ -136,7 +136,8 @@ class Query(object):
 
     def set_distinct(self, distinct_fields):
         self.distinct = True
-        self.columns = distinct_fields
+        if distinct_fields:
+            self.columns = distinct_fields
 
     def add_order_by(self, column):
         self.order_by.append(column)
