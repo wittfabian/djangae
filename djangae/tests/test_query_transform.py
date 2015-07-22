@@ -22,7 +22,6 @@ class TransformQueryTest(TestCase):
         self.assertEqual(query.tables, [ TransformTestModel._meta.db_table ])
         self.assertIsNone(query.where)
 
-
     def test_and_filter(self):
         query = transform_query(
             connections['default'],
@@ -50,3 +49,17 @@ class TransformQueryTest(TestCase):
         self.assertEqual(1, len(query.where.children)) # One child node
         self.assertTrue(query.where.children[0].negated)
         self.assertEqual(1, len(query.where.children[0].children))
+
+    def test_ordering(self):
+        query = transform_query(
+            connections['default'],
+            "SELECT",
+            TransformTestModel.objects.filter(field1="One", field2="Two").order_by("field1", "-field2").query
+        )
+
+        self.assertEqual(query.model, TransformTestModel)
+        self.assertEqual(query.kind, 'SELECT')
+        self.assertEqual(query.tables, [ TransformTestModel._meta.db_table ])
+        self.assertTrue(query.where)
+        self.assertEqual(2, len(query.where.children)) # Two child nodes
+        self.assertEqual(["field1", "-field2"], query.order_by)

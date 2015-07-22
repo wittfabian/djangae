@@ -20,6 +20,7 @@ class SQLCompiler(compiler.SQLCompiler):
     def as_sql(self):
         self.pre_sql_setup()
         self.refcounts_before = self.query.alias_refcount.copy()
+
         select = SelectCommand(
             self.connection,
             self.query

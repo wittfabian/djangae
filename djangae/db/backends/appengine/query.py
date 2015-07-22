@@ -1,4 +1,6 @@
 import django
+import json
+
 from itertools import chain, imap
 
 from djangae.db.utils import (
@@ -24,6 +26,11 @@ VALID_OPERATORS = (
     '=', '<', '>', '<=', '>=', 'IN'
 )
 
+def convert_operator(operator):
+    if operator == 'exact':
+        return '='
+
+    return operator
 
 class WhereNode(object):
     def __init__(self):
@@ -47,7 +54,7 @@ class WhereNode(object):
 
     def set_leaf(self, column, operator, value):
         self.column = column
-        self.operator = operator
+        self.operator = convert_operator(operator)
         self.value = value
 
     def __iter__(self):
@@ -105,10 +112,52 @@ class Query(object):
         assert where is None or isinstance(where, WhereNode)
         self.where = where
 
+    def serialize(self):
+        if not self.is_normalized:
+            raise ValueError("You cannot serialize queries unless they are normalized")
+
+        result = {}
+        result["kind"] = self.kind
+        result["table"] = self.tables[0]
+        result["columns"] = self.columns
+        result["distinct"] = self.distinct_fields
+        result["order_by"] = self.order_by
+        result["row_data"] = self.row_data
+
+        where = []
+
+        assert self.where.connector == 'OR'
+
+        for node in self.where.children:
+            assert node.connector == 'AND'
+
+            query = {}
+            for lookup in node.children:
+                query[''.join(lookup.column, lookup.operator)] = lookup.value
+
+            where.append(query)
+
+        result["where"] = where
+
+        return json.dumps(result)
+
 
 def _transform_query_16(kind, query):
     ret = Query(query.model, kind)
     return ret
+
+
+def _extract_ordering_from_query_17(query):
+    # Add any orderings
+    if not query.default_ordering:
+        result = list(query.order_by)
+    else:
+        result = list(query.order_by or query.get_meta().ordering or [])
+
+    if query.extra_order_by:
+        result.extend(query.extra_order_by)
+
+    return result
 
 
 def _transform_query_17(connection, kind, query):
@@ -117,6 +166,10 @@ def _transform_query_17(connection, kind, query):
     # Add the root concrete table as the source table
     root_table = get_top_concrete_parent(query.model)._meta.db_table
     ret.add_source_table(root_table)
+
+    # Extract the ordering of the query results
+    for order_col in _extract_ordering_from_query_17(query):
+        ret.add_order_by(order_col)
 
     output = WhereNode()
     output.connector = query.where.connector
