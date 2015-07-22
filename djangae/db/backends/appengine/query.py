@@ -1,11 +1,20 @@
 import django
 import json
+import logging
+
+from django.core.exceptions import FieldError
+from django.db.models.fields import FieldDoesNotExist
 
 from itertools import chain, imap
 
+from djangae.utils import on_production
 from djangae.db.utils import (
     get_top_concrete_parent,
 )
+
+
+DJANGAE_LOG = logging.getLogger("djangae")
+
 
 VALID_QUERY_KINDS = (
     "SELECT",
@@ -148,6 +157,8 @@ def _transform_query_16(kind, query):
 
 
 def _extract_ordering_from_query_17(query):
+    from djangae.db.backends.appengine.commands import log_once
+
     # Add any orderings
     if not query.default_ordering:
         result = list(query.order_by)
@@ -157,7 +168,45 @@ def _extract_ordering_from_query_17(query):
     if query.extra_order_by:
         result.extend(query.extra_order_by)
 
-    return result
+    final = []
+
+    opts = query.model._meta
+
+    for col in result:
+        if col.lstrip("-") == "pk":
+            pk_col = query.model._meta.pk.column
+            final.append("-" + pk_col if col.startswith("-") else pk_col)
+        elif "__" in col:
+            continue
+        else:
+            try:
+                field = query.model._meta.get_field_by_name(col.lstrip("-"))[0]
+                final.append("-" + field.column if col.startswith("-") else field.column)
+            except FieldDoesNotExist:
+                if col in query.extra_select:
+                    # If the column is in the extra select we transform to the original
+                    # column
+                    try:
+                        field = opts.get_field_by_name(query.extra_select[col][0])[0]
+                        final.append("-" + field.column if col.startswith("-") else field.column)
+                        continue
+                    except FieldDoesNotExist:
+                        # Just pass through to the exception below
+                        pass
+
+                available = opts.get_all_field_names()
+                raise FieldError("Cannot resolve keyword %r into field. "
+                    "Choices are: %s" % (col, ", ".join(available))
+                )
+
+    if len(final) != len(result):
+        diff = set(result) - set(final)
+        log_once(
+            DJANGAE_LOG.warning if not on_production() else DJANGAE_LOG.debug,
+            "The following orderings were ignored as cross-table and random orderings are not supported on the datastore: %s", diff
+        )
+
+    return final
 
 
 def _transform_query_17(connection, kind, query):
