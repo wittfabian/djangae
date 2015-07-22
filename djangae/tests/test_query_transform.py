@@ -7,6 +7,7 @@ from djangae.db.backends.appengine.query import transform_query
 class TransformTestModel(models.Model):
     field1 = models.CharField(max_length=255)
     field2 = models.CharField(max_length=255, unique=True)
+    field3 = models.CharField(null=True, max_length=255)
 
 
 class TransformQueryTest(TestCase):
@@ -88,7 +89,7 @@ class TransformQueryTest(TestCase):
             TransformTestModel.objects.defer("field1").query
         )
 
-        self.assertItemsEqual(["id", "field2"], query.columns)
+        self.assertItemsEqual(["id", "field2", "field3"], query.columns)
 
     def test_no_results_returns_emptyresultset(self):
         self.assertRaises(
@@ -109,3 +110,12 @@ class TransformQueryTest(TestCase):
         self.assertEqual(5, query.offset)
         self.assertEqual(5, query.limit)
 
+    def test_isnull(self):
+        query = transform_query(
+            connections['default'],
+            "SELECT",
+            TransformTestModel.objects.filter(field3__isnull=True).all()[5:10].query
+        )
+
+        self.assertIsNone(query.where.children[0].value)
+        self.assertEqual("=", query.where.children[0].operator)

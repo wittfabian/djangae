@@ -79,6 +79,10 @@ class WhereNode(object):
             # we can deal with 'id_iexact=' query by using 'exact' rather than 'iexact'.
             operator = "exact"
 
+        if operator == "isnull":
+            operator = "exact"
+            value = None
+
         self.column = column
         self.operator = convert_operator(operator)
         self.value = value
@@ -285,12 +289,15 @@ def _transform_query_17(connection, kind, query):
             if not getattr(child, "children", None):
                 # Leaf
                 lhs = child.lhs.output_field.column
-                rhs = child.lhs.output_field.get_db_prep_lookup(
-                    child.lookup_name,
-                    child.rhs,
-                    connection,
-                    prepared=True
-                )[0]
+                if child.rhs_is_direct_value():
+                    rhs = child.rhs
+                else:
+                    rhs = child.lhs.output_field.get_db_prep_lookup(
+                        child.lookup_name,
+                        child.rhs,
+                        connection,
+                        prepared=True
+                    )[0]
 
                 new_node.set_leaf(
                     lhs,
