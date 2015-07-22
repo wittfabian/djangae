@@ -88,6 +88,10 @@ class Query(object):
         self.order_by = []
         self.row_data = [] # For insert/updates
         self.where = None
+        self.offset = self.limit = None
+
+        self.annotations = []
+        self.per_entity_annotations = []
 
     @property
     def is_normalized(self):
@@ -251,6 +255,10 @@ def _transform_query_17(connection, kind, query):
     # Extract any projected columns (values/values_list/only/defer)
     for projected_col in _extract_projected_columns_from_query_17(query):
         ret.add_projected_column(projected_col)
+
+    # Extract any query offsets and limits
+    ret.offset = query.low_mark
+    ret.limit = max((query.high_mark or 0) - query.low_mark, 0)
 
     output = WhereNode()
     output.connector = query.where.connector

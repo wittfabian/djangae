@@ -98,3 +98,14 @@ class TransformQueryTest(TestCase):
             "SELECT",
             TransformTestModel.objects.none().query
         )
+
+    def test_offset_and_limit(self):
+        query = transform_query(
+            connections['default'],
+            "SELECT",
+            TransformTestModel.objects.all()[5:10].query
+        )
+
+        self.assertEqual(5, query.offset)
+        self.assertEqual(5, query.limit)
+
