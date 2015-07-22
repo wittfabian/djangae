@@ -1,6 +1,5 @@
-from django.db import models
+from django.db import models, connections
 from djangae.test import TestCase
-
 from djangae.db.backends.appengine.query import transform_query
 
 
@@ -12,9 +11,27 @@ class TransformTestModel(models.Model):
 class TransformQueryTest(TestCase):
 
     def test_basic_query(self):
-        query = transform_query("SELECT", TransformTestModel.objects.all().query)
+        query = transform_query(
+            connections['default'],
+            "SELECT",
+            TransformTestModel.objects.all().query
+        )
 
         self.assertEqual(query.model, TransformTestModel)
         self.assertEqual(query.kind, 'SELECT')
         self.assertEqual(query.tables, [ TransformTestModel._meta.db_table ])
         self.assertIsNone(query.where)
+
+
+    def test_and_filter(self):
+        query = transform_query(
+            connections['default'],
+            "SELECT",
+            TransformTestModel.objects.filter(field1="One", field2="Two").all().query
+        )
+
+        self.assertEqual(query.model, TransformTestModel)
+        self.assertEqual(query.kind, 'SELECT')
+        self.assertEqual(query.tables, [ TransformTestModel._meta.db_table ])
+        self.assertTrue(query.where)
+        self.assertEqual(2, len(query.where.children)) # Two child nodes

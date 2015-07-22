@@ -33,10 +33,11 @@ class WhereNode(object):
 
         self.children = []
         self.connector = 'AND'
+        self.negated = False
 
     @property
     def is_leaf(self):
-        return self.column and self.operator
+        return bool(self.column and self.operator)
 
     def set_connector(self, connector):
         self.connector = connector
@@ -69,6 +70,22 @@ class Query(object):
         self.row_data = [] # For insert/updates
         self.where = None
 
+    @property
+    def is_normalized(self):
+        """
+            Returns True if this query has a normalized where tree
+        """
+        if not self.where:
+            return True
+
+        # Only a leaf node, return True
+        if not self.where.is_leaf:
+            return True
+
+        # If we have children, and they are all leaf nodes then this is a normalized
+        # query
+        return self.where.connector == 'OR' and self.where.children and all(x.is_leaf for x in self.where.children)
+
     def add_source_table(self, table):
         if table in self.tables:
             return
@@ -94,12 +111,46 @@ def _transform_query_16(kind, query):
     return ret
 
 
-def _transform_query_17(kind, query):
+def _transform_query_17(connection, kind, query):
     ret = Query(query.model, kind)
 
     # Add the root concrete table as the source table
     root_table = get_top_concrete_parent(query.model)._meta.db_table
     ret.add_source_table(root_table)
+
+    output = WhereNode()
+    output.connector = query.where.connector
+
+    def walk_tree(source_node, new_parent):
+        for child in source_node.children:
+            new_node = WhereNode()
+
+            if not getattr(child, "children", None):
+                # Leaf
+                lhs = child.lhs.output_field.column
+                rhs = child.lhs.output_field.get_db_prep_lookup(
+                    child.lookup_name,
+                    child.rhs,
+                    connection,
+                    prepared=True
+                )[0]
+
+                new_node.column = lhs
+                new_node.operator = child.lookup_name
+                new_node.value = rhs
+            else:
+                new_node.connector = child.connector
+                walk_tree(child, new_node)
+
+            new_parent.children.append(new_node)
+
+    walk_tree(query.where, output)
+
+    # If there no child nodes, just wipe out the where
+    if not output.children:
+        output = None
+
+    ret.where = output
 
     return ret
 
@@ -120,5 +171,5 @@ _FACTORY = {
 }
 
 
-def transform_query(kind, query):
-    return _FACTORY[django.VERSION[:2]](kind, query)
+def transform_query(compiler, kind, query):
+    return _FACTORY[django.VERSION[:2]](compiler, kind, query)
