@@ -140,6 +140,7 @@ def _transform_query_17(connection, kind, query):
                 new_node.value = rhs
             else:
                 new_node.connector = child.connector
+                new_node.negated = child.negated
                 walk_tree(child, new_node)
 
             new_parent.children.append(new_node)
