@@ -10,6 +10,7 @@ from itertools import chain, imap
 from djangae.utils import on_production
 from djangae.db.utils import (
     get_top_concrete_parent,
+    get_concrete_parents
 )
 
 
@@ -111,6 +112,12 @@ class Query(object):
     def add_order_by(self, column):
         self.order_by.append(column)
 
+    def add_projected_column(self, column):
+        if not self.columns:
+            self.columns = [ column ]
+        else:
+            self.columns.append(column)
+
     def add_row(self, data):
         assert self.columns
         assert len(data) == len(self.columns)
@@ -209,6 +216,26 @@ def _extract_ordering_from_query_17(query):
     return final
 
 
+def _extract_projected_columns_from_query_17(query):
+    if query.select:
+        result = []
+        for x in query.select:
+            if x.field is None:
+                column = x.col.col[1]  # This is the column we are getting
+            else:
+                column = x.field.column
+
+            result.append(column)
+        return result
+    else:
+        # If the query uses defer()/only() then we need to process deferred. We have to get all deferred columns
+        # for all (concrete) inherited models and then only include columns if they appear in that list
+        deferred_columns = {}
+        query.deferred_to_data(deferred_columns, query.deferred_to_columns_cb)
+        inherited_db_tables = [x._meta.db_table for x in get_concrete_parents(query.model)]
+        return list(chain(*[list(deferred_columns.get(x, [])) for x in inherited_db_tables]))
+
+
 def _transform_query_17(connection, kind, query):
     ret = Query(query.model, kind)
 
@@ -219,6 +246,10 @@ def _transform_query_17(connection, kind, query):
     # Extract the ordering of the query results
     for order_col in _extract_ordering_from_query_17(query):
         ret.add_order_by(order_col)
+
+    # Extract any projected columns (values/values_list/only/defer)
+    for projected_col in _extract_projected_columns_from_query_17(query):
+        ret.add_projected_column(projected_col)
 
     output = WhereNode()
     output.connector = query.where.connector

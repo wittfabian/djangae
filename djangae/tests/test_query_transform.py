@@ -63,3 +63,28 @@ class TransformQueryTest(TestCase):
         self.assertTrue(query.where)
         self.assertEqual(2, len(query.where.children)) # Two child nodes
         self.assertEqual(["field1", "-field2"], query.order_by)
+
+    def test_projection(self):
+        query = transform_query(
+            connections['default'],
+            "SELECT",
+            TransformTestModel.objects.only("field1").query
+        )
+
+        self.assertItemsEqual(["id", "field1"], query.columns)
+
+        query = transform_query(
+            connections['default'],
+            "SELECT",
+            TransformTestModel.objects.values_list("field1").query
+        )
+
+        self.assertEqual(["field1"], query.columns)
+
+        query = transform_query(
+            connections['default'],
+            "SELECT",
+            TransformTestModel.objects.defer("field1").query
+        )
+
+        self.assertItemsEqual(["id", "field2"], query.columns)
