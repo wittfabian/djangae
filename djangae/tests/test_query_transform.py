@@ -1,3 +1,4 @@
+from django.db.models.sql.datastructures import EmptyResultSet
 from django.db import models, connections
 from djangae.test import TestCase
 from djangae.db.backends.appengine.query import transform_query
@@ -88,3 +89,12 @@ class TransformQueryTest(TestCase):
         )
 
         self.assertItemsEqual(["id", "field2"], query.columns)
+
+    def test_no_results_returns_emptyresultset(self):
+        self.assertRaises(
+            EmptyResultSet,
+            transform_query,
+            connections['default'],
+            "SELECT",
+            TransformTestModel.objects.none().query
+        )

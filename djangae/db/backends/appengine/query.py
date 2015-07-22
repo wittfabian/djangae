@@ -4,6 +4,8 @@ import logging
 
 from django.core.exceptions import FieldError
 from django.db.models.fields import FieldDoesNotExist
+from django.db.models.sql.datastructures import EmptyResultSet
+from django.db.models.sql.where import EmptyWhere
 
 from itertools import chain, imap
 
@@ -237,6 +239,10 @@ def _extract_projected_columns_from_query_17(query):
 
 
 def _transform_query_17(connection, kind, query):
+    if isinstance(query.where, EmptyWhere):
+        # Empty where means return nothing!
+        raise EmptyResultSet()
+
     ret = Query(query.model, kind)
 
     # Add the root concrete table as the source table
