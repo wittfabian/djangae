@@ -134,8 +134,9 @@ class Query(object):
 
         self.tables.append(table)
 
-    def set_distinct(self, value):
-        self.distinct = value
+    def set_distinct(self, distinct_fields):
+        self.distinct = True
+        self.columns = distinct_fields
 
     def add_order_by(self, column):
         self.order_by.append(column)
@@ -278,7 +279,8 @@ def _transform_query_17(connection, kind, query):
     for projected_col in _extract_projected_columns_from_query_17(query):
         ret.add_projected_column(projected_col)
 
-    ret.set_distinct(query.distinct)
+    # This must happen after extracting projected cols
+    ret.set_distinct(list(query.distinct_fields))
 
     # Extract any query offsets and limits
     ret.offset = query.low_mark

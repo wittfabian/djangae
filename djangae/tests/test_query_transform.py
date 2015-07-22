@@ -128,3 +128,4 @@ class TransformQueryTest(TestCase):
         )
 
         self.assertTrue(query.distinct)
+        self.assertEqual(query.columns, ["field2", "field3"])
