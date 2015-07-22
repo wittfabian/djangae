@@ -160,11 +160,6 @@ class Query(object):
         return json.dumps(result)
 
 
-def _transform_query_16(kind, query):
-    ret = Query(query.model, kind)
-    return ret
-
-
 def _extract_ordering_from_query_17(query):
     from djangae.db.backends.appengine.commands import log_once
 
@@ -304,7 +299,6 @@ def _transform_query_19(kind, query):
 
 
 _FACTORY = {
-    (1, 6): _transform_query_16,
     (1, 7): _transform_query_17,
     (1, 8): _transform_query_18,
     (1, 9): _transform_query_19
