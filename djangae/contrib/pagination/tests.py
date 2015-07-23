@@ -16,7 +16,8 @@ from .paginator import queryset_identifier, _get_marker
     ("first_name", "last_name"),
     ("first_name", "-last_name"),
     ("created",),
-    ("-created",)
+    ("-created",),
+    "pk", # it's possible to order by the model pk
 ])
 class TestUser(models.Model):
     first_name = models.CharField(max_length=200)
