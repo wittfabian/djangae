@@ -365,7 +365,8 @@ class RelatedSetField(RelatedIteratorField):
 
         # Deal with deserialization from a string
         if isinstance(value, basestring):
-            if not (value.startswith("[") and value.endswith("]")):
+            if not (value.startswith("[") and value.endswith("]")) and \
+               not (value.startswith("{") and value.endswith("}")):
                 raise ValidationError("Invalid input for RelatedSetField instance")
 
             value = value[1:-1].strip()
@@ -470,12 +471,8 @@ class GenericRelationField(models.Field):
     form_class = GenericRelationFormfield
 
     def __init__(self, *args, **kwargs):
-        self.vc_encoded = True
-
         kwargs.update(
             max_length=255,
-            blank=True,
-            null=True
         )
 
         if 'db_index' not in kwargs:

@@ -97,6 +97,9 @@ def _create_dispatcher(configuration, options):
     if current_version >= _VersionList('1.9.19'):
         dispatcher_args.append(options.external_port)
 
+    if current_version >= _VersionList('1.9.22'):
+        dispatcher_args.insert(8, None) # Custom config setting
+
     _create_dispatcher.singleton = dispatcher.Dispatcher(*dispatcher_args)
 
     return _create_dispatcher.singleton
@@ -219,7 +222,7 @@ SANDBOXES = {
 _OPTIONS = None
 
 @contextlib.contextmanager
-def activate(sandbox_name, add_sdk_to_path=False, **overrides):
+def activate(sandbox_name, add_sdk_to_path=False, new_env_vars=None, **overrides):
     """Context manager for command-line scripts started outside of dev_appserver.
 
     :param sandbox_name: str, one of 'local', 'remote' or 'test'
@@ -307,6 +310,18 @@ def activate(sandbox_name, add_sdk_to_path=False, **overrides):
     module = configuration.modules[0]
     for l in sandbox._enable_libraries(module.normalized_libraries):
         sys.path.insert(1, l)
+
+    # Propagate provided environment variables to the sandbox.
+    # This is required for the runserver management command settings flag,
+    # which sets an environment variable needed by Django.
+    from google.appengine.api.appinfo import EnvironmentVariables
+    old_env_vars = module.env_variables if module.env_variables else {}
+    if new_env_vars is None:
+        new_env_vars = {}
+    module._app_info_external.env_variables = EnvironmentVariables.Merge(
+        old_env_vars,
+        new_env_vars,
+    )
 
     try:
         global _OPTIONS

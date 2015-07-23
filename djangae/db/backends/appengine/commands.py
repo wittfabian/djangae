@@ -821,7 +821,11 @@ class SelectCommand(object):
                         raise EmptyResultSet()
 
                     if not isinstance(value, datastore.Key):
-                        value = get_datastore_key(self.model, value)
+                        try:
+                            value = get_datastore_key(self.model, value)
+                        except (datastore_errors.BadValueError, datastore_errors.BadArgumentError):
+                            # A key couldn't be constructed from this value, so no such entity can exist
+                            raise EmptyResultSet()
 
                 key = "%s %s" % (column, op)
                 try:
@@ -1183,6 +1187,14 @@ class UpdateCommand(object):
             result = datastore.Get(key)
         except datastore_errors.EntityNotFoundError:
             # Return false to indicate update failure
+            return False
+
+        if (
+            isinstance(self.select.gae_query, (Query, UniqueQuery)) # ignore QueryByKeys and NoOpQuery
+            and not utils.entity_matches_query(result, self.select.gae_query)
+        ):
+            # Due to eventual consistency they query may have returned an entity which no longer
+            # matches the query
             return False
 
         original = copy.deepcopy(result)

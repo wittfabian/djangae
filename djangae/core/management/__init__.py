@@ -17,7 +17,21 @@ DJANGO_DEFAULTS = {
 
 
 def _execute_from_command_line(sandbox_name, argv, **sandbox_overrides):
-    with sandbox.activate(sandbox_name, add_sdk_to_path=True, **sandbox_overrides):
+    # Parses for a settings flag, adding it as an environment variable to
+    # the sandbox if found.
+    parser = argparse.ArgumentParser(prog='manage.py')
+    parser.add_argument('--settings', nargs='?')
+    settings = parser.parse_known_args(argv)[0].settings
+    env_vars = {}
+    if settings:
+        env_vars['DJANGO_SETTINGS_MODULE'] = settings
+
+    with sandbox.activate(
+        sandbox_name,
+        add_sdk_to_path=True,
+        new_env_vars=env_vars,
+        **sandbox_overrides
+    ):
         import django.core.management as django_management  # Now on the path
         return django_management.execute_from_command_line(argv)
 

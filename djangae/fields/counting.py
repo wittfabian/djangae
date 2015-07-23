@@ -1,6 +1,8 @@
 import random
 
 from django.core.exceptions import ImproperlyConfigured
+from google.appengine.datastore.datastore_rpc import BaseConnection
+from google.appengine.datastore.datastore_stub_util import _MAX_EG_PER_TXN
 
 from djangae.fields.related import (
     RelatedSetField,
@@ -11,12 +13,11 @@ from djangae.models import CounterShard
 from djangae.db import transaction
 
 
-MAX_ENTITY_GROUPS_PER_TRANSACTION = 25
-MAX_ENTITIES_PER_GET = 1000
+MAX_ENTITIES_PER_GET = BaseConnection.MAX_GET_KEYS
 
-# If all the shards plus the object to which they belong is <= MAX_ENTITY_GROUPS_PER_TRANSACTION
-# then we can do the populate() and reset() operations transactionally, which is nice, hence:
-DEFAULT_SHARD_COUNT = MAX_ENTITY_GROUPS_PER_TRANSACTION - 1
+# If the number of shards plus 1 (for the object to which they belong) is <= the max entity groups per
+# transaction then we can do the populate() operation in a single transaction, which is nice, hence:
+DEFAULT_SHARD_COUNT = MAX_SHARDS_PER_TRANSACTION = _MAX_EG_PER_TXN - 1
 
 
 class RelatedShardManager(RelatedIteratorManagerBase, CounterShard._default_manager.__class__):
@@ -61,9 +62,8 @@ class RelatedShardManager(RelatedIteratorManagerBase, CounterShard._default_mana
             update the list of shard PKs on the instance.
         """
         total_to_create = self.field.shard_count - len(self)
-        max_to_create_per_transaction = MAX_ENTITY_GROUPS_PER_TRANSACTION - 1
         while total_to_create:
-            num_to_create = min(total_to_create, max_to_create_per_transaction)
+            num_to_create = min(total_to_create, MAX_SHARDS_PER_TRANSACTION)
             with transaction.atomic(xg=True):
                 new_shard_pks = set()
                 for x in xrange(num_to_create):

@@ -508,6 +508,33 @@ class BackendTests(TestCase):
         self.assertItemsEqual([obj], date_set.dates.exclude(date=None))
         self.assertItemsEqual([obj], date_set.dates.exclude(time=None))
 
+        # sorting should work too
+        self.assertItemsEqual([obj, empty_obj], date_set.dates.order_by('datetime'))
+        self.assertItemsEqual([empty_obj, obj], date_set.dates.order_by('-datetime'))
+        self.assertItemsEqual([obj, empty_obj], date_set.dates.order_by('date'))
+        self.assertItemsEqual([empty_obj, obj], date_set.dates.order_by('-date'))
+        self.assertItemsEqual([obj, empty_obj], date_set.dates.order_by('time'))
+        self.assertItemsEqual([empty_obj, obj], date_set.dates.order_by('-time'))
+
+
+    def test_update_query_does_not_update_entities_which_no_longer_match_query(self):
+        """ When doing queryset.update(field=x), any entities which the query returns but which no
+            longer match the query (due to eventual consistency) should not be altered.
+        """
+        obj = TestFruit.objects.create(name='apple', color='green', is_mouldy=False)
+        with inconsistent_db(probability=0):
+            # alter our object, so that it should no longer match the query that we then do
+            obj.color = 'blue'
+            obj.save()
+            # Now run a query, our object is changed, but the inconsistency means it will still match
+            queryset = TestFruit.objects.filter(color='green')
+            assert queryset.count(), "inconsistent_db context manager isn't working" # sanity
+            # Now run an update with that query, the update should NOT be applied, because it
+            # should re-check that the object still matches the query
+            queryset.update(is_mouldy=True)
+        obj = TestFruit.objects.get(pk=obj.pk)
+        self.assertFalse(obj.is_mouldy)
+
 
 class ModelFormsetTest(TestCase):
     def test_reproduce_index_error(self):
@@ -1131,6 +1158,27 @@ class EdgeCaseTests(TestCase):
         results = list(TestUser.objects.all().filter(username__in=["A", "B"]).exclude(username__in=[]))
         self.assertEqual(2, len(results))
         self.assertItemsEqual(["A", "B"], [x.username for x in results])
+
+    def test_empty_string_key(self):
+        # Creating
+        with self.assertRaises(IntegrityError):
+            TestFruit.objects.create(name='')
+
+        # Getting
+        with self.assertRaises(TestFruit.DoesNotExist):
+            TestFruit.objects.get(name='')
+
+        # Filtering
+        results = list(TestFruit.objects.filter(name=''))
+        self.assertItemsEqual([], results)
+
+        # Combined filtering
+        results = list(TestFruit.objects.filter(name='', color='red'))
+        self.assertItemsEqual([], results)
+
+        # IN query
+        results = list(TestFruit.objects.filter(name__in=['', 'apple']))
+        self.assertItemsEqual([self.apple], results)
 
     def test_or_queryset(self):
         """

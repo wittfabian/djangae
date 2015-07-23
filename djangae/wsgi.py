@@ -1,7 +1,3 @@
-import warnings
-
-from google.appengine.runtime import request_environment
-
 from djangae.utils import on_production
 
 
@@ -29,9 +25,18 @@ class DjangaeApplication(object):
 
         if '_sqlite3' not in sandbox._WHITE_LIST_C_MODULES:
             sandbox._WHITE_LIST_C_MODULES.extend([
-                '_sqlite3'
+                '_sqlite3',
+                '_ssl', # Workaround for App Engine bug #9246
+                '_socket'
             ])
 
+            # Reload the system socket.py, because of bug #9246
+            import imp
+            import os
+            import ast
+
+            psocket = os.path.join(os.path.dirname(ast.__file__), 'socket.py')
+            imp.load_source('socket', psocket)
 
     def __init__(self, application):
         from django.conf import settings
