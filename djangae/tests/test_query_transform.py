@@ -2,7 +2,7 @@ from django.db.models.sql.datastructures import EmptyResultSet
 from django.db import models, connections
 from djangae.test import TestCase
 from djangae.db.backends.appengine.query import transform_query
-
+from django.db.models.query import Q
 
 class TransformTestModel(models.Model):
     field1 = models.CharField(max_length=255)
@@ -138,3 +138,201 @@ class TransformQueryTest(TestCase):
 
         self.assertTrue(query.distinct)
         self.assertEqual(query.columns, ["field2", "field3"])
+
+from djangae.tests.test_connector import TestUser, Relation
+from djangae.db.backends.appengine.dnf import normalize_query
+
+class QueryNormalizationTests(TestCase):
+    """
+        The parse_dnf function takes a Django where tree, and converts it
+        into a tree of one of the following forms:
+
+        [ (column, operator, value), (column, operator, value) ] <- AND only query
+        [ [(column, operator, value)], [(column, operator, value) ]] <- OR query, of multiple ANDs
+    """
+
+    def test_and_queries(self):
+        qs = TestUser.objects.filter(username="test").all()
+
+        query = normalize_query(transform_query(
+            connections['default'],
+            "SELECT", qs.query
+        ))
+
+        self.assertTrue(1, len(query.where.children))
+        self.assertEqual(query.where.children[0].children[0].column, "username")
+        self.assertEqual(query.where.children[0].children[0].operator, "=")
+        self.assertEqual(query.where.children[0].children[0].value, "test")
+
+        qs = TestUser.objects.filter(username="test", email="test@example.com")
+
+        query = normalize_query(transform_query(
+            connections['default'],
+            "SELECT", qs.query
+        ))
+
+        self.assertTrue(2, len(query.where.children[0].children))
+        self.assertEqual(query.where.connector, "OR")
+        self.assertEqual(query.where.children[0].connector, "AND")
+        self.assertEqual(query.where.children[0].children[0].column, "username")
+        self.assertEqual(query.where.children[0].children[0].operator, "=")
+        self.assertEqual(query.where.children[0].children[0].value, "test")
+        self.assertEqual(query.where.children[0].children[1].column, "email")
+        self.assertEqual(query.where.children[0].children[1].operator, "=")
+        self.assertEqual(query.where.children[0].children[1].value, "test@example.com")
+
+        qs = TestUser.objects.filter(username="test").exclude(email="test@example.com")
+        query = normalize_query(transform_query(
+            connections['default'],
+            "SELECT", qs.query
+        ))
+
+
+        self.assertTrue(2, len(query.where.children[0].children))
+        self.assertEqual(query.where.connector, "OR")
+        self.assertEqual(query.where.children[0].connector, "AND")
+        self.assertEqual(query.where.children[0].children[0].column, "username")
+        self.assertEqual(query.where.children[0].children[0].operator, "=")
+        self.assertEqual(query.where.children[0].children[0].value, "test")
+        self.assertEqual(query.where.children[0].children[1].column, "email")
+        self.assertEqual(query.where.children[0].children[1].operator, "<")
+        self.assertEqual(query.where.children[0].children[1].value, "test@example.com")
+        self.assertEqual(query.where.children[1].children[0].column, "username")
+        self.assertEqual(query.where.children[1].children[0].operator, "=")
+        self.assertEqual(query.where.children[1].children[0].value, "test")
+        self.assertEqual(query.where.children[1].children[1].column, "email")
+        self.assertEqual(query.where.children[1].children[1].operator, ">")
+        self.assertEqual(query.where.children[1].children[1].value, "test@example.com")
+
+
+        instance = Relation(pk=1)
+        qs = instance.related_set.filter(headline__startswith='Fir')
+
+        query = normalize_query(transform_query(
+            connections['default'],
+            "SELECT", qs.query
+        ))
+
+        self.assertTrue(2, len(query.where.children[0].children))
+        self.assertEqual(query.where.connector, "OR")
+        self.assertEqual(query.where.children[0].connector, "AND")
+        self.assertEqual(query.where.children[0].children[0].column, "relation_id")
+        self.assertEqual(query.where.children[0].children[0].operator, "=")
+        self.assertEqual(query.where.children[0].children[0].value, 1)
+        self.assertEqual(query.where.children[0].children[1].column, "_idx_startswith_headline")
+        self.assertEqual(query.where.children[0].children[1].operator, "=")
+        self.assertEqual(query.where.children[0].children[1].value, u"Fir")
+
+
+    def test_or_queries(self):
+        qs = TestUser.objects.filter(
+            username="python").filter(
+            Q(username__in=["ruby", "jruby"]) | (Q(username="php") & ~Q(username="perl"))
+        )
+
+        query = normalize_query(transform_query(
+            connections['default'],
+            "SELECT", qs.query
+        ))
+
+        # After IN and != explosion, we have...
+        # (AND: (username='python', OR: (username='ruby', username='jruby', AND: (username='php', AND: (username < 'perl', username > 'perl')))))
+
+        # Working backwards,
+        # AND: (username < 'perl', username > 'perl') can't be simplified
+        # AND: (username='php', AND: (username < 'perl', username > 'perl')) can become (OR: (AND: username = 'php', username < 'perl'), (AND: username='php', username > 'perl'))
+        # OR: (username='ruby', username='jruby', (OR: (AND: username = 'php', username < 'perl'), (AND: username='php', username > 'perl')) can't be simplified
+        # (AND: (username='python', OR: (username='ruby', username='jruby', (OR: (AND: username = 'php', username < 'perl'), (AND: username='php', username > 'perl'))
+        # becomes...
+        # (OR: (AND: username='python', username = 'ruby'), (AND: username='python', username='jruby'), (AND: username='python', username='php', username < 'perl') \
+        #      (AND: username='python', username='php', username > 'perl')
+
+        self.assertTrue(4, len(query.where.children[0].children))
+        self.assertEqual(query.where.connector, "OR")
+        self.assertEqual(query.where.children[0].connector, "AND")
+        self.assertEqual(query.where.children[0].children[0].column, "username")
+        self.assertEqual(query.where.children[0].children[0].operator, "=")
+        self.assertEqual(query.where.children[0].children[0].value, "python")
+        self.assertEqual(query.where.children[0].children[1].column, "username")
+        self.assertEqual(query.where.children[0].children[1].operator, "=")
+        self.assertEqual(query.where.children[0].children[1].value, "ruby")
+
+        self.assertEqual(query.where.children[1].connector, "AND")
+        self.assertEqual(query.where.children[1].children[0].column, "username")
+        self.assertEqual(query.where.children[1].children[0].operator, "=")
+        self.assertEqual(query.where.children[1].children[0].value, "python")
+        self.assertEqual(query.where.children[1].children[1].column, "username")
+        self.assertEqual(query.where.children[1].children[1].operator, "=")
+        self.assertEqual(query.where.children[1].children[1].value, "jruby")
+
+        self.assertEqual(query.where.children[2].connector, "AND")
+        self.assertEqual(query.where.children[2].children[0].column, "username")
+        self.assertEqual(query.where.children[2].children[0].operator, "=")
+        self.assertEqual(query.where.children[2].children[0].value, "python")
+        self.assertEqual(query.where.children[2].children[1].column, "username")
+        self.assertEqual(query.where.children[2].children[1].operator, "=")
+        self.assertEqual(query.where.children[2].children[1].value, "php")
+        self.assertEqual(query.where.children[2].children[2].column, "username")
+        self.assertEqual(query.where.children[2].children[2].operator, ">")
+        self.assertEqual(query.where.children[2].children[2].value, "perl")
+
+        self.assertEqual(query.where.children[3].connector, "AND")
+        self.assertEqual(query.where.children[3].children[0].column, "username")
+        self.assertEqual(query.where.children[3].children[0].operator, "=")
+        self.assertEqual(query.where.children[3].children[0].value, "python")
+        self.assertEqual(query.where.children[3].children[1].column, "username")
+        self.assertEqual(query.where.children[3].children[1].operator, "=")
+        self.assertEqual(query.where.children[3].children[1].value, "php")
+        self.assertEqual(query.where.children[3].children[2].column, "username")
+        self.assertEqual(query.where.children[3].children[2].operator, "<")
+        self.assertEqual(query.where.children[3].children[2].value, "perl")
+
+
+        qs = TestUser.objects.filter(username="test") | TestUser.objects.filter(username="cheese")
+
+        expected = ('OR', [
+            ('LIT', ("username", "=", "test")),
+            ('LIT', ("username", "=", "cheese")),
+        ])
+
+        self.assertEqual(expected, parse_dnf(qs.query.where, connection=connection)[0])
+
+        qs = TestUser.objects.using("default").filter(username__in=set()).values_list('email')
+
+        with self.assertRaises(EmptyResultSet):
+            parse_dnf(qs.query.where, connection=connection)
+
+        qs = TestUser.objects.filter(username__startswith='Hello') |  TestUser.objects.filter(username__startswith='Goodbye')
+        expected = ('OR', [
+            ('LIT', ('_idx_startswith_username', '=', u'Hello')),
+            ('LIT', ('_idx_startswith_username', '=', u'Goodbye'))
+        ])
+        self.assertEqual(expected, parse_dnf(qs.query.where, connection=connection)[0])
+
+        qs = TestUser.objects.filter(pk__in=[1, 2, 3])
+
+        expected = ('OR', [
+            ('LIT', ("id", "=", datastore.Key.from_path(TestUser._meta.db_table, 1))),
+            ('LIT', ("id", "=", datastore.Key.from_path(TestUser._meta.db_table, 2))),
+            ('LIT', ("id", "=", datastore.Key.from_path(TestUser._meta.db_table, 3))),
+        ])
+
+        self.assertEqual(expected, parse_dnf(qs.query.where, connection=connection)[0])
+
+        qs = TestUser.objects.filter(pk__in=[1, 2, 3]).filter(username="test")
+
+        expected = ('OR', [
+            ('AND', [
+                ('LIT', (u'id', '=', datastore.Key.from_path(TestUser._meta.db_table, 1))),
+                ('LIT', ('username', '=', 'test'))
+            ]),
+            ('AND', [
+                ('LIT', (u'id', '=', datastore.Key.from_path(TestUser._meta.db_table, 2))),
+                ('LIT', ('username', '=', 'test'))
+            ]),
+            ('AND', [
+                ('LIT', (u'id', '=', datastore.Key.from_path(TestUser._meta.db_table, 3))),
+                ('LIT', ('username', '=', 'test'))
+            ])
+        ])
+        self.assertEqual(expected, parse_dnf(qs.query.where, connection=connection)[0])

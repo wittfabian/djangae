@@ -1,13 +1,19 @@
 import django
 import json
 import logging
+from itertools import chain, imap
 
 from django.core.exceptions import FieldError
 from django.db.models.fields import FieldDoesNotExist
 from django.db.models.sql.datastructures import EmptyResultSet
 from django.db.models.sql.where import EmptyWhere
 from django.db.models import AutoField
-from itertools import chain, imap
+
+from djangae.indexing import (
+    special_indexes_for_column,
+    REQUIRES_SPECIAL_INDEXES,
+    add_special_index
+)
 
 from djangae.utils import on_production
 from djangae.db.utils import (
@@ -83,16 +89,43 @@ class WhereNode(object):
             operator = "exact"
             value = None
 
+        # Do any special index conversions necessary to perform this lookup
+        if operator in REQUIRES_SPECIAL_INDEXES:
+            indexer = REQUIRES_SPECIAL_INDEXES[operator]
+            value = indexer.prep_value_for_query(value)
+            column = indexer.indexed_column_name(column, value=value)
+            operator = indexer.prep_query_operator(operator)
+
         self.column = column
         self.operator = convert_operator(operator)
         self.value = value
-
 
     def __iter__(self):
         for child in chain(*imap(iter, self.children)):
             yield child
         yield self
 
+
+    def __repr__(self):
+        if self.is_leaf:
+            return "[%s%s%s]" % (self.column, self.operator, self.value)
+        else:
+            return "(%s:%s%s)" % (self.connector, "!" if self.negated else "", ",".join([repr(x) for x in self.children]))
+
+    def __eq__(self, rhs):
+        if self.is_leaf != rhs.is_leaf:
+            return False
+
+        if self.is_leaf:
+            return self.column == rhs.column and self.value == rhs.value and self.operator == rhs.operator
+        else:
+            return self.connector == rhs.connector and self.children == rhs.children
+
+    def __hash__(self):
+        if self.is_leaf:
+            return hash((self.column, self.value, self.operator))
+        else:
+            return hash((self.connector, self.children))
 
 class Query(object):
     def __init__(self, model, kind):
@@ -296,7 +329,7 @@ def _transform_query_17(connection, kind, query):
 
             if not getattr(child, "children", None):
                 # Leaf
-                lhs = child.lhs.output_field.column
+                lhs = child.lhs.target.column
                 if child.rhs_is_direct_value():
                     rhs = child.rhs
                 else:

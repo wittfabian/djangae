@@ -1,3 +1,4 @@
+import copy
 from itertools import  product
 from django.db.models.sql.where import Constraint
 from commands import parse_constraint, OPERATORS_MAP
@@ -350,3 +351,110 @@ def tripled(node):
             else:
                 children.append(_proc)
         return 'OR', children
+
+
+from djangae.db.backends.appengine.query import WhereNode
+
+def preprocess_node(node):
+    # Explode inequalities otherwise things get crazy
+    if node.negated and len(node.children) == 1 and node.children[0].operator == "=":
+        only_grandchild = node.children[0]
+
+        lhs, rhs = WhereNode(), WhereNode()
+        lhs.column = rhs.column = only_grandchild.column
+        lhs.value = rhs.value = only_grandchild.value
+        lhs.operator = "<"
+        rhs.operator = ">"
+
+        node.children = [ lhs, rhs ]
+        node.connector = "OR"
+        node.negated = False
+
+    if not node.negated:
+        for child in node.children:
+            if child.is_leaf and child.operator == "in":
+                new_children = []
+
+                for value in node.children[0].value:
+                    new_node = WhereNode()
+                    new_node.operator = "="
+                    new_node.value = value
+                    new_node.column = node.children[0].column
+
+                    new_children.append(new_node)
+
+                child.column = None
+                child.operator = None
+                child.connector = "OR"
+                child.value = None
+                child.children = new_children
+
+    return node
+
+
+def normalize_query(query):
+    where = query.where
+
+    def walk_tree(where):
+        for child in where.children:
+            child = preprocess_node(child)
+
+            if child.children and child.connector == 'AND' and not child.negated:
+                where.children.remove(child)
+                where.children.extend(child.children)
+                walk_tree(where)
+            elif len(child.children) > 1 and child.connector == 'AND' and child.negated:
+                new_grandchildren = []
+                for grandchild in child.children:
+                    new_node = WhereNode()
+                    new_node.negated = True
+                    new_node.children = [ grandchild ]
+                    new_grandchildren.append(new_node)
+                child.children = new_grandchildren
+                child.connector = 'OR'
+                walk_tree(where)
+            else:
+                walk_tree(child)
+
+        if where.connector == 'AND' and any([x.connector == 'OR' for x in where.children]):
+            # ANDs should have been taken care of!
+            assert not any([x.connector == 'AND' and not x.is_leaf for x in where.children ])
+
+            product_list = []
+            for child in where.children:
+                if child.connector == 'OR':
+                    product_list.append(child.children)
+                else:
+                    product_list.append([child])
+
+            producted = product(*product_list)
+
+            new_children = []
+            for branch in producted:
+                new_and = WhereNode()
+                new_and.connector = 'AND'
+                new_and.children = copy.deepcopy(branch)
+                new_children.append(new_and)
+
+            where.connector = 'OR'
+            where.children = list(set(new_children))
+            walk_tree(where)
+
+        elif where.connector == 'OR':
+            new_children = []
+            for child in where.children:
+                if child.connector == 'OR':
+                    new_children.extend(child.children)
+                else:
+                    new_children.append(child)
+            where.children = list(set(new_children))
+
+    walk_tree(where)
+
+    if where.connector != 'OR':
+        new_node = WhereNode()
+        new_node.connector = 'OR'
+        new_node.children = [ where ]
+        query.where = new_node
+
+    return query
