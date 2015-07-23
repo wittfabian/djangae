@@ -18,8 +18,6 @@ from django.db.models.sql.datastructures import EmptyResultSet
 from django.db.models.sql import query
 from django.db.models.sql.where import EmptyWhere
 from django.db.models.fields import AutoField
-from django.db.models import F, Count
-from django.db.models.expressions import Date
 
 from google.appengine.api import datastore, datastore_errors
 from google.appengine.api.datastore import Query
@@ -88,8 +86,6 @@ REVERSE_OP_MAP = {
 
 INEQUALITY_OPERATORS = frozenset(['>', '<', '<=', '>='])
 
-# These are the expressions that we support
-SUPPORTED_EXPRESSIONS = (Date, F, Count)
 
 def _cols_from_where_node(where_node):
     cols = where_node.get_cols() if hasattr(where_node, 'get_cols') else where_node.get_group_by_cols()
@@ -751,6 +747,10 @@ class SelectCommand(object):
         if hasattr(query, "annotations"):
             # Django 1.8 superseded aggregates with annotations, which made our
             # lives a whole lot more interesting!
+            # These are the expressions that we support
+            from django.db.models import F, Count
+            from django.db.models.expressions import Date
+            SUPPORTED_EXPRESSIONS = (Date, F, Count)
 
             for k, v in query.annotations.items():
                 if v.__class__ not in SUPPORTED_EXPRESSIONS:
