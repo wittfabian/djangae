@@ -332,8 +332,94 @@ def _transform_query_17(connection, kind, query):
     return ret
 
 
-def _transform_query_18(kind, query):
-    pass
+def _extract_projected_columns_from_query_18(query):
+    if query.select:
+        result = []
+        for x in query.select:
+            if x.field is None:
+                column = x.col.col[1]  # This is the column we are getting
+            else:
+                column = x.field.column
+
+            result.append(column)
+        return result
+    else:
+        # If the query uses defer()/only() then we need to process deferred. We have to get all deferred columns
+        # for all (concrete) inherited models and then only include columns if they appear in that list
+        deferred_columns = {}
+        query.deferred_to_data(deferred_columns, query.get_loaded_field_names_cb)
+        return list(chain(*[list(deferred_columns.get(x, [])) for x in get_concrete_parents(query.model)]))
+
+
+def _transform_query_18(connection, kind, query):
+    if isinstance(query.where, EmptyWhere):
+        # Empty where means return nothing!
+        raise EmptyResultSet()
+
+    ret = Query(query.model, kind)
+
+    # Add the root concrete table as the source table
+    root_table = get_top_concrete_parent(query.model)._meta.db_table
+    ret.add_source_table(root_table)
+
+    # Extract the ordering of the query results
+    for order_col in _extract_ordering_from_query_17(query):
+        ret.add_order_by(order_col)
+
+    # Extract any projected columns (values/values_list/only/defer)
+    for projected_col in _extract_projected_columns_from_query_18(query):
+        ret.add_projected_column(projected_col)
+
+    # This must happen after extracting projected cols
+    ret.set_distinct(list(query.distinct_fields))
+
+    # Extract any query offsets and limits
+    ret.offset = query.low_mark
+    ret.limit = max((query.high_mark or 0) - query.low_mark, 0)
+
+    output = WhereNode()
+    output.connector = query.where.connector
+
+    def walk_tree(source_node, new_parent):
+        for child in source_node.children:
+            new_node = WhereNode()
+
+            if not getattr(child, "children", None):
+                # Leaf
+                lhs = child.lhs.output_field.column
+                if child.rhs_is_direct_value():
+                    rhs = child.rhs
+                else:
+                    rhs = child.lhs.output_field.get_db_prep_lookup(
+                        child.lookup_name,
+                        child.rhs,
+                        connection,
+                        prepared=True
+                    )[0]
+
+                new_node.set_leaf(
+                    lhs,
+                    child.lookup_name,
+                    rhs,
+                    child.lhs.output_field
+                )
+
+            else:
+                new_node.connector = child.connector
+                new_node.negated = child.negated
+                walk_tree(child, new_node)
+
+            new_parent.children.append(new_node)
+
+    walk_tree(query.where, output)
+
+    # If there no child nodes, just wipe out the where
+    if not output.children:
+        output = None
+
+    ret.where = output
+
+    return ret
 
 
 def _transform_query_19(kind, query):
@@ -347,5 +433,5 @@ _FACTORY = {
 }
 
 
-def transform_query(compiler, kind, query):
-    return _FACTORY[django.VERSION[:2]](compiler, kind, query)
+def transform_query(connection, kind, query):
+    return _FACTORY[django.VERSION[:2]](connection, kind, query)
