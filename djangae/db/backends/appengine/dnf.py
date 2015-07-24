@@ -370,24 +370,23 @@ def preprocess_node(node):
         node.connector = "OR"
         node.negated = False
 
-    if not node.negated:
-        for child in node.children:
-            if child.is_leaf and child.operator == "in":
-                new_children = []
+    for child in node.children:
+        if child.is_leaf and child.operator == "in":
+            new_children = []
 
-                for value in node.children[0].value:
-                    new_node = WhereNode()
-                    new_node.operator = "="
-                    new_node.value = value
-                    new_node.column = node.children[0].column
+            for value in child.value:
+                new_node = WhereNode()
+                new_node.operator = "="
+                new_node.value = value
+                new_node.column = node.children[0].column
 
-                    new_children.append(new_node)
+                new_children.append(new_node)
 
-                child.column = None
-                child.operator = None
-                child.connector = "OR"
-                child.value = None
-                child.children = new_children
+            child.column = None
+            child.operator = None
+            child.connector = "OR"
+            child.value = None
+            child.children = new_children
 
     return node
 

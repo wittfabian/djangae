@@ -350,12 +350,16 @@ class QueryNormalizationTests(TestCase):
         self.assertTrue(query.where.children[1].is_leaf)
         self.assertEqual("test", query.where.children[1].value)
 
-        return
 
         qs = TestUser.objects.using("default").filter(username__in=set()).values_list('email')
 
         with self.assertRaises(EmptyResultSet):
-            parse_dnf(qs.query.where, connection=connection)
+            query = normalize_query(transform_query(
+                connections['default'],
+                "SELECT", qs.query
+            ))
+
+        return
 
         qs = TestUser.objects.filter(username__startswith='Hello') |  TestUser.objects.filter(username__startswith='Goodbye')
         expected = ('OR', [
