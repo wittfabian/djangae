@@ -403,6 +403,11 @@ def normalize_query(query):
                 where.children.remove(child)
                 where.children.extend(child.children)
                 walk_tree(where)
+            elif child.connector == "AND" and len(child.children) == 1 and not child.negated:
+                # Promote leaf nodes if they are the only child under an AND. Just for consistency
+                where.children.remove(child)
+                where.children.extend(child.children)
+                walk_tree(where)
             elif len(child.children) > 1 and child.connector == 'AND' and child.negated:
                 new_grandchildren = []
                 for grandchild in child.children:

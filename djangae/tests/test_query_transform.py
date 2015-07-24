@@ -336,17 +336,21 @@ class QueryNormalizationTests(TestCase):
         self.assertEqual(query.where.children[3].children[1].operator, "=")
         self.assertEqual(query.where.children[3].children[1].value, "ruby")
 
-        return
-
-
         qs = TestUser.objects.filter(username="test") | TestUser.objects.filter(username="cheese")
 
-        expected = ('OR', [
-            ('LIT', ("username", "=", "test")),
-            ('LIT', ("username", "=", "cheese")),
-        ])
+        query = normalize_query(transform_query(
+            connections['default'],
+            "SELECT", qs.query
+        ))
 
-        self.assertEqual(expected, parse_dnf(qs.query.where, connection=connection)[0])
+        self.assertEqual(query.where.connector, "OR")
+        self.assertEqual(2, len(query.where.children))
+        self.assertTrue(query.where.children[0].is_leaf)
+        self.assertEqual("cheese", query.where.children[0].value)
+        self.assertTrue(query.where.children[1].is_leaf)
+        self.assertEqual("test", query.where.children[1].value)
+
+        return
 
         qs = TestUser.objects.using("default").filter(username__in=set()).values_list('email')
 
