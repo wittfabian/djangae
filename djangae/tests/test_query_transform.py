@@ -358,14 +358,20 @@ class QueryNormalizationTests(TestCase):
                 "SELECT", qs.query
             ))
 
-        return
-
         qs = TestUser.objects.filter(username__startswith='Hello') |  TestUser.objects.filter(username__startswith='Goodbye')
-        expected = ('OR', [
-            ('LIT', ('_idx_startswith_username', '=', u'Hello')),
-            ('LIT', ('_idx_startswith_username', '=', u'Goodbye'))
-        ])
-        self.assertEqual(expected, parse_dnf(qs.query.where, connection=connection)[0])
+
+        query = normalize_query(transform_query(
+            connections['default'],
+            "SELECT", qs.query
+        ))
+
+        self.assertEqual(2, len(query.where.children))
+        self.assertEqual("_idx_startswith_username", query.where.children[0].column)
+        self.assertEqual(u"Goodbye", query.where.children[0].value)
+        self.assertEqual("_idx_startswith_username", query.where.children[1].column)
+        self.assertEqual(u"Hello", query.where.children[1].value)
+
+        return
 
         qs = TestUser.objects.filter(pk__in=[1, 2, 3])
 
