@@ -395,9 +395,9 @@ def normalize_query(query):
     where = query.where
 
     def walk_tree(where):
-        for child in where.children:
-            child = preprocess_node(child)
+        preprocess_node(where)
 
+        for child in where.children:
             if where.connector == "AND" and child.children and child.connector == 'AND' and not child.negated:
                 where.children.remove(child)
                 where.children.extend(child.children)
@@ -478,17 +478,13 @@ def normalize_query(query):
         # - Not negated: The entire AND branch will always be false, so that branch can be removed
         #    if that was the last branch, then the queryset will be empty
 
-        for and_branch in node.children[:]:
-            if and_branch.is_leaf:
-                if and_branch.operator == "IN" and not len(and_branch.value):
-                    node.children.remove(and_branch)
-            else:
-                for leaf in and_branch.children[:]:
-                    assert leaf.is_leaf
+        # Everything got wiped out!
+        if node.connector == 'OR' and len(node.children) == 0:
+            raise EmptyResultSet()
 
-                    if leaf.operator == "IN" and not len(leaf.value):
-                        if not and_branch.negated:
-                            node.children.remove(and_branch)
+        for and_branch in node.children[:]:
+            if and_branch.is_leaf and and_branch.operator == "IN" and not len(and_branch.value):
+                node.children.remove(and_branch)
 
             if not node.children:
                 raise EmptyResultSet()
