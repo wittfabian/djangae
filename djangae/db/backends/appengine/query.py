@@ -125,7 +125,7 @@ class WhereNode(object):
         if self.is_leaf:
             return hash((self.column, self.value, self.operator))
         else:
-            return hash((self.connector, self.children))
+            return hash((self.connector,) + tuple([hash(x) for x in self.children]))
 
 class Query(object):
     def __init__(self, model, kind):

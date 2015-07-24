@@ -1,7 +1,7 @@
 from django.db.models.sql.datastructures import EmptyResultSet
 from django.db import models, connections
 from djangae.test import TestCase
-from djangae.db.backends.appengine.query import transform_query
+from djangae.db.backends.appengine.query import transform_query, Query, WhereNode
 from django.db.models.query import Q
 
 class TransformTestModel(models.Model):
@@ -151,6 +151,54 @@ class QueryNormalizationTests(TestCase):
         [ [(column, operator, value)], [(column, operator, value) ]] <- OR query, of multiple ANDs
     """
 
+    def test_and_with_child_or_promoted(self):
+        """
+            Given the following tree:
+
+                   AND
+                  / | \
+                 A  B OR
+                      / \
+                     C   D
+
+             The OR should be promoted, so the resulting tree is
+
+                      OR
+                     /   \
+                   AND   AND
+                  / | \ / | \
+                 A  B C A B D
+        """
+
+
+        query = Query(TestUser, "SELECT")
+        query.where = WhereNode()
+        query.where.children.append(WhereNode())
+        query.where.children[-1].column = "A"
+        query.where.children[-1].operator = "="
+        query.where.children.append(WhereNode())
+        query.where.children[-1].column = "B"
+        query.where.children[-1].operator = "="
+        query.where.children.append(WhereNode())
+        query.where.children[-1].connector = "OR"
+        query.where.children[-1].children.append(WhereNode())
+        query.where.children[-1].children[-1].column = "C"
+        query.where.children[-1].children[-1].operator = "="
+        query.where.children[-1].children.append(WhereNode())
+        query.where.children[-1].children[-1].column = "D"
+        query.where.children[-1].children[-1].operator = "="
+
+        query = normalize_query(query)
+
+        self.assertEqual(query.where.connector, "OR")
+        self.assertEqual(2, len(query.where.children))
+        self.assertFalse(query.where.children[0].is_leaf)
+        self.assertFalse(query.where.children[1].is_leaf)
+        self.assertEqual(query.where.children[0].connector, "AND")
+        self.assertEqual(query.where.children[1].connector, "AND")
+        self.assertEqual(3, len(query.where.children[0].children))
+        self.assertEqual(3, len(query.where.children[1].children))
+
     def test_and_queries(self):
         qs = TestUser.objects.filter(username="test").all()
 
@@ -248,14 +296,17 @@ class QueryNormalizationTests(TestCase):
         #      (AND: username='python', username='php', username > 'perl')
 
         self.assertTrue(4, len(query.where.children[0].children))
-        self.assertEqual(query.where.connector, "OR")
+
         self.assertEqual(query.where.children[0].connector, "AND")
         self.assertEqual(query.where.children[0].children[0].column, "username")
         self.assertEqual(query.where.children[0].children[0].operator, "=")
         self.assertEqual(query.where.children[0].children[0].value, "python")
         self.assertEqual(query.where.children[0].children[1].column, "username")
         self.assertEqual(query.where.children[0].children[1].operator, "=")
-        self.assertEqual(query.where.children[0].children[1].value, "ruby")
+        self.assertEqual(query.where.children[0].children[1].value, "php")
+        self.assertEqual(query.where.children[0].children[2].column, "username")
+        self.assertEqual(query.where.children[0].children[2].operator, "<")
+        self.assertEqual(query.where.children[0].children[2].value, "perl")
 
         self.assertEqual(query.where.children[1].connector, "AND")
         self.assertEqual(query.where.children[1].children[0].column, "username")
@@ -276,16 +327,16 @@ class QueryNormalizationTests(TestCase):
         self.assertEqual(query.where.children[2].children[2].operator, ">")
         self.assertEqual(query.where.children[2].children[2].value, "perl")
 
+        self.assertEqual(query.where.connector, "OR")
         self.assertEqual(query.where.children[3].connector, "AND")
         self.assertEqual(query.where.children[3].children[0].column, "username")
         self.assertEqual(query.where.children[3].children[0].operator, "=")
         self.assertEqual(query.where.children[3].children[0].value, "python")
         self.assertEqual(query.where.children[3].children[1].column, "username")
         self.assertEqual(query.where.children[3].children[1].operator, "=")
-        self.assertEqual(query.where.children[3].children[1].value, "php")
-        self.assertEqual(query.where.children[3].children[2].column, "username")
-        self.assertEqual(query.where.children[3].children[2].operator, "<")
-        self.assertEqual(query.where.children[3].children[2].value, "perl")
+        self.assertEqual(query.where.children[3].children[1].value, "ruby")
+
+        return
 
 
         qs = TestUser.objects.filter(username="test") | TestUser.objects.filter(username="cheese")

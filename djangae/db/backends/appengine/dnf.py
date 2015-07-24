@@ -399,7 +399,7 @@ def normalize_query(query):
         for child in where.children:
             child = preprocess_node(child)
 
-            if child.children and child.connector == 'AND' and not child.negated:
+            if where.connector == "AND" and child.children and child.connector == 'AND' and not child.negated:
                 where.children.remove(child)
                 where.children.extend(child.children)
                 walk_tree(where)
@@ -433,7 +433,7 @@ def normalize_query(query):
             for branch in producted:
                 new_and = WhereNode()
                 new_and.connector = 'AND'
-                new_and.children = copy.deepcopy(branch)
+                new_and.children = list(copy.deepcopy(branch))
                 new_children.append(new_and)
 
             where.connector = 'OR'
