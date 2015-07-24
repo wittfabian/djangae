@@ -1366,6 +1366,10 @@ class EdgeCaseTests(TestCase):
         # Check that it's ok with PKs though
         query = TestUser.objects.filter(pk__in=list(xrange(1, 32)))
         list(query)
+        # Check that it's ok joining filters with pks
+        results = list(TestUser.objects.filter(
+            pk__in=[self.u1.pk, self.u2.pk, self.u3.pk]).filter(pk__in=[self.u1.pk, self.u2.pk]))
+        self.assertItemsEqual(results, [self.u1, self.u2])
 
     def test_self_relations(self):
         obj = SelfRelatedModel.objects.create()
