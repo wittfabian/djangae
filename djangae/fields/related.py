@@ -11,13 +11,15 @@ from djangae.forms.fields import (
 from django.utils import six
 
 class RelatedIteratorRel(ForeignObjectRel):
-    def __init__(self, to, related_name=None, limit_choices_to=None):
+    def __init__(self, field, to, related_name=None, limit_choices_to=None):
+        self.field = field
         self.to = to
         self.related_name = related_name
         self.related_query_name = None
         self.field_name = None
         self.parent_link = None
         self.on_delete = models.DO_NOTHING
+        self.symmetrical = False
 
         if limit_choices_to is None:
             limit_choices_to = {}
@@ -253,6 +255,7 @@ class RelatedIteratorField(RelatedField):
 
     def __init__(self, model, limit_choices_to=None, related_name=None, **kwargs):
         kwargs["rel"] = RelatedIteratorRel(
+            self,
             model,
             related_name=related_name,
             limit_choices_to=limit_choices_to

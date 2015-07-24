@@ -40,7 +40,7 @@ class SimulatedContentTypeManager(Manager):
         """
         conn = connections[router.db_for_write(ContentType)]
 
-        if conn.use_debug_cursor:
+        if getattr(conn, "use_debug_cursor", getattr(conn, "force_debug_cursor", False)):
             for model in models or []:
                 if model not in self._store.queried_models:
                     conn.queries.append("select * from {}".format(ContentType._meta.db_table))
@@ -164,7 +164,14 @@ class SimulatedContentTypeManager(Manager):
             raise NotImplementedError("You can't manually create simulated content types")
 
     def filter(self, **kwargs):
-        raise NotImplementedError()
+        self._repopulate_if_necessary()
+        def _condition(ct):
+            for attr, val in kwargs.items():
+                if getattr(ct, attr) != val:
+                    return False
+            return True
+
+        return [ct for ct in self.all() if _condition(ct)]
 
     def all(self, **kwargs):
         result = []
@@ -172,6 +179,12 @@ class SimulatedContentTypeManager(Manager):
         for ct in self._store.content_types.keys():
             result.append(self.get(id=ct))
         return result
+
+    def using(self, *args, **kwargs):
+        return self
+
+    def bulk_create(self, *args, **kwargs):
+        pass
 
 
 def update_contenttypes(app, created_models, verbosity=2, db=DEFAULT_DB_ALIAS, **kwargs):
@@ -277,6 +290,8 @@ If you're unsure, answer 'no'.
 def patch():
     from django.contrib.contenttypes.management import update_contenttypes as original
 
+    if original == update_contenttypes:
+        return
 
     if hasattr(signals, "post_migrate"):
         signals.post_migrate.disconnect(original)

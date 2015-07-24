@@ -2,26 +2,41 @@
 import datetime
 import decimal
 import warnings
+import logging
 
 #LIBRARIES
+import django
 from django.conf import settings
-from django.db.backends import (
-    BaseDatabaseOperations,
-    BaseDatabaseClient,
-    BaseDatabaseIntrospection,
-    BaseDatabaseWrapper,
-    BaseDatabaseFeatures,
-    BaseDatabaseValidation
-)
 
 try:
-    from django.db.backends.schema import BaseDatabaseSchemaEditor
+    from django.db.backends.base.operations import BaseDatabaseOperations
+    from django.db.backends.base.client import BaseDatabaseClient
+    from django.db.backends.base.introspection import BaseDatabaseIntrospection
+    from django.db.backends.base.base import BaseDatabaseWrapper
+    from django.db.backends.base.features import BaseDatabaseFeatures
+    from django.db.backends.base.validation import BaseDatabaseValidation
+    from django.db.backends.base.creation import BaseDatabaseCreation
+    from django.db.backends.base.schema import BaseDatabaseSchemaEditor
 except ImportError:
-    #Django < 1.7 doesn't have BaseDatabaseSchemaEditor
-    class BaseDatabaseSchemaEditor(object):
-        pass
+    # Django <= 1.7 (I think, at least 1.6)
+    from django.db.backends import (
+        BaseDatabaseOperations,
+        BaseDatabaseClient,
+        BaseDatabaseIntrospection,
+        BaseDatabaseWrapper,
+        BaseDatabaseFeatures,
+        BaseDatabaseValidation
+    )
+    from django.db.backends.creation import BaseDatabaseCreation
 
-from django.db.backends.creation import BaseDatabaseCreation
+    try:
+        from django.db.backends.schema import BaseDatabaseSchemaEditor
+    except ImportError:
+        #Django < 1.7 doesn't have BaseDatabaseSchemaEditor
+        class BaseDatabaseSchemaEditor(object):
+            pass
+
+
 from django.utils import timezone
 from google.appengine.api.datastore_types import Blob, Text
 from google.appengine.ext.db import metadata
@@ -128,7 +143,12 @@ class Cursor(object):
                 result.append(key.id_or_name())
             else:
                 field = get_field_from_column(self.last_select_command.model, col)
-                value = self.connection.ops.convert_values(entity.get(col), field)
+                if django.VERSION[1] < 8:
+                    value = self.connection.ops.convert_values(entity.get(col), field)
+                else:
+                    # On Django 1.8, convert_values is gone, and the db_converters stuff kicks in (we don't need to do it)
+                    value = entity.get(col)
+
                 result.append(value)
 
         return result
@@ -176,14 +196,72 @@ class DatabaseOperations(BaseDatabaseOperations):
     def quote_name(self, name):
         return name
 
+    def date_trunc_sql(self, lookup_type, field_name):
+        return None
+
+    def get_db_converters(self, internal_type):
+        converters = super(DatabaseOperations, self).get_db_converters(internal_type)
+
+        if internal_type == 'TextField':
+            converters.append(self.convert_textfield_value)
+        elif internal_type == 'DateTimeField':
+            converters.append(self.convert_datetime_value)
+        elif internal_type == 'DateField':
+            converters.append(self.convert_date_value)
+        elif internal_type == 'TimeField':
+            converters.append(self.convert_time_value)
+        elif internal_type == 'DecimalField':
+            converters.append(self.convert_time_value)
+
+        converters.append(self.convert_list_value)
+        converters.append(self.convert_set_value)
+
+        return converters
+
+    def convert_textfield_value(self, value, expression, connection, context=None):
+        if isinstance(value, str):
+            value = value.decode("utf-8")
+        return value
+
+    def convert_datetime_value(self, value, expression, connection, context=None):
+        return self.connection.ops.value_from_db_datetime(value)
+
+    def convert_date_value(self, value, expression, connection, context=None):
+        return self.connection.ops.value_from_db_date(value)
+
+    def convert_time_value(self, value, expression, connection, context=None):
+        return self.connection.ops.value_from_db_time(value)
+
+    def convert_decimal_value(self, value, expression, connection, context=None):
+        return self.connection.ops.value_from_db_decimal(value)
+
+    def convert_list_value(self, value, expression, connection, context=None):
+        if expression.output_field.db_type(connection) != "list":
+            return value
+
+        if not value:
+            value = []
+        return value
+
+    def convert_set_value(self, value, expression, connection, context=None):
+        if expression.output_field.db_type(connection) != "set":
+            return value
+
+        if not value:
+            value = set()
+        else:
+            value = set(value)
+        return value
+
+
     def convert_values(self, value, field):
-        """ Called when returning values from the datastore"""
+        """ Called when returning values from the datastore ONLY USED ON DJANGO <= 1.7"""
 
         value = super(DatabaseOperations, self).convert_values(value, field)
 
         db_type = field.db_type(self.connection)
         if db_type == 'string' and isinstance(value, str):
-            value = value.decode("utf-8")
+            value = self.convert_textfield_value(value, field, self.connection)
         elif db_type == "datetime":
             value = self.connection.ops.value_from_db_datetime(value)
         elif db_type == "date":
@@ -410,10 +488,13 @@ class DatabaseCreation(BaseDatabaseCreation):
     def sql_indexes_for_model(self, model, *args, **kwargs):
         return []
 
-    def _create_test_db(self, verbosity, autoclobber):
+    def _create_test_db(self, verbosity, autoclobber, *args):
         from google.appengine.ext import testbed # Imported lazily to prevent warnings on GAE
 
         assert not self.testbed
+
+        if args:
+            logging.warning("'keepdb' argument is not currently supported on the AppEngine backend")
 
         # We allow users to disable scattered IDs in tests. This primarily for running Django tests that
         # assume implicit ordering (yeah, annoying)
@@ -441,7 +522,12 @@ class DatabaseCreation(BaseDatabaseCreation):
 class DatabaseIntrospection(BaseDatabaseIntrospection):
     @datastore.NonTransactional
     def get_table_list(self, cursor):
-        return metadata.get_kinds()
+        kinds = metadata.get_kinds()
+        try:
+            from django.db.backends.base.introspection import TableInfo
+            return [ TableInfo(x, "t") for x in kinds ]
+        except ImportError:
+            return kinds # Django <= 1.7
 
 
 class DatabaseSchemaEditor(BaseDatabaseSchemaEditor):
@@ -453,6 +539,12 @@ class DatabaseSchemaEditor(BaseDatabaseSchemaEditor):
         pass
 
     def alter_unique_together(self, *args, **kwargs):
+        pass
+
+    def alter_field(self, from_model, from_field, to_field):
+        pass
+
+    def remove_field(self, from_model, field):
         pass
 
 
@@ -467,6 +559,9 @@ class DatabaseFeatures(BaseDatabaseFeatures):
 
 
 class DatabaseWrapper(BaseDatabaseWrapper):
+
+    data_types = DatabaseCreation.data_types # These moved in 1.8
+
     operators = {
         'exact': '= %s',
         'gt': '> %s',

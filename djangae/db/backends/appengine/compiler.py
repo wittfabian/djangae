@@ -17,7 +17,7 @@ from .commands import InsertCommand, SelectCommand, UpdateCommand, DeleteCommand
 
 
 class SQLCompiler(compiler.SQLCompiler):
-    def as_sql(self):
+    def as_sql(self, with_limits=True, with_col_aliases=False, subquery=False):
         self.pre_sql_setup()
         self.refcounts_before = self.query.alias_refcount.copy()
 
@@ -25,7 +25,7 @@ class SQLCompiler(compiler.SQLCompiler):
             self.connection,
             self.query
         )
-        return (select, [])
+        return (select, tuple())
 
 
 class SQLInsertCompiler(compiler.SQLInsertCompiler, SQLCompiler):
@@ -33,7 +33,7 @@ class SQLInsertCompiler(compiler.SQLInsertCompiler, SQLCompiler):
         self.return_id = None
         super(SQLInsertCompiler, self).__init__(*args, **kwargs)
 
-    def as_sql(self):
+    def as_sql(self, with_limits=True, with_col_aliases=False, subquery=False):
         self.pre_sql_setup()
 
         from djangae.db.utils import get_concrete_fields
@@ -41,14 +41,14 @@ class SQLInsertCompiler(compiler.SQLInsertCompiler, SQLCompiler):
         # Always pass down all the fields on an insert
         return [ (InsertCommand(
             self.connection, self.query.model, self.query.objs,
-            self.query.fields + get_concrete_fields(self.query.model, ignore_leaf=True),
-            self.query.raw), [])
+            list(self.query.fields) + list(get_concrete_fields(self.query.model, ignore_leaf=True)),
+            self.query.raw), tuple())
         ]
 
 
 class SQLDeleteCompiler(compiler.SQLDeleteCompiler, SQLCompiler):
-    def as_sql(self):
-        return (DeleteCommand(self.connection, self.query), [])
+    def as_sql(self, with_limits=True, with_col_aliases=False, subquery=False):
+        return (DeleteCommand(self.connection, self.query), tuple())
 
 
 class SQLUpdateCompiler(compiler.SQLUpdateCompiler, SQLCompiler):
@@ -56,9 +56,9 @@ class SQLUpdateCompiler(compiler.SQLUpdateCompiler, SQLCompiler):
     def __init__(self, *args, **kwargs):
         super(SQLUpdateCompiler, self).__init__(*args, **kwargs)
 
-    def as_sql(self):
+    def as_sql(self, with_limits=True, with_col_aliases=False, subquery=False):
         self.pre_sql_setup()
-        return (UpdateCommand(self.connection, self.query), [])
+        return (UpdateCommand(self.connection, self.query), tuple())
 
 
 class SQLAggregateCompiler(compiler.SQLAggregateCompiler, SQLCompiler):

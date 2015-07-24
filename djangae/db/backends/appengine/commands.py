@@ -7,6 +7,7 @@ from functools import partial
 from itertools import chain, groupby
 
 #LIBRARIES
+import django
 from django.db import DatabaseError
 from django.core.exceptions import FieldError
 from django.db.models.fields import FieldDoesNotExist
@@ -17,6 +18,9 @@ from django.db.models.sql.datastructures import EmptyResultSet
 from django.db.models.sql import query
 from django.db.models.sql.where import EmptyWhere
 from django.db.models.fields import AutoField
+from django.db.models import F, Count
+from django.db.models.expressions import Date
+
 from google.appengine.api import datastore, datastore_errors
 from google.appengine.api.datastore import Query
 from google.appengine.ext import db
@@ -84,13 +88,19 @@ REVERSE_OP_MAP = {
 
 INEQUALITY_OPERATORS = frozenset(['>', '<', '<=', '>='])
 
+# These are the expressions that we support
+SUPPORTED_EXPRESSIONS = (Date, F, Count)
+
 def _cols_from_where_node(where_node):
     cols = where_node.get_cols() if hasattr(where_node, 'get_cols') else where_node.get_group_by_cols()
     return cols
 
 def _get_tables_from_where(where_node):
     cols = _cols_from_where_node(where_node)
-    return list(set([x[0] for x in cols if x[0] ]))
+    if django.VERSION[1] < 8:
+        return list(set([x[0] for x in cols if x[0] ]))
+    else:
+        return list(set([x.alias for x in cols]))
 
 @memoized
 def get_field_from_column(model, column):
@@ -528,7 +538,12 @@ class SelectCommand(object):
         # If the query uses defer()/only() then we need to process deferred. We have to get all deferred columns
         # for all (concrete) inherited models and then only include columns if they appear in that list
         deferred_columns = {}
-        query.deferred_to_data(deferred_columns, query.deferred_to_columns_cb)
+
+        cb = getattr(query, "get_loaded_field_names_cb", None) # Django 1.8
+        if not cb:
+            cb = getattr(query, "deferred_to_columns_cb") # <= 1.7
+
+        query.deferred_to_data(deferred_columns, cb)
         inherited_db_tables = [x._meta.db_table for x in get_concrete_parents(self.model)]
         only_load = list(chain(*[list(deferred_columns.get(x, [])) for x in inherited_db_tables]))
 
@@ -710,16 +725,38 @@ class SelectCommand(object):
         # related as unsupported in its features)
         tables = [ k for k, v in query.alias_refcount.items() if v ]
         inherited_tables = set([x._meta.db_table for x in query.model._meta.parents ])
-        select_related_tables = set([y[0][0] for y in query.related_select_cols ])
-        tables = set(tables) - inherited_tables - select_related_tables
+        tables = set(tables) - inherited_tables
+        if query.select_related:
+            if django.VERSION[1] < 8:
+                select_related_tables = set([y[0][0] for y in query.related_select_cols ])
+            else:
+                #FIXME: Lookup the right connection here (although it probably doesn't matter)
+                related_selections = query.get_compiler('default').get_related_selections(query.select)
+                select_related_tables = set([rel['model']._meta.db_table for rel in related_selections])
+            tables = tables - select_related_tables
+
 
         if len(tables) > 1:
+            if hasattr(query, "join_map"):
+                join_map = query.join_map
+            else:
+                from django.db.models.sql.datastructures import Join
+                join_map = { x: y for x, y in query.alias_map.iteritems() if isinstance(y, Join) }
+
             raise NotSupportedError("""
                 The appengine database connector does not support JOINs. The requested join map follows\n
                 %s
-            """ % query.join_map)
+            """ % join_map)
 
-        if query.aggregates:
+        if hasattr(query, "annotations"):
+            # Django 1.8 superseded aggregates with annotations, which made our
+            # lives a whole lot more interesting!
+
+            for k, v in query.annotations.items():
+                if v.__class__ not in SUPPORTED_EXPRESSIONS:
+                    raise NotSupportedError("Unsupported annotation type: %s", v.__class__)
+
+        elif query.aggregates:
             if query.aggregates.keys() == [ None ]:
                 agg_col = query.aggregates[None].col
                 opts = self.model._meta

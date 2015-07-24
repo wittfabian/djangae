@@ -242,6 +242,10 @@ class ContainsIndexer(Indexer):
         return result or None
 
     def prep_value_for_query(self, value):
+        if hasattr(value, "isoformat"):
+            value = value.isoformat()
+        else:
+            value = unicode(value)
         value = self.unescape(value)
         if value.startswith("%") and value.endswith("%"):
             value = value[1:-1]
