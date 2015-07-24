@@ -350,7 +350,6 @@ class QueryNormalizationTests(TestCase):
         self.assertTrue(query.where.children[1].is_leaf)
         self.assertEqual("test", query.where.children[1].value)
 
-
         qs = TestUser.objects.using("default").filter(username__in=set()).values_list('email')
 
         with self.assertRaises(EmptyResultSet):

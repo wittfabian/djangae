@@ -55,7 +55,7 @@ def convert_operator(operator):
     if operator == 'exact':
         return '='
 
-    return operator
+    return operator.upper()
 
 class WhereNode(object):
     def __init__(self):
@@ -139,7 +139,7 @@ class Query(object):
         self.distinct = False
         self.order_by = []
         self.row_data = [] # For insert/updates
-        self.where = None
+        self._where = None
         self.offset = self.limit = None
 
         self.annotations = []
@@ -187,9 +187,15 @@ class Query(object):
 
         self.row_data.append(data)
 
-    def set_where(self, where):
+    @property
+    def where(self):
+        return self._where
+
+    @where.setter
+    def where(self, where):
         assert where is None or isinstance(where, WhereNode)
-        self.where = where
+        self._where = where
+
 
     def serialize(self):
         if not self.is_normalized:

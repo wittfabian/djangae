@@ -371,14 +371,14 @@ def preprocess_node(node):
         node.negated = False
 
     for child in node.children:
-        if child.is_leaf and child.operator == "in":
+        if child.is_leaf and child.operator == "IN":
             new_children = []
 
             for value in child.value:
                 new_node = WhereNode()
                 new_node.operator = "="
                 new_node.value = value
-                new_node.column = node.children[0].column
+                new_node.column = child.column
 
                 new_children.append(new_node)
 
@@ -460,5 +460,39 @@ def normalize_query(query):
         new_node.connector = 'OR'
         new_node.children = [ where ]
         query.where = new_node
+
+
+    def remove_empty_in(node):
+        """
+            Once we are normalized, if any of the branches filters
+            on an empty list, we can remove that entire branch from the
+            query. If this leaves no branches, then the result set is empty
+        """
+
+        # This is a bit ugly, but you try and do it more succinctly :)
+        # We have the following possible situations for IN queries with an empty
+        # value:
+
+        # - Negated: One of the nodes in the and branch will always be true and is therefore
+        #    unnecessary, we leave it alone though
+        # - Not negated: The entire AND branch will always be false, so that branch can be removed
+        #    if that was the last branch, then the queryset will be empty
+
+        for and_branch in node.children[:]:
+            if and_branch.is_leaf:
+                if and_branch.operator == "IN" and not len(and_branch.value):
+                    node.children.remove(and_branch)
+            else:
+                for leaf in and_branch.children[:]:
+                    assert leaf.is_leaf
+
+                    if leaf.operator == "IN" and not len(leaf.value):
+                        if not and_branch.negated:
+                            node.children.remove(and_branch)
+
+            if not node.children:
+                raise EmptyResultSet()
+
+    remove_empty_in(where)
 
     return query
