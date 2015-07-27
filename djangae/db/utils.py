@@ -9,7 +9,10 @@ import warnings
 import django
 from django.conf import settings
 from django.db import models
-from django.db.backends.util import format_number
+try:
+    from django.db.backends.util import format_number
+except ImportError:
+    from django.db.backends.utils import format_number
 from django.db import IntegrityError
 from django.utils import timezone
 from google.appengine.api import datastore
@@ -56,7 +59,7 @@ def decimal_to_string(value, max_digits=16, decimal_places=0):
     Converts decimal to a unicode string for storage / lookup by nonrel
     databases that don't support decimals natively.
 
-    This is an extension to `django.db.backends.util.format_number`
+    This is an extension to `django.db.backends.utils.format_number`
     that preserves order -- if one decimal is less than another, their
     string representations should compare the same (as strings).
 
