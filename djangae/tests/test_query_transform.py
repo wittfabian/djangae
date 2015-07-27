@@ -158,7 +158,6 @@ class TransformQueryTest(TestCase):
 
         self.assertEqual("-__key__", query.order_by[0])
 
-
     def test_reversed_ordering(self):
         query = transform_query(
             connections['default'],
@@ -168,6 +167,14 @@ class TransformQueryTest(TestCase):
 
         self.assertEqual("-__key__", query.order_by[0])
 
+    def test_clear_ordering(self):
+        query = transform_query(
+            connections['default'],
+            "SELECT",
+            TransformTestModel.objects.order_by("pk").order_by().query
+        )
+
+        self.assertFalse(query.order_by)
 
 from djangae.tests.test_connector import TestUser, Relation
 from djangae.db.backends.appengine.dnf import normalize_query
