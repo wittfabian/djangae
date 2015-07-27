@@ -506,6 +506,32 @@ def wrap_result_with_functor(results, func):
         yield func(result)
 
 
+def can_perform_datastore_get(normalized_query):
+    """
+        Given a normalized query, returns True if there is an equality
+        filter on a key in each branch of the where
+    """
+    assert normalized_query.is_normalized
+
+    for and_branch in normalized_query.where.children:
+        if and_branch.is_leaf and (and_branch.column != "__key__" or and_branch.operator != "="):
+            return False
+        else:
+            key_found = False
+            for filter_node in and_branch.children:
+                assert filter_node.is_leaf
+
+                if filter_node.column == "__key__":
+                    if filter_node.operator == "=":
+                        key_found = True
+                    else:
+                        break
+            if not key_found:
+                return False
+
+    return True
+
+
 class NewSelectCommand(object):
     def __init__(self, connection, query, keys_only=False):
         self.query = normalize_query(transform_query(connection, "SELECT", query))
@@ -558,7 +584,7 @@ class NewSelectCommand(object):
             filters = [ and_branch ] if and_branch.is_leaf else and_branch.children
 
             for filter_node in filters:
-                lookup = "{}{}".format(filter_node.column, filter_node.operator)
+                lookup = "{} {}".format(filter_node.column, filter_node.operator)
 
                 if lookup in query and not isinstance(query[lookup], (list, tuple)):
                     query[lookup] = [ query[lookup ] ] + [ filter_node.value ]
@@ -567,6 +593,10 @@ class NewSelectCommand(object):
 
             query.Order(*ordering)
             queries.append(query)
+
+        if can_perform_datastore_get(self.query):
+            # Yay for optimizations!
+            return QueryByKeys(self.query.model, queries, ordering)
 
         if len(queries) == 1:
             return queries[0]
@@ -598,7 +628,15 @@ class NewSelectCommand(object):
         def increment_returned_results(result):
             self.results_returned += 1
 
+        def rename_pk_field(result):
+            if result is None:
+                return result
+
+            result[self.model._meta.pk.column] = result.key().id_or_name()
+            return result
+
         self.results = wrap_result_with_functor(self.results, increment_returned_results)
+        self.results = wrap_result_with_functor(self.results, rename_pk_field)
 
     def execute(self):
         query = self._build_query()

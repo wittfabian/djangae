@@ -102,6 +102,7 @@ class WhereNode(object):
                 ]
             else:
                 value = datastore.Key.from_path(model._meta.db_table, value)
+            column = "__key__"
 
         if operator == "isnull":
             operator = "exact"
@@ -205,6 +206,11 @@ class Query(object):
             return
 
         field = get_field_from_column(self.model, column)
+
+        # We don't add primary key fields into the projection set
+        if field.primary_key and field.column == column:
+            return
+
         if field.db_type(self.connection) in ("bytes", "text", "list", "set"):
             DJANGAE_LOG.warn("Disabling projection query as %s is an unprojectable type", column)
             self.columns = None
