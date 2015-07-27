@@ -261,21 +261,23 @@ def _extract_ordering_from_query_17(query):
 
     for col in result:
         if col.lstrip("-") == "pk":
-            pk_col = query.model._meta.pk.column
+            pk_col = "__key__"
             final.append("-" + pk_col if col.startswith("-") else pk_col)
         elif "__" in col:
             continue
         else:
             try:
                 field = query.model._meta.get_field_by_name(col.lstrip("-"))[0]
-                final.append("-" + field.column if col.startswith("-") else field.column)
+                column = "__key__" if field.primary_key else field.column
+                final.append("-" + column if col.startswith("-") else column)
             except FieldDoesNotExist:
                 if col in query.extra_select:
                     # If the column is in the extra select we transform to the original
                     # column
                     try:
                         field = opts.get_field_by_name(query.extra_select[col][0])[0]
-                        final.append("-" + field.column if col.startswith("-") else field.column)
+                        column = "__key__" if field.primary_key else field.column
+                        final.append("-" + column if col.startswith("-") else column)
                         continue
                     except FieldDoesNotExist:
                         # Just pass through to the exception below
@@ -285,6 +287,16 @@ def _extract_ordering_from_query_17(query):
                 raise FieldError("Cannot resolve keyword %r into field. "
                     "Choices are: %s" % (col, ", ".join(available))
                 )
+
+    # Reverse if not using standard ordering
+    def swap(col):
+        if col.startswith("-"):
+            return col.lstrip("-")
+        else:
+            return "-{}".format(col)
+
+    if not query.standard_ordering:
+        final = [ swap(x) for x in final ]
 
     if len(final) != len(result):
         diff = set(result) - set(final)
