@@ -396,6 +396,10 @@ def preprocess_node(node):
 def normalize_query(query):
     where = query.where
 
+    # If there are no filters then this is already normalized
+    if where is None:
+        return query
+
     def walk_tree(where):
         preprocess_node(where)
 

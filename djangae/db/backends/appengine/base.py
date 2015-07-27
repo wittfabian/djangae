@@ -53,6 +53,7 @@ from djangae.db.utils import (
 from djangae.db import caching
 from djangae.indexing import load_special_indexes
 from .commands import (
+    NewSelectCommand,
     SelectCommand,
     InsertCommand,
     FlushCommand,
@@ -94,7 +95,7 @@ class Cursor(object):
         self.last_delete_command = None
 
     def execute(self, sql, *params):
-        if isinstance(sql, SelectCommand):
+        if isinstance(sql, SelectCommand) or isinstance(sql, NewSelectCommand):
             # Also catches subclasses of SelectCommand (e.g Update)
             self.last_select_command = sql
             self.rowcount = self.last_select_command.execute() or -1
@@ -117,6 +118,13 @@ class Cursor(object):
         return row
 
     def fetchone(self, delete_flag=False):
+        # Temporary if statement
+        if isinstance(self.last_select_command, NewSelectCommand):
+            try:
+                return self.last_select_command.results.next()
+            except StopIteration:
+                return None
+
         try:
             if isinstance(self.last_select_command.results, (int, long)):
                 # Handle aggregate (e.g. count)

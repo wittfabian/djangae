@@ -488,6 +488,123 @@ def _apply_extra_to_entity(extra_select, entity, pk_col):
 
     return entity
 
+from djangae.db.backends.appengine.query import transform_query
+from djangae.db.backends.appengine.dnf import normalize_query
+
+def convert_django_ordering_to_gae(ordering):
+    result = []
+
+    for column in ordering:
+        if column.startswith("-"):
+            result.append((column.lstrip("-"), datastore.Query.DESCENDING))
+        else:
+            result.append((column, datastore.Query.ASCENDING))
+    return result
+
+def wrap_result_with_functor(results, func):
+    for result in results:
+        yield func(result)
+
+
+class NewSelectCommand(object):
+    def __init__(self, connection, query, keys_only=False):
+        self.query = normalize_query(transform_query(connection, "SELECT", query))
+        self.original_query = query
+        self.keys_only = keys_only or self.query.columns == [ "__key__" ]
+
+        self.excluded_pks = []
+        self.included_pks = []
+
+    def _sanity_check(self):
+        if self.query.distinct and not self.query.columns:
+            raise NotSupportedError("Tried to perform distinct query when projection wasn't possible")
+
+    def _build_query(self):
+        self._sanity_check()
+
+        queries = []
+
+        query_kwargs = {
+            "kind": str(self.query.tables[0]),
+            "distinct": self.query.distinct or None,
+            "keys_only": self.keys_only or None,
+            "projection": self.query.columns or None
+        }
+
+        ordering = convert_django_ordering_to_gae(self.query.order_by)
+
+        if self.query.distinct and not ordering:
+            # If we specified we wanted a distinct query, but we didn't specify
+            # an ordering, we must set the ordering to the distinct columns, otherwise
+            # App Engine shouts at us. Nastily. And without remorse.
+            ordering = self.query.columns
+
+        # Deal with the no filters case
+        if self.query.where is None:
+            query = Query(
+                **query_kwargs
+            )
+            query.Order(*ordering)
+            return query
+
+        assert self.query.where
+
+        # Go through the normalized query tree
+        for and_branch in self.query.where.children:
+            query = Query(
+                **query_kwargs
+            )
+
+            filters = [ and_branch ] if and_branch.is_leaf else and_branch.children
+
+            for filter_node in filters:
+                lookup = "{}{}".format(filter_node.column, filter_node.operator)
+
+                if lookup in query and not isinstance(query[lookup], (list, tuple)):
+                    query[lookup] = [ query[lookup ] ] + [ filter_node.value ]
+                else:
+                    query[lookup] = filter_node.value
+
+            query.Order(*ordering)
+            queries.append(query)
+
+        if len(queries) == 1:
+            return queries[0]
+        else:
+            return datastore.MultiQuery(queries, ordering)
+
+    def _fetch_results(self, query):
+        # If we're manually excluding PKs, and we've specified a limit to the results
+        # we need to make sure that we grab more than we were asked for otherwise we could filter
+        # out too many! These are again limited back to the original request limit
+        # while we're processing the results later
+
+        high_mark = self.query.high_mark
+        low_mark = self.query.low_mark
+
+        excluded_pk_count = 0
+        if self.excluded_pks and high_mark:
+            excluded_pk_count = len(self.excluded_pks)
+            high_mark += excluded_pk_count
+
+        limit = None if high_mark is None else (high_mark - (low_mark or 0))
+        offset = low_mark or None
+
+        self.results = query.Run(limit=limit, offset=offset)
+
+        # Ensure that the results returned is reset
+        self.results_returned = 0
+
+        def increment_returned_results(result):
+            self.results_returned += 1
+
+        self.results = wrap_result_with_functor(self.results, increment_returned_results)
+
+    def execute(self):
+        query = self._build_query()
+        self._fetch_results(query)
+
+
 class SelectCommand(object):
     def __init__(self, connection, query, keys_only=False):
         self.where = None

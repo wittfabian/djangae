@@ -13,15 +13,20 @@ except ImportError:
         pass
 
 #DJANGAE
-from .commands import InsertCommand, SelectCommand, UpdateCommand, DeleteCommand
-
+from .commands import (
+    NewSelectCommand,
+    InsertCommand,
+    SelectCommand,
+    UpdateCommand,
+    DeleteCommand
+)
 
 class SQLCompiler(compiler.SQLCompiler):
     def as_sql(self, with_limits=True, with_col_aliases=False, subquery=False):
         self.pre_sql_setup()
         self.refcounts_before = self.query.alias_refcount.copy()
 
-        select = SelectCommand(
+        select = NewSelectCommand(
             self.connection,
             self.query
         )

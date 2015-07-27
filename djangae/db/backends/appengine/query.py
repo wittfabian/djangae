@@ -159,7 +159,7 @@ class Query(object):
         self.order_by = []
         self.row_data = [] # For insert/updates
         self._where = None
-        self.offset = self.limit = None
+        self.low_mark = self.high_mark = None
 
         self.annotations = []
         self.per_entity_annotations = []
@@ -189,7 +189,11 @@ class Query(object):
     def set_distinct(self, distinct_fields):
         self.distinct = True
         if distinct_fields:
-            self.columns = distinct_fields
+            for field in distinct_fields:
+                self.add_projected_column(field)
+        elif not self.columns:
+            for field in self.model._meta.fields:
+                self.add_projected_column(field.column)
 
     def add_order_by(self, column):
         self.order_by.append(column)
@@ -392,11 +396,12 @@ def _transform_query_17(connection, kind, query):
         ret.add_projected_column(projected_col)
 
     # This must happen after extracting projected cols
-    ret.set_distinct(list(query.distinct_fields))
+    if query.distinct:
+        ret.set_distinct(list(query.distinct_fields))
 
     # Extract any query offsets and limits
-    ret.offset = query.low_mark
-    ret.limit = max((query.high_mark or 0) - query.low_mark, 0)
+    ret.low_mark = query.low_mark
+    ret.high_mark = query.high_mark
 
     output = WhereNode()
     output.connector = query.where.connector
@@ -482,12 +487,13 @@ def _transform_query_18(connection, kind, query):
     for projected_col in _extract_projected_columns_from_query_18(query):
         ret.add_projected_column(projected_col)
 
-    # This must happen after extracting projected cols
-    ret.set_distinct(list(query.distinct_fields))
+    if query.distinct:
+        # This must happen after extracting projected cols
+        ret.set_distinct(list(query.distinct_fields))
 
     # Extract any query offsets and limits
-    ret.offset = query.low_mark
-    ret.limit = max((query.high_mark or 0) - query.low_mark, 0)
+    ret.low_mark = query.low_mark
+    ret.high_mark = query.high_mark
 
     output = WhereNode()
     output.connector = query.where.connector
