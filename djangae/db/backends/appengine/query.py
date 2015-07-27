@@ -21,6 +21,8 @@ from djangae.db.utils import (
     get_concrete_parents
 )
 
+from google.appengine.api import datastore
+
 
 DJANGAE_LOG = logging.getLogger("djangae")
 
@@ -84,6 +86,20 @@ class WhereNode(object):
             # As the primary key 'id' (AutoField) is integer and is always case insensitive,
             # we can deal with 'id_iexact=' query by using 'exact' rather than 'iexact'.
             operator = "exact"
+
+        # The second part of this 'if' rules out foreign keys
+        if output_field.primary_key and output_field.column == column:
+            # If this is a primary key, we need to make sure that the value
+            # we pass to the query is a datastore Key. We have to deal with IN queries here
+            # because they aren't flattened until the DNF stage
+            model = output_field.model
+            if isinstance(value, (list, tuple)):
+                value = [
+                    datastore.Key.from_path(model._meta.db_table, x)
+                    for x in value
+                ]
+            else:
+                value = datastore.Key.from_path(model._meta.db_table, value)
 
         if operator == "isnull":
             operator = "exact"
