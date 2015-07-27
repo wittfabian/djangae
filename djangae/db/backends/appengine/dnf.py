@@ -370,6 +370,8 @@ def preprocess_node(node):
         node.connector = "OR"
         node.negated = False
 
+    # Explode IN filters into a series of 'OR statements to make life
+    # easier later
     for child in node.children:
         if child.is_leaf and child.operator == "IN":
             new_children = []

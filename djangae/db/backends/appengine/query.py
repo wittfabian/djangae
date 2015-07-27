@@ -19,7 +19,8 @@ from djangae.utils import on_production
 from djangae.db.utils import (
     get_top_concrete_parent,
     get_concrete_parents,
-    has_concrete_parents
+    has_concrete_parents,
+    get_field_from_column
 )
 
 from google.appengine.api import datastore
@@ -151,6 +152,7 @@ class Query(object):
         self.model = model
         self.kind = kind
 
+        self.projection_possible = True
         self.tables = []
         self.columns = None # None means all fields
         self.distinct = False
@@ -193,6 +195,18 @@ class Query(object):
         self.order_by.append(column)
 
     def add_projected_column(self, column):
+        if not self.projection_possible:
+            # If we previously tried to add a column that couldn't be
+            # projected, we don't try and add any more
+            return
+
+        field = get_field_from_column(self.model, column)
+        if field.db_type(self.connection) in ("bytes", "text", "list", "set"):
+            DJANGAE_LOG.warn("Disabling projection query as %s is an unprojectable type", column)
+            self.columns = None
+            self.projection_possible = False
+            return
+
         if not self.columns:
             self.columns = [ column ]
         else:
@@ -363,6 +377,7 @@ def _transform_query_17(connection, kind, query):
         raise EmptyResultSet()
 
     ret = Query(query.model, kind)
+    ret.connection = connection
 
     # Add the root concrete table as the source table
     root_table = get_top_concrete_parent(query.model)._meta.db_table
@@ -453,6 +468,7 @@ def _transform_query_18(connection, kind, query):
         raise EmptyResultSet()
 
     ret = Query(query.model, kind)
+    ret.connection = connection
 
     # Add the root concrete table as the source table
     root_table = get_top_concrete_parent(query.model)._meta.db_table

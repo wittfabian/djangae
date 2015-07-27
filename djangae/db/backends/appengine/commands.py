@@ -32,7 +32,8 @@ from djangae.db.utils import (
     MockInstance,
     get_top_concrete_parent,
     get_concrete_parents,
-    has_concrete_parents
+    has_concrete_parents,
+    get_field_from_column
 )
 from djangae.indexing import special_indexes_for_column, REQUIRES_SPECIAL_INDEXES, add_special_index
 from djangae.utils import on_production, memoized
@@ -97,13 +98,6 @@ def _get_tables_from_where(where_node):
         return list(set([x[0] for x in cols if x[0] ]))
     else:
         return list(set([x.alias for x in cols]))
-
-@memoized
-def get_field_from_column(model, column):
-    for field in model._meta.fields:
-        if field.column == column:
-            return field
-    return None
 
 
 def field_conv_year_only(value):

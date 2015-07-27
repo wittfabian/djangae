@@ -142,6 +142,12 @@ def get_concrete_db_tables(model):
 def has_concrete_parents(model):
     return get_concrete_parents(model) != [model]
 
+@memoized
+def get_field_from_column(model, column):
+    for field in model._meta.fields:
+        if field.column == column:
+            return field
+    return None
 
 def django_instance_to_entity(connection, model, fields, raw, instance, check_null=True):
     # uses_inheritance = False

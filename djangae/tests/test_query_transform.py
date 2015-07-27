@@ -10,6 +10,7 @@ class TransformTestModel(models.Model):
     field1 = models.CharField(max_length=255)
     field2 = models.CharField(max_length=255, unique=True)
     field3 = models.CharField(null=True, max_length=255)
+    field4 = models.TextField()
 
     class Meta:
         app_label = "djangae"
@@ -107,7 +108,7 @@ class TransformQueryTest(TestCase):
         query = transform_query(
             connections['default'],
             "SELECT",
-            TransformTestModel.objects.defer("field1").query
+            TransformTestModel.objects.defer("field1", "field4").query
         )
 
         self.assertItemsEqual(["id", "field2", "field3"], query.columns)
@@ -194,6 +195,16 @@ class TransformQueryTest(TestCase):
         )
 
         self.assertFalse(query.order_by)
+
+    def test_projection_on_textfield_disabled(self):
+        query = transform_query(
+            connections['default'],
+            "SELECT",
+            TransformTestModel.objects.values_list("field4").query
+        )
+
+        self.assertFalse(query.columns)
+        self.assertFalse(query.projection_possible)
 
 
 from djangae.tests.test_connector import TestUser, Relation
