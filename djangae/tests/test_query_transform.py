@@ -11,8 +11,27 @@ class TransformTestModel(models.Model):
     field2 = models.CharField(max_length=255, unique=True)
     field3 = models.CharField(null=True, max_length=255)
 
+    class Meta:
+        app_label = "djangae"
+
+class InheritedModel(TransformTestModel):
+    class Meta:
+        app_label = "djangae"
 
 class TransformQueryTest(TestCase):
+
+    def test_polymodel_filter_applied(self):
+        query = transform_query(
+            connections['default'],
+            "SELECT",
+            InheritedModel.objects.filter(field1="One").all().query
+        )
+
+        self.assertEqual(2, len(query.where.children))
+        self.assertTrue(query.where.children[0].children[0].is_leaf)
+        self.assertTrue(query.where.children[1].children[0].is_leaf)
+        self.assertEqual("class", query.where.children[0].children[0].column)
+        self.assertEqual("field1", query.where.children[1].children[0].column)
 
     def test_basic_query(self):
         query = transform_query(
@@ -176,8 +195,10 @@ class TransformQueryTest(TestCase):
 
         self.assertFalse(query.order_by)
 
+
 from djangae.tests.test_connector import TestUser, Relation
 from djangae.db.backends.appengine.dnf import normalize_query
+
 
 class QueryNormalizationTests(TestCase):
     """

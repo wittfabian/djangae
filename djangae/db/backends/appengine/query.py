@@ -18,7 +18,8 @@ from djangae.indexing import (
 from djangae.utils import on_production
 from djangae.db.utils import (
     get_top_concrete_parent,
-    get_concrete_parents
+    get_concrete_parents,
+    has_concrete_parents
 )
 
 from google.appengine.api import datastore
@@ -211,7 +212,35 @@ class Query(object):
     def where(self, where):
         assert where is None or isinstance(where, WhereNode)
         self._where = where
+        self._add_inheritence_filter()
 
+    def _add_inheritence_filter(self):
+        """
+            We support inheritence with polymodels. Whenever we set
+            the 'where' on this query, we manipulate the tree so that
+            the lookups are ANDed with a filter on 'class = db_table'
+            and on inserts, we add the 'class' column if the model is part
+            of an inheritance tree.
+
+            We only do any of this if the model has concrete parents and isn't
+            a proxy model
+        """
+
+        if has_concrete_parents(self.model) and not self.model._meta.proxy:
+            new_filter = WhereNode()
+            new_filter.column = 'class'
+            new_filter.operator = '='
+            new_filter.value = self.model._meta.db_table
+
+            # We add this bare AND just to stay consistent with what Django does
+            new_and = WhereNode()
+            new_and.connector = 'AND'
+            new_and.children = [ new_filter ]
+
+            new_root = WhereNode()
+            new_root.connector = 'AND'
+            new_root.children = [ new_and, self._where ]
+            self._where = new_root
 
     def serialize(self):
         if not self.is_normalized:
