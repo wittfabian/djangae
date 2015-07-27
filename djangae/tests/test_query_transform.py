@@ -382,36 +382,27 @@ class QueryNormalizationTests(TestCase):
 
         self.assertEqual(3, len(query.where.children))
         self.assertEqual("id", query.where.children[0].column)
-        self.assertEqual(datastore.Key.from_path(TestUser._meta.db_table, 1), query.where.children[0].value)
+        self.assertEqual(1, query.where.children[0].value)
         self.assertEqual("id", query.where.children[1].column)
-        self.assertEqual(datastore.Key.from_path(TestUser._meta.db_table, 2), query.where.children[1].value)
+        self.assertEqual(2, query.where.children[1].value)
         self.assertEqual("id", query.where.children[2].column)
-        self.assertEqual(datastore.Key.from_path(TestUser._meta.db_table, 3), query.where.children[2].value)
-
-        return
-
-        expected = ('OR', [
-            ('LIT', ("id", "=", datastore.Key.from_path(TestUser._meta.db_table, 1))),
-            ('LIT', ("id", "=", datastore.Key.from_path(TestUser._meta.db_table, 2))),
-            ('LIT', ("id", "=", datastore.Key.from_path(TestUser._meta.db_table, 3))),
-        ])
-
-        self.assertEqual(expected, parse_dnf(qs.query.where, connection=connection)[0])
+        self.assertEqual(3, query.where.children[2].value)
 
         qs = TestUser.objects.filter(pk__in=[1, 2, 3]).filter(username="test")
+        query = normalize_query(transform_query(
+            connections['default'],
+            "SELECT", qs.query
+        ))
 
-        expected = ('OR', [
-            ('AND', [
-                ('LIT', (u'id', '=', datastore.Key.from_path(TestUser._meta.db_table, 1))),
-                ('LIT', ('username', '=', 'test'))
-            ]),
-            ('AND', [
-                ('LIT', (u'id', '=', datastore.Key.from_path(TestUser._meta.db_table, 2))),
-                ('LIT', ('username', '=', 'test'))
-            ]),
-            ('AND', [
-                ('LIT', (u'id', '=', datastore.Key.from_path(TestUser._meta.db_table, 3))),
-                ('LIT', ('username', '=', 'test'))
-            ])
-        ])
-        self.assertEqual(expected, parse_dnf(qs.query.where, connection=connection)[0])
+        self.assertEqual(3, len(query.where.children))
+        self.assertEqual("id", query.where.children[0].children[0].column)
+        self.assertEqual(1, query.where.children[0].children[0].value)
+        self.assertEqual("test", query.where.children[0].children[1].value)
+
+        self.assertEqual("id", query.where.children[1].children[0].column)
+        self.assertEqual(2, query.where.children[1].children[0].value)
+        self.assertEqual("test", query.where.children[0].children[1].value)
+
+        self.assertEqual("id", query.where.children[2].children[0].column)
+        self.assertEqual(3, query.where.children[2].children[0].value)
+        self.assertEqual("test", query.where.children[0].children[1].value)
