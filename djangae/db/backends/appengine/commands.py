@@ -538,7 +538,7 @@ class NewSelectCommand(object):
     def __init__(self, connection, query, keys_only=False):
         self.query = normalize_query(transform_query(connection, "SELECT", query))
         self.original_query = query
-        self.keys_only = keys_only or self.query.columns == [ "__key__" ]
+        self.keys_only = keys_only or [x.field for x in query.select] == [ query.model._meta.pk ]
 
         self.excluded_pks = []
         self.included_pks = []
@@ -696,7 +696,7 @@ class NewSelectCommand(object):
         # If this is a keys only query, we need to generate a fake entity
         # for each key in the result set
         if self.keys_only:
-            self.results = wrap_result_with_functor(self.results, rename_pk_field)
+            self.results = wrap_result_with_functor(self.results, convert_key_to_entity)
 
         self.results = wrap_result_with_functor(self.results, rename_pk_field)
         self.results = wrap_result_with_functor(self.results, process_extra_selects)
