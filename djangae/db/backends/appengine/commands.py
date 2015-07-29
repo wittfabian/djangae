@@ -623,7 +623,13 @@ class NewSelectCommand(object):
         limit = None if high_mark is None else (high_mark - (low_mark or 0))
         offset = low_mark or None
 
-        self.results = query.Run(limit=limit, offset=offset)
+        if self.query.kind == "COUNT":
+            self.results = query.Count(limit=limit, offset=offset)
+            return
+        elif self.query.kind == "AVERAGE":
+            raise ValueError("AVERAGE not yet supported")
+        else:
+            self.results = query.Run(limit=limit, offset=offset)
 
         # Ensure that the results returned is reset
         self.results_returned = 0
