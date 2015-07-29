@@ -2,7 +2,7 @@ import django
 import json
 import logging
 from itertools import chain, imap
-
+from functools import partial
 from django.core.exceptions import FieldError
 from django.db.models.fields import FieldDoesNotExist
 from django.db.models.sql.datastructures import EmptyResultSet
@@ -164,6 +164,7 @@ class Query(object):
 
         self.annotations = []
         self.per_entity_annotations = []
+        self.extra_selects = []
 
     @property
     def is_normalized(self):
@@ -180,6 +181,46 @@ class Query(object):
         # If we have children, and they are all leaf nodes then this is a normalized
         # query
         return self.where.connector == 'OR' and self.where.children and all(x.is_leaf for x in self.where.children)
+
+    def add_extra_select(self, column, lookup):
+        if lookup.lower().startswith("select "):
+            raise ValueError("SQL statements aren't supported with extra(select=)")
+
+        # Boolean expression test
+        bool_expr = "(?P<lhs>[a-zA-Z0-9_]+)\s?(?P<op>[=|>|<]{1,2})\s?(?P<rhs>[\w+|\']+)"
+
+        # Operator expression test
+        op_expr = "(?P<lhs>[a-zA-Z0-9_]+)\s?(?P<op>[+|-|/|*])\s?(?P<rhs>[\w+|\']+)"
+
+        OP_LOOKUP = {
+            "=": lambda x, y: x == y,
+            "is": lambda x, y: x == y,
+            "<": lambda x, y: x < y,
+            ">": lambda x, y: x > y,
+            ">=": lambda x, y: x >= y,
+            "<=": lambda x, y: x <= y,
+            "+": lambda x, y: x + y,
+            "-": lambda x, y: x - y,
+            "/": lambda x, y: x / y,
+            "*": lambda x, y: x * y
+        }
+
+        import re
+
+        for regex in (bool_expr, op_expr):
+            match = re.match(bool_expr, lookup)
+            if match:
+                lhs = match.group('lhs')
+                rhs = match.group('rhs')
+                op = match.group('op').lower()
+                if op in OP_LOOKUP:
+                    self.extra_selects.append((column, (OP_LOOKUP[op], (lhs, rhs))))
+                else:
+                    raise ValueError("Unsupported operator")
+                return
+
+        # Assume literal
+        self.extra_selects.append((column, (lambda x: x, [lookup])))
 
     def add_source_table(self, table):
         if table in self.tables:
@@ -401,6 +442,10 @@ def _transform_query_17(connection, kind, query):
     for projected_col in _extract_projected_columns_from_query_17(query):
         ret.add_projected_column(projected_col)
 
+    # Add any extra selects
+    for col, select in query.extra_select.items():
+        ret.add_extra_select(col, select[0])
+
     # This must happen after extracting projected cols
     if query.distinct:
         ret.set_distinct(list(query.distinct_fields))
@@ -492,6 +537,10 @@ def _transform_query_18(connection, kind, query):
     # Extract any projected columns (values/values_list/only/defer)
     for projected_col in _extract_projected_columns_from_query_18(query):
         ret.add_projected_column(projected_col)
+
+    # Add any extra selects
+    for col, select in query.extra_select.items():
+        ret.add_extra_select(col, select[0])
 
     if query.distinct:
         # This must happen after extracting projected cols

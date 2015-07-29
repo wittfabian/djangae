@@ -637,8 +637,47 @@ class NewSelectCommand(object):
             result[self.query.model._meta.pk.column] = result.key().id_or_name()
             return result
 
+        def process_extra_selects(result):
+            extra_selects = self.query.extra_selects
+            model_fields = self.query.model._meta.fields
+
+            DATE_FORMATS = ("%Y-%m-%d", "%Y-%m-%d %H:%M:%S")
+
+            def process_arg(arg):
+                if arg.startswith("'") and arg.endswith("'"):
+                    # String literal
+                    arg = arg.strip("'")
+                    # Check to see if this is a date
+                    for date in DATE_FORMATS:
+                        try:
+                            value = datetime.strptime(arg, date)
+                            return value
+                        except ValueError:
+                            continue
+                    return arg
+                elif arg in [ x.column for x in model_fields ]:
+                    # Column value
+                    return result.get(arg)
+
+                # Handle NULL
+                if arg.lower() == 'null':
+                    return None
+                elif arg.lower() == 'true':
+                    return True
+                elif arg.lower() == 'false':
+                    return False
+
+                # Just a plain old literal
+                return arg
+
+            for col, select in extra_selects:
+                result[col] = select[0](*[ process_arg(x) for x in select[1] ])
+
+            return result
+
         self.results = wrap_result_with_functor(self.results, increment_returned_results)
         self.results = wrap_result_with_functor(self.results, rename_pk_field)
+        self.results = wrap_result_with_functor(self.results, process_extra_selects)
 
     def execute(self):
         query = self._build_query()
