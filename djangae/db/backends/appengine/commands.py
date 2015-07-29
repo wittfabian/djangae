@@ -591,7 +591,8 @@ class NewSelectCommand(object):
                 else:
                     query[lookup] = filter_node.value
 
-            query.Order(*ordering)
+            if ordering:
+                query.Order(*ordering)
             queries.append(query)
 
         if can_perform_datastore_get(self.query):
@@ -627,12 +628,13 @@ class NewSelectCommand(object):
 
         def increment_returned_results(result):
             self.results_returned += 1
+            return result
 
         def rename_pk_field(result):
             if result is None:
                 return result
 
-            result[self.model._meta.pk.column] = result.key().id_or_name()
+            result[self.query.model._meta.pk.column] = result.key().id_or_name()
             return result
 
         self.results = wrap_result_with_functor(self.results, increment_returned_results)
