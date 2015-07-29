@@ -120,8 +120,27 @@ class Cursor(object):
     def fetchone(self, delete_flag=False):
         # Temporary if statement
         if isinstance(self.last_select_command, NewSelectCommand):
+
+            def convert_values(value, field):
+                """ For 1.7 support """
+                ops = self.connection.ops
+                if not hasattr(ops, "convert_values"):
+                    return value
+                else:
+                    return ops.convert_values(value, field)
+
             try:
-                return self.last_select_command.results.next()
+                result = self.last_select_command.results.next()
+
+                query = self.last_select_command.query
+
+                row = []
+                for col in (query.columns or (x.column for x in query.model._meta.fields)):
+                    field = get_field_from_column(query.model, col)
+                    row.append(convert_values(result.get(col), field))
+
+                self.returned_ids.append(result.key().id_or_name())
+                return row
             except StopIteration:
                 return None
 
