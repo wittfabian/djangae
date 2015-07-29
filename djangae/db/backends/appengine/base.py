@@ -124,10 +124,11 @@ class Cursor(object):
             def convert_values(value, field):
                 """ For 1.7 support """
                 ops = self.connection.ops
-                if not hasattr(ops, "convert_values"):
-                    return value
-                else:
+
+                if django.VERSION[1] < 8:
                     return ops.convert_values(value, field)
+                else:
+                    return value
 
             try:
                 result = self.last_select_command.results.next()
@@ -208,6 +209,7 @@ class Cursor(object):
 
 MAXINT = 9223372036854775808
 
+
 class DatabaseOperations(BaseDatabaseOperations):
     compiler_module = "djangae.db.backends.appengine.compiler"
 
@@ -283,7 +285,6 @@ class DatabaseOperations(BaseDatabaseOperations):
 
     def convert_values(self, value, field):
         """ Called when returning values from the datastore ONLY USED ON DJANGO <= 1.7"""
-
         value = super(DatabaseOperations, self).convert_values(value, field)
 
         db_type = field.db_type(self.connection)
