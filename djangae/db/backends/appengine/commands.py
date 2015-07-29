@@ -503,7 +503,9 @@ def convert_django_ordering_to_gae(ordering):
 
 def wrap_result_with_functor(results, func):
     for result in results:
-        yield func(result)
+        result = func(result)
+        if result is not None:
+            yield result
 
 
 def can_perform_datastore_get(normalized_query):
@@ -630,6 +632,16 @@ class NewSelectCommand(object):
             self.results_returned += 1
             return result
 
+        def convert_key_to_entity(result):
+            class FakeEntity(dict):
+                def __init__(self, key):
+                    self._key = key
+
+                def key(self):
+                    return self._key
+
+            return FakeEntity(result)
+
         def rename_pk_field(result):
             if result is None:
                 return result
@@ -680,6 +692,12 @@ class NewSelectCommand(object):
             return result
 
         self.results = wrap_result_with_functor(self.results, increment_returned_results)
+
+        # If this is a keys only query, we need to generate a fake entity
+        # for each key in the result set
+        if self.keys_only:
+            self.results = wrap_result_with_functor(self.results, rename_pk_field)
+
         self.results = wrap_result_with_functor(self.results, rename_pk_field)
         self.results = wrap_result_with_functor(self.results, process_extra_selects)
 
