@@ -1,6 +1,8 @@
 import django
 import json
 import logging
+import re
+
 from itertools import chain, imap
 from functools import partial
 from django.core.exceptions import FieldError
@@ -204,8 +206,6 @@ class Query(object):
             "/": lambda x, y: x / y,
             "*": lambda x, y: x * y
         }
-
-        import re
 
         for regex in (bool_expr, op_expr):
             match = re.match(bool_expr, lookup)

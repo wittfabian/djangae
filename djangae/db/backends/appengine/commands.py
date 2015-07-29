@@ -638,6 +638,10 @@ class NewSelectCommand(object):
             return result
 
         def process_extra_selects(result):
+            """
+                We handle extra selects by generating the new columns from
+                each result. We can handle simple boolean logic and operators.
+            """
             extra_selects = self.query.extra_selects
             model_fields = self.query.model._meta.fields
 
