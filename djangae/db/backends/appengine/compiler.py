@@ -16,7 +16,6 @@ except ImportError:
 from .commands import (
     NewSelectCommand,
     InsertCommand,
-    SelectCommand,
     UpdateCommand,
     DeleteCommand
 )

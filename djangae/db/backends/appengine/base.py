@@ -54,7 +54,6 @@ from djangae.db import caching
 from djangae.indexing import load_special_indexes
 from .commands import (
     NewSelectCommand,
-    SelectCommand,
     InsertCommand,
     FlushCommand,
     UpdateCommand,
@@ -95,7 +94,7 @@ class Cursor(object):
         self.last_delete_command = None
 
     def execute(self, sql, *params):
-        if isinstance(sql, SelectCommand) or isinstance(sql, NewSelectCommand):
+        if isinstance(sql, NewSelectCommand):
             # Also catches subclasses of SelectCommand (e.g Update)
             self.last_select_command = sql
             self.rowcount = self.last_select_command.execute() or -1
@@ -118,76 +117,37 @@ class Cursor(object):
         return row
 
     def fetchone(self, delete_flag=False):
-        # Temporary if statement
-        if isinstance(self.last_select_command, NewSelectCommand):
+        def convert_values(value, field):
+            """ For 1.7 support """
+            ops = self.connection.ops
 
-            def convert_values(value, field):
-                """ For 1.7 support """
-                ops = self.connection.ops
-
-                if django.VERSION[1] < 8:
-                    return ops.convert_values(value, field)
-                else:
-                    return value
-
-            try:
-                result = self.last_select_command.results.next()
-
-                if isinstance(result, (int, long)):
-                    return (result,)
-
-                query = self.last_select_command.query
-
-                row = []
-
-                # Prepend extra select values to the resulting row
-                for col, select in query.extra_selects:
-                    row.append(result.get(col))
-
-                for col in (query.columns or (x.column for x in query.model._meta.fields)):
-                    field = get_field_from_column(query.model, col)
-                    row.append(convert_values(result.get(col), field))
-
-                self.returned_ids.append(result.key().id_or_name())
-                return row
-            except StopIteration:
-                return None
+            if django.VERSION[1] < 8:
+                return ops.convert_values(value, field)
+            else:
+                return value
 
         try:
-            if isinstance(self.last_select_command.results, (int, long)):
-                # Handle aggregate (e.g. count)
-                return (self.last_select_command.results, )
-            else:
-                entity = self.last_select_command.next_result()
-        except StopIteration:  #FIXME: does this ever get raised?  Where from?
-            entity = None
+            result = self.last_select_command.results.next()
 
-        if entity is None:
+            if isinstance(result, (int, long)):
+                return (result,)
+
+            query = self.last_select_command.query
+
+            row = []
+
+            # Prepend extra select values to the resulting row
+            for col, select in query.extra_selects:
+                row.append(result.get(col))
+
+            for col in (query.columns or (x.column for x in query.model._meta.fields)):
+                field = get_field_from_column(query.model, col)
+                row.append(convert_values(result.get(col), field))
+
+            self.returned_ids.append(result.key().id_or_name())
+            return row
+        except StopIteration:
             return None
-
-        ## FIXME: Move this to SelectCommand.next_result()
-        result = []
-
-        # If there is extra_select prepend values to the results list
-        for col, query in self.last_select_command.extra_select.items():
-            result.append(entity.get(col))
-
-        for col in self.last_select_command.queried_fields:
-            if col == "__key__":
-                key = entity if isinstance(entity, Key) else entity.key()
-                self.returned_ids.append(key)
-                result.append(key.id_or_name())
-            else:
-                field = get_field_from_column(self.last_select_command.model, col)
-                if django.VERSION[1] < 8:
-                    value = self.connection.ops.convert_values(entity.get(col), field)
-                else:
-                    # On Django 1.8, convert_values is gone, and the db_converters stuff kicks in (we don't need to do it)
-                    value = entity.get(col)
-
-                result.append(value)
-
-        return result
 
     def fetchmany(self, size, delete_flag=False):
         if not self.last_select_command.results:

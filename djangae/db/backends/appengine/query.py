@@ -4,7 +4,6 @@ import logging
 import re
 
 from itertools import chain, imap
-from functools import partial
 from django.core.exceptions import FieldError
 from django.db.models.fields import FieldDoesNotExist
 from django.db.models.sql.datastructures import EmptyResultSet
