@@ -24,7 +24,6 @@ class TransformQueryTest(TestCase):
     def test_polymodel_filter_applied(self):
         query = transform_query(
             connections['default'],
-            "SELECT",
             InheritedModel.objects.filter(field1="One").all().query
         )
 
@@ -37,7 +36,6 @@ class TransformQueryTest(TestCase):
     def test_basic_query(self):
         query = transform_query(
             connections['default'],
-            "SELECT",
             TransformTestModel.objects.all().query
         )
 
@@ -49,7 +47,6 @@ class TransformQueryTest(TestCase):
     def test_and_filter(self):
         query = transform_query(
             connections['default'],
-            "SELECT",
             TransformTestModel.objects.filter(field1="One", field2="Two").all().query
         )
 
@@ -62,7 +59,6 @@ class TransformQueryTest(TestCase):
     def test_exclude_filter(self):
         query = transform_query(
             connections['default'],
-            "SELECT",
             TransformTestModel.objects.exclude(field1="One").all().query
         )
 
@@ -77,7 +73,6 @@ class TransformQueryTest(TestCase):
     def test_ordering(self):
         query = transform_query(
             connections['default'],
-            "SELECT",
             TransformTestModel.objects.filter(field1="One", field2="Two").order_by("field1", "-field2").query
         )
 
@@ -91,7 +86,6 @@ class TransformQueryTest(TestCase):
     def test_projection(self):
         query = transform_query(
             connections['default'],
-            "SELECT",
             TransformTestModel.objects.only("field1").query
         )
 
@@ -99,7 +93,6 @@ class TransformQueryTest(TestCase):
 
         query = transform_query(
             connections['default'],
-            "SELECT",
             TransformTestModel.objects.values_list("field1").query
         )
 
@@ -107,7 +100,6 @@ class TransformQueryTest(TestCase):
 
         query = transform_query(
             connections['default'],
-            "SELECT",
             TransformTestModel.objects.defer("field1", "field4").query
         )
 
@@ -118,24 +110,21 @@ class TransformQueryTest(TestCase):
             EmptyResultSet,
             transform_query,
             connections['default'],
-            "SELECT",
             TransformTestModel.objects.none().query
         )
 
     def test_offset_and_limit(self):
         query = transform_query(
             connections['default'],
-            "SELECT",
             TransformTestModel.objects.all()[5:10].query
         )
 
-        self.assertEqual(5, query.offset)
-        self.assertEqual(5, query.limit)
+        self.assertEqual(5, query.low_mark)
+        self.assertEqual(10, query.high_mark)
 
     def test_isnull(self):
         query = transform_query(
             connections['default'],
-            "SELECT",
             TransformTestModel.objects.filter(field3__isnull=True).all()[5:10].query
         )
 
@@ -145,7 +134,6 @@ class TransformQueryTest(TestCase):
     def test_distinct(self):
         query = transform_query(
             connections['default'],
-            "SELECT",
             TransformTestModel.objects.distinct("field2", "field3").query
         )
 
@@ -154,7 +142,6 @@ class TransformQueryTest(TestCase):
 
         query = transform_query(
             connections['default'],
-            "SELECT",
             TransformTestModel.objects.distinct().values("field2", "field3").query
         )
 
@@ -164,7 +151,6 @@ class TransformQueryTest(TestCase):
     def test_order_by_pk(self):
         query = transform_query(
             connections['default'],
-            "SELECT",
             TransformTestModel.objects.order_by("pk").query
         )
 
@@ -172,7 +158,6 @@ class TransformQueryTest(TestCase):
 
         query = transform_query(
             connections['default'],
-            "SELECT",
             TransformTestModel.objects.order_by("-pk").query
         )
 
@@ -181,7 +166,6 @@ class TransformQueryTest(TestCase):
     def test_reversed_ordering(self):
         query = transform_query(
             connections['default'],
-            "SELECT",
             TransformTestModel.objects.order_by("pk").reverse().query
         )
 
@@ -190,7 +174,6 @@ class TransformQueryTest(TestCase):
     def test_clear_ordering(self):
         query = transform_query(
             connections['default'],
-            "SELECT",
             TransformTestModel.objects.order_by("pk").order_by().query
         )
 
@@ -199,7 +182,6 @@ class TransformQueryTest(TestCase):
     def test_projection_on_textfield_disabled(self):
         query = transform_query(
             connections['default'],
-            "SELECT",
             TransformTestModel.objects.values_list("field4").query
         )
 
@@ -273,7 +255,7 @@ class QueryNormalizationTests(TestCase):
 
         query = normalize_query(transform_query(
             connections['default'],
-            "SELECT", qs.query
+            qs.query
         ))
 
         self.assertTrue(1, len(query.where.children))
@@ -285,7 +267,7 @@ class QueryNormalizationTests(TestCase):
 
         query = normalize_query(transform_query(
             connections['default'],
-            "SELECT", qs.query
+            qs.query
         ))
 
         self.assertTrue(2, len(query.where.children[0].children))
@@ -301,7 +283,7 @@ class QueryNormalizationTests(TestCase):
         qs = TestUser.objects.filter(username="test").exclude(email="test@example.com")
         query = normalize_query(transform_query(
             connections['default'],
-            "SELECT", qs.query
+            qs.query
         ))
 
 
@@ -327,7 +309,7 @@ class QueryNormalizationTests(TestCase):
 
         query = normalize_query(transform_query(
             connections['default'],
-            "SELECT", qs.query
+            qs.query
         ))
 
         self.assertTrue(2, len(query.where.children[0].children))
@@ -349,7 +331,7 @@ class QueryNormalizationTests(TestCase):
 
         query = normalize_query(transform_query(
             connections['default'],
-            "SELECT", qs.query
+            qs.query
         ))
 
         # After IN and != explosion, we have...
@@ -409,7 +391,7 @@ class QueryNormalizationTests(TestCase):
 
         query = normalize_query(transform_query(
             connections['default'],
-            "SELECT", qs.query
+            qs.query
         ))
 
         self.assertEqual(query.where.connector, "OR")
@@ -424,14 +406,14 @@ class QueryNormalizationTests(TestCase):
         with self.assertRaises(EmptyResultSet):
             query = normalize_query(transform_query(
                 connections['default'],
-                "SELECT", qs.query
+                qs.query
             ))
 
         qs = TestUser.objects.filter(username__startswith='Hello') |  TestUser.objects.filter(username__startswith='Goodbye')
 
         query = normalize_query(transform_query(
             connections['default'],
-            "SELECT", qs.query
+            qs.query
         ))
 
         self.assertEqual(2, len(query.where.children))
@@ -444,7 +426,7 @@ class QueryNormalizationTests(TestCase):
         qs = TestUser.objects.filter(pk__in=[1, 2, 3])
         query = normalize_query(transform_query(
             connections['default'],
-            "SELECT", qs.query
+            qs.query
         ))
 
         self.assertEqual(3, len(query.where.children))
@@ -458,7 +440,7 @@ class QueryNormalizationTests(TestCase):
         qs = TestUser.objects.filter(pk__in=[1, 2, 3]).filter(username="test")
         query = normalize_query(transform_query(
             connections['default'],
-            "SELECT", qs.query
+            qs.query
         ))
 
         self.assertEqual(3, len(query.where.children))
