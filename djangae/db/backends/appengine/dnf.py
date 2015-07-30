@@ -3,40 +3,60 @@ from itertools import  product
 from django.db.models.sql.datastructures import EmptyResultSet
 from djangae.db.backends.appengine.query import WhereNode
 
-def preprocess_node(node):
-    # Explode inequalities otherwise things get crazy
-    if node.negated and len(node.children) == 1 and node.children[0].operator == "=":
-        only_grandchild = node.children[0]
+def preprocess_node(node, negated):
 
-        lhs, rhs = WhereNode(), WhereNode()
-        lhs.column = rhs.column = only_grandchild.column
-        lhs.value = rhs.value = only_grandchild.value
-        lhs.operator = "<"
-        rhs.operator = ">"
-
-        node.children = [ lhs, rhs ]
-        node.connector = "OR"
-        node.negated = False
-
-    # Explode IN filters into a series of 'OR statements to make life
-    # easier later
+    # Go through the children of this node and if any of the
+    # child nodes are leaf nodes, then explode them if necessary
     for child in node.children:
-        if child.is_leaf and child.operator == "IN":
-            new_children = []
+        if child.is_leaf:
+            if child.operator == "ISNULL":
+                value = not child.value if negated else child.value
 
-            for value in child.value:
-                new_node = WhereNode()
-                new_node.operator = "="
-                new_node.value = value
-                new_node.column = child.column
+                if value:
+                    child.operator = "="
+                    child.value = None
+                else:
+                    lhs, rhs = WhereNode(), WhereNode()
+                    lhs.column = rhs.column = child.column
+                    lhs.value = rhs.value = None
+                    lhs.operator = "<"
+                    rhs.operator = ">"
 
-                new_children.append(new_node)
+                    child.operator = child.value = child.column = None
+                    child.connector = "OR"
+                    child.children = [lhs, rhs]
 
-            child.column = None
-            child.operator = None
-            child.connector = "OR"
-            child.value = None
-            child.children = new_children
+            elif negated and child.operator == "=":
+                # Excluded equalities become inequalities
+
+                lhs, rhs = WhereNode(), WhereNode()
+                lhs.column = rhs.column = child.column
+                lhs.value = rhs.value = None
+                lhs.operator = "<"
+                rhs.operator = ">"
+
+                child.operator = child.value = child.column = None
+                child.connector = "OR"
+                child.children = [lhs, rhs]
+
+            elif child.operator == "IN":
+                # Explode IN filters into a series of 'OR statements to make life
+                # easier later
+                new_children = []
+
+                for value in child.value:
+                    new_node = WhereNode()
+                    new_node.operator = "="
+                    new_node.value = value
+                    new_node.column = child.column
+
+                    new_children.append(new_node)
+
+                child.column = None
+                child.operator = None
+                child.connector = "OR"
+                child.value = None
+                child.children = new_children
 
     return node
 
@@ -48,19 +68,24 @@ def normalize_query(query):
     if where is None:
         return query
 
-    def walk_tree(where):
-        preprocess_node(where)
+    def walk_tree(where, original_negated=False):
+        negated = original_negated
+
+        if where.negated:
+            negated = not negated
+
+        preprocess_node(where, negated)
 
         for child in where.children:
             if where.connector == "AND" and child.children and child.connector == 'AND' and not child.negated:
                 where.children.remove(child)
                 where.children.extend(child.children)
-                walk_tree(where)
+                walk_tree(where, original_negated)
             elif child.connector == "AND" and len(child.children) == 1 and not child.negated:
                 # Promote leaf nodes if they are the only child under an AND. Just for consistency
                 where.children.remove(child)
                 where.children.extend(child.children)
-                walk_tree(where)
+                walk_tree(where, original_negated)
             elif len(child.children) > 1 and child.connector == 'AND' and child.negated:
                 new_grandchildren = []
                 for grandchild in child.children:
@@ -70,9 +95,9 @@ def normalize_query(query):
                     new_grandchildren.append(new_node)
                 child.children = new_grandchildren
                 child.connector = 'OR'
-                walk_tree(where)
+                walk_tree(where, original_negated)
             else:
-                walk_tree(child)
+                walk_tree(child, negated)
 
         if where.connector == 'AND' and any([x.connector == 'OR' for x in where.children]):
             # ANDs should have been taken care of!
@@ -96,7 +121,7 @@ def normalize_query(query):
 
             where.connector = 'OR'
             where.children = list(set(new_children))
-            walk_tree(where)
+            walk_tree(where, original_negated)
 
         elif where.connector == 'OR':
             new_children = []
