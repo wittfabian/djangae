@@ -516,8 +516,9 @@ def can_perform_datastore_get(normalized_query):
     assert normalized_query.is_normalized
 
     for and_branch in normalized_query.where.children:
-        if and_branch.is_leaf and (and_branch.column != "__key__" or and_branch.operator != "="):
-            return False
+        if and_branch.is_leaf:
+            if (and_branch.column != "__key__" or and_branch.operator != "="):
+                return False
         else:
             key_found = False
             for filter_node in and_branch.children:
@@ -526,8 +527,8 @@ def can_perform_datastore_get(normalized_query):
                 if filter_node.column == "__key__":
                     if filter_node.operator == "=":
                         key_found = True
-                    else:
                         break
+
             if not key_found:
                 return False
 

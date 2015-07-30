@@ -11,6 +11,7 @@ from django.db.models.sql.datastructures import EmptyResultSet
 from django.db.models.sql.where import EmptyWhere
 from django.db.models import AutoField
 
+from django.db import NotSupportedError
 from djangae.indexing import (
     special_indexes_for_column,
     REQUIRES_SPECIAL_INDEXES,
@@ -247,6 +248,9 @@ class Query(object):
             return
 
         field = get_field_from_column(self.model, column)
+
+        if field is None:
+            raise NotSupportedError("{} is not a valid column for the queried model. Did you try to join?".format(column))
 
         # We don't add primary key fields into the projection set
         if field.primary_key and field.column == column:
