@@ -289,6 +289,26 @@ class Query(object):
         assert where is None or isinstance(where, WhereNode)
         self._where = where
         self._add_inheritence_filter()
+        self._disable_projection_if_fields_used_in_equality_filter()
+
+    def _disable_projection_if_fields_used_in_equality_filter(self):
+        if not self._where or not self.columns:
+            return
+
+        equality_columns = set()
+
+        def walk(node):
+            if not node.is_leaf:
+                for child in node.children:
+                    walk(child)
+            elif node.operator == "=" or node.operator == "IN":
+                equality_columns.add(node.column)
+
+        walk(self._where)
+
+        if equality_columns and equality_columns.intersection(set(self.columns)):
+            self.columns = None
+            self.projection_possible = False
 
     def _add_inheritence_filter(self):
         """
