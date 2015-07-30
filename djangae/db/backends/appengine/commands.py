@@ -602,6 +602,11 @@ class NewSelectCommand(object):
             # Yay for optimizations!
             return QueryByKeys(self.query.model, queries, ordering)
 
+        unique_identifier = query_is_unique(self.query)
+        if unique_identifier:
+            # Yay for optimizations!
+            return UniqueQuery(unique_identifier, self.query, self.query.model)
+
         if len(queries) == 1:
             return queries[0]
         else:
