@@ -133,6 +133,9 @@ class Cursor(object):
             try:
                 result = self.last_select_command.results.next()
 
+                if isinstance(result, (int, long)):
+                    return (result,)
+
                 query = self.last_select_command.query
 
                 row = []

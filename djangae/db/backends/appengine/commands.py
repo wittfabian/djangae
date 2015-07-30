@@ -537,7 +537,7 @@ def can_perform_datastore_get(normalized_query):
 
 class NewSelectCommand(object):
     def __init__(self, connection, query, keys_only=False):
-        self.query = normalize_query(transform_query(connection, "SELECT", query))
+        self.query = normalize_query(transform_query(connection, query))
         self.original_query = query
         self.keys_only = keys_only or [x.field for x in query.select] == [ query.model._meta.pk ]
 
@@ -622,10 +622,10 @@ class NewSelectCommand(object):
             high_mark += excluded_pk_count
 
         limit = None if high_mark is None else (high_mark - (low_mark or 0))
-        offset = low_mark or None
+        offset = low_mark or 0
 
         if self.query.kind == "COUNT":
-            self.results = query.Count(limit=limit, offset=offset)
+            self.results = (x for x in [query.Count(limit=limit, offset=offset)])
             return
         elif self.query.kind == "AVERAGE":
             raise ValueError("AVERAGE not yet supported")

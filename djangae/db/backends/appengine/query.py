@@ -609,6 +609,15 @@ _FACTORY = {
     (1, 9): _transform_query_19
 }
 
+def _determine_query_kind(query):
+    from django.db.models.sql.aggregates import Count
+    if query.aggregates:
+        if None in query.aggregates and isinstance(query.aggregates[None], Count):
+            return "COUNT"
+        else:
+            raise NotSupportedError("Unsupported aggregate: {}".format(query.aggregates))
 
-def transform_query(connection, kind, query):
-    return _FACTORY[django.VERSION[:2]](connection, kind, query)
+    return "SELECT"
+
+def transform_query(connection, query):
+    return _FACTORY[django.VERSION[:2]](connection, _determine_query_kind(query), query)
