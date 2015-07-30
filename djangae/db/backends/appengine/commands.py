@@ -14,10 +14,6 @@ from django.db.models.fields import FieldDoesNotExist
 
 from django.core.cache import cache
 from django.db import IntegrityError
-from django.db.models.sql.datastructures import EmptyResultSet
-from django.db.models.sql import query
-from django.db.models.sql.where import EmptyWhere
-from django.db.models.fields import AutoField
 
 from google.appengine.api import datastore, datastore_errors
 from google.appengine.api.datastore import Query
@@ -36,7 +32,7 @@ from djangae.db.utils import (
     get_field_from_column
 )
 from djangae.indexing import special_indexes_for_column, REQUIRES_SPECIAL_INDEXES, add_special_index
-from djangae.utils import on_production, memoized
+from djangae.utils import on_production
 from djangae.db import constraints, utils
 from djangae.db.backends.appengine import caching
 from djangae.db.unique_utils import query_is_unique
@@ -442,7 +438,11 @@ class NewSelectCommand(object):
     def __init__(self, connection, query, keys_only=False):
         self.query = normalize_query(transform_query(connection, query))
         self.original_query = query
-        self.keys_only = keys_only or [x.field for x in query.select] == [ query.model._meta.pk ]
+        self.keys_only = (keys_only or [x.field for x in query.select] == [ query.model._meta.pk ])
+
+        # MultiQuery doesn't support keys_only
+        if self.query.where and len(self.query.where.children) > 1:
+            self.keys_only = False
 
         self.excluded_pks = []
         self.included_pks = []
@@ -505,10 +505,10 @@ class NewSelectCommand(object):
             # Yay for optimizations!
             return QueryByKeys(self.query.model, queries, ordering)
 
-        unique_identifier = query_is_unique(self.query)
-        if unique_identifier:
+        identifier = query_is_unique(self.query.model, queries[0])
+        if identifier:
             # Yay for optimizations!
-            return UniqueQuery(unique_identifier, self.query, self.query.model)
+            return UniqueQuery(identifier, queries[0], self.query.model)
 
         if len(queries) == 1:
             return queries[0]
