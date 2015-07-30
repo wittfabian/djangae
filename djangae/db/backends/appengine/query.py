@@ -60,6 +60,14 @@ VALID_OPERATORS = (
 def convert_operator(operator):
     if operator == 'exact':
         return '='
+    elif operator == 'gt':
+        return '>'
+    elif operator == 'lt':
+        return '<'
+    elif operator == 'gte':
+        return '>='
+    elif operator == 'lte':
+        return '<='
 
     return operator.upper()
 
