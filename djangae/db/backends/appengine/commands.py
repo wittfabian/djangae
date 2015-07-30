@@ -11,7 +11,7 @@ import django
 from django.db import DatabaseError
 from django.core.exceptions import FieldError
 from django.db.models.fields import FieldDoesNotExist
-
+from django.db.models.sql.datastructures import EmptyResultSet
 from django.core.cache import cache
 from django.db import IntegrityError
 
@@ -175,14 +175,16 @@ def _convert_entity_based_on_query_options(entity, opts):
     return entity
 
 
-def _get_key(query):
-    return query["__key__ ="]
 
 class QueryByKeys(object):
     def __init__(self, model, queries, ordering):
+        def _get_key(query):
+            result = query["__key__ ="]
+            return result
+
         self.model = model
         self.queries = queries
-        self.queries_by_key = { a: list(b) for a, b in groupby(queries, lambda x: _get_key(x)) }
+        self.queries_by_key = { a: list(b) for a, b in groupby(queries, _get_key) }
         self.ordering = ordering
         self._Query__kind = queries[0]._Query__kind
 

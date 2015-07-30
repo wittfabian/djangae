@@ -145,4 +145,24 @@ def normalize_query(query):
 
     remove_empty_in(where)
 
+    def detect_conflicting_key_filter(node):
+        assert node.connector == "OR"
+        for and_branch in node.children[:]:
+            # If we have a Root OR with leaf elements, we don't need to worry
+            if and_branch.is_leaf:
+                break
+
+            pk_equality_found = None
+            for child in and_branch.children:
+                if child.column == "__key__" and child.operator == "=":
+                    if pk_equality_found and pk_equality_found != child.value:
+                        # Remove this AND branch as it's impossible to return anything
+                        node.children.remove(and_branch)
+                    else:
+                        pk_equality_found = child.value
+            if not node.children:
+                raise EmptyResultSet()
+
+    detect_conflicting_key_filter(query.where)
+
     return query
