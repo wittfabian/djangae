@@ -114,10 +114,6 @@ class WhereNode(object):
                 value = datastore.Key.from_path(model._meta.db_table, value)
             column = "__key__"
 
-        if operator == "isnull":
-            operator = "exact"
-            value = None
-
         # Do any special index conversions necessary to perform this lookup
         if operator in REQUIRES_SPECIAL_INDEXES:
             indexer = REQUIRES_SPECIAL_INDEXES[operator]
@@ -495,15 +491,14 @@ def _transform_query_17(connection, kind, query):
             if not getattr(child, "children", None):
                 # Leaf
                 lhs = child.lhs.target.column
-                if child.rhs_is_direct_value():
+                rhs = child.process_rhs(None, connection)
+
+                if child.lookup_name == 'in':
+                    rhs = rhs[-1]
+                elif child.lookup_name == 'isnull':
                     rhs = child.rhs
                 else:
-                    rhs = child.lhs.output_field.get_db_prep_lookup(
-                        child.lookup_name,
-                        child.rhs,
-                        connection,
-                        prepared=True
-                    )[0]
+                    rhs = rhs[-1][0]
 
                 new_node.set_leaf(
                     lhs,
