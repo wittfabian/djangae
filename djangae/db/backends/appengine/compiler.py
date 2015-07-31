@@ -66,12 +66,15 @@ class SQLUpdateCompiler(compiler.SQLUpdateCompiler, SQLCompiler):
 
 
 class SQLAggregateCompiler(compiler.SQLAggregateCompiler, SQLCompiler):
-    pass
+    def as_sql(self, with_limits=True, with_col_aliases=False, subquery=False):
+        return SQLCompiler.as_sql(self, with_limits, with_col_aliases, subquery)
 
 
 class SQLDateCompiler(DateCompiler, SQLCompiler):
-    pass
+    def as_sql(self, with_limits=True, with_col_aliases=False, subquery=False):
+        return SQLCompiler.as_sql(self, with_limits, with_col_aliases, subquery)
 
 
 class SQLDateTimeCompiler(DateTimeCompiler, SQLCompiler):
-    pass
+    def as_sql(self, with_limits=True, with_col_aliases=False, subquery=False):
+        return SQLCompiler.as_sql(self, with_limits, with_col_aliases, subquery)
