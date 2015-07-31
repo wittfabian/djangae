@@ -171,6 +171,7 @@ class Query(object):
         self.annotations = []
         self.per_entity_annotations = []
         self.extra_selects = []
+        self.polymodel_filter_added = False
 
     @property
     def is_normalized(self):
@@ -319,6 +320,9 @@ class Query(object):
         """
 
         if has_concrete_parents(self.model) and not self.model._meta.proxy:
+            if self.polymodel_filter_added:
+                return
+
             new_filter = WhereNode()
             new_filter.column = 'class'
             new_filter.operator = '='
@@ -333,6 +337,8 @@ class Query(object):
             new_root.connector = 'AND'
             new_root.children = [ new_and, self._where ]
             self._where = new_root
+
+            self.polymodel_filter_added = True
 
     def serialize(self):
         if not self.is_normalized:
