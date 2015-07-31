@@ -14,6 +14,7 @@ from djangae.fields import (
     ShardedCounterField,
     SetField,
 )
+from djangae.fields.counting import DEFAULT_SHARD_COUNT
 from djangae.models import CounterShard
 from djangae.test import TestCase
 
@@ -44,11 +45,15 @@ class ComputedFieldTests(TestCase):
 class ModelWithCounter(models.Model):
     counter = ShardedCounterField()
 
+    class Meta:
+        app_label = "djangae"
 
 class ModelWithManyCounters(models.Model):
     counter1 = ShardedCounterField()
     counter2 = ShardedCounterField()
 
+    class Meta:
+        app_label = "djangae"
 
 class ISOther(models.Model):
     name = models.CharField(max_length=500)
@@ -166,6 +171,19 @@ class ShardedCounterTest(TestCase):
         instance.counter.populate()
         expected_num_shards = instance._meta.get_field('counter').shard_count
         self.assertEqual(len(instance.counter), expected_num_shards)
+
+    def test_populate_is_idempotent_across_threads(self):
+        """ Edge case test to make sure that 2 different threads calling .populate() on a field
+            don't cause it to exceed the corrent number of shards.
+        """
+        instance = ModelWithCounter.objects.create()
+        same_instance = ModelWithCounter.objects.get()
+        instance.counter.populate()
+        same_instance.counter.populate()
+        # Now reload it from the DB and check that it has the correct number of shards
+        instance = ModelWithCounter.objects.get()
+        self.assertEqual(instance.counter.all().count(), DEFAULT_SHARD_COUNT)
+
 
     def test_label_reference_is_saved(self):
         """ Test that each CounterShard which the field creates is saved with the label of the
