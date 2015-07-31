@@ -65,13 +65,18 @@ def preprocess_node(node, negated):
             elif child.operator == "RANGE":
                 lhs, rhs = WhereNode(), WhereNode()
                 lhs.column = rhs.column = child.column
-                lhs.operator = ">="
-                rhs.operator = "<="
+                if negated:
+                    lhs.operator = "<"
+                    rhs.operator = ">"
+                    child.connector = "OR"
+                else:
+                    lhs.operator = ">="
+                    rhs.operator = "<="
+                    child.connector = "AND"
                 lhs.value = child.value[0]
                 rhs.value = child.value[1]
 
                 child.column = child.operator = child.value = None
-                child.connector = "AND"
                 child.children = [ lhs, rhs ]
 
                 assert not child.is_leaf
