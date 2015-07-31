@@ -37,6 +37,9 @@ Django 1.8 support is under development.
 ## Contrib Applications
 
  - [Authentication with djangae.contrib.gauth](gauth.md)
+ - [Security enhancements with djangae.contrib.security](security.md)
  - [Map-reduce integration with djangae.contrib.mappers](mappers.md)
  - [Pagination with djangae.contrib.pagination](pagination.md)
+ - [Unique constraint repairs with djangae.contrib.uniquetool](uniquetool.md)
+
 
