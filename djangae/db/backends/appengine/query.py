@@ -256,10 +256,6 @@ class Query(object):
         if field is None:
             raise NotSupportedError("{} is not a valid column for the queried model. Did you try to join?".format(column))
 
-        # We don't add primary key fields into the projection set
-        if field.primary_key and field.column == column:
-            return
-
         if field.db_type(self.connection) in ("bytes", "text", "list", "set"):
             DJANGAE_LOG.warn("Disabling projection query as %s is an unprojectable type", column)
             self.columns = None

@@ -344,11 +344,19 @@ class NewSelectCommand(object):
 
         queries = []
 
+        def _exclude_pk(fields):
+            if fields is None:
+                return None
+
+            return [ x for x in fields if x != self.query.model._meta.pk.column ]
+
+        projection = _exclude_pk(self.query.columns) or None
+
         query_kwargs = {
             "kind": str(self.query.tables[0]),
             "distinct": self.query.distinct or None,
             "keys_only": self.keys_only or None,
-            "projection": self.query.columns or None
+            "projection": projection
         }
 
         ordering = convert_django_ordering_to_gae(self.query.order_by)
