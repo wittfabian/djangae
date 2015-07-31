@@ -431,7 +431,9 @@ def _extract_ordering_from_query_17(query):
             try:
                 column = col.lstrip("-")
 
-                if column in query.annotation_select:
+                # This is really 1.8 only, but I didn't want to duplicate this function
+                # just for this. Suggestions for doing this more cleanly welcome!
+                if column in getattr(query, "annotation_select", {}):
                     # It's an annotation, if it's a supported one, return the
                     # original column
                     annotation = query.annotation_select[column]
