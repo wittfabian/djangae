@@ -9,7 +9,7 @@ from django.test import TestCase
 from django.test.utils import override_settings
 
 # CONSISTENCY
-from consistency.consistency import improve_queryset_consistency
+from djangae.contrib.consistency import improve_queryset_consistency
 
 
 class TestModel(models.Model):
