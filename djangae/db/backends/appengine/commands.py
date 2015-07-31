@@ -391,7 +391,10 @@ class NewSelectCommand(object):
                 if lookup in query and not isinstance(query[lookup], (list, tuple)):
                     query[lookup] = [ query[lookup ] ] + [ filter_node.value ]
                 else:
-                    query[lookup] = filter_node.value
+                    if isinstance(filter_node.value, basestring):
+                        query[lookup] = unicode(filter_node.value)
+                    else:
+                        query[lookup] = filter_node.value
 
             if ordering:
                 query.Order(*ordering)
