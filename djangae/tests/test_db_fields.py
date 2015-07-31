@@ -45,11 +45,15 @@ class ComputedFieldTests(TestCase):
 class ModelWithCounter(models.Model):
     counter = ShardedCounterField()
 
+    class Meta:
+        app_label = "djangae"
 
 class ModelWithManyCounters(models.Model):
     counter1 = ShardedCounterField()
     counter2 = ShardedCounterField()
 
+    class Meta:
+        app_label = "djangae"
 
 class ISOther(models.Model):
     name = models.CharField(max_length=500)
