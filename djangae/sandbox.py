@@ -384,7 +384,7 @@ def allow_modules(func, *args):
             mod.__dict__.update(_system.__dict__)
 
         # We have to maintain the environment, or bad things happen
-        os.environ = environ
+        os.environ = environ # This gets monkey patched by GAE
 
         try:
             return func(*args, **kwargs)
@@ -395,5 +395,7 @@ def allow_modules(func, *args):
             for mod in patch_modules:
                 _system = reload(mod)
                 mod.__dict__.update(_system.__dict__)
+            # Put the original os back, again
+            os.environ = environ
 
     return _wrapped
