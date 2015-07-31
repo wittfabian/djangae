@@ -31,7 +31,7 @@ def preprocess_node(node, negated):
 
                 lhs, rhs = WhereNode(), WhereNode()
                 lhs.column = rhs.column = child.column
-                lhs.value = rhs.value = None
+                lhs.value = rhs.value = child.value
                 lhs.operator = "<"
                 rhs.operator = ">"
 
