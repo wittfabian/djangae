@@ -588,7 +588,7 @@ def _transform_query_18(connection, kind, query):
                 lhs = child.lhs.target.column
                 rhs = child.process_rhs(None, connection)
 
-                if child.lookup_name == 'in':
+                if child.lookup_name in ('in', 'range'):
                     rhs = rhs[-1]
                 elif child.lookup_name == 'isnull':
                     rhs = child.rhs

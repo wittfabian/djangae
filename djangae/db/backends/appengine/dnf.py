@@ -39,6 +39,8 @@ def preprocess_node(node, negated):
                 child.connector = "OR"
                 child.children = [lhs, rhs]
 
+                assert not child.is_leaf
+
             elif child.operator == "IN":
                 # Explode IN filters into a series of 'OR statements to make life
                 # easier later
@@ -57,6 +59,22 @@ def preprocess_node(node, negated):
                 child.connector = "OR"
                 child.value = None
                 child.children = new_children
+
+                assert not child.is_leaf
+
+            elif child.operator == "RANGE":
+                lhs, rhs = WhereNode(), WhereNode()
+                lhs.column = rhs.column = child.column
+                lhs.operator = ">="
+                rhs.operator = "<="
+                lhs.value = child.value[0]
+                rhs.value = child.value[1]
+
+                child.column = child.operator = child.value = None
+                child.connector = "AND"
+                child.children = [ lhs, rhs ]
+
+                assert not child.is_leaf
 
     return node
 
