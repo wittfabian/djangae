@@ -632,7 +632,7 @@ _FACTORY = {
     (1, 9): _transform_query_19
 }
 
-def _determine_query_kind(query):
+def _determine_query_kind_17(query):
     from django.db.models.sql.aggregates import Count
     if query.aggregates:
         if None in query.aggregates and isinstance(query.aggregates[None], Count):
@@ -642,5 +642,25 @@ def _determine_query_kind(query):
 
     return "SELECT"
 
+def _determine_query_kind_18(query):
+    if query.annotations:
+        if "__count" in query.annotations:
+            if query.annotations["__count"].input_field.value == "*":
+                return "COUNT"
+            else:
+                raise NotSupportedError("Unsupported count: {}".format(query.annotations))
+        else:
+            raise NotSupportedError("Unsupported annotation: {}".format(query.aggregates))
+
+    return "SELECT"
+
+_KIND_FACTORY = {
+    (1, 7): _determine_query_kind_17,
+    (1, 8): _determine_query_kind_18,
+    (1, 9): _determine_query_kind_18 # Same as 1.8
+}
+
 def transform_query(connection, query):
-    return _FACTORY[django.VERSION[:2]](connection, _determine_query_kind(query), query)
+    version = django.VERSION[:2]
+    kind = _KIND_FACTORY[version](query)
+    return _FACTORY[version](connection, kind, query)
