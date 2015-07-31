@@ -2,6 +2,7 @@ import django
 import json
 import logging
 import re
+import datetime
 
 from itertools import chain, imap
 from django.core.exceptions import FieldError
@@ -245,6 +246,44 @@ class Query(object):
     def add_order_by(self, column):
         self.order_by.append(column)
 
+    def add_annotation(self, column, annotation):
+        name = annotation.__class__.__name__
+        if name == "Count":
+            return # Handled elsewhere
+
+        if name not in ("Col", "Date", "DateTime"):
+            raise NotSupportedError("Unsupported annotation %s" % name)
+
+        def process_date(value, lookup_type):
+            from djangae.db.backends.appengine.commands import ensure_datetime #FIXME move func to utils
+            value = ensure_datetime(value)
+            ret = datetime.datetime.fromtimestamp(0)
+
+            POSSIBLE_LOOKUPS = ("year", "month", "day", "hour", "minute", "second")
+
+            ret = ret.replace(
+                value.year,
+                value.month if lookup_type in POSSIBLE_LOOKUPS[1:] else ret.month,
+                value.day if lookup_type in POSSIBLE_LOOKUPS[2:] else ret.day,
+                value.hour if lookup_type in POSSIBLE_LOOKUPS[3:] else ret.hour,
+                value.minute if lookup_type in POSSIBLE_LOOKUPS[4:] else ret.minute,
+                value.second if lookup_type in POSSIBLE_LOOKUPS[5:] else ret.second,
+            )
+
+            return ret
+
+        # Abuse the extra_select functionality
+        if name == "Col":
+            self.extra_selects.append((column, (lambda x: x, [annotation.output_field.column])))
+        elif name in ("Date", "DateTime"):
+            self.extra_selects.append(
+                (column,
+                (lambda x: process_date(x, annotation.lookup_type), [annotation.col.output_field.column]))
+            )
+            # Override the projection so that we only get this column
+            self.columns = [ annotation.col.output_field.column ]
+
+
     def add_projected_column(self, column):
         if not self.projection_possible:
             # If we previously tried to add a column that couldn't be
@@ -390,7 +429,25 @@ def _extract_ordering_from_query_17(query):
             continue
         else:
             try:
-                field = query.model._meta.get_field_by_name(col.lstrip("-"))[0]
+                column = col.lstrip("-")
+
+                if column in query.annotation_select:
+                    # It's an annotation, if it's a supported one, return the
+                    # original column
+                    annotation = query.annotation_select[column]
+                    name = annotation.__class__.__name__
+
+                    # We only support a few expressions
+                    if name not in ("Col", "Date", "DateTime"):
+                        raise NotSupportedError("Tried to order by unsupported expression")
+                    else:
+                        # Retrieve the original column and use that for ordering
+                        if name == "Col":
+                            column = annotation.output_field.column
+                        else:
+                            column = annotation.col.output_field.column
+
+                field = query.model._meta.get_field_by_name(column)[0]
                 column = "__key__" if field.primary_key else field.column
                 final.append("-" + column if col.startswith("-") else column)
             except FieldDoesNotExist:
@@ -574,6 +631,11 @@ def _transform_query_18(connection, kind, query):
         # This must happen after extracting projected cols
         ret.set_distinct(list(query.distinct_fields))
 
+    # Process annotations!
+    if query.annotation_select:
+        for k, v in query.annotation_select.items():
+            ret.add_annotation(k, v)
+
     # Extract any query offsets and limits
     ret.low_mark = query.low_mark
     ret.high_mark = query.high_mark
@@ -647,10 +709,6 @@ def _determine_query_kind_18(query):
         if "__count" in query.annotations:
             if query.annotations["__count"].input_field.value == "*":
                 return "COUNT"
-            else:
-                raise NotSupportedError("Unsupported count: {}".format(query.annotations))
-        else:
-            raise NotSupportedError("Unsupported annotation: {}".format(query.aggregates))
 
     return "SELECT"
 

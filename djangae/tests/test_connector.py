@@ -1197,15 +1197,15 @@ class EdgeCaseTests(TestCase):
         )
 
         dates = TestUser.objects.dates('last_login', 'day')
-        self.assertItemsEqual(
-            [datetime.date(2013, 4, 5), last_a_login],
-            dates
+        self.assertEqual(
+            [datetime.date(2013, 4, 5), last_a_login.date()],
+            list(dates)
         )
 
         dates = TestUser.objects.dates('last_login', 'day', order='DESC')
-        self.assertItemsEqual(
-            [last_a_login, datetime.date(2013, 4, 5)],
-            dates
+        self.assertEqual(
+            [last_a_login.date(), datetime.date(2013, 4, 5)],
+            list(dates)
         )
 
     def test_in_query(self):
