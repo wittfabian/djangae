@@ -41,5 +41,4 @@ Django 1.8 support is under development.
  - [Map-reduce integration with djangae.contrib.mappers](mappers.md)
  - [Pagination with djangae.contrib.pagination](pagination.md)
  - [Unique constraint repairs with djangae.contrib.uniquetool](uniquetool.md)
-
-
+ - [Help with Datastore eventual consistency with djangae.contrib.consistency](consistency.md)
