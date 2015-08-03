@@ -404,7 +404,14 @@ class RegexIndexer(Indexer):
 
     def check_if_match(self, value, index, flags=0):
         pattern = self.get_pattern(index)
-        return bool(re.match(pattern, value, flags))
+
+        if value:
+            if hasattr(value, '__iter__'): # is a list, tuple or set?
+                if any([bool(re.match(pattern, x, flags)) for x in value]):
+                    return True
+            else:
+                return bool(re.match(pattern, value, flags))
+        return False
 
     def prep_value_for_database(self, value, index):
         return self.check_if_match(value, index)
