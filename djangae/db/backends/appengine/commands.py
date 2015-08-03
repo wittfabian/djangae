@@ -497,6 +497,12 @@ class NewSelectCommand(object):
                 elif arg.lower() == 'false':
                     return False
 
+                # See if it's an integer
+                try:
+                    arg = int(arg)
+                except (TypeError, ValueError):
+                    pass
+
                 # Just a plain old literal
                 return arg
 

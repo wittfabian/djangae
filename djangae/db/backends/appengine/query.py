@@ -218,7 +218,7 @@ class Query(object):
         }
 
         for regex in (bool_expr, op_expr):
-            match = re.match(bool_expr, lookup)
+            match = re.match(regex, lookup)
             if match:
                 lhs = match.group('lhs')
                 rhs = match.group('rhs')
