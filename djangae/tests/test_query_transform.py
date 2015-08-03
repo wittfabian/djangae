@@ -430,11 +430,11 @@ class QueryNormalizationTests(TestCase):
         ))
 
         self.assertEqual(3, len(query.where.children))
-        self.assertEqual("id", query.where.children[0].column)
+        self.assertEqual("__key__", query.where.children[0].column)
         self.assertEqual(datastore.Key.from_path(TestUser._meta.db_table, 3), query.where.children[0].value)
-        self.assertEqual("id", query.where.children[1].column)
+        self.assertEqual("__key__", query.where.children[1].column)
         self.assertEqual(datastore.Key.from_path(TestUser._meta.db_table, 1), query.where.children[1].value)
-        self.assertEqual("id", query.where.children[2].column)
+        self.assertEqual("__key__", query.where.children[2].column)
         self.assertEqual(datastore.Key.from_path(TestUser._meta.db_table, 2), query.where.children[2].value)
 
         qs = TestUser.objects.filter(pk__in=[1, 2, 3]).filter(username="test")
