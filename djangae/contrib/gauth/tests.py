@@ -8,7 +8,6 @@ from django.test import TestCase
 from django.test.utils import override_settings
 from django.contrib.auth.models import AnonymousUser
 from django.contrib.auth.hashers import make_password
-from django.contrib.auth.tests.test_auth_backends import BaseModelBackendTest
 from google.appengine.api import users
 
 # DJANGAE
