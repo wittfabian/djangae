@@ -70,21 +70,12 @@ def write_special_indexes():
             stream.write(yaml.dump(_special_indexes))
 
 
-def prepare_index_type(index_type, value):
-    """
-    If we're dealing with RegexIndexer, we create a new index for each
-    regex pattern. Indexes are called regex__pattern.
-    """
-    if index_type in ['regex', 'iregex']:
-        index_type = '{}__{}'.format(index_type, value.encode('hex'))
-    return index_type
-
-
 def add_special_index(model_class, field_name, index_type, value=None):
     from djangae.utils import on_production, in_testing
     from django.conf import settings
 
-    index_type = prepare_index_type(index_type, value)
+    indexer = REQUIRES_SPECIAL_INDEXES[index_type]
+    index_type = indexer.prepare_index_type(index_type, value)
 
     field_name = field_name.encode("utf-8")  # Make sure we are working with strings
 
@@ -116,6 +107,7 @@ class Indexer(object):
     def prep_value_for_query(self, value): raise NotImplementedError()
     def indexed_column_name(self, field_column, value, index): raise NotImplementedError()
     def prep_query_operator(self, op): return "exact"
+    def prepare_index_type(self, index_type, value): return index_type
 
     def unescape(self, value):
         value = value.replace("\\_", "_")
@@ -387,9 +379,14 @@ class IStartsWithIndexer(StartsWithIndexer):
 
 
 class RegexIndexer(Indexer):
-    """
 
-    """
+    def prepare_index_type(self, index_type, value):
+        """
+            If we're dealing with RegexIndexer, we create a new index for each
+            regex pattern. Indexes are called regex__pattern.
+        """
+        return 'regex__{}'.format(value.encode('hex'))
+
     def validate_can_be_indexed(self, value, negated):
         if negated:
             return False
@@ -424,6 +421,9 @@ class RegexIndexer(Indexer):
 
 
 class IRegexIndexer(RegexIndexer):
+
+    def prepare_index_type(self, index_type, value):
+        return 'iregex__{}'.format(value.encode('hex'))
 
     def prep_value_for_database(self, value, index):
         return self.check_if_match(value, index, flags=re.IGNORECASE)

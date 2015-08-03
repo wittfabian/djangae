@@ -16,7 +16,6 @@ from djangae.indexing import (
     special_indexes_for_column,
     REQUIRES_SPECIAL_INDEXES,
     add_special_index,
-    prepare_index_type
 )
 
 from djangae.utils import on_production
@@ -131,7 +130,7 @@ class WhereNode(object):
         if operator in REQUIRES_SPECIAL_INDEXES:
             add_special_index(output_field.model, column, operator, value)
             indexer = REQUIRES_SPECIAL_INDEXES[operator]
-            index_type = prepare_index_type(operator, value)
+            index_type = indexer.prepare_index_type(operator, value)
             value = indexer.prep_value_for_query(value)
             if not indexer.validate_can_be_indexed(value, negated):
                 raise NotSupportedError("Unsupported special index or value '%s %s'" % (column, operator))
