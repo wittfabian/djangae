@@ -336,9 +336,37 @@ class Query(object):
 
         self._where = where
         self._remove_erroneous_isnull()
+        self._remove_negated_empty_in()
         self._add_inheritence_filter()
         self._disable_projection_if_fields_used_in_equality_filter()
         self._check_only_single_inequality_filter()
+
+    def _remove_negated_empty_in(self):
+        """
+            An empty exclude(id__in=[]) is pointless, but can cause trouble
+            during denormalization. We remove such nodes here.
+        """
+        if not self._where:
+            return
+
+        def walk(node, negated):
+            if node.negated:
+                negated = node.negated
+
+            for child in node.children[:]:
+                if negated and child.operator == "IN" and not child.value:
+                    node.children.remove(child)
+
+                walk(child, negated)
+
+            node.children = [ x for x in node.children if x.children or x.column ]
+
+        had_where = bool(self._where.children)
+        walk(self._where, False)
+
+        # Reset the where if that was the only filter
+        if had_where and not bool(self._where.children):
+            self._where = None
 
     def _remove_erroneous_isnull(self):
         # This is a little crazy, but bear with me...
