@@ -99,6 +99,7 @@ class WhereNode(object):
             # As the primary key 'id' (AutoField) is integer and is always case insensitive,
             # we can deal with 'id_iexact=' query by using 'exact' rather than 'iexact'.
             operator = "exact"
+            value = int(value)
 
         # The second part of this 'if' rules out foreign keys
         if output_field.primary_key and output_field.column == column:
@@ -471,7 +472,20 @@ def _extract_ordering_from_query_17(query):
     opts = query.model._meta
 
     for col in result:
-        if col.lstrip("-") == "pk":
+        if isinstance(col, (int, long)):
+            # If you do a Dates query, the ordering is set to [1] or [-1]... which is weird
+            # I think it's to select the column number but then there is only 1 column so
+            # unless the ordinal is one-based I have no idea. So basically if it's an integer
+            # subtract 1 from the absolute value and look up in the select for the column (guessing)
+            idx = abs(col) - 1
+            try:
+                field_name = query.select[idx].col.col[-1]
+                field = query.model._meta.get_field_by_name(field_name)[0]
+                final.append("-" + field.column if col < 0 else field.column)
+            except IndexError:
+                raise NotSupportedError("Unsupported order_by %s" % col)
+
+        elif col.lstrip("-") == "pk":
             pk_col = "__key__"
             final.append("-" + pk_col if col.startswith("-") else pk_col)
         elif "__" in col:
@@ -571,10 +585,9 @@ def _walk_django_where(query, trunk_callback, leaf_callback, **kwargs):
         if node.negated:
             negated = not negated
 
-        new_kwargs = kwargs.copy()
-        new_kwargs["negated"] = negated
-
         for child in node.children:
+            new_kwargs = kwargs.copy()
+            new_kwargs["negated"] = negated
             if not getattr(child, "children", []):
                 leaf_callback(child, **new_kwargs)
             else:
