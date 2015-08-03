@@ -5,8 +5,8 @@ from itertools import chain
 
 from django.contrib.contenttypes.models import ContentType
 from django.db import DEFAULT_DB_ALIAS, router, connections
-from django.db.models import get_model, get_models, signals, Manager, get_apps
-from django.db.models.loading import UnavailableApp
+from django.db.models import signals, Manager
+from django.apps import apps
 from django.utils.encoding import smart_text
 from django.utils import six
 from django.utils.six.moves import input
@@ -58,7 +58,7 @@ class SimulatedContentTypeManager(Manager):
         self._update_queries(models)
 
         if not hasattr(self._store, "content_types"):
-            all_models = [ (x._meta.app_label, x._meta.model_name, x) for x in chain(*[ get_models(y) for y in get_apps() ]) ]
+            all_models = [ (x._meta.app_label, x._meta.model_name, x) for x in apps.get_models() ]
 
             self._update_queries([(x[0], x[1]) for x in all_models])
 
@@ -197,8 +197,8 @@ def update_contenttypes(app, created_models, verbosity=2, db=DEFAULT_DB_ALIAS, *
         print("Running Djangae version of update_contenttypes on {}".format(app))
 
     try:
-        get_model('contenttypes', 'ContentType')
-    except UnavailableApp:
+        apps.get_model('contenttypes', 'ContentType')
+    except LookupError:
         return
 
     if hasattr(router, "allow_syncdb"):
@@ -210,7 +210,7 @@ def update_contenttypes(app, created_models, verbosity=2, db=DEFAULT_DB_ALIAS, *
 
 
     ContentType.objects.clear_cache()
-    app_models = get_models(app)
+    app_models = apps.get_models(app)
     if not app_models:
         return
     # They all have the same app_label, get the first one.

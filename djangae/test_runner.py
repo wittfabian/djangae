@@ -108,7 +108,7 @@ class DjangaeTestSuiteRunner(DiscoverRunner):
             djangae tests to your app, but you can of course override that.
         """
         from django.conf import settings
-        from django.utils.importlib import import_module
+        from importlib import import_module
 
         ADDITIONAL_APPS = getattr(settings, "DJANGAE_ADDITIONAL_TEST_APPS", ("djangae",))
         extra_tests = []
