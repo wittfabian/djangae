@@ -117,6 +117,7 @@ class WhereNode(object):
 
         # Do any special index conversions necessary to perform this lookup
         if operator in REQUIRES_SPECIAL_INDEXES:
+            add_special_index(output_field.model, column, operator, value)
             indexer = REQUIRES_SPECIAL_INDEXES[operator]
             value = indexer.prep_value_for_query(value)
             if not indexer.validate_can_be_indexed(value, negated):
