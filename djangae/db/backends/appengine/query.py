@@ -323,8 +323,54 @@ class Query(object):
     def where(self, where):
         assert where is None or isinstance(where, WhereNode)
         self._where = where
+        self._remove_erroneous_isnull()
         self._add_inheritence_filter()
         self._disable_projection_if_fields_used_in_equality_filter()
+
+    def _remove_erroneous_isnull(self):
+        # This is a little crazy, but bear with me...
+        # If you run a query like this:  filter(thing=1).exclude(field1="test") where field1 is
+        # null-able you'll end up with a negated branch in the where tree which is:
+
+        #           AND (negated)
+        #          /            \
+        #   field1="test"   field1__isnull=False
+
+        # This is because on SQL, field1 != "test" won't give back rows where field1 is null, so
+        # django has to include the negated isnull=False as well in order to get back the null rows
+        # as well.  On App Engine though None is just a value, not the lack of a value, so it's
+        # enough to just have the first branch in the negated node and in fact, if you try to use
+        # the above tree, it will result in looking for:
+        #  field1 < "test" and field1 > "test" and field1__isnull=True
+        # which returns the wrong result (it'll return when field1 == None only)
+
+        def walk(node, negated):
+            if node.negated:
+                negated = not negated
+
+            if not node.is_leaf:
+                equality_fields = set()
+                negated_isnull_fields = set()
+                isnull_lookup = {}
+
+                for child in node.children[:]:
+                    if negated:
+                        if child.operator == "=":
+                            equality_fields.add(child.column)
+                            if child.column in negated_isnull_fields:
+                                node.children.remove(isnull_lookup[child.column])
+
+                        elif child.operator == "ISNULL":
+                            negated_isnull_fields.add(child.column)
+                            if child.column in equality_fields:
+                                node.children.remove(child)
+                            else:
+                                isnull_lookup[child.column] = child
+
+                    walk(child, negated)
+        if self.where:
+            walk(self._where, False)
+
 
     def _disable_projection_if_fields_used_in_equality_filter(self):
         if not self._where or not self.columns:
@@ -532,7 +578,7 @@ def _walk_django_where(query, trunk_callback, leaf_callback, **kwargs):
             if not getattr(child, "children", []):
                 leaf_callback(child, **new_kwargs)
             else:
-                new_parent = trunk_callback(child, **kwargs)
+                new_parent = trunk_callback(child, **new_kwargs)
 
                 if new_parent:
                     new_kwargs["new_parent"] = new_parent
@@ -560,8 +606,7 @@ def _django_17_query_walk_leaf(node, negated, new_parent, connection):
         lhs,
         node.lookup_name,
         rhs,
-        node.lhs.output_field,
-        negated=negated
+        node.lhs.output_field
     )
 
     new_parent.children.append(new_node)
@@ -691,7 +736,8 @@ def _transform_query_18(connection, kind, query):
         _django_17_query_walk_trunk,
         _django_17_query_walk_leaf,
         new_parent=output,
-        connection=connection
+        connection=connection,
+        negated=query.where.negated
     )
 
     # If there no child nodes, just wipe out the where
