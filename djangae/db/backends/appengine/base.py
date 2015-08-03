@@ -196,6 +196,9 @@ class DatabaseOperations(BaseDatabaseOperations):
     def date_trunc_sql(self, lookup_type, field_name):
         return None
 
+    def datetime_trunc_sql(self, lookup_type, field_name, tzname):
+        return '%s'
+
     def get_db_converters(self, internal_type):
         converters = super(DatabaseOperations, self).get_db_converters(internal_type)
 

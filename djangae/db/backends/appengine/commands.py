@@ -527,7 +527,8 @@ class NewSelectCommand(object):
                 seen = set()
 
                 def dedupe(result):
-                    key = "|".join([ repr(result[x]) for x in result ])
+                    query = self.original_query
+                    key = "|".join([ repr(result[x]) for x in query.annotations.keys() if x in result ])
                     if key in seen:
                         return None
                     seen.add(key)
