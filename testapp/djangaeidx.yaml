@@ -28,7 +28,8 @@ djangae_testuser:
 djangae_user:
   username: [iexact]
 lookup_article:
-  headline: [contains, endswith, startswith, regex__666f2a, regex__62282e292e2a625c31]
+  headline: [contains, endswith, startswith, regex__666f2a, regex__62282e292e2a625c31,
+    iregex__666f2a]
   id: [iexact]
   pub_date: [startswith]
 lookup_season:
