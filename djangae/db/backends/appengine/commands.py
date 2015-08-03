@@ -248,6 +248,9 @@ class UniqueQuery(object):
         self._gae_query = gae_query
         self._model = model
 
+    def keys(self):
+        return self._gae_query.keys()
+
     def Run(self, limit, offset):
         opts = self._gae_query._Query__query_options
         if opts.keys_only or opts.projection:
