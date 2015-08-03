@@ -524,7 +524,7 @@ def _extract_ordering_from_query_17(query):
         result = list(query.order_by or query.get_meta().ordering or [])
 
     if query.extra_order_by:
-        result.extend(query.extra_order_by)
+        result = list(query.extra_order_by)
 
     final = []
 
