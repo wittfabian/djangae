@@ -5,8 +5,6 @@ import logging
 
 # 3RD PARTY
 from django.conf import settings
-from django.db import models
-from django.dispatch import receiver
 from google.appengine.datastore.datastore_rpc import BaseConnection
 
 # CONSISTENCY
@@ -64,17 +62,18 @@ def get_recent_objects(queryset):
     """
     return queryset.filter(pk__in=get_recent_object_pks_for_model(queryset.model))
 
+
 ######################## SIGNALS ########################
 
 
-@receiver(models.signals.post_save, dispatch_uid="consistency_post_save")
+# See signals.py for registraion
+
 def handle_post_save(sender, instance, created, **kwargs):
     config = get_config(sender)
     if should_cache(instance, created, config):
         add_object_pk_to_caches(instance, config)
 
 
-@receiver(models.signals.post_delete, dispatch_uid="consistency_post_delete")
 def handle_post_delete(sender, instance, **kwargs):
     config = get_config(sender)
     if might_be_cached(sender, config):

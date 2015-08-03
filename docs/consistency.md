@@ -18,8 +18,8 @@ which you can use on a queryset so that it:
 
 ## Basic Usage
 
-Add `'djangae.contrib.consistency'` to `settings.INSTALLED_APPS` and then use as follows.  (You may also need to
-import `djangae.contrib.consistency.models` to get the signals to register.)
+* Add `'djangae.contrib.consistency'` to `settings.INSTALLED_APPS` (if you want the tests to run).
+* Add `from djangae.contrib.consistency.signals import connect_signals; connect_signals()` somewhere in your setup code (see **Notes** below).
 
 ```python
 
@@ -104,3 +104,7 @@ CONSISTENCY_CONFIG = {
       creating/modifying an object, because writing to the session requires a Database write, which is
       probably slower than a cache write.  Unless you're altering the session object anyway, in which
       case the session cache may be advantageous.
+* We deliberately don't register these signals automatically (either in the app's models files or in
+  the app's AppConfig) because registering signals causes Django's bulk delete behaviour to change
+  which in turn causes some of the core Django tests (which are run as part of the Djangae
+  'testapp') to fail.  If you can find a way around this then send a pull request!

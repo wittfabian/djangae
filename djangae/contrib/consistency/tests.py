@@ -10,6 +10,7 @@ from django.test.utils import override_settings
 
 # CONSISTENCY
 from djangae.contrib.consistency import improve_queryset_consistency
+from djangae.contrib.consistency.signals import connect_signals, disconnect_signals
 
 
 class TestModel(models.Model):
@@ -17,6 +18,17 @@ class TestModel(models.Model):
 
 
 class ConsistencyTests(TestCase):
+
+    def setUp(self):
+        # Having post-delete signals registered changes the way that django does its delete queries
+        # so to avoid causing django tests to fail (which are run as part of the 'testapp' tests in
+        # djangae) we only register the consistency signals during our tests
+        connect_signals()
+
+    def tearDown(self):
+        disconnect_signals()
+
+
 
     def test_newly_created_objects_returned(self):
         existing = TestModel.objects.create(name='existing')
