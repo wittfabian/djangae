@@ -114,6 +114,12 @@ class WhereNode(object):
                     for x in value if x
                 ]
             else:
+                if operator == "isnull" and value is True:
+                    # FIXME: Strictly, this isn't correct, this could be one of several branches
+                    # but id=None filters are silly anyway. This should be moved to after normalization..
+                    # probably. This fixes a test in Django which does this in get_or_create for some reason
+                    raise EmptyResultSet()
+
                 if not value:
                     # Empty strings and 0 are forbidden as keys
                     # so make this an impossible filter
