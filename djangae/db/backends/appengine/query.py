@@ -100,20 +100,31 @@ class WhereNode(object):
             # As the primary key 'id' (AutoField) is integer and is always case insensitive,
             # we can deal with 'id_iexact=' query by using 'exact' rather than 'iexact'.
             operator = "exact"
+            value = int(value)
 
         # The second part of this 'if' rules out foreign keys
         if output_field.primary_key and output_field.column == column:
             # If this is a primary key, we need to make sure that the value
             # we pass to the query is a datastore Key. We have to deal with IN queries here
             # because they aren't flattened until the DNF stage
+
             model = output_field.model
             if isinstance(value, (list, tuple)):
                 value = [
                     datastore.Key.from_path(model._meta.db_table, x)
-                    for x in value
+                    for x in value if x
                 ]
             else:
-                value = datastore.Key.from_path(model._meta.db_table, value)
+                if not value:
+                    # Empty strings and 0 are forbidden as keys
+                    # so make this an impossible filter
+                    # FIXME: This is a hack! It screws with the ordering
+                    # because it's an inequality. Instead we should wipe this
+                    # filter out when preprocessing in the DNF (because it's impossible)
+                    value = datastore.Key.from_path('', 1)
+                    operator = '<'
+                else:
+                    value = datastore.Key.from_path(model._meta.db_table, value)
             column = "__key__"
 
         # Do any special index conversions necessary to perform this lookup
@@ -222,7 +233,7 @@ class Query(object):
         }
 
         for regex in (bool_expr, op_expr):
-            match = re.match(bool_expr, lookup)
+            match = re.match(regex, lookup)
             if match:
                 lhs = match.group('lhs')
                 rhs = match.group('rhs')
@@ -328,8 +339,72 @@ class Query(object):
     def where(self, where):
         assert where is None or isinstance(where, WhereNode)
         self._where = where
+        self._remove_erroneous_isnull()
         self._add_inheritence_filter()
         self._disable_projection_if_fields_used_in_equality_filter()
+        self._check_only_single_inequality_filter()
+
+    def _remove_erroneous_isnull(self):
+        # This is a little crazy, but bear with me...
+        # If you run a query like this:  filter(thing=1).exclude(field1="test") where field1 is
+        # null-able you'll end up with a negated branch in the where tree which is:
+
+        #           AND (negated)
+        #          /            \
+        #   field1="test"   field1__isnull=False
+
+        # This is because on SQL, field1 != "test" won't give back rows where field1 is null, so
+        # django has to include the negated isnull=False as well in order to get back the null rows
+        # as well.  On App Engine though None is just a value, not the lack of a value, so it's
+        # enough to just have the first branch in the negated node and in fact, if you try to use
+        # the above tree, it will result in looking for:
+        #  field1 < "test" and field1 > "test" and field1__isnull=True
+        # which returns the wrong result (it'll return when field1 == None only)
+
+        def walk(node, negated):
+            if node.negated:
+                negated = not negated
+
+            if not node.is_leaf:
+                equality_fields = set()
+                negated_isnull_fields = set()
+                isnull_lookup = {}
+
+                for child in node.children[:]:
+                    if negated:
+                        if child.operator == "=":
+                            equality_fields.add(child.column)
+                            if child.column in negated_isnull_fields:
+                                node.children.remove(isnull_lookup[child.column])
+
+                        elif child.operator == "ISNULL":
+                            negated_isnull_fields.add(child.column)
+                            if child.column in equality_fields:
+                                node.children.remove(child)
+                            else:
+                                isnull_lookup[child.column] = child
+
+                    walk(child, negated)
+        if self.where:
+            walk(self._where, False)
+
+    def _check_only_single_inequality_filter(self):
+        inequality_fields = []
+        def walk(node, negated):
+            if node.negated:
+                negated = not negated
+
+            if not node.is_leaf:
+                for child in node.children[:]:
+                    if negated and child.operator == "=":
+                        inequality_fields.append(child.column)
+                        if len(inequality_fields) > 1:
+                            raise NotSupportedError(
+                                "You can only have one inequality filter per query on the datastore"
+                            )
+                    walk(child, negated)
+        if self.where:
+            walk(self._where, False)
 
     def _disable_projection_if_fields_used_in_equality_filter(self):
         if not self._where or not self.columns:
@@ -361,7 +436,6 @@ class Query(object):
             We only do any of this if the model has concrete parents and isn't
             a proxy model
         """
-
         if has_concrete_parents(self.model) and not self.model._meta.proxy:
             if self.polymodel_filter_added:
                 return
@@ -378,7 +452,10 @@ class Query(object):
 
             new_root = WhereNode()
             new_root.connector = 'AND'
-            new_root.children = [ new_and, self._where ]
+            new_root.children = [ new_and ]
+            if self._where:
+                # Add the original where if there was one
+                new_root.children.append(self._where)
             self._where = new_root
 
             self.polymodel_filter_added = True
@@ -430,9 +507,24 @@ def _extract_ordering_from_query_17(query):
     opts = query.model._meta
 
     for col in result:
-        if col.lstrip("-") == "pk":
+        if isinstance(col, (int, long)):
+            # If you do a Dates query, the ordering is set to [1] or [-1]... which is weird
+            # I think it's to select the column number but then there is only 1 column so
+            # unless the ordinal is one-based I have no idea. So basically if it's an integer
+            # subtract 1 from the absolute value and look up in the select for the column (guessing)
+            idx = abs(col) - 1
+            try:
+                field_name = query.select[idx].col.col[-1]
+                field = query.model._meta.get_field_by_name(field_name)[0]
+                final.append("-" + field.column if col < 0 else field.column)
+            except IndexError:
+                raise NotSupportedError("Unsupported order_by %s" % col)
+
+        elif col.lstrip("-") == "pk":
             pk_col = "__key__"
             final.append("-" + pk_col if col.startswith("-") else pk_col)
+        elif col == "?":
+            raise NotSupportedError("Random ordering is not supported on the datastore")
         elif "__" in col:
             continue
         else:
@@ -530,14 +622,13 @@ def _walk_django_where(query, trunk_callback, leaf_callback, **kwargs):
         if node.negated:
             negated = not negated
 
-        new_kwargs = kwargs.copy()
-        new_kwargs["negated"] = negated
-
         for child in node.children:
+            new_kwargs = kwargs.copy()
+            new_kwargs["negated"] = negated
             if not getattr(child, "children", []):
                 leaf_callback(child, **new_kwargs)
             else:
-                new_parent = trunk_callback(child, **kwargs)
+                new_parent = trunk_callback(child, **new_kwargs)
 
                 if new_parent:
                     new_kwargs["new_parent"] = new_parent
@@ -547,10 +638,13 @@ def _walk_django_where(query, trunk_callback, leaf_callback, **kwargs):
     kwargs.setdefault("negated", False)
     walk_node(query.where, **kwargs)
 
-def _django_17_query_walk_leaf(node, negated, new_parent, connection):
+def _django_17_query_walk_leaf(node, negated, new_parent, connection, model):
     new_node = WhereNode()
 
     # Leaf
+    if node.lhs.target.model != model:
+        raise NotSupportedError("Cross-join where filters are not supported on the datastore")
+
     lhs = node.lhs.target.column
     rhs = node.process_rhs(None, connection)
 
@@ -565,8 +659,7 @@ def _django_17_query_walk_leaf(node, negated, new_parent, connection):
         lhs,
         node.lookup_name,
         rhs,
-        node.lhs.output_field,
-        negated=negated
+        node.lhs.output_field
     )
 
     new_parent.children.append(new_node)
@@ -620,7 +713,8 @@ def _transform_query_17(connection, kind, query):
         _django_17_query_walk_trunk,
         _django_17_query_walk_leaf,
         new_parent=output,
-        connection=connection
+        connection=connection,
+        model=query.model
     )
 
     # If there no child nodes, just wipe out the where
@@ -696,7 +790,8 @@ def _transform_query_18(connection, kind, query):
         _django_17_query_walk_trunk,
         _django_17_query_walk_leaf,
         new_parent=output,
-        connection=connection
+        connection=connection,
+        negated=query.where.negated
     )
 
     # If there no child nodes, just wipe out the where

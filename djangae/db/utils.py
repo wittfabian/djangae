@@ -7,12 +7,10 @@ import warnings
 
 #LIBRARIES
 import django
+from django.apps import apps
 from django.conf import settings
 from django.db import models
-try:
-    from django.db.backends.util import format_number
-except ImportError:
-    from django.db.backends.utils import format_number
+from django.db.backends.utils import format_number
 from django.db import IntegrityError
 from django.utils import timezone
 from google.appengine.api import datastore
@@ -46,10 +44,7 @@ def get_model_from_db_table(db_table):
         "include_swapped": True
     }
 
-    if django.VERSION[1] == 6:
-        kwargs["only_installed"] = False
-
-    for model in models.get_models(**kwargs):
+    for model in apps.get_models(**kwargs):
         if model._meta.db_table == db_table:
             return model
 

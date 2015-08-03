@@ -1,10 +1,10 @@
 import datetime
 import logging
 
+from django.apps import apps
 from django.db import models, connection
 from django.dispatch import receiver
 from django.db.models.signals import post_save
-from django.db.models.loading import cache as model_cache
 
 from google.appengine.api import datastore
 from google.appengine.ext import deferred
@@ -42,7 +42,7 @@ def encode_model(model):
     return "%s,%s" % (model._meta.app_label, model._meta.model_name)
 
 def decode_model(model_str):
-    return model_cache.get_model(*model_str.split(','))
+    return apps.get_model(*model_str.split(','))
 
 
 class ActionLog(models.Model):

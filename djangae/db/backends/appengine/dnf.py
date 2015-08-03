@@ -25,7 +25,6 @@ def preprocess_node(node, negated):
                     child.operator = child.value = child.column = None
                     child.connector = "OR"
                     child.children = [lhs, rhs]
-
             elif negated and child.operator == "=":
                 # Excluded equalities become inequalities
 

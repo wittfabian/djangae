@@ -1,10 +1,10 @@
 import os
 import logging
+from importlib import import_module
 
 from django.conf import settings
 from django.http import HttpResponse, HttpResponseServerError
 from django.views.decorators.http import require_POST
-from django.utils.importlib import import_module
 from django.views.decorators.csrf import csrf_exempt
 
 from djangae.utils import on_production
