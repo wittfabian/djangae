@@ -1028,11 +1028,11 @@ class EdgeCaseTests(TestCase):
             TestFruit.objects.get(name='')
 
         # Filtering
-        results = list(TestFruit.objects.filter(name=''))
+        results = list(TestFruit.objects.filter(name='').order_by("name"))
         self.assertItemsEqual([], results)
 
         # Combined filtering
-        results = list(TestFruit.objects.filter(name='', color='red'))
+        results = list(TestFruit.objects.filter(name='', color='red').order_by("name"))
         self.assertItemsEqual([], results)
 
         # IN query

@@ -106,14 +106,24 @@ class WhereNode(object):
             # If this is a primary key, we need to make sure that the value
             # we pass to the query is a datastore Key. We have to deal with IN queries here
             # because they aren't flattened until the DNF stage
+
             model = output_field.model
             if isinstance(value, (list, tuple)):
                 value = [
                     datastore.Key.from_path(model._meta.db_table, x)
-                    for x in value
+                    for x in value if x
                 ]
             else:
-                value = datastore.Key.from_path(model._meta.db_table, value)
+                if not value:
+                    # Empty strings and 0 are forbidden as keys
+                    # so make this an impossible filter
+                    # FIXME: This is a hack! It screws with the ordering
+                    # because it's an inequality. Instead we should wipe this
+                    # filter out when preprocessing in the DNF (because it's impossible)
+                    value = datastore.Key.from_path('', 1)
+                    operator = '<'
+                else:
+                    value = datastore.Key.from_path(model._meta.db_table, value)
             column = "__key__"
 
         # Do any special index conversions necessary to perform this lookup
@@ -508,6 +518,8 @@ def _extract_ordering_from_query_17(query):
         elif col.lstrip("-") == "pk":
             pk_col = "__key__"
             final.append("-" + pk_col if col.startswith("-") else pk_col)
+        elif col == "?":
+            raise NotSupportedError("Random ordering is not supported on the datastore")
         elif "__" in col:
             continue
         else:
@@ -621,10 +633,13 @@ def _walk_django_where(query, trunk_callback, leaf_callback, **kwargs):
     kwargs.setdefault("negated", False)
     walk_node(query.where, **kwargs)
 
-def _django_17_query_walk_leaf(node, negated, new_parent, connection):
+def _django_17_query_walk_leaf(node, negated, new_parent, connection, model):
     new_node = WhereNode()
 
     # Leaf
+    if node.lhs.target.model != model:
+        raise NotSupportedError("Cross-join where filters are not supported on the datastore")
+
     lhs = node.lhs.target.column
     rhs = node.process_rhs(None, connection)
 
@@ -693,7 +708,8 @@ def _transform_query_17(connection, kind, query):
         _django_17_query_walk_trunk,
         _django_17_query_walk_leaf,
         new_parent=output,
-        connection=connection
+        connection=connection,
+        model=query.model
     )
 
     # If there no child nodes, just wipe out the where
