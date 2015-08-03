@@ -786,7 +786,8 @@ def _transform_query_18(connection, kind, query):
         _django_17_query_walk_leaf,
         new_parent=output,
         connection=connection,
-        negated=query.where.negated
+        negated=query.where.negated,
+        model=query.model
     )
 
     # If there no child nodes, just wipe out the where
