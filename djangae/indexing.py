@@ -95,7 +95,7 @@ def add_special_index(model_class, field_name, index_type):
 
 
 class Indexer(object):
-    def validate_can_be_indexed(self, value):
+    def validate_can_be_indexed(self, value, negated):
         """Return True if the value is indexable, False otherwise"""
         raise NotImplementedError()
 
@@ -112,7 +112,7 @@ class Indexer(object):
 
 
 class IExactIndexer(Indexer):
-    def validate_can_be_indexed(self, value):
+    def validate_can_be_indexed(self, value, negated):
         return len(value) < 500
 
     def prep_value_for_database(self, value):
@@ -131,7 +131,7 @@ class IExactIndexer(Indexer):
 
 
 class DayIndexer(Indexer):
-    def validate_can_be_indexed(self, value):
+    def validate_can_be_indexed(self, value, negated):
         return isinstance(value, (datetime.datetime, datetime.date))
 
     def prep_value_for_database(self, value):
@@ -152,7 +152,7 @@ class DayIndexer(Indexer):
 
 
 class YearIndexer(Indexer):
-    def validate_can_be_indexed(self, value):
+    def validate_can_be_indexed(self, value, negated):
         return isinstance(value, (datetime.datetime, datetime.date))
 
     def prep_value_for_database(self, value):
@@ -174,7 +174,7 @@ class YearIndexer(Indexer):
 
 
 class MonthIndexer(Indexer):
-    def validate_can_be_indexed(self, value):
+    def validate_can_be_indexed(self, value, negated):
         return isinstance(value, (datetime.datetime, datetime.date))
 
     def prep_value_for_database(self, value):
@@ -196,7 +196,7 @@ class MonthIndexer(Indexer):
 
 
 class WeekDayIndexer(Indexer):
-    def validate_can_be_indexed(self, value):
+    def validate_can_be_indexed(self, value, negated):
         return isinstance(value, (datetime.datetime, datetime.date))
 
     def prep_value_for_database(self, value):
@@ -220,7 +220,9 @@ class ContainsIndexer(Indexer):
     def number_of_permutations(self, value):
         return sum(range(len(value)+1))
 
-    def validate_can_be_indexed(self, value):
+    def validate_can_be_indexed(self, value, negated):
+        if negated:
+            return False
         return isinstance(value, basestring) and len(value) <= 500
 
     def prep_value_for_database(self, value):
@@ -284,7 +286,10 @@ class EndsWithIndexer(Indexer):
         of the last characters in a list field. Then we can just do an exact lookup on
         the value. Which isn't as nice, but is more flexible.
     """
-    def validate_can_be_indexed(self, value):
+    def validate_can_be_indexed(self, value, negated):
+        if negated:
+            return False
+
         return isinstance(value, basestring) and len(value) < 500
 
     def prep_value_for_database(self, value):
@@ -325,7 +330,10 @@ class StartsWithIndexer(Indexer):
         Although we can do a startswith natively, doing it this way allows us to
         use more queries (E.g. we save an exclude)
     """
-    def validate_can_be_indexed(self, value):
+    def validate_can_be_indexed(self, value, negated):
+        if negated:
+            return False
+
         return isinstance(value, basestring) and len(value) < 500
 
     def prep_value_for_database(self, value):

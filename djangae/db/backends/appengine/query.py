@@ -93,7 +93,7 @@ class WhereNode(object):
     def append_child(self, node):
         self.children.append(node)
 
-    def set_leaf(self, column, operator, value, output_field=None):
+    def set_leaf(self, column, operator, value, output_field=None, negated=False):
         if operator == "iexact" and isinstance(output_field, AutoField):
             # When new instance is created, automatic primary key 'id' does not generate '_idx_iexact_id'.
             # As the primary key 'id' (AutoField) is integer and is always case insensitive,
@@ -119,6 +119,9 @@ class WhereNode(object):
         if operator in REQUIRES_SPECIAL_INDEXES:
             indexer = REQUIRES_SPECIAL_INDEXES[operator]
             value = indexer.prep_value_for_query(value)
+            if not indexer.validate_can_be_indexed(value, negated):
+                raise NotSupportedError("Unsupported special index or value '%s %s'" % (column, operator))
+
             column = indexer.indexed_column_name(column, value=value)
             operator = indexer.prep_query_operator(operator)
 
@@ -510,6 +513,68 @@ def _extract_projected_columns_from_query_17(query):
         return list(chain(*[list(deferred_columns.get(x, [])) for x in inherited_db_tables]))
 
 
+def _walk_django_where(query, trunk_callback, leaf_callback, **kwargs):
+    """
+        Walks through a Django where tree. If a leaf node is encountered
+        the leaf_callback is called, otherwise the trunk_callback is called
+    """
+
+    def walk_node(node, **kwargs):
+        negated = kwargs["negated"]
+
+        if node.negated:
+            negated = not negated
+
+        new_kwargs = kwargs.copy()
+        new_kwargs["negated"] = negated
+
+        for child in node.children:
+            if not getattr(child, "children", []):
+                leaf_callback(child, **new_kwargs)
+            else:
+                new_parent = trunk_callback(child, **kwargs)
+
+                if new_parent:
+                    new_kwargs["new_parent"] = new_parent
+
+                walk_node(child, **new_kwargs)
+
+    kwargs.setdefault("negated", False)
+    walk_node(query.where, **kwargs)
+
+def _django_17_query_walk_leaf(node, negated, new_parent, connection):
+    new_node = WhereNode()
+
+    # Leaf
+    lhs = node.lhs.target.column
+    rhs = node.process_rhs(None, connection)
+
+    if node.lookup_name in ('in', 'range'):
+        rhs = rhs[-1]
+    elif node.lookup_name == 'isnull':
+        rhs = node.rhs
+    else:
+        rhs = rhs[-1][0]
+
+    new_node.set_leaf(
+        lhs,
+        node.lookup_name,
+        rhs,
+        node.lhs.output_field,
+        negated=negated
+    )
+
+    new_parent.children.append(new_node)
+
+def _django_17_query_walk_trunk(node, negated, new_parent, **kwargs):
+    new_node = WhereNode()
+    new_node.connector = node.connector
+    new_node.negated = node.negated
+
+    new_parent.children.append(new_node)
+
+    return new_node
+
 def _transform_query_17(connection, kind, query):
     if isinstance(query.where, EmptyWhere):
         # Empty where means return nothing!
@@ -545,37 +610,13 @@ def _transform_query_17(connection, kind, query):
     output = WhereNode()
     output.connector = query.where.connector
 
-    def walk_tree(source_node, new_parent):
-        for child in source_node.children:
-            new_node = WhereNode()
-
-            if not getattr(child, "children", None):
-                # Leaf
-                lhs = child.lhs.target.column
-                rhs = child.process_rhs(None, connection)
-
-                if child.lookup_name in ('in', 'range'):
-                    rhs = rhs[-1]
-                elif child.lookup_name == 'isnull':
-                    rhs = child.rhs
-                else:
-                    rhs = rhs[-1][0]
-
-                new_node.set_leaf(
-                    lhs,
-                    child.lookup_name,
-                    rhs,
-                    child.lhs.output_field
-                )
-
-            else:
-                new_node.connector = child.connector
-                new_node.negated = child.negated
-                walk_tree(child, new_node)
-
-            new_parent.children.append(new_node)
-
-    walk_tree(query.where, output)
+    _walk_django_where(
+        query,
+        _django_17_query_walk_trunk,
+        _django_17_query_walk_leaf,
+        new_parent=output,
+        connection=connection
+    )
 
     # If there no child nodes, just wipe out the where
     if not output.children:
@@ -645,37 +686,13 @@ def _transform_query_18(connection, kind, query):
     output = WhereNode()
     output.connector = query.where.connector
 
-    def walk_tree(source_node, new_parent):
-        for child in source_node.children:
-            new_node = WhereNode()
-
-            if not getattr(child, "children", None):
-                # Leaf
-                lhs = child.lhs.target.column
-                rhs = child.process_rhs(None, connection)
-
-                if child.lookup_name in ('in', 'range'):
-                    rhs = rhs[-1]
-                elif child.lookup_name == 'isnull':
-                    rhs = child.rhs
-                else:
-                    rhs = rhs[-1][0]
-
-                new_node.set_leaf(
-                    lhs,
-                    child.lookup_name,
-                    rhs,
-                    child.lhs.output_field
-                )
-
-            else:
-                new_node.connector = child.connector
-                new_node.negated = child.negated
-                walk_tree(child, new_node)
-
-            new_parent.children.append(new_node)
-
-    walk_tree(query.where, output)
+    _walk_django_where(
+        query,
+        _django_17_query_walk_trunk,
+        _django_17_query_walk_leaf,
+        new_parent=output,
+        connection=connection
+    )
 
     # If there no child nodes, just wipe out the where
     if not output.children:
