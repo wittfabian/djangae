@@ -333,6 +333,7 @@ class Query(object):
     @where.setter
     def where(self, where):
         assert where is None or isinstance(where, WhereNode)
+
         self._where = where
         self._remove_erroneous_isnull()
         self._add_inheritence_filter()
@@ -641,7 +642,14 @@ def _django_17_query_walk_leaf(node, negated, new_parent, connection, model):
         raise NotSupportedError("Cross-join where filters are not supported on the datastore")
 
     lhs = node.lhs.target.column
-    rhs = node.process_rhs(None, connection)
+    try:
+        rhs = node.process_rhs(None, connection)
+    except EmptyResultSet:
+        if node.lookup_name == 'in':
+            # Deal with this later
+            rhs = [ [] ]
+        else:
+            raise
 
     if node.lookup_name in ('in', 'range'):
         rhs = rhs[-1]
