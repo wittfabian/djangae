@@ -365,7 +365,7 @@ class NewSelectCommand(object):
             # If we specified we wanted a distinct query, but we didn't specify
             # an ordering, we must set the ordering to the distinct columns, otherwise
             # App Engine shouts at us. Nastily. And without remorse.
-            ordering = self.query.columns
+            ordering = self.query.columns[:]
 
         # Deal with the no filters case
         if self.query.where is None:
@@ -391,7 +391,10 @@ class NewSelectCommand(object):
                 if lookup in query and not isinstance(query[lookup], (list, tuple)):
                     query[lookup] = [ query[lookup ] ] + [ filter_node.value ]
                 else:
-                    query[lookup] = filter_node.value
+                    if isinstance(filter_node.value, basestring):
+                        query[lookup] = unicode(filter_node.value)
+                    else:
+                        query[lookup] = filter_node.value
 
             if ordering:
                 query.Order(*ordering)
@@ -511,6 +514,23 @@ class NewSelectCommand(object):
 
         self.results = wrap_result_with_functor(self.results, rename_pk_field)
         self.results = wrap_result_with_functor(self.results, process_extra_selects)
+
+        if self.query.distinct and self.query.extra_selects:
+            # If we had extra selects, and we're distinct, we must deduplicate results
+            def deduper_factory():
+                seen = set()
+
+                def dedupe(result):
+                    key = "|".join([ repr(result[x]) for x in result ])
+                    if key in seen:
+                        return None
+                    seen.add(key)
+                    return result
+
+                return dedupe
+
+            self.results = wrap_result_with_functor(self.results, deduper_factory())
+
 
     def execute(self):
         self.gae_query = self._build_query()
