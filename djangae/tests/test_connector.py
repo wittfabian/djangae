@@ -1375,7 +1375,10 @@ class TestSpecialIndexers(TestCase):
     def setUp(self):
         super(TestSpecialIndexers, self).setUp()
 
-        self.names = ['Ola', 'Adam', 'Luke', 'rob', 'Daniel', 'Ela', 'Olga', 'olek', 'ola', 'Olaaa', 'OlaaA']
+        self.names = [
+            'Ola', 'Adam', 'Luke', 'rob', 'Daniel', 'Ela', 'Olga', 'olek',
+            'ola', 'Olaaa', 'OlaaA', 'Ola + Ola', '-Test-', '-test-'
+        ]
         for name in self.names:
             SpecialIndexesModel.objects.create(name=name)
 
@@ -1412,6 +1415,15 @@ class TestSpecialIndexers(TestCase):
 
             qry = self.qry.filter(name__istartswith=name)
             self.assertEqual(len(qry), len([x for x in self.names if x.lower().startswith(name.lower())]))
+
+    def test_regex_lookup_and_iregex_lookup(self):
+        tests = ['([A-Z])\w+', '([A-Z])\w+\s[+]\s([A-Z])\w+', '\-[A-Z]\w+\-']
+        for pattern in tests:
+            qry = self.qry.filter(name__regex=pattern)
+            self.assertEqual(len(qry), len([x for x in self.names if re.match(pattern, x)]))
+
+            qry = self.qry.filter(name__iregex=pattern)
+            self.assertEqual(len(qry), len([x for x in self.names if re.match(pattern, x.lower())]))
 
 def deferred_func():
     pass
