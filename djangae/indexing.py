@@ -2,6 +2,7 @@ import logging
 import yaml
 import os
 import datetime
+import re
 
 from djangae.sandbox import allow_mode_write
 from django.conf import settings
@@ -74,7 +75,7 @@ def prepare_index_type(index_type, value):
     If we're dealing with RegexIndexer, we create a new index for each
     regex pattern. Indexes are called regex__pattern.
     """
-    if index_type == 'regex':
+    if index_type in ['regex', 'iregex']:
         index_type = '{}__{}'.format(index_type, value.encode('hex'))
     return index_type
 
@@ -111,9 +112,9 @@ class Indexer(object):
         """Return True if the value is indexable, False otherwise"""
         raise NotImplementedError()
 
-    def prep_value_for_database(self, value): raise NotImplementedError()
+    def prep_value_for_database(self, value, index): raise NotImplementedError()
     def prep_value_for_query(self, value): raise NotImplementedError()
-    def indexed_column_name(self, field_column, value): raise NotImplementedError()
+    def indexed_column_name(self, field_column, value, index): raise NotImplementedError()
     def prep_query_operator(self, op): return "exact"
 
     def unescape(self, value):
@@ -127,7 +128,7 @@ class IExactIndexer(Indexer):
     def validate_can_be_indexed(self, value, negated):
         return len(value) < 500
 
-    def prep_value_for_database(self, value):
+    def prep_value_for_database(self, value, index):
         if value is None:
             return None
 
@@ -138,7 +139,7 @@ class IExactIndexer(Indexer):
     def prep_value_for_query(self, value):
         return value.lower()
 
-    def indexed_column_name(self, field_column, value):
+    def indexed_column_name(self, field_column, value, index):
         return "_idx_iexact_{0}".format(field_column)
 
 
@@ -146,7 +147,7 @@ class DayIndexer(Indexer):
     def validate_can_be_indexed(self, value, negated):
         return isinstance(value, (datetime.datetime, datetime.date))
 
-    def prep_value_for_database(self, value):
+    def prep_value_for_database(self, value, index):
         if value:
             return value.day
         return None
@@ -159,7 +160,7 @@ class DayIndexer(Indexer):
             value = datetime.datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
         return value.day
 
-    def indexed_column_name(self, field_column, value):
+    def indexed_column_name(self, field_column, value, index):
         return "_idx_day_{0}".format(field_column)
 
 
@@ -167,7 +168,7 @@ class YearIndexer(Indexer):
     def validate_can_be_indexed(self, value, negated):
         return isinstance(value, (datetime.datetime, datetime.date))
 
-    def prep_value_for_database(self, value):
+    def prep_value_for_database(self, value, index):
         if value:
             return value.year
         return None
@@ -181,7 +182,7 @@ class YearIndexer(Indexer):
 
         return value.year
 
-    def indexed_column_name(self, field_column, value):
+    def indexed_column_name(self, field_column, value, index):
         return "_idx_year_{0}".format(field_column)
 
 
@@ -189,7 +190,7 @@ class MonthIndexer(Indexer):
     def validate_can_be_indexed(self, value, negated):
         return isinstance(value, (datetime.datetime, datetime.date))
 
-    def prep_value_for_database(self, value):
+    def prep_value_for_database(self, value, index):
         if value:
             return value.month
         return None
@@ -203,7 +204,7 @@ class MonthIndexer(Indexer):
 
         return value.month
 
-    def indexed_column_name(self, field_column, value):
+    def indexed_column_name(self, field_column, value, index):
         return "_idx_month_{0}".format(field_column)
 
 
@@ -211,7 +212,7 @@ class WeekDayIndexer(Indexer):
     def validate_can_be_indexed(self, value, negated):
         return isinstance(value, (datetime.datetime, datetime.date))
 
-    def prep_value_for_database(self, value):
+    def prep_value_for_database(self, value, index):
         if value:
             zero_based_weekday = value.weekday()
             if zero_based_weekday == 6:  # Sunday
@@ -224,7 +225,7 @@ class WeekDayIndexer(Indexer):
     def prep_value_for_query(self, value):
         return value
 
-    def indexed_column_name(self, field_column, value):
+    def indexed_column_name(self, field_column, value, index):
         return "_idx_week_day_{0}".format(field_column)
 
 
@@ -237,7 +238,7 @@ class ContainsIndexer(Indexer):
             return False
         return isinstance(value, basestring) and len(value) <= 500
 
-    def prep_value_for_database(self, value):
+    def prep_value_for_database(self, value, index):
         result = []
         if value:
             # If this a date or a datetime, or something that supports isoformat, then use that
@@ -265,7 +266,7 @@ class ContainsIndexer(Indexer):
             value = value[1:-1]
         return value
 
-    def indexed_column_name(self, field_column, value):
+    def indexed_column_name(self, field_column, value, index):
         # This we use when we actually query to return the right field for a given
         # value length
         length = len(value)
@@ -276,14 +277,14 @@ class ContainsIndexer(Indexer):
         return "_idx_contains_{0}_{1}".format(field_column, column_number)
 
 class IContainsIndexer(ContainsIndexer):
-    def prep_value_for_database(self, value):
+    def prep_value_for_database(self, value, index):
         if value is None:
             return None
-        result = super(IContainsIndexer, self).prep_value_for_database(value.lower())
+        result = super(IContainsIndexer, self).prep_value_for_database(value.lower(), index)
         return result if result else None
 
-    def indexed_column_name(self, field_column, value):
-        column_name = super(IContainsIndexer, self).indexed_column_name(field_column, value)
+    def indexed_column_name(self, field_column, value, index):
+        column_name = super(IContainsIndexer, self).indexed_column_name(field_column, value, index)
         return column_name.replace('_idx_contains_', '_idx_icontains_')
 
     def prep_value_for_query(self, value):
@@ -304,7 +305,7 @@ class EndsWithIndexer(Indexer):
 
         return isinstance(value, basestring) and len(value) < 500
 
-    def prep_value_for_database(self, value):
+    def prep_value_for_database(self, value, index):
         results = []
         for i in xrange(len(value)):
             results.append(value[i:])
@@ -316,7 +317,7 @@ class EndsWithIndexer(Indexer):
             value = value[1:]
         return value
 
-    def indexed_column_name(self, field_column, value):
+    def indexed_column_name(self, field_column, value, index):
         return "_idx_endswith_{0}".format(field_column)
 
 
@@ -324,16 +325,16 @@ class IEndsWithIndexer(EndsWithIndexer):
     """
         Same as above, just all lower cased
     """
-    def prep_value_for_database(self, value):
+    def prep_value_for_database(self, value, index):
         if value is None:
             return None
-        result = super(IEndsWithIndexer, self).prep_value_for_database(value.lower())
+        result = super(IEndsWithIndexer, self).prep_value_for_database(value.lower(), index)
         return result or None
 
     def prep_value_for_query(self, value):
         return super(IEndsWithIndexer, self).prep_value_for_query(value.lower())
 
-    def indexed_column_name(self, field_column, value):
+    def indexed_column_name(self, field_column, value, index):
         return "_idx_iendswith_{0}".format(field_column)
 
 
@@ -348,7 +349,7 @@ class StartsWithIndexer(Indexer):
 
         return isinstance(value, basestring) and len(value) < 500
 
-    def prep_value_for_database(self, value):
+    def prep_value_for_database(self, value, index):
         if isinstance(value, datetime.datetime):
             value = value.strftime("%Y-%m-%d %H:%M:%S")
 
@@ -367,7 +368,7 @@ class StartsWithIndexer(Indexer):
 
         return value
 
-    def indexed_column_name(self, field_column, value):
+    def indexed_column_name(self, field_column, value, index):
         return "_idx_startswith_{0}".format(field_column)
 
 
@@ -375,13 +376,13 @@ class IStartsWithIndexer(StartsWithIndexer):
     """
         Same as above, just all lower cased
     """
-    def prep_value_for_database(self, value):
-        return super(IStartsWithIndexer, self).prep_value_for_database(value.lower())
+    def prep_value_for_database(self, value, index):
+        return super(IStartsWithIndexer, self).prep_value_for_database(value.lower(), index)
 
     def prep_value_for_query(self, value):
         return super(IStartsWithIndexer, self).prep_value_for_query(value.lower())
 
-    def indexed_column_name(self, field_column, value):
+    def indexed_column_name(self, field_column, value, index):
         return "_idx_istartswith_{0}".format(field_column)
 
 
@@ -389,18 +390,39 @@ class RegexIndexer(Indexer):
     """
 
     """
-    def prep_value_for_database(self, value):
-        return ''
+    def validate_can_be_indexed(self, value, negated):
+        if negated:
+            return False
+
+        return isinstance(value, bool)
+
+    def get_pattern(self, index):
+        try:
+            return index.split('__')[1].decode('hex')
+        except IndexError:
+            return ''
+
+    def check_if_match(self, value, index, flags=0):
+        pattern = self.get_pattern(index)
+        return bool(re.match(pattern, value, flags))
+
+    def prep_value_for_database(self, value, index):
+        return self.check_if_match(value, index)
 
     def prep_value_for_query(self, value):
-        return ''
+        return True
 
-    def indexed_column_name(self, field_column, value):
-        return "_idx_regex_{0}_{1}".format(field_column, value.encode('hex'))
+    def indexed_column_name(self, field_column, value, index):
+        return "_idx_regex_{0}_{1}".format(field_column, self.get_pattern(index).encode('hex'))
 
 
 class IRegexIndexer(RegexIndexer):
-    pass
+
+    def prep_value_for_database(self, value, index):
+        return self.check_if_match(value, index, flags=re.IGNORECASE)
+
+    def indexed_column_name(self, field_column, value, index):
+        return "_idx_iregex_{0}_{1}".format(field_column, self.get_pattern(index).encode('hex'))
 
 
 REQUIRES_SPECIAL_INDEXES = {

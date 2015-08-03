@@ -1,5 +1,6 @@
 import datetime
 import decimal
+import re
 
 from cStringIO import StringIO
 from string import letters
@@ -1417,13 +1418,14 @@ class TestSpecialIndexers(TestCase):
             self.assertEqual(len(qry), len([x for x in self.names if x.lower().startswith(name.lower())]))
 
     def test_regex_lookup_and_iregex_lookup(self):
-        tests = ['([A-Z])\w+', '([A-Z])\w+\s[+]\s([A-Z])\w+', '\-[A-Z]\w+\-']
+        tests = ['([A-Z])\w+', '([A-Z])\w+\s[+]\s([A-Z])\w+', '\-Test\-']
         for pattern in tests:
             qry = self.qry.filter(name__regex=pattern)
             self.assertEqual(len(qry), len([x for x in self.names if re.match(pattern, x)]))
 
             qry = self.qry.filter(name__iregex=pattern)
-            self.assertEqual(len(qry), len([x for x in self.names if re.match(pattern, x.lower())]))
+            self.assertEqual(len(qry), len([x for x in self.names if re.match(pattern, x, flags=re.I)]))
+
 
 def deferred_func():
     pass

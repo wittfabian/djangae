@@ -189,7 +189,7 @@ def django_instance_to_entity(connection, model, fields, raw, instance, check_nu
         # Add special indexed fields
         for index in special_indexes_for_column(model, field.column):
             indexer = REQUIRES_SPECIAL_INDEXES[index.split('__')[0]] # Indexes can be named regex__aaa, hence splitting by __
-            values = indexer.prep_value_for_database(value)
+            values = indexer.prep_value_for_database(value, index)
 
             if values is None:
                 continue
@@ -198,7 +198,7 @@ def django_instance_to_entity(connection, model, fields, raw, instance, check_nu
                 values = [ values ]
 
             for v in values:
-                column = indexer.indexed_column_name(field.column, v)
+                column = indexer.indexed_column_name(field.column, v, index)
                 if column in field_values:
                     if not isinstance(field_values[column], list):
                         field_values[column] = [ field_values[column], v ]
