@@ -69,9 +69,21 @@ def write_special_indexes():
             stream.write(yaml.dump(_special_indexes))
 
 
-def add_special_index(model_class, field_name, index_type):
+def prepare_index_type(index_type, value):
+    """
+    If we're dealing with RegexIndexer, we create a new index for each
+    regex pattern. Indexes are called regex__pattern.
+    """
+    if index_type == 'regex':
+        index_type = '{}__{}'.format(index_type, value.encode('hex'))
+    return index_type
+
+
+def add_special_index(model_class, field_name, index_type, value=None):
     from djangae.utils import on_production, in_testing
     from django.conf import settings
+
+    index_type = prepare_index_type(index_type, value)
 
     field_name = field_name.encode("utf-8")  # Make sure we are working with strings
 
@@ -373,6 +385,24 @@ class IStartsWithIndexer(StartsWithIndexer):
         return "_idx_istartswith_{0}".format(field_column)
 
 
+class RegexIndexer(Indexer):
+    """
+
+    """
+    def prep_value_for_database(self, value):
+        return ''
+
+    def prep_value_for_query(self, value):
+        return ''
+
+    def indexed_column_name(self, field_column, value):
+        return "_idx_regex_{0}_{1}".format(field_column, value.encode('hex'))
+
+
+class IRegexIndexer(RegexIndexer):
+    pass
+
+
 REQUIRES_SPECIAL_INDEXES = {
     "iexact": IExactIndexer(),
     "contains": ContainsIndexer(),
@@ -384,5 +414,7 @@ REQUIRES_SPECIAL_INDEXES = {
     "endswith": EndsWithIndexer(),
     "iendswith": IEndsWithIndexer(),
     "startswith": StartsWithIndexer(),
-    "istartswith": IStartsWithIndexer()
+    "istartswith": IStartsWithIndexer(),
+    "regex": RegexIndexer(),
+    "iregex": IRegexIndexer(),
 }
