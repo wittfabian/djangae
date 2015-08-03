@@ -14,7 +14,13 @@ djangae_integermodel:
 djangae_related:
   headline: [startswith]
 djangae_specialindexesmodel:
-  name: [contains, endswith, iexact, startswith, icontains, iendswith, istartswith]
+  name: [contains, endswith, iexact, startswith, icontains, iendswith, istartswith,
+    regex__285b412d5a5d295c772b, regex__285b412d5a5d295c772b5c735b2b5d5c73285b412d5a5d295c772b,
+    regex__5c2d546573745c2d, iregex__285b412d5a5d295c772b, iregex__285b412d5a5d295c772b5c735b2b5d5c73285b412d5a5d295c772b,
+    iregex__5c2d546573745c2d]
+  sample_list: [regex__285b412d5a5d295c772b, regex__285b412d5a5d295c772b5c735b2b5d5c73285b412d5a5d295c772b,
+    regex__5c2d546573745c2d, iregex__285b412d5a5d295c772b, iregex__285b412d5a5d295c772b5c735b2b5d5c73285b412d5a5d295c772b,
+    iregex__5c2d546573745c2d]
 djangae_testfruit:
   color: [icontains, contains, iexact, iendswith, endswith, istartswith, startswith]
 djangae_testuser:

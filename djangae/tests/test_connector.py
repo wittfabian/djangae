@@ -1,5 +1,6 @@
 import datetime
 import decimal
+import re
 
 from cStringIO import StringIO
 from string import letters
@@ -214,6 +215,7 @@ class ModelWithUniquesAndOverride(models.Model):
 
 class SpecialIndexesModel(models.Model):
     name = models.CharField(max_length=255)
+    sample_list = ListField(models.CharField)
 
     def __unicode__(self):
         return self.name
@@ -1375,9 +1377,21 @@ class TestSpecialIndexers(TestCase):
     def setUp(self):
         super(TestSpecialIndexers, self).setUp()
 
-        self.names = ['Ola', 'Adam', 'Luke', 'rob', 'Daniel', 'Ela', 'Olga', 'olek', 'ola', 'Olaaa', 'OlaaA']
+        self.names = [
+            'Ola', 'Adam', 'Luke', 'rob', 'Daniel', 'Ela', 'Olga', 'olek',
+            'ola', 'Olaaa', 'OlaaA', 'Ola + Ola', '-Test-', '-test-'
+        ]
         for name in self.names:
             SpecialIndexesModel.objects.create(name=name)
+
+        self.lists = [
+            self.names,
+            ['Name', 'name', 'name + name'],
+            ['-Tesst-'],
+            ['-test-']
+        ]
+        for sample_list in self.lists:
+            SpecialIndexesModel.objects.create(sample_list=sample_list)
 
         self.qry = SpecialIndexesModel.objects.all()
 
@@ -1412,6 +1426,25 @@ class TestSpecialIndexers(TestCase):
 
             qry = self.qry.filter(name__istartswith=name)
             self.assertEqual(len(qry), len([x for x in self.names if x.lower().startswith(name.lower())]))
+
+    def test_regex_lookup_and_iregex_lookup(self):
+        tests = ['([A-Z])\w+', '([A-Z])\w+\s[+]\s([A-Z])\w+', '\-Test\-']
+        for pattern in tests:
+            qry = self.qry.filter(name__regex=pattern)
+            self.assertEqual(len(qry), len([x for x in self.names if re.match(pattern, x)]))
+
+            qry = self.qry.filter(name__iregex=pattern)
+            self.assertEqual(len(qry), len([x for x in self.names if re.match(pattern, x, flags=re.I)]))
+
+            # Check that the same works for ListField and SetField too
+            qry = self.qry.filter(sample_list__regex=pattern)
+            expected = [sample_list for sample_list in self.lists if any([bool(re.match(pattern, x)) for x in sample_list])]
+            self.assertEqual(len(qry), len(expected))
+
+            qry = self.qry.filter(sample_list__iregex=pattern)
+            expected = [sample_list for sample_list in self.lists if any([bool(re.match(pattern, x, flags=re.I)) for x in sample_list])]
+            self.assertEqual(len(qry), len(expected))
+
 
 def deferred_func():
     pass

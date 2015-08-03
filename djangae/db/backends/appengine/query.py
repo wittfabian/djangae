@@ -15,7 +15,7 @@ from django.db import NotSupportedError
 from djangae.indexing import (
     special_indexes_for_column,
     REQUIRES_SPECIAL_INDEXES,
-    add_special_index
+    add_special_index,
 )
 
 from djangae.utils import on_production
@@ -128,17 +128,21 @@ class WhereNode(object):
 
         # Do any special index conversions necessary to perform this lookup
         if operator in REQUIRES_SPECIAL_INDEXES:
+            add_special_index(output_field.model, column, operator, value)
             indexer = REQUIRES_SPECIAL_INDEXES[operator]
+            index_type = indexer.prepare_index_type(operator, value)
             value = indexer.prep_value_for_query(value)
             if not indexer.validate_can_be_indexed(value, negated):
                 raise NotSupportedError("Unsupported special index or value '%s %s'" % (column, operator))
 
-            column = indexer.indexed_column_name(column, value=value)
+            column = indexer.indexed_column_name(column, value, index_type)
             operator = indexer.prep_query_operator(operator)
 
         self.column = column
         self.operator = convert_operator(operator)
         self.value = value
+
+
 
     def __iter__(self):
         for child in chain(*imap(iter, self.children)):
