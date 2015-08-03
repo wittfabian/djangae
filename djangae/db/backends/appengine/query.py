@@ -421,7 +421,6 @@ class Query(object):
             We only do any of this if the model has concrete parents and isn't
             a proxy model
         """
-
         if has_concrete_parents(self.model) and not self.model._meta.proxy:
             if self.polymodel_filter_added:
                 return
@@ -438,7 +437,10 @@ class Query(object):
 
             new_root = WhereNode()
             new_root.connector = 'AND'
-            new_root.children = [ new_and, self._where ]
+            new_root.children = [ new_and ]
+            if self._where:
+                # Add the original where if there was one
+                new_root.children.append(self._where)
             self._where = new_root
 
             self.polymodel_filter_added = True
