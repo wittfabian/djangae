@@ -2,8 +2,11 @@ import copy
 from itertools import  product
 from django.db.models.sql.datastructures import EmptyResultSet
 from djangae.db.backends.appengine.query import WhereNode
+from django.db import NotSupportedError
 
 def preprocess_node(node, negated):
+
+    to_remove = []
 
     # Go through the children of this node and if any of the
     # child nodes are leaf nodes, then explode them if necessary
@@ -79,6 +82,9 @@ def preprocess_node(node, negated):
                 child.children = [ lhs, rhs ]
 
                 assert not child.is_leaf
+
+    for child in to_remove:
+        node.children.remove(child)
 
     return node
 
@@ -162,6 +168,8 @@ def normalize_query(query):
         new_node.children = [ where ]
         query.where = new_node
 
+    if len(query.where.children) > 30:
+        raise NotSupportedError("Unable to run query as it required more than 30 subqueries")
 
     def remove_empty_in(node):
         """

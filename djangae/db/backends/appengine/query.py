@@ -15,7 +15,7 @@ from django.db import NotSupportedError
 from djangae.indexing import (
     special_indexes_for_column,
     REQUIRES_SPECIAL_INDEXES,
-    add_special_index
+    add_special_index,
 )
 
 from djangae.utils import on_production
@@ -114,6 +114,12 @@ class WhereNode(object):
                     for x in value if x
                 ]
             else:
+                if operator == "isnull" and value is True:
+                    # FIXME: Strictly, this isn't correct, this could be one of several branches
+                    # but id=None filters are silly anyway. This should be moved to after normalization..
+                    # probably. This fixes a test in Django which does this in get_or_create for some reason
+                    raise EmptyResultSet()
+
                 if not value:
                     # Empty strings and 0 are forbidden as keys
                     # so make this an impossible filter
@@ -128,17 +134,21 @@ class WhereNode(object):
 
         # Do any special index conversions necessary to perform this lookup
         if operator in REQUIRES_SPECIAL_INDEXES:
+            add_special_index(output_field.model, column, operator, value)
             indexer = REQUIRES_SPECIAL_INDEXES[operator]
+            index_type = indexer.prepare_index_type(operator, value)
             value = indexer.prep_value_for_query(value)
             if not indexer.validate_can_be_indexed(value, negated):
                 raise NotSupportedError("Unsupported special index or value '%s %s'" % (column, operator))
 
-            column = indexer.indexed_column_name(column, value=value)
+            column = indexer.indexed_column_name(column, value, index_type)
             operator = indexer.prep_query_operator(operator)
 
         self.column = column
         self.operator = convert_operator(operator)
         self.value = value
+
+
 
     def __iter__(self):
         for child in chain(*imap(iter, self.children)):
@@ -336,9 +346,37 @@ class Query(object):
 
         self._where = where
         self._remove_erroneous_isnull()
+        self._remove_negated_empty_in()
         self._add_inheritence_filter()
         self._disable_projection_if_fields_used_in_equality_filter()
         self._check_only_single_inequality_filter()
+
+    def _remove_negated_empty_in(self):
+        """
+            An empty exclude(id__in=[]) is pointless, but can cause trouble
+            during denormalization. We remove such nodes here.
+        """
+        if not self._where:
+            return
+
+        def walk(node, negated):
+            if node.negated:
+                negated = node.negated
+
+            for child in node.children[:]:
+                if negated and child.operator == "IN" and not child.value:
+                    node.children.remove(child)
+
+                walk(child, negated)
+
+            node.children = [ x for x in node.children if x.children or x.column ]
+
+        had_where = bool(self._where.children)
+        walk(self._where, False)
+
+        # Reset the where if that was the only filter
+        if had_where and not bool(self._where.children):
+            self._where = None
 
     def _remove_erroneous_isnull(self):
         # This is a little crazy, but bear with me...
@@ -496,7 +534,7 @@ def _extract_ordering_from_query_17(query):
         result = list(query.order_by or query.get_meta().ordering or [])
 
     if query.extra_order_by:
-        result.extend(query.extra_order_by)
+        result = list(query.extra_order_by)
 
     final = []
 

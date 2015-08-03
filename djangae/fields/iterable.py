@@ -39,7 +39,7 @@ class IterableField(models.Field):
         if lookup_type == 'isnull' and value in (True, False):
             return value
 
-        if lookup_type != 'exact' and lookup_type != 'in':
+        if lookup_type not in ['exact', 'in', 'regex', 'iregex']:
             raise ValueError("You can only query using exact and in lookups on iterable fields")
 
         if isinstance(value, (list, set)):
