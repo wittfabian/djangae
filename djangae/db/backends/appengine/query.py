@@ -327,6 +327,7 @@ class Query(object):
         self._remove_erroneous_isnull()
         self._add_inheritence_filter()
         self._disable_projection_if_fields_used_in_equality_filter()
+        self._check_only_single_inequality_filter()
 
     def _remove_erroneous_isnull(self):
         # This is a little crazy, but bear with me...
@@ -372,6 +373,23 @@ class Query(object):
         if self.where:
             walk(self._where, False)
 
+    def _check_only_single_inequality_filter(self):
+        inequality_fields = []
+        def walk(node, negated):
+            if node.negated:
+                negated = not negated
+
+            if not node.is_leaf:
+                for child in node.children[:]:
+                    if negated and child.operator == "=":
+                        inequality_fields.append(child.column)
+                        if len(inequality_fields) > 1:
+                            raise NotSupportedError(
+                                "You can only have one inequality filter per query on the datastore"
+                            )
+                    walk(child, negated)
+        if self.where:
+            walk(self._where, False)
 
     def _disable_projection_if_fields_used_in_equality_filter(self):
         if not self._where or not self.columns:
