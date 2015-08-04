@@ -42,12 +42,20 @@ def preprocess_node(node, negated):
                 new_children = []
 
                 for value in child.value:
-                    new_node = WhereNode()
-                    new_node.operator = "="
-                    new_node.value = value
-                    new_node.column = child.column
-
-                    new_children.append(new_node)
+                    if node.negated:
+                        lhs, rhs = WhereNode(), WhereNode()
+                        lhs.column = rhs.column = child.column
+                        lhs.value = rhs.value = value
+                        lhs.operator = "<"
+                        rhs.operator = ">"
+                        new_children.append(lhs)
+                        new_children.append(rhs)
+                    else:
+                        new_node = WhereNode()
+                        new_node.operator = "="
+                        new_node.value = value
+                        new_node.column = child.column
+                        new_children.append(new_node)
 
                 child.column = None
                 child.operator = None
@@ -169,7 +177,21 @@ def normalize_query(query):
         new_node.children = [ where ]
         query._where = new_node
 
-    if len(query.where.children) > 30:
+    all_pks = True
+    for and_branch in query.where.children:
+        if and_branch.is_leaf:
+            children = [ and_branch ]
+        else:
+            children = and_branch.children
+
+        for node in children:
+            if node.column == "__key__" and node.operator in ("=", "IN"):
+                break
+        else:
+            all_pks = False
+            break
+
+    if (not all_pks) and len(query.where.children) > 30:
         raise NotSupportedError("Unable to run query as it required more than 30 subqueries")
 
     def remove_empty_in(node):
