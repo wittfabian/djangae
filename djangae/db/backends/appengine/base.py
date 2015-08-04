@@ -140,7 +140,11 @@ class Cursor(object):
             for col, select in query.extra_selects:
                 row.append(result.get(col))
 
-            for col in (query.columns or (x.column for x in query.model._meta.fields)):
+
+            columns = ( x.column for x in query.model._meta.fields)
+            for col in columns:
+                if query.columns and col not in query.columns and col != query.model._meta.pk.column:
+                    continue
                 field = get_field_from_column(query.model, col)
                 row.append(convert_values(result.get(col), field))
 
