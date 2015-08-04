@@ -375,7 +375,10 @@ class NewSelectCommand(object):
             query = Query(
                 **query_kwargs
             )
-            query.Order(*ordering)
+            try:
+                query.Order(*ordering)
+            except datastore_errors.BadArgumentError as e:
+                raise NotSupportedError(e)
             return query
 
         assert self.query.where
@@ -400,7 +403,10 @@ class NewSelectCommand(object):
                         query[lookup] = filter_node.value
 
             if ordering:
-                query.Order(*ordering)
+                try:
+                    query.Order(*ordering)
+                except datastore_errors.BadArgumentError as e:
+                    raise NotSupportedError(e)
             queries.append(query)
 
         if can_perform_datastore_get(self.query):
