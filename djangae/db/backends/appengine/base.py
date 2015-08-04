@@ -142,6 +142,10 @@ class Cursor(object):
 
 
             columns = ( x.column for x in query.model._meta.fields)
+
+            if django.VERSION[1] < 8 and query.columns:
+                columns = query.columns
+
             for col in columns:
                 if query.columns and col not in query.columns and col != query.model._meta.pk.column:
                     continue
