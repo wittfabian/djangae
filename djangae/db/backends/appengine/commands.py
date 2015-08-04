@@ -248,6 +248,11 @@ class UniqueQuery(object):
         self._gae_query = gae_query
         self._model = model
 
+        self._Query__kind = gae_query._Query__kind
+
+    def get(self, x):
+        return self._gae_query.get(x)
+
     def keys(self):
         return self._gae_query.keys()
 
