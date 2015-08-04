@@ -385,7 +385,7 @@ class RegexIndexer(Indexer):
             If we're dealing with RegexIndexer, we create a new index for each
             regex pattern. Indexes are called regex__pattern.
         """
-        return 'regex__{}'.format(value.encode('hex'))
+        return 'regex__{}'.format(value.encode("utf-8").encode('hex'))
 
     def validate_can_be_indexed(self, value, negated):
         if negated:
@@ -395,7 +395,7 @@ class RegexIndexer(Indexer):
 
     def get_pattern(self, index):
         try:
-            return index.split('__')[1].decode('hex')
+            return index.split('__')[1].decode('hex').decode("utf-8")
         except IndexError:
             return ''
 
@@ -407,7 +407,10 @@ class RegexIndexer(Indexer):
                 if any([bool(re.match(pattern, x, flags)) for x in value]):
                     return True
             else:
-                return bool(re.match(pattern, value, flags))
+                if isinstance(value, (int, long)):
+                    value = str(value)
+
+                return bool(re.search(pattern, value, flags))
         return False
 
     def prep_value_for_database(self, value, index):
@@ -417,7 +420,7 @@ class RegexIndexer(Indexer):
         return True
 
     def indexed_column_name(self, field_column, value, index):
-        return "_idx_regex_{0}_{1}".format(field_column, self.get_pattern(index).encode('hex'))
+        return "_idx_regex_{0}_{1}".format(field_column, self.get_pattern(index).encode("utf-8").encode('hex'))
 
 
 class IRegexIndexer(RegexIndexer):
