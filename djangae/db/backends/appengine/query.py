@@ -711,6 +711,9 @@ def _walk_django_where(query, trunk_callback, leaf_callback, **kwargs):
 def _django_17_query_walk_leaf(node, negated, new_parent, connection, model):
     new_node = WhereNode()
 
+    if not hasattr(node, "lhs"):
+        raise NotSupportedError("Attempted probable subquery, these aren't supported on the datastore")
+
     # Leaf
     if get_top_concrete_parent(node.lhs.target.model) != get_top_concrete_parent(model):
         raise NotSupportedError("Cross-join where filters are not supported on the datastore")
@@ -756,6 +759,19 @@ def _transform_query_17(connection, kind, query):
     if isinstance(query.where, EmptyWhere):
         # Empty where means return nothing!
         raise EmptyResultSet()
+
+    # Check for joins, we ignore select related tables as they aren't actually used (the connector marks select
+    # related as unsupported in its features)
+    tables = [ k for k, v in query.alias_refcount.items() if v ]
+    inherited_tables = set([x._meta.db_table for x in query.model._meta.parents ])
+    select_related_tables = set([y[0][0] for y in query.related_select_cols ])
+    tables = set(tables) - inherited_tables - select_related_tables
+
+    if len(tables) > 1:
+        raise NotSupportedError("""
+            The appengine database connector does not support JOINs. The requested join map follows\n
+            %s
+        """ % query.join_map)
 
     ret = Query(query.model, kind)
     ret.connection = connection
