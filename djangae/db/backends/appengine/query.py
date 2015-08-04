@@ -700,7 +700,8 @@ def _django_17_query_walk_leaf(node, negated, new_parent, connection, model):
         lhs,
         node.lookup_name,
         rhs,
-        node.lhs.output_field
+        node.lhs.output_field,
+        negated
     )
 
     new_parent.children.append(new_node)
