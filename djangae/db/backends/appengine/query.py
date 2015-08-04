@@ -676,7 +676,7 @@ def _django_17_query_walk_leaf(node, negated, new_parent, connection, model):
     new_node = WhereNode()
 
     # Leaf
-    if node.lhs.target.model != model:
+    if get_top_concrete_parent(node.lhs.target.model) != get_top_concrete_parent(model):
         raise NotSupportedError("Cross-join where filters are not supported on the datastore")
 
     lhs = node.lhs.target.column
