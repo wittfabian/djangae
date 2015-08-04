@@ -514,6 +514,25 @@ class NewSelectCommand(object):
 
             return result
 
+        def convert_datetime_fields(result):
+            fields = [
+                x for x in self.query.model._meta.fields
+                if x.get_internal_type() in ("DateTimeField", "DateField", "TimeField")
+            ]
+
+            for field in fields:
+                column = field.column
+                value = result.get(column)
+                if value is not None:
+                    if x.get_internal_type() == "DateTimeField":
+                        result[column] = self.query.connection.ops.value_from_db_datetime(value)
+                    elif x.get_internal_type() == "DateField":
+                        result[column] = self.query.connection.ops.value_from_db_date(value)
+                    elif x.get_internal_type() == "TimeField":
+                        result[column] = self.query.connection.ops.value_from_db_time(value)
+            return result
+
+        self.results = wrap_result_with_functor(self.results, convert_datetime_fields)
         self.results = wrap_result_with_functor(self.results, increment_returned_results)
 
         # If this is a keys only query, we need to generate a fake entity
