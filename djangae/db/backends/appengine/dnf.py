@@ -13,22 +13,15 @@ def preprocess_node(node, negated):
     for child in node.children:
         if child.is_leaf:
             if child.operator == "ISNULL":
-                value = not child.value if negated else child.value
-
+                value = not child.value if node.negated else child.value
                 if value:
                     child.operator = "="
                     child.value = None
                 else:
-                    lhs, rhs = WhereNode(), WhereNode()
-                    lhs.column = rhs.column = child.column
-                    lhs.value = rhs.value = None
-                    lhs.operator = "<"
-                    rhs.operator = ">"
+                    child.operator = ">"
+                    child.value = None
 
-                    child.operator = child.value = child.column = None
-                    child.connector = "OR"
-                    child.children = [lhs, rhs]
-            elif negated and child.operator == "=":
+            elif node.negated and child.operator == "=":
                 # Excluded equalities become inequalities
 
                 lhs, rhs = WhereNode(), WhereNode()
@@ -67,7 +60,7 @@ def preprocess_node(node, negated):
             elif child.operator == "RANGE":
                 lhs, rhs = WhereNode(), WhereNode()
                 lhs.column = rhs.column = child.column
-                if negated:
+                if node.negated:
                     lhs.operator = "<"
                     rhs.operator = ">"
                     child.connector = "OR"
@@ -82,6 +75,14 @@ def preprocess_node(node, negated):
                 child.children = [ lhs, rhs ]
 
                 assert not child.is_leaf
+        elif node.negated:
+            # Move the negation down the tree
+            child.negated = not child.negated
+
+    # If this node was negated, we flip everything
+    if node.negated:
+        node.negated = False
+        node.connector = "AND" if node.connector == "OR" else "OR"
 
     for child in to_remove:
         node.children.remove(child)
