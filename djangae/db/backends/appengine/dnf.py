@@ -167,7 +167,7 @@ def normalize_query(query):
         new_node = WhereNode()
         new_node.connector = 'OR'
         new_node.children = [ where ]
-        query.where = new_node
+        query._where = new_node
 
     if len(query.where.children) > 30:
         raise NotSupportedError("Unable to run query as it required more than 30 subqueries")
