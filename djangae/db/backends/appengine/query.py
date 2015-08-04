@@ -199,6 +199,9 @@ class Query(object):
         self.extra_selects = []
         self.polymodel_filter_added = False
 
+        # A list of PKs that should be excluded from the resultset
+        self.excluded_pks = set()
+
     @property
     def is_normalized(self):
         """
@@ -349,8 +352,35 @@ class Query(object):
         self._remove_erroneous_isnull()
         self._remove_negated_empty_in()
         self._add_inheritence_filter()
+        self._populate_excluded_pks()
         self._disable_projection_if_fields_used_in_equality_filter()
         self._check_only_single_inequality_filter()
+
+    def _populate_excluded_pks(self):
+        if not self._where:
+            return
+
+        self.excluded_pks = set()
+        def walk(node, negated):
+            if node.negated:
+                negated = not negated
+
+            for child in node.children[:]:
+                if negated and child.operator == "=" and child.column == "__key__":
+                    self.excluded_pks.add(child.value)
+                    node.children.remove(child)
+                elif negated and child.operator == "IN" and child.column == "__key__":
+                    [ self.excluded_pks.add(x) for x in child.value ]
+                    node.children.remove(child)
+
+                walk(child, negated)
+
+            node.children = [ x for x in node.children if x.children or x.column ]
+
+        walk(self._where, False)
+
+        if not self._where.children:
+            self._where = None
 
     def _remove_negated_empty_in(self):
         """
@@ -424,20 +454,20 @@ class Query(object):
             walk(self._where, False)
 
     def _check_only_single_inequality_filter(self):
-        inequality_fields = []
+        inequality_fields = set()
         def walk(node, negated):
             if node.negated:
                 negated = not negated
 
-            if not node.is_leaf:
-                for child in node.children[:]:
-                    if negated and child.operator == "=":
-                        inequality_fields.append(child.column)
-                        if len(inequality_fields) > 1:
-                            raise NotSupportedError(
-                                "You can only have one inequality filter per query on the datastore"
-                            )
-                    walk(child, negated)
+            for child in node.children[:]:
+                if (negated and child.operator == "=") or child.operator in (">", "<", ">=", "<="):
+                    inequality_fields.add(child.column)
+                    if len(inequality_fields) > 1:
+                        raise NotSupportedError(
+                            "You can only have one inequality filter per query on the datastore"
+                        )
+
+                walk(child, negated)
         if self.where:
             walk(self._where, False)
 

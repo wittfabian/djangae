@@ -248,6 +248,11 @@ class UniqueQuery(object):
         self._gae_query = gae_query
         self._model = model
 
+        self._Query__kind = gae_query._Query__kind
+
+    def get(self, x):
+        return self._gae_query.get(x)
+
     def keys(self):
         return self._gae_query.keys()
 
@@ -335,8 +340,7 @@ class NewSelectCommand(object):
         if self.query.where and len(self.query.where.children) > 1:
             self.keys_only = False
 
-        self.excluded_pks = []
-        self.included_pks = []
+        self.excluded_pks = self.query.excluded_pks
 
     def _sanity_check(self):
         if self.query.distinct and not self.query.columns:
@@ -537,7 +541,11 @@ class NewSelectCommand(object):
                     result[column] = ensure_datetime(value)
             return result
 
-        self.results = wrap_result_with_functor(self.results, convert_datetime_fields)
+        def ignore_excluded_pks(result):
+            if result.key() in self.query.excluded_pks:
+                return None
+            return result
+
         self.results = wrap_result_with_functor(self.results, increment_returned_results)
 
         # If this is a keys only query, we need to generate a fake entity
@@ -545,6 +553,8 @@ class NewSelectCommand(object):
         if self.keys_only:
             self.results = wrap_result_with_functor(self.results, convert_key_to_entity)
 
+        self.results = wrap_result_with_functor(self.results, ignore_excluded_pks)
+        self.results = wrap_result_with_functor(self.results, convert_datetime_fields)
         self.results = wrap_result_with_functor(self.results, rename_pk_field)
         self.results = wrap_result_with_functor(self.results, process_extra_selects)
 
