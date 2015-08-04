@@ -534,12 +534,7 @@ class NewSelectCommand(object):
                     value = None
 
                 if value is not None:
-                    if x.get_internal_type() == "DateTimeField":
-                        result[column] = self.query.connection.ops.value_from_db_datetime(value)
-                    elif x.get_internal_type() == "DateField":
-                        result[column] = self.query.connection.ops.value_from_db_date(value)
-                    elif x.get_internal_type() == "TimeField":
-                        result[column] = self.query.connection.ops.value_from_db_time(value)
+                    result[column] = ensure_datetime(value)
             return result
 
         self.results = wrap_result_with_functor(self.results, convert_datetime_fields)
