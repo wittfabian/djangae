@@ -21,6 +21,7 @@ from djangae.indexing import (
 from djangae.utils import on_production
 from djangae.db.utils import (
     get_top_concrete_parent,
+    get_model_from_db_table,
     get_concrete_parents,
     has_concrete_parents,
     get_field_from_column
@@ -628,7 +629,12 @@ def _extract_projected_columns_from_query_17(query):
     if query.select:
         result = []
         for x in query.select:
+
             if x.field is None:
+                model = get_model_from_db_table(x.col.col[0])
+                if get_top_concrete_parent(model) != get_top_concrete_parent(query.model):
+                    raise NotSupportedError("Attempted a cross-join select which is not supported on the datastore")
+
                 column = x.col.col[1]  # This is the column we are getting
             else:
                 column = x.field.column
@@ -680,6 +686,7 @@ def _django_17_query_walk_leaf(node, negated, new_parent, connection, model):
         raise NotSupportedError("Cross-join where filters are not supported on the datastore")
 
     lhs = node.lhs.target.column
+
     try:
         rhs = node.process_rhs(None, connection)
     except EmptyResultSet:

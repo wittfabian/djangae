@@ -404,7 +404,7 @@ class RegexIndexer(Indexer):
 
         if value:
             if hasattr(value, '__iter__'): # is a list, tuple or set?
-                if any([bool(re.match(pattern, x, flags)) for x in value]):
+                if any([bool(re.search(pattern, x, flags)) for x in value]):
                     return True
             else:
                 if isinstance(value, (int, long)):

@@ -1431,18 +1431,18 @@ class TestSpecialIndexers(TestCase):
         tests = ['([A-Z])\w+', '([A-Z])\w+\s[+]\s([A-Z])\w+', '\-Test\-']
         for pattern in tests:
             qry = self.qry.filter(name__regex=pattern)
-            self.assertEqual(len(qry), len([x for x in self.names if re.match(pattern, x)]))
+            self.assertEqual(len(qry), len([x for x in self.names if re.search(pattern, x)]))
 
             qry = self.qry.filter(name__iregex=pattern)
-            self.assertEqual(len(qry), len([x for x in self.names if re.match(pattern, x, flags=re.I)]))
+            self.assertEqual(len(qry), len([x for x in self.names if re.search(pattern, x, flags=re.I)]))
 
             # Check that the same works for ListField and SetField too
             qry = self.qry.filter(sample_list__regex=pattern)
-            expected = [sample_list for sample_list in self.lists if any([bool(re.match(pattern, x)) for x in sample_list])]
+            expected = [sample_list for sample_list in self.lists if any([bool(re.search(pattern, x)) for x in sample_list])]
             self.assertEqual(len(qry), len(expected))
 
             qry = self.qry.filter(sample_list__iregex=pattern)
-            expected = [sample_list for sample_list in self.lists if any([bool(re.match(pattern, x, flags=re.I)) for x in sample_list])]
+            expected = [sample_list for sample_list in self.lists if any([bool(re.search(pattern, x, flags=re.I)) for x in sample_list])]
             self.assertEqual(len(qry), len(expected))
 
 
