@@ -67,6 +67,9 @@ class SQLUpdateCompiler(compiler.SQLUpdateCompiler, SQLCompiler):
 
 class SQLAggregateCompiler(compiler.SQLAggregateCompiler, SQLCompiler):
     def as_sql(self, with_limits=True, with_col_aliases=False, subquery=False):
+        if self.query.subquery:
+            self.query.high_mark = self.query.subquery.query.high_mark
+            self.query.low_mark = self.query.subquery.query.low_mark
         return SQLCompiler.as_sql(self, with_limits, with_col_aliases, subquery)
 
 
