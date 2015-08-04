@@ -42,6 +42,8 @@ many_to_one_reporter:
   first_name: [startswith]
 model_forms_post:
   posted: [day, year, month]
+model_inheritance_place:
+  name: [contains]
 or_lookups_article:
   headline: [contains, iexact, startswith, icontains]
 proxy_models_baseuser:

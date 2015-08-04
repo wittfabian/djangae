@@ -528,7 +528,11 @@ class NewSelectCommand(object):
 
             for field in fields:
                 column = field.column
-                value = result.get(column)
+                if isinstance(result, dict): # sometimes it's a key!
+                    value = result.get(column)
+                else:
+                    value = None
+
                 if value is not None:
                     if x.get_internal_type() == "DateTimeField":
                         result[column] = self.query.connection.ops.value_from_db_datetime(value)
