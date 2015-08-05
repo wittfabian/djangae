@@ -393,23 +393,39 @@ class NewSelectCommand(object):
                 **query_kwargs
             )
 
+            # This deals with the oddity that the root of the tree may well be a leaf
             filters = [ and_branch ] if and_branch.is_leaf else and_branch.children
 
             for filter_node in filters:
                 lookup = "{} {}".format(filter_node.column, filter_node.operator)
 
+                # If there is already a value for this lookup, we need to make the
+                # value a list and append the new entry
                 if lookup in query and not isinstance(query[lookup], (list, tuple)):
                     query[lookup] = [ query[lookup ] ] + [ filter_node.value ]
                 else:
+                    # If we had a string like object passed in, make sure it's unicode
                     if isinstance(filter_node.value, basestring):
                         query[lookup] = unicode(filter_node.value)
                     else:
-                        query[lookup] = filter_node.value
+                        # If the value is a list, we can't just assign it to the query
+                        # which will treat each element as its own value. So in this
+                        # case we nest it. This has the side effect of throwing a BadValueError
+                        # which we could throw ourselves, but the datastore might start supporting
+                        # list values in lookups.. you never know!
+                        if isinstance(filter_node.value, (list, tuple)):
+                            query[lookup] = [ filter_node.value ]
+                        else:
+                            # Common case: just add the raw where constraint
+                            query[lookup] = filter_node.value
 
             if ordering:
                 try:
                     query.Order(*ordering)
                 except datastore_errors.BadArgumentError as e:
+                    # This is the easiest way to detect unsupported orderings
+                    # ideally we'd detect this at the query normalization stage
+                    # but it's a lot of hassle, this is much easier and seems to work OK
                     raise NotSupportedError(e)
             queries.append(query)
 
