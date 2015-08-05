@@ -562,6 +562,7 @@ class DatabaseFeatures(BaseDatabaseFeatures):
     autocommits_when_autocommit_is_off = True
     uses_savepoints = False
     allows_auto_pk_0 = False
+    needs_datetime_string_cast = False
 
 
 class DatabaseWrapper(BaseDatabaseWrapper):

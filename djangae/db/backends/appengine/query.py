@@ -308,14 +308,14 @@ class Query(object):
 
         # Abuse the extra_select functionality
         if name == "Col":
-            self.extra_selects.append((column, (lambda x: x, [annotation.output_field.column])))
+            self.extra_selects.append((column, (lambda x: x, [column])))
         elif name in ("Date", "DateTime"):
             self.extra_selects.append(
                 (column,
-                (lambda x: process_date(x, annotation.lookup_type), [annotation.col.output_field.column]))
+                (lambda x: process_date(x, annotation.lookup_type), [column]))
             )
             # Override the projection so that we only get this column
-            self.columns = [ annotation.col.output_field.column ]
+            self.columns = [ column ]
 
 
     def add_projected_column(self, column):
@@ -771,6 +771,8 @@ def _django_17_query_walk_trunk(node, negated, new_parent, **kwargs):
     return new_node
 
 def _transform_query_17(connection, kind, query):
+    from django.db.models.sql.datastructures import Date, DateTime
+
     if isinstance(query.where, EmptyWhere):
         # Empty where means return nothing!
         raise EmptyResultSet()
@@ -802,6 +804,14 @@ def _transform_query_17(connection, kind, query):
     # Extract any projected columns (values/values_list/only/defer)
     for projected_col in _extract_projected_columns_from_query_17(query):
         ret.add_projected_column(projected_col)
+
+    for potential_annotation in query.select:
+        col = getattr(potential_annotation, "col", None)
+        if not col:
+            continue
+
+        if isinstance(col, (Date, DateTime)):
+            ret.add_annotation(col.col[-1], col)
 
     # Add any extra selects
     for col, select in query.extra_select.items():

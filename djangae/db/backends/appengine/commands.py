@@ -433,12 +433,12 @@ class NewSelectCommand(object):
             # Yay for optimizations!
             return QueryByKeys(self.query.model, queries, ordering)
 
-        identifier = query_is_unique(self.query.model, queries[0])
-        if identifier:
-            # Yay for optimizations!
-            return UniqueQuery(identifier, queries[0], self.query.model)
-
         if len(queries) == 1:
+            identifier = query_is_unique(self.query.model, queries[0])
+            if identifier:
+                # Yay for optimizations!
+                return UniqueQuery(identifier, queries[0], self.query.model)
+
             return queries[0]
         else:
             return datastore.MultiQuery(queries, ordering)
@@ -470,6 +470,12 @@ class NewSelectCommand(object):
 
         # Ensure that the results returned is reset
         self.results_returned = 0
+
+        def _exclude_pk(fields):
+            if fields is None:
+                return None
+
+            return [ x for x in fields if x != self.query.model._meta.pk.column ]
 
         def increment_returned_results(result):
             self.results_returned += 1
@@ -580,8 +586,7 @@ class NewSelectCommand(object):
                 seen = set()
 
                 def dedupe(result):
-                    query = self.original_query
-                    key = "|".join([ repr(result[x]) for x in query.annotations.keys() if x in result ])
+                    key = tuple([ result[x] for x in _exclude_pk(self.query.columns) if x in result ])
                     if key in seen:
                         return None
                     seen.add(key)

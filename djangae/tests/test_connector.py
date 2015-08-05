@@ -1200,13 +1200,13 @@ class EdgeCaseTests(TestCase):
 
         dates = TestUser.objects.dates('last_login', 'day')
         self.assertEqual(
-            [datetime.date(2013, 4, 5), last_a_login.date()],
+            [datetime.date(2013, 4, 5), last_a_login],
             list(dates)
         )
 
         dates = TestUser.objects.dates('last_login', 'day', order='DESC')
         self.assertEqual(
-            [last_a_login.date(), datetime.date(2013, 4, 5)],
+            [last_a_login, datetime.date(2013, 4, 5)],
             list(dates)
         )
 
