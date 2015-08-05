@@ -94,7 +94,12 @@ class WhereNode(object):
     def append_child(self, node):
         self.children.append(node)
 
-    def set_leaf(self, column, operator, value, output_field=None, negated=False):
+    def set_leaf(self, column, operator, value, is_pk_field, negated, output_field=None):
+        assert column
+        assert operator
+        assert isinstance(is_pk_field, bool)
+        assert isinstance(negated, bool)
+
         if operator == "iexact" and isinstance(output_field, AutoField):
             # When new instance is created, automatic primary key 'id' does not generate '_idx_iexact_id'.
             # As the primary key 'id' (AutoField) is integer and is always case insensitive,
@@ -102,16 +107,16 @@ class WhereNode(object):
             operator = "exact"
             value = int(value)
 
-        # The second part of this 'if' rules out foreign keys
-        if output_field.primary_key and output_field.column == column:
+        if is_pk_field:
             # If this is a primary key, we need to make sure that the value
             # we pass to the query is a datastore Key. We have to deal with IN queries here
             # because they aren't flattened until the DNF stage
+            model = get_top_concrete_parent(output_field.model)
+            table = model._meta.db_table
 
-            model = output_field.model
             if isinstance(value, (list, tuple)):
                 value = [
-                    datastore.Key.from_path(model._meta.db_table, x)
+                    datastore.Key.from_path(table, x)
                     for x in value if x
                 ]
             else:
@@ -130,7 +135,7 @@ class WhereNode(object):
                     value = datastore.Key.from_path('', 1)
                     operator = '<'
                 else:
-                    value = datastore.Key.from_path(model._meta.db_table, value)
+                    value = datastore.Key.from_path(table, value)
             column = "__key__"
 
         # Do any special index conversions necessary to perform this lookup
@@ -183,6 +188,7 @@ class Query(object):
         assert kind in VALID_QUERY_KINDS
 
         self.model = model
+        self.concrete_model = get_top_concrete_parent(model)
         self.kind = kind
 
         self.projection_possible = True
@@ -718,7 +724,15 @@ def _django_17_query_walk_leaf(node, negated, new_parent, connection, model):
     if get_top_concrete_parent(node.lhs.target.model) != get_top_concrete_parent(model):
         raise NotSupportedError("Cross-join where filters are not supported on the datastore")
 
-    lhs = node.lhs.target.column
+    field = node.lhs.target
+
+    # Make sure we don't let people try to filter on a text field, otherwise they just won't
+    # get any results!
+
+    if field.db_type(connection) in ("bytes", "text"):
+        raise NotSupportedError("You can't filter on text or blob fields on the datastore")
+
+    lhs = field.column
 
     try:
         rhs = node.process_rhs(None, connection)
@@ -740,8 +754,9 @@ def _django_17_query_walk_leaf(node, negated, new_parent, connection, model):
         lhs,
         node.lookup_name,
         rhs,
-        node.lhs.output_field,
-        negated
+        is_pk_field=field==model._meta.pk,
+        negated=negated,
+        output_field=node.lhs.output_field,
     )
 
     new_parent.children.append(new_node)

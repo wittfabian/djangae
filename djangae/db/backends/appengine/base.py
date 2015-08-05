@@ -140,7 +140,6 @@ class Cursor(object):
             for col, select in query.extra_selects:
                 row.append(result.get(col))
 
-
             columns = ( x.column for x in query.model._meta.fields)
 
             if django.VERSION[1] < 8 and query.columns:

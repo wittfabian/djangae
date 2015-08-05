@@ -360,7 +360,7 @@ class NewSelectCommand(object):
         projection = _exclude_pk(self.query.columns) or None
 
         query_kwargs = {
-            "kind": str(self.query.tables[0]),
+            "kind": self.query.concrete_model._meta.db_table,
             "distinct": self.query.distinct or None,
             "keys_only": self.keys_only or None,
             "projection": projection
