@@ -318,9 +318,6 @@ class DatabaseOperations(BaseDatabaseOperations):
 
         return value
 
-    def prep_lookup_decimal(self, model, value, field):
-        return self.value_to_db_decimal(value, field.max_digits, field.decimal_places)
-
     def prep_lookup_date(self, model, value, field):
         if isinstance(value, datetime.datetime):
             return value
@@ -343,9 +340,7 @@ class DatabaseOperations(BaseDatabaseOperations):
 
         db_type = field.db_type(self.connection)
 
-        if db_type == 'decimal':
-            return self.prep_lookup_decimal(model, value, field)
-        elif db_type == 'date':
+        if db_type == 'date':
             return self.prep_lookup_date(model, value, field)
         elif db_type == 'time':
             return self.prep_lookup_time(model, value, field)
