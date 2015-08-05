@@ -2,16 +2,13 @@
 from datetime import datetime
 import logging
 import copy
-import re
+import decimal
 from functools import partial
 from itertools import chain, groupby
 
 #LIBRARIES
 import django
 from django.db import DatabaseError
-from django.core.exceptions import FieldError
-from django.db.models.fields import FieldDoesNotExist
-from django.db.models.sql.datastructures import EmptyResultSet
 from django.core.cache import cache
 from django.db import IntegrityError
 
@@ -20,19 +17,15 @@ from google.appengine.api.datastore import Query
 from google.appengine.ext import db
 
 #DJANGAE
-from djangae.db.backends.appengine.dbapi import CouldBeSupportedError, NotSupportedError
+from djangae.db.backends.appengine.dbapi import NotSupportedError
 from djangae.db.utils import (
     get_datastore_key,
     django_instance_to_entity,
-    get_prepared_db_value,
     MockInstance,
-    get_top_concrete_parent,
-    get_concrete_parents,
     has_concrete_parents,
     get_field_from_column
 )
-from djangae.indexing import special_indexes_for_column, REQUIRES_SPECIAL_INDEXES, add_special_index
-from djangae.utils import on_production
+
 from djangae.db import constraints, utils
 from djangae.db.backends.appengine import caching
 from djangae.db.unique_utils import query_is_unique
@@ -332,6 +325,7 @@ def can_perform_datastore_get(normalized_query):
 
 class NewSelectCommand(object):
     def __init__(self, connection, query, keys_only=False):
+        self.connection = connection
         self.query = normalize_query(transform_query(connection, query))
         self.original_query = query
         self.keys_only = (keys_only or [x.field for x in query.select] == [ query.model._meta.pk ])
@@ -399,25 +393,32 @@ class NewSelectCommand(object):
             for filter_node in filters:
                 lookup = "{} {}".format(filter_node.column, filter_node.operator)
 
+                value = filter_node.value
+                # This is a special case. Annoyingly Django's decimal field doesn't
+                # ever call ops.get_prep_save or lookup or whatever when you are filtering
+                # on a query. It *does* do it on a save, so we basically need to do a
+                # conversion here, when really it should be handled elsewhere
+                if isinstance(value, decimal.Decimal):
+                    field = get_field_from_column(self.query.model, filter_node.column)
+                    value = self.connection.ops.value_to_db_decimal(value, field.max_digits, field.decimal_places)
+                elif isinstance(value, basestring):
+                    value = unicode(value)
+
                 # If there is already a value for this lookup, we need to make the
                 # value a list and append the new entry
                 if lookup in query and not isinstance(query[lookup], (list, tuple)):
-                    query[lookup] = [ query[lookup ] ] + [ filter_node.value ]
+                    query[lookup] = [ query[lookup ] ] + [ value ]
                 else:
-                    # If we had a string like object passed in, make sure it's unicode
-                    if isinstance(filter_node.value, basestring):
-                        query[lookup] = unicode(filter_node.value)
+                    # If the value is a list, we can't just assign it to the query
+                    # which will treat each element as its own value. So in this
+                    # case we nest it. This has the side effect of throwing a BadValueError
+                    # which we could throw ourselves, but the datastore might start supporting
+                    # list values in lookups.. you never know!
+                    if isinstance(value, (list, tuple)):
+                        query[lookup] = [ value ]
                     else:
-                        # If the value is a list, we can't just assign it to the query
-                        # which will treat each element as its own value. So in this
-                        # case we nest it. This has the side effect of throwing a BadValueError
-                        # which we could throw ourselves, but the datastore might start supporting
-                        # list values in lookups.. you never know!
-                        if isinstance(filter_node.value, (list, tuple)):
-                            query[lookup] = [ filter_node.value ]
-                        else:
-                            # Common case: just add the raw where constraint
-                            query[lookup] = filter_node.value
+                        # Common case: just add the raw where constraint
+                        query[lookup] = value
 
             if ordering:
                 try:
