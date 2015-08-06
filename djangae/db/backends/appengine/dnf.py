@@ -113,16 +113,17 @@ def normalize_query(query):
 
         preprocess_node(where, negated)
 
+        rewalk = False
         for child in where.children:
             if where.connector == "AND" and child.children and child.connector == 'AND' and not child.negated:
                 where.children.remove(child)
                 where.children.extend(child.children)
-                walk_tree(where, original_negated)
+                rewalk = True
             elif child.connector == "AND" and len(child.children) == 1 and not child.negated:
                 # Promote leaf nodes if they are the only child under an AND. Just for consistency
                 where.children.remove(child)
                 where.children.extend(child.children)
-                walk_tree(where, original_negated)
+                rewalk = True
             elif len(child.children) > 1 and child.connector == 'AND' and child.negated:
                 new_grandchildren = []
                 for grandchild in child.children:
@@ -132,9 +133,12 @@ def normalize_query(query):
                     new_grandchildren.append(new_node)
                 child.children = new_grandchildren
                 child.connector = 'OR'
-                walk_tree(where, original_negated)
+                rewalk = True
             else:
                 walk_tree(child, negated)
+
+        if rewalk:
+            walk_tree(where, original_negated)
 
         if where.connector == 'AND' and any([x.connector == 'OR' for x in where.children]):
             # ANDs should have been taken care of!

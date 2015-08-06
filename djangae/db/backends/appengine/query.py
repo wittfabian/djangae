@@ -693,19 +693,35 @@ def _extract_projected_columns_from_query_17(query):
 
     if query.select:
         for x in query.select:
+            column = x.field.column
+            result.append(column)
+        return result
+    else:
+        # If the query uses defer()/only() then we need to process deferred. We have to get all deferred columns
+        # for all (concrete) inherited models and then only include columns if they appear in that list
+        only_load = query.get_loaded_field_names()
+        if only_load:
+            for field, model in query.model._meta.get_concrete_fields_with_model():
+                model = model or query.model
+                try:
+                    if field.name in only_load[model]:
+                        # Add a field that has been explicitly included
+                        result.append(field.column)
+                except KeyError:
+                    # Model wasn't explicitly listed in the only_load table
+                    # Therefore, we need to load all fields from this model
+                    result.append(field.column)
+            return result
+        else:
+            return []
 
-            if x.field is None:
-                model = get_model_from_db_table(x.col.col[0])
-                if get_top_concrete_parent(model) != get_top_concrete_parent(query.model):
-                    raise NotSupportedError("Attempted a cross-join select which is not supported on the datastore")
 
-                column = x.col.col[1]  # This is the column we are getting
-            else:
-                if hasattr(x, "target"):
-                    column = x.target.column
-                else:
-                    column = x.field.column
+def _extract_projected_columns_from_query_18(query):
+    result = []
 
+    if query.select:
+        for x in query.select:
+            column = x.target.column
             result.append(column)
         return result
     else:
@@ -918,7 +934,7 @@ def _transform_query_18(connection, kind, query):
         ret.add_order_by(order_col)
 
     # Extract any projected columns (values/values_list/only/defer)
-    for projected_col in _extract_projected_columns_from_query_17(query):
+    for projected_col in _extract_projected_columns_from_query_18(query):
         ret.add_projected_column(projected_col)
 
     # Add any extra selects
