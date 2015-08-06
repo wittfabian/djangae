@@ -368,6 +368,11 @@ class Query(object):
 
         self.excluded_pks = set()
         def walk(node, negated):
+            if node.connector == "OR":
+                # We can only process AND nodes, if we hit an OR we can't
+                # use the excluded PK optimization
+                return
+
             if node.negated:
                 negated = not negated
 
