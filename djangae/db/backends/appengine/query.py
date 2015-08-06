@@ -690,6 +690,7 @@ def _extract_ordering_from_query_17(query):
 
 def _extract_projected_columns_from_query_17(query):
     result = []
+
     if query.select:
         for x in query.select:
 
@@ -700,7 +701,7 @@ def _extract_projected_columns_from_query_17(query):
 
                 column = x.col.col[1]  # This is the column we are getting
             else:
-                column = x.field.column
+                column = x.target.column
 
             result.append(column)
         return result

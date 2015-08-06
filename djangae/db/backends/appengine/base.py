@@ -199,8 +199,10 @@ class DatabaseOperations(BaseDatabaseOperations):
     def datetime_trunc_sql(self, lookup_type, field_name, tzname):
         return '%s'
 
-    def get_db_converters(self, internal_type):
-        converters = super(DatabaseOperations, self).get_db_converters(internal_type)
+    def get_db_converters(self, expression):
+        converters = super(DatabaseOperations, self).get_db_converters(expression)
+
+        internal_type = expression.field.get_internal_type()
 
         if internal_type == 'TextField':
             converters.append(self.convert_textfield_value)
@@ -212,9 +214,9 @@ class DatabaseOperations(BaseDatabaseOperations):
             converters.append(self.convert_time_value)
         elif internal_type == 'DecimalField':
             converters.append(self.convert_time_value)
-        elif internal_type == 'ListField':
+        elif internal_type in ('ListField', 'RelatedListField'):
             converters.append(self.convert_list_value)
-        elif internal_type == 'SetField':
+        elif internal_type in ('SetField', 'RelatedSetField'):
             converters.append(self.convert_set_value)
 
         return converters
