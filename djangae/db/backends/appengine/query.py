@@ -94,13 +94,13 @@ class WhereNode(object):
     def append_child(self, node):
         self.children.append(node)
 
-    def set_leaf(self, column, operator, value, is_pk_field, negated, output_field=None):
+    def set_leaf(self, column, operator, value, is_pk_field, negated, target_field=None):
         assert column
         assert operator
         assert isinstance(is_pk_field, bool)
         assert isinstance(negated, bool)
 
-        if operator == "iexact" and isinstance(output_field, AutoField):
+        if operator == "iexact" and isinstance(target_field, AutoField):
             # When new instance is created, automatic primary key 'id' does not generate '_idx_iexact_id'.
             # As the primary key 'id' (AutoField) is integer and is always case insensitive,
             # we can deal with 'id_iexact=' query by using 'exact' rather than 'iexact'.
@@ -111,7 +111,7 @@ class WhereNode(object):
             # If this is a primary key, we need to make sure that the value
             # we pass to the query is a datastore Key. We have to deal with IN queries here
             # because they aren't flattened until the DNF stage
-            model = get_top_concrete_parent(output_field.model)
+            model = get_top_concrete_parent(target_field.model)
             table = model._meta.db_table
 
             if isinstance(value, (list, tuple)):
@@ -140,7 +140,7 @@ class WhereNode(object):
 
         # Do any special index conversions necessary to perform this lookup
         if operator in REQUIRES_SPECIAL_INDEXES:
-            add_special_index(output_field.model, column, operator, value)
+            add_special_index(target_field.model, column, operator, value)
             indexer = REQUIRES_SPECIAL_INDEXES[operator]
             index_type = indexer.prepare_index_type(operator, value)
             value = indexer.prep_value_for_query(value)
@@ -786,7 +786,7 @@ def _django_17_query_walk_leaf(node, negated, new_parent, connection, model):
         rhs,
         is_pk_field=field==model._meta.pk,
         negated=negated,
-        output_field=node.lhs.output_field,
+        target_field=node.lhs.target,
     )
 
     new_parent.children.append(new_node)
