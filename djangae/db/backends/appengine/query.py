@@ -798,6 +798,9 @@ def _django_17_query_walk_leaf(node, negated, new_parent, connection, model):
     if field.db_type(connection) in ("bytes", "text"):
         raise NotSupportedError("You can't filter on text or blob fields on the datastore")
 
+    if node.lookup_name == "isnull" and field.model._meta.parents.values():
+        raise NotSupportedError("isnull lookups on inherited relations aren't supported on the datastore")
+
     lhs = field.column
 
     try:
