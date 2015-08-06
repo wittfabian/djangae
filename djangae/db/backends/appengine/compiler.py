@@ -31,6 +31,10 @@ class SQLCompiler(compiler.SQLCompiler):
         )
         return (select, tuple())
 
+    def get_select(self):
+        self.query.select_related = False # Make sure select_related is disabled for all queries
+        return super(SQLCompiler, self).get_select()
+
 
 class SQLInsertCompiler(compiler.SQLInsertCompiler, SQLCompiler):
     def __init__(self, *args, **kwargs):

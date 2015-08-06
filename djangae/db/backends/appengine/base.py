@@ -212,9 +212,10 @@ class DatabaseOperations(BaseDatabaseOperations):
             converters.append(self.convert_time_value)
         elif internal_type == 'DecimalField':
             converters.append(self.convert_time_value)
-
-        converters.append(self.convert_list_value)
-        converters.append(self.convert_set_value)
+        elif internal_type == 'ListField':
+            converters.append(self.convert_list_value)
+        elif internal_type == 'SetField':
+            converters.append(self.convert_set_value)
 
         return converters
 

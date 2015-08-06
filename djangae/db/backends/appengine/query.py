@@ -897,25 +897,6 @@ def _transform_query_17(connection, kind, query):
     return ret
 
 
-def _extract_projected_columns_from_query_18(query):
-    if query.select:
-        result = []
-        for x in query.select:
-            if x.field is None:
-                column = x.col.col[1]  # This is the column we are getting
-            else:
-                column = x.field.column
-
-            result.append(column)
-        return result
-    else:
-        # If the query uses defer()/only() then we need to process deferred. We have to get all deferred columns
-        # for all (concrete) inherited models and then only include columns if they appear in that list
-        deferred_columns = {}
-        query.deferred_to_data(deferred_columns, query.get_loaded_field_names_cb)
-        return list(chain(*[list(deferred_columns.get(x, [])) for x in get_concrete_parents(query.model)]))
-
-
 def _transform_query_18(connection, kind, query):
     if isinstance(query.where, EmptyWhere):
         # Empty where means return nothing!
@@ -933,7 +914,7 @@ def _transform_query_18(connection, kind, query):
         ret.add_order_by(order_col)
 
     # Extract any projected columns (values/values_list/only/defer)
-    for projected_col in _extract_projected_columns_from_query_18(query):
+    for projected_col in _extract_projected_columns_from_query_17(query):
         ret.add_projected_column(projected_col)
 
     # Add any extra selects
