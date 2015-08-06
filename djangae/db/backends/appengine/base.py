@@ -202,6 +202,7 @@ class DatabaseOperations(BaseDatabaseOperations):
     def get_db_converters(self, expression):
         converters = super(DatabaseOperations, self).get_db_converters(expression)
 
+        db_type = expression.field.db_type(self.connection)
         internal_type = expression.field.get_internal_type()
 
         if internal_type == 'TextField':
@@ -214,9 +215,9 @@ class DatabaseOperations(BaseDatabaseOperations):
             converters.append(self.convert_time_value)
         elif internal_type == 'DecimalField':
             converters.append(self.convert_time_value)
-        elif internal_type in ('ListField', 'RelatedListField'):
+        elif db_type == 'list':
             converters.append(self.convert_list_value)
-        elif internal_type in ('SetField', 'RelatedSetField'):
+        elif db_type == 'set':
             converters.append(self.convert_set_value)
 
         return converters

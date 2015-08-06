@@ -693,7 +693,15 @@ def _extract_projected_columns_from_query_17(query):
 
     if query.select:
         for x in query.select:
-            column = x.field.column
+            if x.field is None:
+                model = get_model_from_db_table(x.col.col[0])
+                if get_top_concrete_parent(model) != get_top_concrete_parent(query.model):
+                    raise NotSupportedError("Attempted a cross-join select which is not supported on the datastore")
+
+                column = x.col.col[1]  # This is the column we are getting
+            else:
+                column = x.field.column
+
             result.append(column)
         return result
     else:
