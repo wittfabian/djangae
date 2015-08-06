@@ -45,10 +45,22 @@ DJANGO_TESTS_WHICH_EXPECT_SQL_PARAMS = {
 }
 
 
+# Django 1.8 removed the supports_select_related flag, so we have to manually skip
+# tests which depend on it
+DJANGO_TESTS_WHICH_USE_SELECT_RELATED = {
+    'defer.tests.DeferTests.test_defer_with_select_related',
+    'defer.tests.DeferTests.test_defer_select_related_raises_invalid_query',
+    'defer.tests.DeferTests.test_only_select_related_raises_invalid_query',
+    'defer.tests.DeferTests.test_only_with_select_related',
+    'model_inheritance.tests.ModelInheritanceDataTests.test_select_related_works_on_parent_model_fields'
+}
+
+
 DJANGO_TESTS_TO_SKIP = DJANGO_TESTS_WHICH_REQUIRE_ZERO_PKS.union(
     DJANGO_TESTS_WHICH_REQUIRE_AUTH_USER).union(
     DJANGO_TESTS_WHICH_HAVE_BUGS).union(
-    DJANGO_TESTS_WHICH_EXPECT_SQL_PARAMS
+    DJANGO_TESTS_WHICH_EXPECT_SQL_PARAMS).union(
+    DJANGO_TESTS_WHICH_USE_SELECT_RELATED
 )
 
 def init_testbed():
