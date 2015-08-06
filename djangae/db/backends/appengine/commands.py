@@ -472,7 +472,21 @@ class NewSelectCommand(object):
         offset = low_mark or 0
 
         if self.query.kind == "COUNT":
-            self.results = (x for x in [query.Count(limit=limit, offset=offset)])
+            if self.excluded_pks:
+                # If we're excluding pks, relying on a traditional count won't work
+                # so we have two options:
+                # 1. Do a keys_only query instead and count the results excluding keys
+                # 2. Do a count, then a pk__in=excluded_pks to work out how many to subtract
+                # Here I've favoured option one as it means a single RPC call. Testing locally
+                # didn't seem to indicate much of a performance difference, even when doing the pk__in
+                # with GetAsync while the count was running. That might not be true of prod though so
+                # if anyone comes up with a faster idea let me know!
+                count_query = Query(query._Query__kind, keys_only=True)
+                count_query.update(query)
+                resultset = count_query.Run(limit=limit, offset=offset)
+                self.results = (x for x in [ len([ y for y in resultset if y not in self.excluded_pks]) ])
+            else:
+                self.results = (x for x in [query.Count(limit=limit, offset=offset)])
             return
         elif self.query.kind == "AVERAGE":
             raise ValueError("AVERAGE not yet supported")
