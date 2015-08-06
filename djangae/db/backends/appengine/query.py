@@ -789,6 +789,15 @@ def _django_17_query_walk_leaf(node, negated, new_parent, connection, model):
         target_field=node.lhs.target,
     )
 
+    # For some reason, this test:
+    # test_update_with_related_manager (get_or_create.tests.UpdateOrCreateTests)
+    # ends up with duplicate nodes in the where tree. I don't know why. But this
+    # weirdly causes the datastore query to return nothing.
+    # so here we don't add duplicate nodes, I can't think of a case where that would
+    # change the query if it's under the same parent.
+    if new_node in new_parent.children:
+        return
+
     new_parent.children.append(new_node)
 
 def _django_17_query_walk_trunk(node, negated, new_parent, **kwargs):
