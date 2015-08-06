@@ -701,7 +701,10 @@ def _extract_projected_columns_from_query_17(query):
 
                 column = x.col.col[1]  # This is the column we are getting
             else:
-                column = x.target.column
+                if hasattr(x, "target"):
+                    column = x.target.column
+                else:
+                    column = x.field.column
 
             result.append(column)
         return result
