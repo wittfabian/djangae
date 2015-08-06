@@ -579,7 +579,7 @@ class Query(object):
 
             query = {}
             for lookup in node.children:
-                query[''.join(lookup.column, lookup.operator)] = lookup.value
+                query[''.join([lookup.column, lookup.operator])] = lookup.value
 
             where.append(query)
 
