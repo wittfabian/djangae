@@ -614,7 +614,16 @@ class NewSelectCommand(object):
                 seen = set()
 
                 def dedupe(result):
-                    key = tuple([ result[x] for x in self._exclude_pk(self.query.columns) if x in result ])
+                    # FIXME: This logic can't be right. I think we need to store the distinct fields
+                    # somewhere on the query
+                    if getattr(self.original_query, "annotation_select", None):
+                        columns = self.original_query.annotation_select.keys()
+                    else:
+                        columns = self.query.columns or []
+                    if not columns:
+                        return result
+
+                    key = tuple([ result[x] for x in self._exclude_pk(columns) if x in result ])
                     if key in seen:
                         return None
                     seen.add(key)
