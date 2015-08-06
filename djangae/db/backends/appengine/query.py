@@ -713,7 +713,7 @@ def _extract_projected_columns_from_query_17(query):
             for field, model in query.model._meta.get_concrete_fields_with_model():
                 model = model or query.model
                 try:
-                    if field.name in only_load[model]:
+                    if field.column in only_load[model]:
                         # Add a field that has been explicitly included
                         result.append(field.column)
                 except KeyError:
