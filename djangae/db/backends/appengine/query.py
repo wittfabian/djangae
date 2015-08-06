@@ -667,8 +667,8 @@ def _extract_ordering_from_query_17(query):
 
 
 def _extract_projected_columns_from_query_17(query):
+    result = []
     if query.select:
-        result = []
         for x in query.select:
 
             if x.field is None:
@@ -685,10 +685,21 @@ def _extract_projected_columns_from_query_17(query):
     else:
         # If the query uses defer()/only() then we need to process deferred. We have to get all deferred columns
         # for all (concrete) inherited models and then only include columns if they appear in that list
-        deferred_columns = {}
-        query.deferred_to_data(deferred_columns, query.deferred_to_columns_cb)
-        inherited_db_tables = [x._meta.db_table for x in get_concrete_parents(query.model)]
-        return list(chain(*[list(deferred_columns.get(x, [])) for x in inherited_db_tables]))
+        only_load = query.get_loaded_field_names()
+        if only_load:
+            for field, model in query.model._meta.get_concrete_fields_with_model():
+                model = model or query.model
+                try:
+                    if field.name in only_load[model]:
+                        # Add a field that has been explicitly included
+                        result.append(field.column)
+                except KeyError:
+                    # Model wasn't explicitly listed in the only_load table
+                    # Therefore, we need to load all fields from this model
+                    result.append(field.column)
+            return result
+        else:
+            return []
 
 
 def _walk_django_where(query, trunk_callback, leaf_callback, **kwargs):

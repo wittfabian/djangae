@@ -340,18 +340,24 @@ class NewSelectCommand(object):
         if self.query.distinct and not self.query.columns:
             raise NotSupportedError("Tried to perform distinct query when projection wasn't possible")
 
+    def _exclude_pk(self, columns):
+        if columns is None:
+            return None
+
+        opts = self.query.model._meta
+        copts = self.query.concrete_model._meta
+
+        return [
+            x for x in columns if x not in
+            (opts.pk.column, copts.pk.column)
+        ]
+
     def _build_query(self):
         self._sanity_check()
 
         queries = []
 
-        def _exclude_pk(fields):
-            if fields is None:
-                return None
-
-            return [ x for x in fields if x != self.query.model._meta.pk.column ]
-
-        projection = _exclude_pk(self.query.columns) or None
+        projection = self._exclude_pk(self.query.columns) or None
 
         query_kwargs = {
             "kind": self.query.concrete_model._meta.db_table,
@@ -472,12 +478,6 @@ class NewSelectCommand(object):
         # Ensure that the results returned is reset
         self.results_returned = 0
 
-        def _exclude_pk(fields):
-            if fields is None:
-                return None
-
-            return [ x for x in fields if x != self.query.model._meta.pk.column ]
-
         def increment_returned_results(result):
             self.results_returned += 1
             return result
@@ -496,7 +496,9 @@ class NewSelectCommand(object):
             if result is None:
                 return result
 
-            result[self.query.model._meta.pk.column] = result.key().id_or_name()
+            value = result.key().id_or_name()
+            result[self.query.model._meta.pk.column] = value
+            result[self.query.concrete_model._meta.pk.column] = value
             return result
 
         def process_extra_selects(result):
@@ -587,7 +589,7 @@ class NewSelectCommand(object):
                 seen = set()
 
                 def dedupe(result):
-                    key = tuple([ result[x] for x in _exclude_pk(self.query.columns) if x in result ])
+                    key = tuple([ result[x] for x in self._exclude_pk(self.query.columns) if x in result ])
                     if key in seen:
                         return None
                     seen.add(key)
