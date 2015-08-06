@@ -547,16 +547,28 @@ class Query(object):
             self.polymodel_filter_added = True
 
     def serialize(self):
+        """
+            The idea behind this function is to provide a way to serialize this
+            query to a string which can be compared to another query. Pickle won't
+            work as some of the values etc. might not be picklable.
+
+            FIXME: This function is incomplete! Not all necessary members are serialized
+        """
         if not self.is_normalized:
             raise ValueError("You cannot serialize queries unless they are normalized")
 
         result = {}
         result["kind"] = self.kind
-        result["table"] = self.tables[0]
+        result["table"] = self.model._meta.db_table
+        result["concrete_table"] = self.concrete_model._meta.db_table
         result["columns"] = self.columns
-        result["distinct"] = self.distinct_fields
+        result["projection_possible"] = self.projection_possible
+        result["init_list"] = self.init_list
+        result["distinct"] = self.distinct
         result["order_by"] = self.order_by
-        result["row_data"] = self.row_data
+        result["low_mark"] = self.low_mark
+        result["high_mark"] = self.high_mark
+        result["excluded_pks"] = list(self.excluded_pks)
 
         where = []
 

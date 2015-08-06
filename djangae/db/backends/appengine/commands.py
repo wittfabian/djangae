@@ -340,6 +340,13 @@ class NewSelectCommand(object):
 
         self.excluded_pks = self.query.excluded_pks
 
+    def __eq__(self, other):
+        return (isinstance(other, self.__class__)
+            and self.query.serialize() == other.query.serialize())
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
     def _sanity_check(self):
         if self.query.distinct and not self.query.columns:
             raise NotSupportedError("Tried to perform distinct query when projection wasn't possible")
