@@ -26,6 +26,7 @@ class TransformQueryTest(TestCase):
             connections['default'],
             InheritedModel.objects.filter(field1="One").all().query
         )
+        query.prepare()
 
         self.assertEqual(2, len(query.where.children))
         self.assertTrue(query.where.children[0].children[0].is_leaf)

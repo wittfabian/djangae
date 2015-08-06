@@ -326,7 +326,11 @@ def can_perform_datastore_get(normalized_query):
 class NewSelectCommand(object):
     def __init__(self, connection, query, keys_only=False):
         self.connection = connection
-        self.query = normalize_query(transform_query(connection, query))
+
+        self.query = transform_query(connection, query)
+        self.query.prepare()
+        self.query = normalize_query(self.query)
+
         self.original_query = query
         self.keys_only = (keys_only or [x.field for x in query.select] == [ query.model._meta.pk ])
 

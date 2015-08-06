@@ -193,7 +193,10 @@ class Query(object):
 
         self.projection_possible = True
         self.tables = []
+
         self.columns = None # None means all fields
+        self.init_list = []
+
         self.distinct = False
         self.order_by = []
         self.row_data = [] # For insert/updates
@@ -319,6 +322,8 @@ class Query(object):
 
 
     def add_projected_column(self, column):
+        self.init_list.append(column)
+
         if not self.projection_possible:
             # If we previously tried to add a column that couldn't be
             # projected, we don't try and add any more
@@ -346,6 +351,17 @@ class Query(object):
 
         self.row_data.append(data)
 
+    def prepare(self):
+        if not self.init_list:
+            self.init_list = [ x.column for x in self.model._meta.fields ]
+
+        self._remove_erroneous_isnull()
+        self._remove_negated_empty_in()
+        self._add_inheritence_filter()
+        self._populate_excluded_pks()
+        self._disable_projection_if_fields_used_in_equality_filter()
+        self._check_only_single_inequality_filter()
+
     @property
     def where(self):
         return self._where
@@ -355,12 +371,6 @@ class Query(object):
         assert where is None or isinstance(where, WhereNode)
 
         self._where = where
-        self._remove_erroneous_isnull()
-        self._remove_negated_empty_in()
-        self._add_inheritence_filter()
-        self._populate_excluded_pks()
-        self._disable_projection_if_fields_used_in_equality_filter()
-        self._check_only_single_inequality_filter()
 
     def _populate_excluded_pks(self):
         if not self._where:
