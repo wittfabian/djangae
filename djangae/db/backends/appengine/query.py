@@ -315,10 +315,10 @@ class Query(object):
         elif name in ("Date", "DateTime"):
             self.extra_selects.append(
                 (column,
-                (lambda x: process_date(x, annotation.lookup_type), [annotation.lookup]))
+                (lambda x: process_date(x, annotation.lookup_type), [getattr(annotation, "lookup", column)]))
             )
             # Override the projection so that we only get this column
-            self.columns = [ annotation.lookup ]
+            self.columns = [ getattr(annotation, "lookup", column) ]
 
 
     def add_projected_column(self, column):
