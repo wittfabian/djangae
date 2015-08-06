@@ -761,7 +761,11 @@ def _django_17_query_walk_leaf(node, negated, new_parent, connection, model):
     lhs = field.column
 
     try:
-        rhs = node.process_rhs(None, connection)
+        if hasattr(node.rhs, "get_compiler"):
+            # This is a subquery
+            raise NotSupportedError("Attempted to run a subquery on the datastore")
+        else:
+            rhs = node.process_rhs(None, connection)
     except EmptyResultSet:
         if node.lookup_name == 'in':
             # Deal with this later
