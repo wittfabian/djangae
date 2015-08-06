@@ -628,6 +628,92 @@ def _extract_ordering_from_query_17(query):
         else:
             try:
                 column = col.lstrip("-")
+                field = query.model._meta.get_field_by_name(column)[0]
+                column = "__key__" if field.primary_key else field.column
+                final.append("-" + column if col.startswith("-") else column)
+            except FieldDoesNotExist:
+                if col in query.extra_select:
+                    # If the column is in the extra select we transform to the original
+                    # column
+                    try:
+                        field = opts.get_field_by_name(query.extra_select[col][0])[0]
+                        column = "__key__" if field.primary_key else field.column
+                        final.append("-" + column if col.startswith("-") else column)
+                        continue
+                    except FieldDoesNotExist:
+                        # Just pass through to the exception below
+                        pass
+
+                available = opts.get_all_field_names()
+                raise FieldError("Cannot resolve keyword %r into field. "
+                    "Choices are: %s" % (col, ", ".join(available))
+                )
+
+    # Reverse if not using standard ordering
+    def swap(col):
+        if col.startswith("-"):
+            return col.lstrip("-")
+        else:
+            return "-{}".format(col)
+
+    if not query.standard_ordering:
+        final = [ swap(x) for x in final ]
+
+    if len(final) != len(result):
+        diff = set(result) - set(final)
+        log_once(
+            DJANGAE_LOG.warning if not on_production() else DJANGAE_LOG.debug,
+            "The following orderings were ignored as cross-table and random orderings are not supported on the datastore: %s", diff
+        )
+
+    return final
+
+
+def _extract_ordering_from_query_18(query):
+    from djangae.db.backends.appengine.commands import log_once
+    from django.db.models.expressions import OrderBy, F
+
+    # Add any orderings
+    if not query.default_ordering:
+        result = list(query.order_by)
+    else:
+        result = list(query.order_by or query.get_meta().ordering or [])
+
+    if query.extra_order_by:
+        result = list(query.extra_order_by)
+
+    final = []
+
+    opts = query.model._meta
+
+    for col in result:
+        if isinstance(col, OrderBy):
+            col = col.expression.name
+        elif isinstance(col, F):
+            col = col.name
+
+        if isinstance(col, (int, long)):
+            # If you do a Dates query, the ordering is set to [1] or [-1]... which is weird
+            # I think it's to select the column number but then there is only 1 column so
+            # unless the ordinal is one-based I have no idea. So basically if it's an integer
+            # subtract 1 from the absolute value and look up in the select for the column (guessing)
+            idx = abs(col) - 1
+            try:
+                field_name = query.select[idx].col.col[-1]
+                field = query.model._meta.get_field_by_name(field_name)[0]
+                final.append("-" + field.column if col < 0 else field.column)
+            except IndexError:
+                raise NotSupportedError("Unsupported order_by %s" % col)
+        elif col.lstrip("-") == "pk":
+            pk_col = "__key__"
+            final.append("-" + pk_col if col.startswith("-") else pk_col)
+        elif col == "?":
+            raise NotSupportedError("Random ordering is not supported on the datastore")
+        elif "__" in col:
+            continue
+        else:
+            try:
+                column = col.lstrip("-")
 
                 # This is really 1.8 only, but I didn't want to duplicate this function
                 # just for this. Suggestions for doing this more cleanly welcome!
@@ -941,7 +1027,7 @@ def _transform_query_18(connection, kind, query):
     ret.add_source_table(root_table)
 
     # Extract the ordering of the query results
-    for order_col in _extract_ordering_from_query_17(query):
+    for order_col in _extract_ordering_from_query_18(query):
         ret.add_order_by(order_col)
 
     # Extract any projected columns (values/values_list/only/defer)
