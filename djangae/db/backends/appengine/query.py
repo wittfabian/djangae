@@ -681,17 +681,29 @@ def _extract_ordering_from_query_18(query):
 
     if query.extra_order_by:
         result = list(query.extra_order_by)
-        # Ignore orderings with dot separators
-        # FIXME: This is a little naive. We could support these orderings if the table
-        # specified is the model's table.
-        new_result = [ x for x in result if "." not in x ]
-        if len(result) != len(new_result):
-            diff = set(result) - set(new_result)
+
+        # we need some extra logic to handle dot seperated ordering
+        new_result = []
+        cross_table_ordering = set()
+        for ordering in result:
+            if "." in ordering:
+                dot_based_ordering = ordering.split(".")
+                if dot_based_ordering[0] == query.model._meta.db_table:
+                    ordering = dot_based_ordering[1]
+                elif dot_based_ordering[0].lstrip('-') == query.model._meta.db_table:
+                    ordering = '-{}'.format(dot_based_ordering[1])
+                else:
+                    cross_table_ordering.add(ordering)
+                    continue # we don't want to add this ordering value
+            new_result.append(ordering)
+
+        if len(cross_table_ordering):
             log_once(
                 DJANGAE_LOG.warning if not on_production() else DJANGAE_LOG.debug,
-                "The following orderings were ignored as cross-table orderings are not supported on the datastore: %s", diff
+                "The following orderings were ignored as cross-table orderings are not supported on the datastore: %s", cross_table_ordering
             )
-            result = new_result
+
+        result = new_result
 
     final = []
 
