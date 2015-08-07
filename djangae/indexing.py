@@ -55,11 +55,16 @@ def special_index_exists(model_class, field_name, index_type):
 
 
 def special_indexes_for_model(model_class):
-    return _special_indexes.get(_get_table_from_model(model_class))
+    classes = [ model_class ] + model_class._meta.parents.keys()
+
+    result = {}
+    for klass in classes:
+        result.update(_special_indexes.get(_get_table_from_model(klass), {}))
+    return result
 
 
 def special_indexes_for_column(model_class, column):
-    return _special_indexes.get(_get_table_from_model(model_class), {}).get(column, [])
+    return special_indexes_for_model(model_class).get(column, [])
 
 
 def write_special_indexes():
