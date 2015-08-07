@@ -697,9 +697,19 @@ def _extract_ordering_from_query_18(query):
 
     opts = query.model._meta
 
+    # Apparently expression ordering is absolute and so shouldn't be flipped
+    # if the standard_ordering is False. This keeps track of which columns
+    # were expressions and so don't need flipping
+    expressions = set()
+
     for col in result:
         if isinstance(col, OrderBy):
+            descending = col.descending
             col = col.expression.name
+            if descending:
+                col = "-" + col
+            expressions.add(col)
+
         elif isinstance(col, F):
             col = col.name
 
@@ -773,7 +783,7 @@ def _extract_ordering_from_query_18(query):
             return "-{}".format(col)
 
     if not query.standard_ordering:
-        final = [ swap(x) for x in final ]
+        final = [ x if x in expressions else swap(x) for x in final ]
 
     if len(final) != len(result):
         diff = set(result) - set(final)
