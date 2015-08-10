@@ -2,38 +2,32 @@
 from datetime import datetime
 import logging
 import copy
-import re
+import decimal
+import json
 from functools import partial
 from itertools import chain, groupby
 
 #LIBRARIES
+import django
 from django.db import DatabaseError
-from django.core.exceptions import FieldError
-from django.db.models.fields import FieldDoesNotExist
-
 from django.core.cache import cache
 from django.db import IntegrityError
-from django.db.models.sql.datastructures import EmptyResultSet
-from django.db.models.sql import query
-from django.db.models.sql.where import EmptyWhere
-from django.db.models.fields import AutoField
+
 from google.appengine.api import datastore, datastore_errors
 from google.appengine.api.datastore import Query
 from google.appengine.ext import db
 
 #DJANGAE
-from djangae.db.backends.appengine.dbapi import CouldBeSupportedError, NotSupportedError
+from djangae.db.backends.appengine.dbapi import NotSupportedError
 from djangae.db.utils import (
     get_datastore_key,
     django_instance_to_entity,
-    get_prepared_db_value,
     MockInstance,
-    get_top_concrete_parent,
-    get_concrete_parents,
-    has_concrete_parents
+    has_concrete_parents,
+    get_field_from_column
 )
-from djangae.indexing import special_indexes_for_column, REQUIRES_SPECIAL_INDEXES, add_special_index
-from djangae.utils import on_production, memoized
+
+from djangae.db.backends.appengine import POLYMODEL_CLASS_ATTRIBUTE
 from djangae.db import constraints, utils
 from djangae.db.backends.appengine import caching
 from djangae.db.unique_utils import query_is_unique
@@ -84,20 +78,17 @@ REVERSE_OP_MAP = {
 
 INEQUALITY_OPERATORS = frozenset(['>', '<', '<=', '>='])
 
+
 def _cols_from_where_node(where_node):
     cols = where_node.get_cols() if hasattr(where_node, 'get_cols') else where_node.get_group_by_cols()
     return cols
 
 def _get_tables_from_where(where_node):
     cols = _cols_from_where_node(where_node)
-    return list(set([x[0] for x in cols if x[0] ]))
-
-@memoized
-def get_field_from_column(model, column):
-    for field in model._meta.fields:
-        if field.column == column:
-            return field
-    return None
+    if django.VERSION[1] < 8:
+        return list(set([x[0] for x in cols if x[0] ]))
+    else:
+        return list(set([x.alias for x in cols]))
 
 
 def field_conv_year_only(value):
@@ -167,123 +158,28 @@ def log_once(logging_call, text, args):
 log_once.logged = set()
 
 
-def parse_constraint(child, connection, negated=False):
-    if isinstance(child, tuple):
-        # First, unpack the constraint
-        constraint, op, annotation, value = child
-        was_list = isinstance(value, (list, tuple))
-        if isinstance(value, query.Query):
-            value = value.get_compiler(connection.alias).as_sql()[0].execute()
-        else:
-            packed, value = constraint.process(op, value, connection)
-        alias, column, db_type = packed
-        field = constraint.field
-    else:
-        # Django 1.7+
-        field = child.lhs.target
-        column = child.lhs.target.column
-        op = child.lookup_name
-        value = child.rhs
-        annotation = value
-        was_list = isinstance(value, (list, tuple))
-
-        if isinstance(value, query.Query):
-            value = value.get_compiler(connection.alias).as_sql()[0].execute()
-        elif value != []:
-            value = child.lhs.output_field.get_db_prep_lookup(
-                child.lookup_name, child.rhs, connection, prepared=True)
-
-
-    is_pk = field and field.primary_key
-
-    if column == "id" and op == "iexact" and is_pk and isinstance(field, AutoField):
-        # When new instance is created, automatic primary key 'id' does not generate '_idx_iexact_id'.
-        # As the primary key 'id' (AutoField) is integer and is always case insensitive, we can deal with 'id_iexact=' query by using 'exact' rather than 'iexact'.
-        op = "exact"
-
-    if field and field.db_type(connection) in ("bytes", "text"):
-        raise NotSupportedError("Text and Blob fields are not indexed by the datastore, so you can't filter on them")
-
-    if op not in REQUIRES_SPECIAL_INDEXES:
-        # Don't convert if this op requires special indexes, it will be handled there
-        if field:
-            value = [ connection.ops.prep_lookup_value(field.model, x, field, column=column) for x in value]
-
-        # Don't ask me why, but on Django 1.6 constraint.process on isnull wipes out the value (it returns an empty list)
-        # so we have to special case this to use the annotation value instead
-        if op == "isnull":
-            if annotation is not None:
-                value = [ annotation ]
-
-            if is_pk and value[0]:
-                raise EmptyResultSet()
-
-        if not was_list:
-            value = value[0]
-    else:
-        if negated:
-            raise CouldBeSupportedError("Special indexing does not currently supported negated queries. See #80")
-
-        if not was_list:
-            value = value[0]
-
-        add_special_index(field.model, column, op)  # Add the index if we can (e.g. on dev_appserver)
-
-        if op not in special_indexes_for_column(field.model, column):
-            raise RuntimeError("There is a missing index in your djangaeidx.yaml - \n\n{0}:\n\t{1}: [{2}]".format(
-                field.model, column, op)
-            )
-
-        indexer = REQUIRES_SPECIAL_INDEXES[op]
-        value = indexer.prep_value_for_query(value)
-        column = indexer.indexed_column_name(column, value=value)
-        op = indexer.prep_query_operator(op)
-
-    return column, op, value
-
-
-def convert_keys_to_entities(results):
-    """
-        If for performance reasons we do a keys_only query, then the result
-        of the query will be a list of keys, not a list of entities. Here
-        we convert to a FakeEntity type which should be enough for the rest of the
-        pipeline to process without knowing any different!
-    """
-
-    class FakeEntity(dict):
-        def __init__(self, key):
-            self._key = key
-
-        def key(self):
-            return self._key
-
-    for result in results:
-        if isinstance(result, datastore.Key):
-            yield FakeEntity(result)
-        else:
-            yield FakeEntity(result.key())
-
-
 def _convert_entity_based_on_query_options(entity, opts):
     if opts.keys_only:
         return entity.key()
 
     if opts.projection:
         for k in entity.keys()[:]:
-            if k not in list(opts.projection) + ["class"]:
+            if k not in list(opts.projection) + [POLYMODEL_CLASS_ATTRIBUTE]:
                 del entity[k]
 
     return entity
 
 
-def _get_key(query):
-    return query["__key__ ="]
 
 class QueryByKeys(object):
     def __init__(self, model, queries, ordering):
+        def _get_key(query):
+            result = query["__key__ ="]
+            return result
+
         self.model = model
         self.queries = queries
-        self.queries_by_key = { a: list(b) for a, b in groupby(queries, lambda x: _get_key(x)) }
+        self.queries_by_key = { a: list(b) for a, b in groupby(queries, _get_key) }
         self.ordering = ordering
         self._Query__kind = queries[0]._Query__kind
 
@@ -347,6 +243,14 @@ class UniqueQuery(object):
         self._gae_query = gae_query
         self._model = model
 
+        self._Query__kind = gae_query._Query__kind
+
+    def get(self, x):
+        return self._gae_query.get(x)
+
+    def keys(self):
+        return self._gae_query.keys()
+
     def Run(self, limit, offset):
         opts = self._gae_query._Query__query_options
         if opts.keys_only or opts.projection:
@@ -374,586 +278,402 @@ class UniqueQuery(object):
         return sum(1 for x in self.Run(limit, offset))
 
 
-def _convert_ordering(query):
-    if not query.default_ordering:
-        result = query.order_by
-    else:
-        result = query.order_by or query.get_meta().ordering
+from djangae.db.backends.appengine.query import transform_query
+from djangae.db.backends.appengine.dnf import normalize_query
 
-    if query.extra_order_by:
-        # This is a best attempt at ordering by extra select, it covers the cases
-        # in the Django tests, but use this functionality with care
-        all_fields = query.get_meta().get_all_field_names()
-        new_ordering = []
-        for col in query.extra_order_by:
-            # If the query in the extra order by is part of the extra select
-            # and the extra select is just an alias, then use the original column
-            if col in query.extra_select:
-                if query.extra_select[col][0] in all_fields:
-                    new_ordering.append(query.extra_select[col][0])
-                else:
-                    # It wasn't an alias, probably can't support it
-                    raise NotSupportedError("Unsupported extra_order_by: {}".format(query.extra_order_by))
-            else:
-                # Not in the extra select, probably just a column so use it if it is
-                if col in all_fields:
-                    new_ordering.append(col)
-                else:
-                    raise NotSupportedError("Unsupported extra_order_by: {}".format(query.extra_order_by))
+def convert_django_ordering_to_gae(ordering):
+    result = []
 
-        result = tuple(new_ordering)
-
-    if result:
-        # We factor out cross-table orderings (rather than raising NotSupportedError) otherwise we'll break
-        # the admin which uses them. We log a warning when this happens though
-        try:
-            ordering = []
-            for name in result:
-                if name == "?":
-                    raise NotSupportedError("Random ordering is not supported on the datastore")
-
-                if not (isinstance(name, basestring) and "__" in name):
-                    if isinstance(name, basestring):
-                        if name.lstrip("-") == "pk":
-                            field_column = query.model._meta.pk.column
-                        else:
-                            field = query.model._meta.get_field_by_name(name.lstrip("-"))[0]
-                            field_column = field.column
-                        ordering.append(field_column if not name.startswith("-") else "-{}".format(field_column))
-                    else:
-                        ordering.append(name)
-
-        except FieldDoesNotExist:
-            opts = query.model._meta
-            available = opts.get_all_field_names()
-            raise FieldError("Cannot resolve keyword %r into field. "
-                "Choices are: %s" % (name, ", ".join(available))
-            )
-
-        if len(ordering) < len(result):
-            diff = set(result) - set(ordering)
-            log_once(
-                DJANGAE_LOG.warning if not on_production() else DJANGAE_LOG.debug,
-                "The following orderings were ignored as cross-table orderings are not supported on the datastore: %s", diff
-            )
-        result = ordering
-
-
+    for column in ordering:
+        if column.startswith("-"):
+            result.append((column.lstrip("-"), datastore.Query.DESCENDING))
+        else:
+            result.append((column, datastore.Query.ASCENDING))
     return result
 
-def _apply_extra_to_entity(extra_select, entity, pk_col):
+def wrap_result_with_functor(results, func):
+    for result in results:
+        result = func(result)
+        if result is not None:
+            yield result
+
+
+def can_perform_datastore_get(normalized_query):
     """
-        Obviously the datastore doesn't support extra columns, but we can emulate simple
-        extra selects as we iterate the results. This function does that!
+        Given a normalized query, returns True if there is an equality
+        filter on a key in each branch of the where
     """
+    assert normalized_query.is_normalized
 
-    def prep_value(attr):
-        if attr == pk_col:
-            attr = entity.key().id_or_name()
+    for and_branch in normalized_query.where.children:
+        if and_branch.is_leaf:
+            if (and_branch.column != "__key__" or and_branch.operator != "="):
+                return False
         else:
-            attr = entity[attr] if attr in entity else attr
+            key_found = False
+            for filter_node in and_branch.children:
+                assert filter_node.is_leaf
 
-        try:
-            attr = int(attr)
-        except (TypeError, ValueError):
-            pass
+                if filter_node.column == "__key__":
+                    if filter_node.operator == "=":
+                        key_found = True
+                        break
 
-        if isinstance(attr, basestring):
-            if (attr[0], attr[-1]) == ("'", "'"):
-                attr = attr[1:-1]
-            elif (attr[0], attr[-1]) == ('"', '"'):
-                attr = attr[1:-1]
-        return attr
+            if not key_found:
+                return False
 
-    for column, (select, _) in extra_select.iteritems():
+    return True
 
-        arithmetic_regex = "(\w+)\s?([+|-|/|*|\=])\s?([\w|'|\"]+)"
-        match = re.match(arithmetic_regex, select)
-        if match:
-            lhs = match.group(1)
-            op = match.group(2)
-            rhs = match.group(3)
-
-            lhs = prep_value(lhs)
-            rhs = prep_value(rhs)
-
-            fun = EXTRA_SELECT_FUNCTIONS.get(op)
-            if not fun:
-                raise NotSupportedError("Unimplemented extra select operation: '%s'" % op)
-
-            entity[column] = fun(lhs, rhs)
-        else:
-            rhs = prep_value(select)
-            entity[column] = rhs
-
-    return entity
 
 class SelectCommand(object):
     def __init__(self, connection, query, keys_only=False):
-        self.where = None
-
-        self.original_query = query
         self.connection = connection
 
-        self.limits = (query.low_mark, query.high_mark)
-        self.results_returned = 0
+        self.query = transform_query(connection, query)
+        self.query.prepare()
+        self.query = normalize_query(self.query)
 
-        opts = query.get_meta()
+        self.original_query = query
+        self.keys_only = (keys_only or [x.field for x in query.select] == [ query.model._meta.pk ])
 
-        self.distinct = query.distinct
-        self.distinct_values = set()
-        self.distinct_on_field = None
-        self.distinct_field_convertor = None
-        self.queried_fields = []
-        self.model = query.model
-        self.pk_col = opts.pk.column
-        self.is_count = query.aggregates
-        self.extra_select = query.extra_select
-        self._set_db_table()
+        # MultiQuery doesn't support keys_only
+        if self.query.where and len(self.query.where.children) > 1:
+            self.keys_only = False
 
-        try:
-            self._validate_query_is_possible(query)
-            self.ordering = _convert_ordering(query)
-        except NotSupportedError as e:
-            # If we can detect here, or when parsing the WHERE tree that a query is unsupported
-            # we set this flag, and then throw NotSupportedError when execute is called.
-            # This will then wrap the exception in Django's NotSupportedError meaning users
-            # only need to catch that one, and not both Django's and ours
-            self.unsupported_query_message = str(e)
-            return
-        else:
-            self.unsupported_query_message = ""
-
-
-        # If the query uses defer()/only() then we need to process deferred. We have to get all deferred columns
-        # for all (concrete) inherited models and then only include columns if they appear in that list
-        deferred_columns = {}
-        query.deferred_to_data(deferred_columns, query.deferred_to_columns_cb)
-        inherited_db_tables = [x._meta.db_table for x in get_concrete_parents(self.model)]
-        only_load = list(chain(*[list(deferred_columns.get(x, [])) for x in inherited_db_tables]))
-
-        if query.select:
-            for x in query.select:
-                if hasattr(x, "field"):
-                    # In Django 1.6+ 'x' above is a SelectInfo (which is a tuple subclass), whereas in 1.5 it's a tuple
-                    # in 1.6 x[1] == Field, but 1.5 x[1] == unicode (column name)
-                    if x.field is None:
-                        column = x.col.col[1]  # This is the column we are getting
-                        lookup_type = x.col.lookup_type
-
-                        self.distinct_on_field = column
-
-                        # This whole section of code is weird, and is probably better implemented as a custom Query type (like QueryByKeys)
-                        # basically, appengine gives back dates as a time since the epoch, we convert it to a date, then floor it, then convert it back
-                        # in our transform function. The transform is applied when the results are read back so that only distinct values are returned.
-                        # this is very hacky...
-                        if lookup_type in DATE_TRANSFORMS:
-                            self.distinct_field_convertor = lambda value: DATE_TRANSFORMS[lookup_type](self.connection, value)
-                        else:
-                            raise CouldBeSupportedError("Unhandled lookup_type %s" % lookup_type)
-                    else:
-                        column = x.field.column
-                else:
-                    column = x[1]
-
-                if only_load and column not in only_load:
-                    continue
-
-                self.queried_fields.append(column)
-        else:
-            # If no specific fields were specified, select all fields if the query is distinct (as App Engine only supports
-            # distinct on projection queries) or the ones specified by only_load
-            self.queried_fields = [x.column for x in opts.fields if (x.column in only_load) or self.distinct]
-
-        self.keys_only = keys_only or self.queried_fields == [opts.pk.column]
-
-        # Projection queries don't return results unless all projected fields are
-        # indexed on the model. This means if you add a field, and all fields on the model
-        # are projectable, you will never get any results until you've resaved all of them.
-
-        # Because it's not possible to detect this situation, we only try a projection query if a
-        # subset of fields was specified (e.g. values_list('bananas')) which makes the behaviour a
-        # bit more predictable. It would be nice at some point to add some kind of force_projection()
-        # thing on a queryset that would do this whenever possible, but that's for the future, maybe.
-        try_projection = (self.keys_only is False) and bool(self.queried_fields)
-
-        if not self.queried_fields:
-            # If we don't have any queried fields yet, it must have been an empty select and not a distinct
-            # and not an only/defer, so get all the fields
-            self.queried_fields = [ x.column for x in opts.fields ]
-
-        self.excluded_pks = set()
-
-        self.has_inequality_filter = False
-        self.all_filters = []
-        self.results = None
-
-        self.gae_query = None
-
-        projection_fields = []
-
-        if try_projection:
-            for field in self.queried_fields:
-                # We don't include the primary key in projection queries...
-                if field == self.pk_col:
-                    order_fields = set([ x.strip("-") for x in self.ordering])
-
-                    if self.pk_col in order_fields or "pk" in order_fields:
-                        # If we were ordering on __key__ we can't do a projection at all
-                        self.projection_fields = []
-                        break
-                    continue
-
-                # Text and byte fields aren't indexed, so we can't do a
-                # projection query
-                f = get_field_from_column(self.model, field)
-                if not f:
-                    raise CouldBeSupportedError("Attempting a cross-table select or dates query, or something?!")
-                assert f  # If this happens, we have a cross-table select going on! #FIXME
-                db_type = f.db_type(connection)
-
-                if db_type in ("bytes", "text", "list", "set"):
-                    projection_fields = []
-                    break
-
-                projection_fields.append(field)
-
-        self.projection = list(set(projection_fields)) or None
-        if opts.parents:
-            self.projection = None
-
-        if isinstance(query.where, EmptyWhere):
-            # Empty where means return nothing!
-            raise EmptyResultSet()
-        else:
-            try:
-                where_tables = _get_tables_from_where(query.where)
-            except TypeError:
-                # This exception is thrown by get_group_by_cols if one of the constraints is a SubQueryConstraint
-                # yeah, we can't do that.
-                self.unsupported_query_message = "Subquery WHERE constraints aren't supported"
-                return
-
-            if where_tables and where_tables != [ query.model._meta.db_table ]:
-                # Mark this query as unsupported and return
-                self.unsupported_query_message = "Cross-join WHERE constraints aren't supported: %s" % _cols_from_where_node(query.where)
-                return
-
-            from dnf import parse_dnf
-            try:
-                self.where, columns, self.excluded_pks = parse_dnf(query.where, self.connection, ordering=self.ordering)
-            except NotSupportedError as e:
-                # Mark this query as unsupported and return
-                self.unsupported_query_message = str(e)
-                return
-
-        # DISABLE PROJECTION IF WE ARE FILTERING ON ONE OF THE PROJECTION_FIELDS
-        for field in self.projection or []:
-            if field in columns:
-                self.projection = None
-                break
-        try:
-            # If the PK was queried, we switch it in our queried
-            # fields store with __key__
-            pk_index = self.queried_fields.index(self.pk_col)
-            self.queried_fields[pk_index] = "__key__"
-        except ValueError:
-            pass
-
-    def execute(self):
-        if self.unsupported_query_message:
-            raise NotSupportedError(self.unsupported_query_message)
-
-        self.gae_query = self._build_gae_query()
-        self.results = None
-        self.query_done = False
-        self.aggregate_type = "count" if self.is_count else None
-        self._do_fetch()
-
-    def lower(self):
-        """
-            This exists solely for django-debug-toolbar compatibility.
-            At some point I hope to investigate making SelectCommand a GQL string
-            so that we don't need to do this hackery
-        """
-
-        return str(self).lower()
+        self.excluded_pks = self.query.excluded_pks
 
     def __eq__(self, other):
-        if not isinstance(other, self.__class__):
-            return False
+        return (isinstance(other, self.__class__)
+            and self.query.serialize() == other.query.serialize())
 
-        return self.__repr__() == other.__repr__()
+    def __ne__(self, other):
+        return not self.__eq__(other)
 
-    def __repr__(self):
-        return "SELECT {} FROM {} WHERE {}".format(
-            ", ".join(self.queried_fields or [] if not self.is_count else ["COUNT"]),
-            self.db_table,
-            self.where
-        )
+    def _sanity_check(self):
+        if self.query.distinct and not self.query.columns:
+            raise NotSupportedError("Tried to perform distinct query when projection wasn't possible")
 
-    def _set_db_table(self):
-        """ Work out which Datastore kind we should actually be querying. This allows for poly
-            models, i.e. non-abstract parent models which we support by storing all fields for
-            both the parent model and its child models on the parent table.
-        """
-        inheritance_root = get_top_concrete_parent(self.model)
-        self.db_table = inheritance_root._meta.db_table
+    def _exclude_pk(self, columns):
+        if columns is None:
+            return None
 
-    def _validate_query_is_possible(self, query):
-        """ Given the *django* query, check the following:
-            - The query only has one inequality filter
-            - The query does no joins
-            - The query ordering is compatible with the filters
-        """
-        # Check for joins, we ignore select related tables as they aren't actually used (the connector marks select
-        # related as unsupported in its features)
-        tables = [ k for k, v in query.alias_refcount.items() if v ]
-        inherited_tables = set([x._meta.db_table for x in query.model._meta.parents ])
-        select_related_tables = set([y[0][0] for y in query.related_select_cols ])
-        tables = set(tables) - inherited_tables - select_related_tables
+        opts = self.query.model._meta
+        copts = self.query.concrete_model._meta
 
-        if len(tables) > 1:
-            raise NotSupportedError("""
-                The appengine database connector does not support JOINs. The requested join map follows\n
-                %s
-            """ % query.join_map)
+        return [
+            x for x in columns if x not in
+            (opts.pk.column, copts.pk.column)
+        ]
 
-        if query.aggregates:
-            if query.aggregates.keys() == [ None ]:
-                agg_col = query.aggregates[None].col
-                opts = self.model._meta
-                if agg_col != "*" and agg_col != (opts.db_table, opts.pk.column):
-                    raise NotSupportedError("Counting anything other than '*' or the primary key is not supported")
-            else:
-                raise NotSupportedError("Unsupported aggregate query")
+    def _build_query(self):
+        self._sanity_check()
 
-    def _build_gae_query(self):
-        """ Build and return the Datastore Query object. """
+        queries = []
+
+        projection = self._exclude_pk(self.query.columns) or None
+
         query_kwargs = {
-            "kind": str(self.db_table)
+            "kind": self.query.concrete_model._meta.db_table,
+            "distinct": self.query.distinct or None,
+            "keys_only": self.keys_only or None,
+            "projection": projection
         }
 
-        if self.distinct:
-            if self.projection:
-                query_kwargs["distinct"] = True
-            else:
-                logging.warning("Ignoring distinct on a query where a projection wasn't possible")
+        ordering = convert_django_ordering_to_gae(self.query.order_by)
 
-        if self.keys_only:
-            query_kwargs["keys_only"] = self.keys_only
-        elif self.projection:
-            query_kwargs["projection"] = self.projection
+        if self.query.distinct and not ordering:
+            # If we specified we wanted a distinct query, but we didn't specify
+            # an ordering, we must set the ordering to the distinct columns, otherwise
+            # App Engine shouts at us. Nastily. And without remorse.
+            ordering = self.query.columns[:]
 
-        query = Query(
-            **query_kwargs
-        )
-
-        if has_concrete_parents(self.model) and not self.model._meta.proxy:
-            query["class ="] = self.model._meta.db_table
-
-        ordering = []
-        for order in self.ordering:
-            if isinstance(order, (long, int)):
-                direction = datastore.Query.ASCENDING if order == 1 else datastore.Query.DESCENDING
-                order = self.queried_fields[0]
-            else:
-                direction = datastore.Query.DESCENDING if order.startswith("-") else datastore.Query.ASCENDING
-                order = order.lstrip("-")
-
-            if order == self.model._meta.pk.column or order == "pk":
-                order = "__key__"
-
-            #Flip the ordering if someone called reverse() on the queryset
-            if not self.original_query.standard_ordering:
-                direction = datastore.Query.DESCENDING if direction == datastore.Query.ASCENDING else datastore.Query.ASCENDING
-
-            ordering.append((order, direction))
-
-        def process_and_branch(query, and_branch):
-            for child in and_branch[-1]:
-                column, op, value = child[1]
-
-            # for column, op, value in and_branch[-1]:
-                if column == self.pk_col:
-                    column = "__key__"
-
-                    #FIXME: This EmptyResultSet check should happen during normalization so that Django doesn't count it as a query
-                    if op == "=" and "__key__ =" in query and query["__key__ ="] != value:
-                        # We've already done an exact lookup on a key, this query can't return anything!
-                        raise EmptyResultSet()
-
-                    if not isinstance(value, datastore.Key):
-                        try:
-                            value = get_datastore_key(self.model, value)
-                        except (datastore_errors.BadValueError, datastore_errors.BadArgumentError):
-                            # A key couldn't be constructed from this value, so no such entity can exist
-                            raise EmptyResultSet()
-
-                key = "%s %s" % (column, op)
-                try:
-                    if isinstance(value, basestring):
-                        value = coerce_unicode(value)
-
-                    if key in query:
-                        if type(query[key]) == list:
-                            if value not in query[key]:
-                                query[key].append(value)
-                        else:
-                            if query[key] != value:
-                                query[key] = [ query[key], value ]
-                    else:
-                        query[key] = value
-                except datastore_errors.BadFilterError as e:
-                    raise NotSupportedError(str(e))
-
-        if self.where:
-            queries = []
-
-            # print query._Query__kind, self.where
-
-            for and_branch in self.where[1]:
-                # Duplicate the query for all the "OR"s
-                queries.append(Query(**query_kwargs))
-                queries[-1].update(query)  # Make sure we copy across filters (e.g. class =)
-                try:
-                    if and_branch[0] == "LIT":
-                        and_branch = ("AND", [and_branch])
-                    process_and_branch(queries[-1], and_branch)
-                except EmptyResultSet:
-                    # This is a little hacky but basically if there is only one branch in the or, and it raises
-                    # and EmptyResultSet, then we just bail, however if there is more than one branch the query the
-                    # query might still return something. This logic needs cleaning up and moving to the DNF phase
-                    if len(self.where[1]) == 1:
-                        return NoOpQuery()
-                    else:
-                        queries.pop()
-
-            if not queries:
-                return NoOpQuery()
-
-            included_pks = [ qry["__key__ ="] for qry in queries if "__key__ =" in qry ]
-            if len(included_pks) == len(queries): # If all queries have a key, we can perform a Get
-                return QueryByKeys(self.model, queries, ordering) # Just use whatever query to determine the matches
-            else:
-                if len(queries) > 1:
-                    # Disable keys only queries for MultiQuery
-                    new_queries = []
-                    for i, query in enumerate(queries):
-                        if i > 30:
-                            raise NotSupportedError("Too many subqueries (max: 30, got {}). Probably cause too many IN/!= filters".format(
-                                len(queries)
-                            ))
-                        qry = Query(query._Query__kind, projection=query._Query__query_options.projection)
-                        qry.update(query)
-                        try:
-                            qry.Order(*ordering)
-                        except datastore_errors.BadArgumentError as e:
-                            raise NotSupportedError(e)
-
-                        new_queries.append(qry)
-
-                    query = datastore.MultiQuery(new_queries, ordering)
-                else:
-                    query = queries[0]
-                    try:
-                        query.Order(*ordering)
-                    except datastore_errors.BadArgumentError as e:
-                        raise NotSupportedError(e)
-        else:
+        # Deal with the no filters case
+        if self.query.where is None:
+            query = Query(
+                **query_kwargs
+            )
             try:
                 query.Order(*ordering)
             except datastore_errors.BadArgumentError as e:
                 raise NotSupportedError(e)
+            return query
 
-        # If the resulting query was unique, then wrap as a unique query which
-        # will hit the cache first
-        unique_identifier = query_is_unique(self.model, query)
-        if unique_identifier:
-            return UniqueQuery(unique_identifier, query, self.model)
+        assert self.query.where
 
-        DJANGAE_LOG.debug("Select query: {0}, {1}".format(self.model.__name__, self.where))
+        # Go through the normalized query tree
+        for and_branch in self.query.where.children:
+            query = Query(
+                **query_kwargs
+            )
 
-        return query
+            # This deals with the oddity that the root of the tree may well be a leaf
+            filters = [ and_branch ] if and_branch.is_leaf else and_branch.children
 
-    def _do_fetch(self):
-        assert not self.results
+            for filter_node in filters:
+                lookup = "{} {}".format(filter_node.column, filter_node.operator)
 
+                value = filter_node.value
+                # This is a special case. Annoyingly Django's decimal field doesn't
+                # ever call ops.get_prep_save or lookup or whatever when you are filtering
+                # on a query. It *does* do it on a save, so we basically need to do a
+                # conversion here, when really it should be handled elsewhere
+                if isinstance(value, decimal.Decimal):
+                    field = get_field_from_column(self.query.model, filter_node.column)
+                    value = self.connection.ops.value_to_db_decimal(value, field.max_digits, field.decimal_places)
+                elif isinstance(value, basestring):
+                    value = unicode(value)
+
+                # If there is already a value for this lookup, we need to make the
+                # value a list and append the new entry
+                if lookup in query and not isinstance(query[lookup], (list, tuple)):
+                    query[lookup] = [ query[lookup ] ] + [ value ]
+                else:
+                    # If the value is a list, we can't just assign it to the query
+                    # which will treat each element as its own value. So in this
+                    # case we nest it. This has the side effect of throwing a BadValueError
+                    # which we could throw ourselves, but the datastore might start supporting
+                    # list values in lookups.. you never know!
+                    if isinstance(value, (list, tuple)):
+                        query[lookup] = [ value ]
+                    else:
+                        # Common case: just add the raw where constraint
+                        query[lookup] = value
+
+            if ordering:
+                try:
+                    query.Order(*ordering)
+                except datastore_errors.BadArgumentError as e:
+                    # This is the easiest way to detect unsupported orderings
+                    # ideally we'd detect this at the query normalization stage
+                    # but it's a lot of hassle, this is much easier and seems to work OK
+                    raise NotSupportedError(e)
+            queries.append(query)
+
+        if can_perform_datastore_get(self.query):
+            # Yay for optimizations!
+            return QueryByKeys(self.query.model, queries, ordering)
+
+        if len(queries) == 1:
+            identifier = query_is_unique(self.query.model, queries[0])
+            if identifier:
+                # Yay for optimizations!
+                return UniqueQuery(identifier, queries[0], self.query.model)
+
+            return queries[0]
+        else:
+            return datastore.MultiQuery(queries, ordering)
+
+    def _fetch_results(self, query):
         # If we're manually excluding PKs, and we've specified a limit to the results
         # we need to make sure that we grab more than we were asked for otherwise we could filter
         # out too many! These are again limited back to the original request limit
         # while we're processing the results later
-        excluded_pk_count = 0
-        if self.excluded_pks and self.limits[1]:
-            excluded_pk_count = len(self.excluded_pks)
-            self.limits = tuple([self.limits[0], self.limits[1] + excluded_pk_count])
 
-        self.results = self._run_query(
-            aggregate_type=self.aggregate_type,
-            start=self.limits[0],
-            limit=None if self.limits[1] is None else (self.limits[1] - (self.limits[0] or 0))
-        )
+        high_mark = self.query.high_mark
+        low_mark = self.query.low_mark
+
+        excluded_pk_count = 0
+        if self.excluded_pks and high_mark:
+            excluded_pk_count = len(self.excluded_pks)
+            high_mark += excluded_pk_count
+
+        limit = None if high_mark is None else (high_mark - (low_mark or 0))
+        offset = low_mark or 0
+
+        if self.query.kind == "COUNT":
+            if self.excluded_pks:
+                # If we're excluding pks, relying on a traditional count won't work
+                # so we have two options:
+                # 1. Do a keys_only query instead and count the results excluding keys
+                # 2. Do a count, then a pk__in=excluded_pks to work out how many to subtract
+                # Here I've favoured option one as it means a single RPC call. Testing locally
+                # didn't seem to indicate much of a performance difference, even when doing the pk__in
+                # with GetAsync while the count was running. That might not be true of prod though so
+                # if anyone comes up with a faster idea let me know!
+                count_query = Query(query._Query__kind, keys_only=True)
+                count_query.update(query)
+                resultset = count_query.Run(limit=limit, offset=offset)
+                self.results = (x for x in [ len([ y for y in resultset if y not in self.excluded_pks]) ])
+            else:
+                self.results = (x for x in [query.Count(limit=limit, offset=offset)])
+            return
+        elif self.query.kind == "AVERAGE":
+            raise ValueError("AVERAGE not yet supported")
+        else:
+            self.results = query.Run(limit=limit, offset=offset)
 
         # Ensure that the results returned is reset
         self.results_returned = 0
 
-        if excluded_pk_count:
-            # Reset the upper limit if we adjusted it above
-            self.limits = tuple([self.limits[0], self.limits[1] - excluded_pk_count])
-
-        self.query_done = True
-
-    def _run_query(self, limit=None, start=None, aggregate_type=None):
-        if aggregate_type is None:
-            results = self.gae_query.Run(limit=limit, offset=start)
-            if self.keys_only:
-                # If we did a keys_only query for performance, we need to wrap the result
-                results = convert_keys_to_entities(results)
-
-        elif self.aggregate_type == "count":
-            return self.gae_query.Count(limit=limit, offset=start)
-        else:
-            raise RuntimeError("Unsupported query type")
-
-        def lazy_results():
-            for result in results:
-                if self.extra_select:
-                    yield _apply_extra_to_entity(self.extra_select, result, self.pk_col)
-                else:
-                    yield result
-        return lazy_results()
-
-
-    def next_result(self):
-        if self.limits[1]:
-            if self.results_returned >= self.limits[1] - (self.limits[0] or 0):
-                raise StopIteration()
-
-        while True:
-            x = self.results.next()
-
-            if isinstance(x, datastore.Key):
-                if x in self.excluded_pks:
-                    continue
-            elif x.key() in self.excluded_pks:
-                continue
-
-            if self.distinct_on_field: #values for distinct queries
-                value = x[self.distinct_on_field]
-                value = self.distinct_field_convertor(value)
-
-                if value in self.distinct_values:
-                    continue
-                else:
-                    self.distinct_values.add(value)
-                    # Insert modified value into entity before returning the entity. This is dirty,
-                    # but Cursor.fetchone (which calls this) wants the entity ID and yet also wants
-                    # the correct value for this field. The alternative would be to call
-                    # self.distinct_field_convertor again in Cursor.fetchone, but that's wasteful.
-                    x[self.distinct_on_field] = value
-
+        def increment_returned_results(result):
             self.results_returned += 1
-            return x
+            return result
+
+        def convert_key_to_entity(result):
+            class FakeEntity(dict):
+                def __init__(self, key):
+                    self._key = key
+
+                def key(self):
+                    return self._key
+
+            return FakeEntity(result)
+
+        def rename_pk_field(result):
+            if result is None:
+                return result
+
+            value = result.key().id_or_name()
+            result[self.query.model._meta.pk.column] = value
+            result[self.query.concrete_model._meta.pk.column] = value
+            return result
+
+        def process_extra_selects(result):
+            """
+                We handle extra selects by generating the new columns from
+                each result. We can handle simple boolean logic and operators.
+            """
+            extra_selects = self.query.extra_selects
+            model_fields = self.query.model._meta.fields
+
+            DATE_FORMATS = ("%Y-%m-%d", "%Y-%m-%d %H:%M:%S")
+
+            def process_arg(arg):
+                if arg.startswith("'") and arg.endswith("'"):
+                    # String literal
+                    arg = arg.strip("'")
+                    # Check to see if this is a date
+                    for date in DATE_FORMATS:
+                        try:
+                            value = datetime.strptime(arg, date)
+                            return value
+                        except ValueError:
+                            continue
+                    return arg
+                elif arg in [ x.column for x in model_fields ]:
+                    # Column value
+                    return result.get(arg)
+
+                # Handle NULL
+                if arg.lower() == 'null':
+                    return None
+                elif arg.lower() == 'true':
+                    return True
+                elif arg.lower() == 'false':
+                    return False
+
+                # See if it's an integer
+                try:
+                    arg = int(arg)
+                except (TypeError, ValueError):
+                    pass
+
+                # Just a plain old literal
+                return arg
+
+            for col, select in extra_selects:
+                result[col] = select[0](*[ process_arg(x) for x in select[1] ])
+
+            return result
+
+        def convert_datetime_fields(result):
+            fields = [
+                x for x in self.query.model._meta.fields
+                if x.get_internal_type() in ("DateTimeField", "DateField", "TimeField")
+            ]
+
+            for field in fields:
+                column = field.column
+                if isinstance(result, dict): # sometimes it's a key!
+                    value = result.get(column)
+                else:
+                    value = None
+
+                if value is not None:
+                    result[column] = ensure_datetime(value)
+            return result
+
+        def ignore_excluded_pks(result):
+            if result.key() in self.query.excluded_pks:
+                return None
+            return result
+
+        self.results = wrap_result_with_functor(self.results, increment_returned_results)
+
+        # If this is a keys only query, we need to generate a fake entity
+        # for each key in the result set
+        if self.keys_only:
+            self.results = wrap_result_with_functor(self.results, convert_key_to_entity)
+
+        self.results = wrap_result_with_functor(self.results, ignore_excluded_pks)
+        self.results = wrap_result_with_functor(self.results, convert_datetime_fields)
+        self.results = wrap_result_with_functor(self.results, rename_pk_field)
+        self.results = wrap_result_with_functor(self.results, process_extra_selects)
+
+        if self.query.distinct and self.query.extra_selects:
+            # If we had extra selects, and we're distinct, we must deduplicate results
+            def deduper_factory():
+                seen = set()
+
+                def dedupe(result):
+                    # FIXME: This logic can't be right. I think we need to store the distinct fields
+                    # somewhere on the query
+                    if getattr(self.original_query, "annotation_select", None):
+                        columns = self.original_query.annotation_select.keys()
+                    else:
+                        columns = self.query.columns or []
+                    if not columns:
+                        return result
+
+                    key = tuple([ result[x] for x in self._exclude_pk(columns) if x in result ])
+                    if key in seen:
+                        return None
+                    seen.add(key)
+                    return result
+
+                return dedupe
+
+            self.results = wrap_result_with_functor(self.results, deduper_factory())
+
+
+    def execute(self):
+        self.gae_query = self._build_query()
+        self._fetch_results(self.gae_query)
+
+    def __unicode__(self):
+        try:
+            qry = json.loads(self.query.serialize())
+
+            result = u" ".join([
+                qry["kind"],
+                ", ".join(qry["columns"] if qry["projection_possible"] and qry["columns"] else ["*"]),
+                "FROM",
+                qry["concrete_table"]
+            ])
+
+            if qry["where"]:
+                result += " " + u" ".join([
+                    "WHERE",
+                    " OR ".join([
+                        " AND ".join( [ "{} {}".format(k, v) for k, v in x.iteritems() ])
+                        for x in qry["where"]
+                    ])
+                ])
+            return result
+        except:
+            # We never want this to cause things to die
+            logging.exception("Unable to translate query to string")
+            return "QUERY TRANSLATION ERROR"
+
+    def __repr__(self):
+        return self.__unicode__().encode("utf-8")
+
+    def lower(self):
+        """
+            This exists solely for django-debug-toolbar compatibility.
+        """
+        return str(self).lower()
+
 
 class FlushCommand(object):
     """
@@ -1056,7 +776,6 @@ class InsertCommand(object):
 
             return results
         else:
-
             if not constraints.constraint_checks_enabled(self.model):
                 # Fast path, just bulk insert
                 results = datastore.Put(self.entities)
@@ -1069,8 +788,8 @@ class InsertCommand(object):
                     #FIXME: We should rearrange this so that each entity is handled individually like above. We'll
                     # lose insert performance, but gain consistency on errors which is more important
                     markers = constraints.acquire_bulk(self.model, self.entities)
-
                     results = datastore.Put(self.entities)
+
                     for entity in self.entities:
                         caching.add_entity_to_cache(self.model, entity, caching.CachingSituation.DATASTORE_PUT)
 
@@ -1092,8 +811,32 @@ class InsertCommand(object):
         return str(self).lower()
 
 
+    def __unicode__(self):
+        try:
+            keys = self.entities[0].keys()
+            result = u" ".join([
+                "INSERT INTO",
+                self.entities[0].kind(),
+                "(" + ", ".join(keys) + ")",
+                "VALUES"
+            ])
+
+            for entity in self.entities:
+                result += "(" + ", ".join([str(entity[x]) for x in keys]) + ")"
+
+            return result
+        except:
+            # We never want this to cause things to die
+            logging.exception("Unable to translate query to string")
+            return "QUERY TRANSLATION ERROR"
+
+    def __repr__(self):
+        return self.__unicode__().encode("utf-8")
+
+
 class DeleteCommand(object):
     def __init__(self, connection, query):
+        self.model = query.model
         self.select = SelectCommand(connection, query, keys_only=True)
 
     def execute(self):
@@ -1108,16 +851,16 @@ class DeleteCommand(object):
             qry["__key__ ="] = key
             return qry
 
-        queries = [spawn_query(self.select.db_table, x.key()) for x in self.select.results]
+        queries = [spawn_query(x.key().kind(), x.key()) for x in self.select.results]
         if not queries:
             return
 
-        for entity in QueryByKeys(self.select.model, queries, []).Run():
+        for entity in QueryByKeys(self.model, queries, []).Run():
             keys.append(entity.key())
 
             # Delete constraints if that's enabled
-            if constraints.constraint_checks_enabled(self.select.model):
-                constraints.release(self.select.model, entity)
+            if constraints.constraint_checks_enabled(self.model):
+                constraints.release(self.model, entity)
 
             caching.remove_entity_from_cache_by_key(entity.key())
         datastore.Delete(keys)
@@ -1172,12 +915,26 @@ class UpdateCommand(object):
         # what we have is fine.
         instance = MockInstance(**instance_kwargs)
 
+        # We need to add to the class attribute, rather than replace it!
+        original_class = result.get(POLYMODEL_CLASS_ATTRIBUTE, [])
+
         # Update the entity we read above with the new values
         result.update(django_instance_to_entity(
             self.connection, self.model,
             [ x[0] for x in self.values],  # Pass in the fields that were updated
             True, instance)
         )
+
+        # Make sure we keep all classes in the inheritence tree!
+        if original_class:
+            if result[POLYMODEL_CLASS_ATTRIBUTE] is not None:
+                result[POLYMODEL_CLASS_ATTRIBUTE].extend(original_class)
+                # Make sure we don't add duplicates
+            else:
+                result[POLYMODEL_CLASS_ATTRIBUTE] = original_class
+
+        if POLYMODEL_CLASS_ATTRIBUTE in result:
+            result[POLYMODEL_CLASS_ATTRIBUTE] = list(set(result[POLYMODEL_CLASS_ATTRIBUTE]))
 
         if not constraints.constraint_checks_enabled(self.model):
             # The fast path, no constraint checking
@@ -1204,10 +961,8 @@ class UpdateCommand(object):
     def execute(self):
         self.select.execute()
 
-        results = self.select.results
-
         i = 0
-        for result in results:
+        for result in self.select.results:
             if self._update_entity(result.key()):
                 # Only increment the count if we successfully updated
                 i += 1

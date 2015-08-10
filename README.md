@@ -39,7 +39,9 @@ http://djangae.readthedocs.org/
 ## Supported Django Versions
 
 The intention is always to support the last two versions of Django, although older versions may work. Currently
-Django 1.6 and 1.7 are supported. 1.8 support will come soon after it's released.
+Django 1.7 and 1.8 are supported. Django 1.9 support (master) isn't too far away!
+
+** 1.6 is no longer supported by Djangae, as it's not supported by Django either! **
 
 # Installation
 
@@ -56,7 +58,7 @@ On the first run this will download the App Engine SDK, pip install a bunch of s
 
     $ DJANGO_VERSION=1.8 ./runtests.sh
 
-Currently the default is 1.6. TravisCI runs on 1.6 and 1.7 currently, and 1.8 in the 1-8-support branch.
+Currently the default is 1.7. TravisCI runs on 1.7 and 1.8 currently.
 
 You can run specific tests in the usual way by doing:
 

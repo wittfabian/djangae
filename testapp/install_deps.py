@@ -32,6 +32,13 @@ NEXT_DJANGO_VERSION = {
     "2.0": "2.1",
 }
 
+if DJANGO_VERSION != "master":
+    DJANGO_FOR_PIP = "django>={},<{}".format(DJANGO_VERSION, NEXT_DJANGO_VERSION[DJANGO_VERSION])
+    DJANGO_TESTS_URL = "https://github.com/django/django/archive/stable/{}.x.zip".format(DJANGO_VERSION)
+else:
+    DJANGO_FOR_PIP = "git+git://github.com/django/django.git@master"
+    DJANGO_TESTS_URL = "https://github.com/django/django/archive/master.zip"
+
 if __name__ == '__main__':
 
     if os.path.exists(TARGET_DIR):
@@ -67,15 +74,13 @@ if __name__ == '__main__':
     p.wait()
 
     print("Installing Django {}".format(DJANGO_VERSION))
-    args = ["pip", "install", "--no-deps", "django>={},<{}".format(DJANGO_VERSION, NEXT_DJANGO_VERSION[DJANGO_VERSION]), "-t", TARGET_DIR, "-I", "--no-use-wheel"]
+    args = ["pip", "install", "--no-deps", DJANGO_FOR_PIP, "-t", TARGET_DIR, "-I", "--no-use-wheel"]
     p = subprocess.Popen(args)
     p.wait()
 
     print("Installing Django tests from {}".format(DJANGO_VERSION))
-
-    url = "https://github.com/django/django/archive/stable/{}.x.zip".format(DJANGO_VERSION)
-    django_zip = urlopen(url)
+    django_zip = urlopen(DJANGO_TESTS_URL)
     zipfile = ZipFile(StringIO(django_zip.read()))
     for filename in zipfile.namelist():
-        if filename.startswith("django-stable-{}.x/tests/".format(DJANGO_VERSION)):
+        if filename.startswith("django-stable-{}.x/tests/".format(DJANGO_VERSION)) or filename.startswith("django-master/tests/"):
             zipfile.extract(filename, os.path.join(TARGET_DIR))
