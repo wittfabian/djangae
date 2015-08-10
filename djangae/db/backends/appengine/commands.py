@@ -927,12 +927,14 @@ class UpdateCommand(object):
 
         # Make sure we keep all classes in the inheritence tree!
         if original_class:
-            if result[POLYMODEL_CLASS_ATTRIBUTE]:
+            if result[POLYMODEL_CLASS_ATTRIBUTE] is not None:
                 result[POLYMODEL_CLASS_ATTRIBUTE].extend(original_class)
                 # Make sure we don't add duplicates
-                result[POLYMODEL_CLASS_ATTRIBUTE] = list(set(result[POLYMODEL_CLASS_ATTRIBUTE]))
             else:
                 result[POLYMODEL_CLASS_ATTRIBUTE] = original_class
+
+        if POLYMODEL_CLASS_ATTRIBUTE in result:
+            result[POLYMODEL_CLASS_ATTRIBUTE] = list(set(result[POLYMODEL_CLASS_ATTRIBUTE]))
 
         if not constraints.constraint_checks_enabled(self.model):
             # The fast path, no constraint checking

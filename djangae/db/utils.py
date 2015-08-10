@@ -220,7 +220,7 @@ def django_instance_to_entity(connection, model, fields, raw, instance, check_nu
 
     classes = get_concrete_db_tables(model)
     if len(classes) > 1:
-        entity[POLYMODEL_CLASS_ATTRIBUTE] = classes
+        entity[POLYMODEL_CLASS_ATTRIBUTE] = list(set(classes))
 
     return entity
 
