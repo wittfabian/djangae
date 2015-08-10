@@ -325,7 +325,7 @@ def can_perform_datastore_get(normalized_query):
     return True
 
 
-class NewSelectCommand(object):
+class SelectCommand(object):
     def __init__(self, connection, query, keys_only=False):
         self.connection = connection
 
@@ -837,7 +837,7 @@ class InsertCommand(object):
 class DeleteCommand(object):
     def __init__(self, connection, query):
         self.model = query.model
-        self.select = NewSelectCommand(connection, query, keys_only=True)
+        self.select = SelectCommand(connection, query, keys_only=True)
 
     def execute(self):
         self.select.execute()
@@ -875,7 +875,7 @@ class DeleteCommand(object):
 class UpdateCommand(object):
     def __init__(self, connection, query):
         self.model = query.model
-        self.select = NewSelectCommand(connection, query, keys_only=True)
+        self.select = SelectCommand(connection, query, keys_only=True)
         self.values = query.values
         self.connection = connection
 

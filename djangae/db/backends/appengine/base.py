@@ -41,7 +41,6 @@ from django.utils import timezone
 from google.appengine.api.datastore_types import Blob, Text
 from google.appengine.ext.db import metadata
 from google.appengine.datastore import datastore_stub_util
-from google.appengine.api.datastore import Key
 from google.appengine.api import datastore, datastore_errors
 
 #DJANGAE
@@ -53,7 +52,7 @@ from djangae.db.utils import (
 from djangae.db import caching
 from djangae.indexing import load_special_indexes
 from .commands import (
-    NewSelectCommand,
+    SelectCommand,
     InsertCommand,
     FlushCommand,
     UpdateCommand,
@@ -94,7 +93,7 @@ class Cursor(object):
         self.last_delete_command = None
 
     def execute(self, sql, *params):
-        if isinstance(sql, NewSelectCommand):
+        if isinstance(sql, SelectCommand):
             # Also catches subclasses of SelectCommand (e.g Update)
             self.last_select_command = sql
             self.rowcount = self.last_select_command.execute() or -1

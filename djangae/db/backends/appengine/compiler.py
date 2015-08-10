@@ -14,7 +14,7 @@ except ImportError:
 
 #DJANGAE
 from .commands import (
-    NewSelectCommand,
+    SelectCommand,
     InsertCommand,
     UpdateCommand,
     DeleteCommand
@@ -25,7 +25,7 @@ class SQLCompiler(compiler.SQLCompiler):
         self.pre_sql_setup()
         self.refcounts_before = self.query.alias_refcount.copy()
 
-        select = NewSelectCommand(
+        select = SelectCommand(
             self.connection,
             self.query
         )
