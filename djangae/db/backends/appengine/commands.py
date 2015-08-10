@@ -425,7 +425,7 @@ class SelectCommand(object):
 
                 # If there is already a value for this lookup, we need to make the
                 # value a list and append the new entry
-                if lookup in query and not isinstance(query[lookup], (list, tuple)):
+                if lookup in query and not isinstance(query[lookup], (list, tuple)) and query[lookup] != value:
                     query[lookup] = [ query[lookup ] ] + [ value ]
                 else:
                     # If the value is a list, we can't just assign it to the query
