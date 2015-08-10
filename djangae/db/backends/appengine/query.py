@@ -12,8 +12,7 @@ from django.db.models.sql.where import EmptyWhere
 from django.db.models import AutoField
 
 from django.db import NotSupportedError
-from djangae.indexing import (
-    special_indexes_for_column,
+from djangae.db.backends.appengine.indexing import (
     REQUIRES_SPECIAL_INDEXES,
     add_special_index,
 )
@@ -23,7 +22,6 @@ from djangae.utils import on_production
 from djangae.db.utils import (
     get_top_concrete_parent,
     get_model_from_db_table,
-    get_concrete_parents,
     has_concrete_parents,
     get_field_from_column
 )

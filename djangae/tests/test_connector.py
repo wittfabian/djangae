@@ -30,7 +30,7 @@ from djangae.test import inconsistent_db, TestCase
 from django.db import IntegrityError, NotSupportedError
 from djangae.db.constraints import UniqueMarker, UniquenessMixin
 from djangae.db.unique_utils import _unique_combinations, unique_identifiers_from_entity
-from djangae.indexing import add_special_index
+from djangae.db.backends.appengine.indexing import add_special_index
 from djangae.db.utils import entity_matches_query, decimal_to_string, normalise_field_value
 from djangae.db.caching import disable_cache
 from djangae.fields import SetField, ListField, RelatedSetField

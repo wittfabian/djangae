@@ -50,7 +50,7 @@ from djangae.db.utils import (
     get_datastore_key,
 )
 from djangae.db import caching
-from djangae.indexing import load_special_indexes
+from djangae.db.backends.appengine.indexing import load_special_indexes
 from .commands import (
     SelectCommand,
     InsertCommand,
