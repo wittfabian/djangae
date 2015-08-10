@@ -929,6 +929,8 @@ class UpdateCommand(object):
         if original_class:
             if result[POLYMODEL_CLASS_ATTRIBUTE]:
                 result[POLYMODEL_CLASS_ATTRIBUTE].extend(original_class)
+                # Make sure we don't add duplicates
+                result[POLYMODEL_CLASS_ATTRIBUTE] = list(set(result[POLYMODEL_CLASS_ATTRIBUTE]))
             else:
                 result[POLYMODEL_CLASS_ATTRIBUTE] = original_class
 
