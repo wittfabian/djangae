@@ -18,6 +18,7 @@ from djangae.indexing import (
     add_special_index,
 )
 
+from djangae.db.backends.appengine import POLYMODEL_CLASS_ATTRIBUTE
 from djangae.utils import on_production
 from djangae.db.utils import (
     get_top_concrete_parent,
@@ -527,7 +528,7 @@ class Query(object):
                 return
 
             new_filter = WhereNode()
-            new_filter.column = 'class'
+            new_filter.column = POLYMODEL_CLASS_ATTRIBUTE
             new_filter.operator = '='
             new_filter.value = self.model._meta.db_table
 
@@ -572,16 +573,16 @@ class Query(object):
 
         where = []
 
-        assert self.where.connector == 'OR'
+        if self.where:
+            assert self.where.connector == 'OR'
+            for node in self.where.children:
+                assert node.connector == 'AND'
 
-        for node in self.where.children:
-            assert node.connector == 'AND'
+                query = {}
+                for lookup in node.children:
+                    query[''.join([lookup.column, lookup.operator])] = str(lookup.value)
 
-            query = {}
-            for lookup in node.children:
-                query[''.join([lookup.column, lookup.operator])] = lookup.value
-
-            where.append(query)
+                where.append(query)
 
         result["where"] = where
 

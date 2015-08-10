@@ -3,6 +3,7 @@ from datetime import datetime
 import logging
 import copy
 import decimal
+import json
 from functools import partial
 from itertools import chain, groupby
 
@@ -26,6 +27,7 @@ from djangae.db.utils import (
     get_field_from_column
 )
 
+from djangae.db.backends.appengine import POLYMODEL_CLASS_ATTRIBUTE
 from djangae.db import constraints, utils
 from djangae.db.backends.appengine import caching
 from djangae.db.unique_utils import query_is_unique
@@ -162,7 +164,7 @@ def _convert_entity_based_on_query_options(entity, opts):
 
     if opts.projection:
         for k in entity.keys()[:]:
-            if k not in list(opts.projection) + ["class"]:
+            if k not in list(opts.projection) + [POLYMODEL_CLASS_ATTRIBUTE]:
                 del entity[k]
 
     return entity
@@ -638,6 +640,40 @@ class NewSelectCommand(object):
         self.gae_query = self._build_query()
         self._fetch_results(self.gae_query)
 
+    def __unicode__(self):
+        try:
+            qry = json.loads(self.query.serialize())
+
+            result = u" ".join([
+                qry["kind"],
+                ", ".join(qry["columns"] if qry["projection_possible"] and qry["columns"] else ["*"]),
+                "FROM",
+                qry["concrete_table"]
+            ])
+
+            if qry["where"]:
+                result += " " + u" ".join([
+                    "WHERE",
+                    " OR ".join([
+                        " AND ".join( [ "{} {}".format(k, v) for k, v in x.iteritems() ])
+                        for x in qry["where"]
+                    ])
+                ])
+            return result
+        except:
+            # We never want this to cause things to die
+            logging.exception("Unable to translate query to string")
+            return "QUERY TRANSLATION ERROR"
+
+    def __repr__(self):
+        return self.__unicode__().encode("utf-8")
+
+    def lower(self):
+        """
+            This exists solely for django-debug-toolbar compatibility.
+        """
+        return str(self).lower()
+
 
 class FlushCommand(object):
     """
@@ -775,6 +811,29 @@ class InsertCommand(object):
         return str(self).lower()
 
 
+    def __unicode__(self):
+        try:
+            keys = self.entities[0].keys()
+            result = u" ".join([
+                "INSERT INTO",
+                self.entities[0].kind(),
+                "(" + ", ".join(keys) + ")",
+                "VALUES"
+            ])
+
+            for entity in self.entities:
+                result += "(" + ", ".join([str(entity[x]) for x in keys]) + ")"
+
+            return result
+        except:
+            # We never want this to cause things to die
+            logging.exception("Unable to translate query to string")
+            return "QUERY TRANSLATION ERROR"
+
+    def __repr__(self):
+        return self.__unicode__().encode("utf-8")
+
+
 class DeleteCommand(object):
     def __init__(self, connection, query):
         self.model = query.model
@@ -856,12 +915,22 @@ class UpdateCommand(object):
         # what we have is fine.
         instance = MockInstance(**instance_kwargs)
 
+        # We need to add to the class attribute, rather than replace it!
+        original_class = result.get(POLYMODEL_CLASS_ATTRIBUTE, [])
+
         # Update the entity we read above with the new values
         result.update(django_instance_to_entity(
             self.connection, self.model,
             [ x[0] for x in self.values],  # Pass in the fields that were updated
             True, instance)
         )
+
+        # Make sure we keep all classes in the inheritence tree!
+        if original_class:
+            if result[POLYMODEL_CLASS_ATTRIBUTE]:
+                result[POLYMODEL_CLASS_ATTRIBUTE].extend(original_class)
+            else:
+                result[POLYMODEL_CLASS_ATTRIBUTE] = original_class
 
         if not constraints.constraint_checks_enabled(self.model):
             # The fast path, no constraint checking
@@ -888,10 +957,8 @@ class UpdateCommand(object):
     def execute(self):
         self.select.execute()
 
-        results = self.select.results
-
         i = 0
-        for result in results:
+        for result in self.select.results:
             if self._update_entity(result.key()):
                 # Only increment the count if we successfully updated
                 i += 1

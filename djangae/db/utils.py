@@ -6,10 +6,8 @@ from itertools import chain
 import warnings
 
 #LIBRARIES
-import django
 from django.apps import apps
 from django.conf import settings
-from django.db import models
 from django.db.backends.utils import format_number
 from django.db import IntegrityError
 from django.utils import timezone
@@ -20,7 +18,7 @@ from google.appengine.api.datastore import Key, Query
 from djangae.utils import memoized
 from djangae.indexing import special_indexes_for_column, REQUIRES_SPECIAL_INDEXES
 from djangae.db.backends.appengine.dbapi import CouldBeSupportedError
-
+from djangae.db.backends.appengine import POLYMODEL_CLASS_ATTRIBUTE
 
 def make_timezone_naive(value):
     if value is None:
@@ -222,7 +220,7 @@ def django_instance_to_entity(connection, model, fields, raw, instance, check_nu
 
     classes = get_concrete_db_tables(model)
     if len(classes) > 1:
-        entity["class"] = classes
+        entity[POLYMODEL_CLASS_ATTRIBUTE] = classes
 
     return entity
 
