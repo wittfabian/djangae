@@ -7,6 +7,7 @@ try:
 except ImportError:
     from StringIO import StringIO
 
+from django.conf import settings
 from django.core.urlresolvers import reverse
 from django.core.files.base import File
 from django.core.files.storage import Storage
@@ -18,6 +19,7 @@ from django.utils.encoding import smart_str, force_unicode
 from django.test.client import encode_multipart, MULTIPART_CONTENT, BOUNDARY
 
 from google.appengine.api import urlfetch
+from google.appengine.api import app_identity
 from google.appengine.api.images import (
     get_serving_url,
     NotImageError,
@@ -41,6 +43,8 @@ try:
 except ImportError:
     has_cloudstorage = False
 
+BUCKET_KEY = 'CLOUD_STORAGE_BUCKET'
+DEFAULT_CONTENT_TYPE = 'application/binary'
 
 def serve_file(request, blob_key_or_info, as_download=False, content_type=None, filename=None, offset=None, size=None):
     """
@@ -98,6 +102,22 @@ def serve_file(request, blob_key_or_info, as_download=False, content_type=None, 
     if info.size is not None:
         response['Content-Length'] = info.size
     return response
+
+
+def get_bucket_name():
+    """
+        Returns the bucket name for Google Cloud Storage, either from your
+        settings or the default app bucket.
+    """
+    bucket = getattr(settings, BUCKET_KEY, None)
+    if not bucket:
+        # No explicit setting, lets try the default bucket for your application.
+        bucket = app_identity.get_default_gcs_bucket_name()
+    if not bucket:
+        from django.core.exceptions import ImproperlyConfigured
+        message = '%s not set or no default bucket configured' % BUCKET_KEY
+        raise ImproperlyConfigured(message)
+    return bucket
 
 
 class BlobstoreStorage(Storage):
@@ -172,7 +192,9 @@ class BlobstoreStorage(Storage):
         if not content.name:
             content.name = 'untitled'
 
-        response = urlfetch.fetch(url=create_upload_url(reverse('djangae_internal_upload_handler')),
+        url = self._create_upload_url()
+
+        response = urlfetch.fetch(url=url,
             payload=encode_multipart(BOUNDARY, {'file': content}),
             method=urlfetch.POST,
             deadline=60,
@@ -183,6 +205,73 @@ class BlobstoreStorage(Storage):
             raise ValueError("The internal upload to blobstore failed, check the app's logs.")
         return '%s/%s' % (response.content, name.lstrip('/'))
 
+    def _create_upload_url(self):
+        return create_upload_url(reverse('djangae_internal_upload_handler'))
+
+
+class CloudStorage(BlobstoreStorage):
+    write_options = None
+
+    def __init__(self, bucket=None):
+        if not bucket:
+            bucket = get_bucket_name()
+        self.bucket = bucket
+        # +2 for the slashes.
+        self._bucket_prefix_len = len(bucket) + 2
+        if cloudstorage.common.local_run() and not cloudstorage.common.get_access_token():
+            self.api_url = cloudstorage.common.local_api_url()
+            self.api_url = '/_ah/gcs'
+        else:
+            self.api_url = 'https://storage.googleapis.com'
+
+    def url(self, filename):
+        return '{0}/{1}/{2}'.format(self.api_url, self.bucket, filename)
+
+    def _open(self, name, mode='r'):
+        name = self._add_bucket(name)
+        # Handle 'rb' as 'r'.
+        mode = mode[:1]
+        return cloudstorage.open(name, mode=mode)
+
+    def _add_bucket(self, name):
+        return '/{0}/{1}'.format(self.bucket, name)
+
+    def _content_type_for_name(self, name):
+        # guess_type returns (None, encoding) if it can't guess.
+        return mimetypes.guess_type(name)[0] or DEFAULT_CONTENT_TYPE
+
+    def _save(self, name, content):
+        kwargs = {
+            'content_type': self._content_type_for_name(name),
+            'options': self.write_options,
+        }
+        with cloudstorage.open(self._add_bucket(name), 'w', **kwargs) as fp:
+            fp.write(content.read())
+        return name
+
+    def delete(self, name):
+        try:
+            cloudstorage.delete(self._add_bucket(name))
+        except cloudstorage.NotFoundError:
+            pass
+
+    def exists(self, name):
+        size = self.size(name)
+        return size is not None
+
+    def size(self, name):
+        try:
+            info = cloudstorage.stat(self._add_bucket(name))
+        except cloudstorage.NotFoundError:
+            return None
+        else:
+            return info.st_size
+
+    def _create_upload_url(self):
+        return create_upload_url(
+            reverse('djangae_internal_upload_handler'),
+            gs_bucket_name=self.bucket_name
+        )
 
 class UniversalNewLineBlobReader(BlobReader):
     def readline(self, size=-1):
