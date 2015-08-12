@@ -178,8 +178,8 @@ class QueryByKeys(object):
             return result
 
         self.model = model
-        self.queries = queries
-        self.queries_by_key = { a: list(b) for a, b in groupby(queries, _get_key) }
+        self.queries = sorted(queries, key=_get_key)
+        self.queries_by_key = { a: list(b) for a, b in groupby(self.queries, _get_key) }
         self.ordering = ordering
         self._Query__kind = queries[0]._Query__kind
 
