@@ -5,8 +5,8 @@ from itertools import chain
 
 from django.contrib.contenttypes.models import ContentType
 from django.db import DEFAULT_DB_ALIAS, router, connections
-from django.db.models import get_model, get_models, signals, Manager, get_apps
-from django.db.models.loading import UnavailableApp
+from django.db.models import signals, Manager
+from django.apps import apps
 from django.utils.encoding import smart_text
 from django.utils import six
 from django.utils.six.moves import input
@@ -40,7 +40,7 @@ class SimulatedContentTypeManager(Manager):
         """
         conn = connections[router.db_for_write(ContentType)]
 
-        if conn.use_debug_cursor:
+        if getattr(conn, "use_debug_cursor", getattr(conn, "force_debug_cursor", False)):
             for model in models or []:
                 if model not in self._store.queried_models:
                     conn.queries.append("select * from {}".format(ContentType._meta.db_table))
@@ -58,7 +58,7 @@ class SimulatedContentTypeManager(Manager):
         self._update_queries(models)
 
         if not hasattr(self._store, "content_types"):
-            all_models = [ (x._meta.app_label, x._meta.model_name, x) for x in chain(*[ get_models(y) for y in get_apps() ]) ]
+            all_models = [ (x._meta.app_label, x._meta.model_name, x) for x in apps.get_models() ]
 
             self._update_queries([(x[0], x[1]) for x in all_models])
 
@@ -164,7 +164,14 @@ class SimulatedContentTypeManager(Manager):
             raise NotImplementedError("You can't manually create simulated content types")
 
     def filter(self, **kwargs):
-        raise NotImplementedError()
+        self._repopulate_if_necessary()
+        def _condition(ct):
+            for attr, val in kwargs.items():
+                if getattr(ct, attr) != val:
+                    return False
+            return True
+
+        return [ct for ct in self.all() if _condition(ct)]
 
     def all(self, **kwargs):
         result = []
@@ -172,6 +179,12 @@ class SimulatedContentTypeManager(Manager):
         for ct in self._store.content_types.keys():
             result.append(self.get(id=ct))
         return result
+
+    def using(self, *args, **kwargs):
+        return self
+
+    def bulk_create(self, *args, **kwargs):
+        pass
 
 
 def update_contenttypes(app, created_models, verbosity=2, db=DEFAULT_DB_ALIAS, **kwargs):
@@ -184,8 +197,8 @@ def update_contenttypes(app, created_models, verbosity=2, db=DEFAULT_DB_ALIAS, *
         print("Running Djangae version of update_contenttypes on {}".format(app))
 
     try:
-        get_model('contenttypes', 'ContentType')
-    except UnavailableApp:
+        apps.get_model('contenttypes', 'ContentType')
+    except LookupError:
         return
 
     if hasattr(router, "allow_syncdb"):
@@ -197,7 +210,7 @@ def update_contenttypes(app, created_models, verbosity=2, db=DEFAULT_DB_ALIAS, *
 
 
     ContentType.objects.clear_cache()
-    app_models = get_models(app)
+    app_models = apps.get_models(app)
     if not app_models:
         return
     # They all have the same app_label, get the first one.
@@ -277,6 +290,8 @@ If you're unsure, answer 'no'.
 def patch():
     from django.contrib.contenttypes.management import update_contenttypes as original
 
+    if original == update_contenttypes:
+        return
 
     if hasattr(signals, "post_migrate"):
         signals.post_migrate.disconnect(original)

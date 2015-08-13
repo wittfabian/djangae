@@ -1,7 +1,7 @@
 from mapreduce import input_readers
 import itertools
 import logging
-from django.db.models.loading import cache as model_cache
+from django.apps import apps
 from djangae import utils
 from djangae.storage import UniversalNewLineBlobReader
 
@@ -16,7 +16,7 @@ class DjangoInputReader(input_readers.InputReader):
         self.end_id = end_id
         self.raw_model = model
         app, model = self.raw_model.split('.')
-        self.model = model_cache.get_model(app, model)
+        self.model = apps.get_model(app, model)
         super(DjangoInputReader, self).__init__(*args, **kwargs)
 
 
@@ -59,7 +59,7 @@ class DjangoInputReader(input_readers.InputReader):
         logging.info("Params: %s" % params)
         # Unpickle the query
         app, model = params['model'].split('.')
-        model = model_cache.get_model(app, model)
+        model = apps.get_model(app, model)
 
         # Grab the lowest pk
         query = model.objects.all()

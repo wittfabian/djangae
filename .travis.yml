@@ -1,18 +1,22 @@
 language: python
+sudo: false
 python:
-  - "2.7"
-
+- '2.7'
 env:
-  - "DJANGO_VERSION=1.6"
-  - "DJANGO_VERSION=1.7"
-
+- DJANGO_VERSION=1.7
+- DJANGO_VERSION=1.8
+before_install:
+- pip install codecov
 install:
-  - cd testapp
-  - python install_deps.py
-
+- cd testapp
+- python install_deps.py
 script:
-  - python manage.py test
-
+- python manage.py test
 after_script:
-  - cd ..
-  - rm django_tests
+- cd ..
+- rm django_tests
+after_success:
+- codecov
+notifications:
+  slack:
+    secure: UBhOWAtUrp9sqN6hm4PWir23GK67wo3tb0Ic7tXLpvKYnACz8kjRIiLUMZjl6kftwO+hwhVQdyZ2iSD6isGfB8Q/CyKCej693N2GZ7wxl/dCGqm6CmKrTQZ7Bkwov22fe1/j8U1fhIuR2j/qkFPkvONi+fXirQqFYxmqor1I9a0=
