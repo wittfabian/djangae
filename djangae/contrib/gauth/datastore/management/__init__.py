@@ -1,5 +1,4 @@
 from django.db.models import signals
-from django.db.models.loading import UnavailableApp
 
 # Disconnect the django.contrib.auth signal
 from django.contrib.auth.management import create_permissions
@@ -13,7 +12,7 @@ def create_permissions_wrapper(*args, **kwargs):
     try:
         if not issubclass(get_user_model(), PermissionsMixin):
             create_permissions(*args, **kwargs)
-    except UnavailableApp:
+    except LookupError:
         # If the user model doesn't exist, do nothing (this is what Django's create_permissions does)
         return
 

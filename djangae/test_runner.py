@@ -41,14 +41,27 @@ DJANGO_TESTS_WHICH_HAVE_BUGS = {
 # values that went into the where, but that's for another day.
 DJANGO_TESTS_WHICH_EXPECT_SQL_PARAMS = {
     'model_forms.tests.ModelMultipleChoiceFieldTests.test_clean_does_deduplicate_values',
-    'model_forms.tests.OldFormForXTests.test_clean_does_deduplicate_values' #Same test, in 1.6
+    'model_forms.tests.OldFormForXTests.test_clean_does_deduplicate_values', #Same test, in 1.6
+    'ordering.tests.OrderingTests.test_order_by_f_expression_duplicates'
+}
+
+
+# Django 1.8 removed the supports_select_related flag, so we have to manually skip
+# tests which depend on it
+DJANGO_TESTS_WHICH_USE_SELECT_RELATED = {
+    'defer.tests.DeferTests.test_defer_with_select_related',
+    'defer.tests.DeferTests.test_defer_select_related_raises_invalid_query',
+    'defer.tests.DeferTests.test_only_select_related_raises_invalid_query',
+    'defer.tests.DeferTests.test_only_with_select_related',
+    'model_inheritance.tests.ModelInheritanceDataTests.test_select_related_works_on_parent_model_fields'
 }
 
 
 DJANGO_TESTS_TO_SKIP = DJANGO_TESTS_WHICH_REQUIRE_ZERO_PKS.union(
     DJANGO_TESTS_WHICH_REQUIRE_AUTH_USER).union(
     DJANGO_TESTS_WHICH_HAVE_BUGS).union(
-    DJANGO_TESTS_WHICH_EXPECT_SQL_PARAMS
+    DJANGO_TESTS_WHICH_EXPECT_SQL_PARAMS).union(
+    DJANGO_TESTS_WHICH_USE_SELECT_RELATED
 )
 
 def init_testbed():
@@ -108,7 +121,7 @@ class DjangaeTestSuiteRunner(DiscoverRunner):
             djangae tests to your app, but you can of course override that.
         """
         from django.conf import settings
-        from django.utils.importlib import import_module
+        from importlib import import_module
 
         ADDITIONAL_APPS = getattr(settings, "DJANGAE_ADDITIONAL_TEST_APPS", ("djangae",))
         extra_tests = []

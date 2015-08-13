@@ -39,7 +39,7 @@ class IterableField(models.Field):
         if lookup_type == 'isnull' and value in (True, False):
             return value
 
-        if lookup_type != 'exact' and lookup_type != 'in':
+        if lookup_type not in ['exact', 'in', 'regex', 'iregex']:
             raise ValueError("You can only query using exact and in lookups on iterable fields")
 
         if isinstance(value, (list, set)):
@@ -224,6 +224,9 @@ class ListField(IterableField):
                             "not of type %r." % type(self.ordering))
         super(ListField, self).__init__(*args, **kwargs)
 
+    def get_internal_type(self):
+        return "ListField"
+
     def pre_save(self, model_instance, add):
         value = super(ListField, self).pre_save(model_instance, add)
 
@@ -245,6 +248,9 @@ class SetField(IterableField):
     @property
     def _iterable_type(self):
         return set
+
+    def get_internal_type(self):
+        return "SetField"
 
     def db_type(self, connection):
         return 'set'
