@@ -210,6 +210,11 @@ class BlobstoreStorage(Storage):
 
 
 class CloudStorage(BlobstoreStorage):
+    """
+        Google Cloud Storage backend, set this as your default backend
+        for ease of use, you can speicify and non-default bucket in the
+        constructor
+    """
     write_options = None
 
     def __init__(self, bucket=None):
@@ -219,7 +224,7 @@ class CloudStorage(BlobstoreStorage):
         # +2 for the slashes.
         self._bucket_prefix_len = len(bucket) + 2
         if cloudstorage.common.local_run() and not cloudstorage.common.get_access_token():
-            self.api_url = cloudstorage.common.local_api_url()
+            # We do it this way so that the stubs override in tests
             self.api_url = '/_ah/gcs'
         else:
             self.api_url = 'https://storage.googleapis.com'
@@ -231,7 +236,9 @@ class CloudStorage(BlobstoreStorage):
         name = self._add_bucket(name)
         # Handle 'rb' as 'r'.
         mode = mode[:1]
-        return cloudstorage.open(name, mode=mode)
+        data = cloudstorage.open(name, mode=mode)
+        import ipdb; ipdb.set_trace()
+        return data
 
     def _add_bucket(self, name):
         return '/{0}/{1}'.format(self.bucket, name)
