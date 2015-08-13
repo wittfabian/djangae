@@ -8,7 +8,7 @@ from django.conf import settings
 from google.appengine.datastore.datastore_rpc import BaseConnection
 
 # CONSISTENCY
-from .caches import get_caches
+from djangae.contrib.consistency.caches import get_caches
 
 
 DEFAULT_CONFIG = {
