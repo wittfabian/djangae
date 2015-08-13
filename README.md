@@ -2,7 +2,7 @@
 
 [![Join the chat at https://gitter.im/potatolondon/djangae](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/potatolondon/djangae?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 
-[![build-status-image]][travis]
+[![build-status-image]][travis] [![codecov.io](http://codecov.io/github/potatolondon/djangae/coverage.svg?branch=master)](http://codecov.io/github/potatolondon/djangae?branch=master)
 
 The best way to run Django on Google App Engine.
 
