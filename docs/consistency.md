@@ -1,7 +1,6 @@
 # Djangae Contrib Consistency
 
-A Django app which helps to mitigate against eventual consistency issues with the App Engine Datastore.
-Works only with [Djangae](https://github.com/potatolondon/djangae).
+A contrib app which helps to mitigate against eventual consistency issues with the App Engine Datastore.
 
 
 ## In A Nutshell
@@ -30,7 +29,7 @@ more_consistent_queryset = improve_queryset_consistency(queryset)
 # Use as normal
 ```
 
-If you want you can use the `get_recent_objects` fuction separately to just get hold of the recently-created/modified objects.
+If you want you can use the `get_recent_objects` function separately to just get hold of the recently-created/modified objects.
 
 
 Note that the recently-created objects are not guaranteed to be returned.  The
@@ -75,7 +74,7 @@ CONSISTENCY_CONFIG = {
         "app_name.UnimportantModel": {
             "cache_on_creation": False,
             "cache_on_modification": False,
-            # Any settings which you don't override inheit from "defaults".
+            # Any settings which you don't override inherit from "defaults".
         },
     },
 }
