@@ -118,7 +118,7 @@ from djangae import fields
 
 class KittenSanctuary(models.Model):
 
-	is_best = fields.TrueOrNullField(unique=True)
+    is_best = fields.TrueOrNullField(unique=True)
     kittens = fields.RelatedSetField('Kitten')
     kitten_rota = fields.RelatedListField('Kitten')
     inspection_dates = fields.SetField(models.DateField())
