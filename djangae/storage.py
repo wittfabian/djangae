@@ -233,12 +233,10 @@ class CloudStorage(BlobstoreStorage):
         return '{0}/{1}/{2}'.format(self.api_url, self.bucket, filename)
 
     def _open(self, name, mode='r'):
-        name = self._add_bucket(name)
         # Handle 'rb' as 'r'.
         mode = mode[:1]
-        data = cloudstorage.open(name, mode=mode)
-        import ipdb; ipdb.set_trace()
-        return data
+        fp = cloudstorage.open(self._add_bucket(name), mode=mode)
+        return File(fp)
 
     def _add_bucket(self, name):
         return '/{0}/{1}'.format(self.bucket, name)
