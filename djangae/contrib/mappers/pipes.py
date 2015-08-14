@@ -78,6 +78,7 @@ class MapReduceTask(object):
     model = None
     map_args = []
     map_kwargs = {}
+    target = 'default'
 
 
     def __init__(self, model=None):
@@ -146,4 +147,5 @@ class MapReduceTask(object):
             params=mapper_parameters,
             shards=shard_count
         )
+        pipe.with_params(target=self.target)
         pipe.start(base_path=PIPELINE_BASE_PATH)

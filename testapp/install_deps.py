@@ -33,10 +33,10 @@ NEXT_DJANGO_VERSION = {
 }
 
 if DJANGO_VERSION != "master":
-    DJANGO_FOR_PIP = "django>={},<{}".format(DJANGO_VERSION, NEXT_DJANGO_VERSION[DJANGO_VERSION])
+    DJANGO_FOR_PIP = "https://github.com/django/django/archive/stable/{}.x.tar.gz".format(DJANGO_VERSION)
     DJANGO_TESTS_URL = "https://github.com/django/django/archive/stable/{}.x.zip".format(DJANGO_VERSION)
 else:
-    DJANGO_FOR_PIP = "git+git://github.com/django/django.git@master"
+    DJANGO_FOR_PIP = "https://github.com/django/django/archive/master.tar.gz"
     DJANGO_TESTS_URL = "https://github.com/django/django/archive/master.zip"
 
 if __name__ == '__main__':

@@ -1,4 +1,5 @@
 #STANDARD LIB
+from urlparse import urlparse
 
 # LIBRARIES
 from django.contrib.auth import get_user_model, get_user
@@ -15,6 +16,7 @@ from djangae.contrib.gauth.datastore.models import GaeDatastoreUser, Group, get_
 from djangae.contrib.gauth.backends import AppEngineUserAPI
 from djangae.contrib.gauth.middleware import AuthenticationMiddleware
 from djangae.contrib.gauth.settings import AUTHENTICATION_BACKENDS
+from djangae.contrib.gauth.utils import get_switch_accounts_url
 from djangae.contrib import sleuth
 
 
@@ -144,7 +146,11 @@ class MiddlewareTests(TestCase):
 
         self.assertEqual(_get_user_two().user_id(), request.user.username)
 
-@override_settings(AUTH_USER_MODEL='djangae.GaeDatastoreUser', AUTHENTICATION_BACKENDS=('djangae.contrib.gauth.backends.AppEngineUserAPI',))
+
+@override_settings(
+    AUTH_USER_MODEL='djangae.GaeDatastoreUser',
+    AUTHENTICATION_BACKENDS=('djangae.contrib.gauth.backends.AppEngineUserAPI',)
+)
 class CustomPermissionsUserModelBackendTest(TestCase):
     """
     Tests for the ModelBackend using the CustomPermissionsUser model.
@@ -248,3 +254,53 @@ class CustomPermissionsUserModelBackendTest(TestCase):
         """A superuser has all permissions. Refs #14795."""
         user = self.UserModel.objects.get(pk=self.superuser.pk)
         self.assertEqual(len(user.get_all_permissions()), len(get_permission_choices()))
+
+
+@override_settings(
+    AUTH_USER_MODEL='djangae.GaeDatastoreUser',
+    AUTHENTICATION_BACKENDS=('djangae.contrib.gauth.backends.AppEngineUserAPI',)
+)
+class SwitchAccountsTests(TestCase):
+    """ Tests for the switch accounts functionality. """
+
+    def test_switch_accounts(self):
+        gcu = 'djangae.contrib.gauth.middleware.users.get_current_user'
+        final_destination = '/death/' # there's no escaping it
+        switch_accounts_url = get_switch_accounts_url(next=final_destination)
+        any_url = '/_ah/warmup'
+        jekyll = users.User(email='jekyll@gmail.com', _user_id='1')
+        hyde = users.User(email='hyde@gmail.com', _user_id='2')
+
+        # we start our scenario with the user logged in
+        with sleuth.switch(gcu, lambda: jekyll):
+            response = self.client.get(any_url)
+            # Check that the user is logged in
+            expected_user_query = GaeDatastoreUser.objects.filter(username=jekyll.user_id())
+            self.assertEqual(len(expected_user_query), 1)
+            self.assertEqual(int(self.client._session()['_auth_user_id']), expected_user_query[0].pk)
+            # Now call the switch_accounts view, which should give us a redirect to the login page
+            response = self.client.get(switch_accounts_url, follow=False)
+            self.assertEqual(response.status_code, 302)
+            self.assertEqual(response['location'], users.create_login_url(switch_accounts_url))
+            # In tests, we don't have dev_appserver fired up, so we can't actually call the login
+            # URL, but let's suppose that the user wasn't logged into multiple accounts at once
+            # and so the login page redirected us straight back to the switch_accounts view.
+            # It should detect this, and should now redirect us to the log*out* URL with a
+            # destination of the log*in* URL
+            response = self.client.get(switch_accounts_url)
+            self.assertEqual(response.status_code, 302)
+            self.assertEqual(
+                response['location'],
+                users.create_logout_url(users.create_login_url(switch_accounts_url))
+            )
+            # And now we have to emulate the scenario that we have now logged in with a different
+            # account, so re-mock that
+        with sleuth.switch(gcu, lambda: hyde):
+            # Now that we're logged in as a different user, we expect request.user to get set to
+            # the equivalent Django user and to be redirected to our final destination
+            response = self.client.get(switch_accounts_url)
+            redirect_path = urlparse(response['location']).path # it has the host name as well
+            self.assertEqual(redirect_path, final_destination)
+            expected_user_query = GaeDatastoreUser.objects.filter(username=hyde.user_id())
+            self.assertEqual(len(expected_user_query), 1)
+            self.assertEqual(int(self.client._session()['_auth_user_id']), expected_user_query[0].pk)

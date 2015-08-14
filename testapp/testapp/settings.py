@@ -36,6 +36,7 @@ INSTALLED_APPS = [
     'django.contrib.auth',
     'djangae.contrib.gauth.datastore',
     'djangae.contrib.security',
+    'djangae.contrib.consistency',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.sites',
@@ -60,10 +61,9 @@ if "test" in sys.argv:
     import tempfile
     import django
 
-    if 'alpha' in django.VERSION or 'beta' in django.VERSION or 'rc' in django.VERSION:
-        tests_dir = os.path.join(BASE_DIR, "libs", "django-master/tests".format(*django.VERSION[:2]))
-    else:
-        tests_dir = os.path.join(BASE_DIR, "libs", "django-stable-{}.{}.x/tests".format(*django.VERSION[:2]))
+    tests_dir = os.path.join(BASE_DIR, "libs", "django-stable-{}.{}.x/tests".format(*django.VERSION[:2]))
+    if not os.path.exists(tests_dir):
+        tests_dir = os.path.join(BASE_DIR, "libs", "django-master/tests")
 
     sys.path.insert(0, tests_dir)
 

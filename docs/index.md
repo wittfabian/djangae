@@ -29,9 +29,7 @@ GitHub: [https://github.com/potatolondon/djangae](https://github.com/potatolondo
 
 The intention is always to support the last two versions of Django, although older versions may work.
 
-Currently Django 1.6 and 1.7 are supported.
-
-Django 1.8 support is under development.
+**Currently Django 1.7 and 1.8 are supported. Django 1.9 (master) support is under development.**
 
 
 ## Contrib Applications
@@ -41,5 +39,4 @@ Django 1.8 support is under development.
  - [Map-reduce integration with djangae.contrib.mappers](mappers.md)
  - [Pagination with djangae.contrib.pagination](pagination.md)
  - [Unique constraint repairs with djangae.contrib.uniquetool](uniquetool.md)
-
-
+ - [Help with Datastore eventual consistency with djangae.contrib.consistency](consistency.md)
