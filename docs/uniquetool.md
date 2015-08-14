@@ -41,3 +41,21 @@ support.
 ### Clean
 
 TODO: Docs needed.
+
+
+## UniquenessMixin
+
+If you want to mark a `ListField` or a `SetField` as unique or use `unique_together`
+Meta option with any of these fields, it is also **necessary** to use `UniquenessMixin`.:
+
+```
+from django.db import models
+from djangae.fields import SetField, ListField
+from djangae.db.constraints import UniquenessMixin
+
+
+class Princess(UniquenessMixin, models.Model):
+    name = models.CharField(max_length=255)
+    potential_princes = SetField(models.CharField(max_length=255), unique=True)
+    ancestors = ListField(models.CharField(max_length=255), unique=True)
+```
