@@ -120,7 +120,32 @@ def get_bucket_name():
     return bucket
 
 
-class BlobstoreStorage(Storage):
+class BlobstoreUploadMixin():
+
+    def _upload_to_blobstore(self, name, content):
+        # With the files api deprecated, we provide a workaround here, an inline upload
+        # to the blobstore, using the djangae.views.internalupload handler to return the blob key
+
+        # `encode_multipart()` expects files to have a `name`, even though
+        # they’re optional
+        if not content.name:
+            content.name = 'untitled'
+
+        url = self._create_upload_url()
+
+        response = urlfetch.fetch(url=url,
+            payload=encode_multipart(BOUNDARY, {'file': content}),
+            method=urlfetch.POST,
+            deadline=60,
+            follow_redirects=False,
+            headers={'Content-Type': MULTIPART_CONTENT}
+        )
+        if response.status_code != 200:
+            raise ValueError("The internal upload to blobstore failed, check the app's logs.")
+        return '%s/%s' % (response.content, name.lstrip('/'))
+
+
+class BlobstoreStorage(Storage, BlobstoreUploadMixin):
     """Google App Engine Blobstore storage backend."""
 
     def _open(self, name, mode='rb'):
@@ -183,33 +208,11 @@ class BlobstoreStorage(Storage):
     def _get_blobinfo(self, name):
         return BlobInfo.get(self._get_key(name))
 
-    def _upload_to_blobstore(self, name, content):
-        # With the files api deprecated, we provide a workaround here, an inline upload
-        # to the blobstore, using the djangae.views.internalupload handler to return the blob key
-
-        # `encode_multipart()` expects files to have a `name`, even though
-        # they’re optional
-        if not content.name:
-            content.name = 'untitled'
-
-        url = self._create_upload_url()
-
-        response = urlfetch.fetch(url=url,
-            payload=encode_multipart(BOUNDARY, {'file': content}),
-            method=urlfetch.POST,
-            deadline=60,
-            follow_redirects=False,
-            headers={'Content-Type': MULTIPART_CONTENT}
-        )
-        if response.status_code != 200:
-            raise ValueError("The internal upload to blobstore failed, check the app's logs.")
-        return '%s/%s' % (response.content, name.lstrip('/'))
-
     def _create_upload_url(self):
         return create_upload_url(reverse('djangae_internal_upload_handler'))
 
 
-class CloudStorage(BlobstoreStorage):
+class CloudStorage(Storage, BlobstoreUploadMixin):
     """
         Google Cloud Storage backend, set this as your default backend
         for ease of use, you can speicify and non-default bucket in the
