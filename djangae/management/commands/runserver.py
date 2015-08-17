@@ -1,4 +1,5 @@
 import os
+from optparse import make_option
 
 from django.core.management.commands.runserver import BaseRunserverCommand
 
@@ -20,6 +21,73 @@ class Command(BaseRunserverCommand):
     dev_appserver that emulates the live environment your application
     will be deployed to.
     """
+    # We use this list to prevent user using certain dev_appserver options that
+    # might collide with some Django settings.
+    WHITELISTED_DEV_APPSERVER_OPTIONS = [
+        'A',
+        'admin_host',
+        'admin_port',
+        'auth_domain',
+        'storage_path',
+        'log_level',
+        'max_module_instances',
+        'use_mtime_file_watcher',
+        'appidentity_email_address',
+        'appidentity_private_key_path',
+        'blobstore_path',
+        'datastore_path',
+        'clear_datastore',
+        'datastore_consistency_policy',
+        'require_indexes',
+        'auto_id_policy',
+        'logs_path',
+        'show_mail_body',
+        'enable_sendmail',
+        'prospective_search_path',
+        'clear_prospective_search',
+        'search_indexes_path',
+        'clear_search_indexes',
+        'enable_task_running',
+        'allow_skipped_files',
+        'api_port',
+        'dev_appserver_log_level',
+        'skip_sdk_update_check',
+        'default_gcs_bucket_name',
+    ]
+
+    def __new__(cls, *args, **kwargs):
+        # We need to dynamically populate the `option_list` attribute
+        # in order to Django allow extra parameters that we're going to pass
+        # to GAE's `dev_appserver.py`
+        instance = BaseRunserverCommand.__new__(cls, *args, **kwargs)
+        sandbox_options = cls._get_sandbox_options()
+        for option in sandbox_options:
+            if option in cls.WHITELISTED_DEV_APPSERVER_OPTIONS:
+                instance.option_list += (
+                    make_option('--%s' % option, action='store', dest=option),
+                )
+        return instance
+
+    @classmethod
+    def _get_sandbox_options(cls):
+        # We read the options from Djangae's sandbox
+        from djangae import sandbox
+        return [option for option in dir(sandbox._OPTIONS) if not option.startswith('_')]
+
+    def handle(self, addrport='', *args, **options):
+        from djangae import sandbox
+
+        self.gae_options = {}
+        sandbox_options = self._get_sandbox_options()
+
+        # this way we populate the dictionary with the options that relevant
+        # just for `dev_appserver.py`
+        for option, value in options.items():
+            if option in sandbox_options and value is not None:
+                self.gae_options[option] = value
+
+        super(Command, self).handle(addrport=addrport, *args, **options)
+
     def run(self, *args, **options):
         self.use_reloader = options.get("use_reloader")
         options["use_reloader"] = False
@@ -86,6 +154,10 @@ class Command(BaseRunserverCommand):
 
         if self.addr != sandbox._OPTIONS.host:
             sandbox._OPTIONS.host = sandbox._OPTIONS.admin_host = sandbox._OPTIONS.api_host = self.addr
+
+        # Extra options for `dev_appserver.py`
+        for param, value in self.gae_options.items():
+            setattr(sandbox._OPTIONS, param, value)
 
         # External port is a new flag introduced in 1.9.19
         current_version = _VersionList(GetVersionObject()['release'])

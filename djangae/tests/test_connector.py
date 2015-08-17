@@ -1,49 +1,42 @@
-import os
+import datetime
+import decimal
+import re
 
 from cStringIO import StringIO
-import datetime
-import unittest
 from string import letters
 from hashlib import md5
-import decimal
 
 # LIBRARIES
 from django.core.files.uploadhandler import StopFutureHandlers
 from django.core.cache import cache
 from django.core.exceptions import ValidationError
-from django.db import connections
 from django.db import DataError, models
 from django.db.models.query import Q
 from django.forms import ModelForm
 from django.test import RequestFactory
 from django.utils.safestring import SafeText
 from django.forms.models import modelformset_factory
-from django.db.models.sql.datastructures import EmptyResultSet
 from google.appengine.api.datastore_errors import EntityNotFoundError, BadValueError
 from google.appengine.api import datastore
 from google.appengine.ext import deferred
 from google.appengine.api import taskqueue
 from django.test.utils import override_settings
-from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import FieldError
+from django.template import Template, Context
 
 # DJANGAE
 from djangae.contrib import sleuth
 from djangae.test import inconsistent_db, TestCase
-
 from django.db import IntegrityError, NotSupportedError
 from djangae.db.constraints import UniqueMarker, UniquenessMixin
 from djangae.db.unique_utils import _unique_combinations, unique_identifiers_from_entity
-from djangae.indexing import add_special_index
+from djangae.db.backends.appengine.indexing import add_special_index
 from djangae.db.utils import entity_matches_query, decimal_to_string, normalise_field_value
 from djangae.db.caching import disable_cache
-from djangae.fields import ComputedCharField, SetField, ListField, GenericRelationField, RelatedSetField
-from djangae.models import CounterShard
-from djangae.db.backends.appengine.dnf import parse_dnf
+from djangae.fields import SetField, ListField, RelatedSetField
 from djangae.storage import BlobstoreFileUploadHandler
-from djangae.wsgi import DjangaeApplication
 from djangae.core import paginator
-from django.template import Template, Context
+
 
 try:
     import webtest
@@ -222,6 +215,7 @@ class ModelWithUniquesAndOverride(models.Model):
 
 class SpecialIndexesModel(models.Model):
     name = models.CharField(max_length=255)
+    sample_list = ListField(models.CharField)
 
     def __unicode__(self):
         return self.name
@@ -508,6 +502,33 @@ class BackendTests(TestCase):
         self.assertItemsEqual([obj], date_set.dates.exclude(date=None))
         self.assertItemsEqual([obj], date_set.dates.exclude(time=None))
 
+        # sorting should work too
+        self.assertItemsEqual([obj, empty_obj], date_set.dates.order_by('datetime'))
+        self.assertItemsEqual([empty_obj, obj], date_set.dates.order_by('-datetime'))
+        self.assertItemsEqual([obj, empty_obj], date_set.dates.order_by('date'))
+        self.assertItemsEqual([empty_obj, obj], date_set.dates.order_by('-date'))
+        self.assertItemsEqual([obj, empty_obj], date_set.dates.order_by('time'))
+        self.assertItemsEqual([empty_obj, obj], date_set.dates.order_by('-time'))
+
+
+    def test_update_query_does_not_update_entities_which_no_longer_match_query(self):
+        """ When doing queryset.update(field=x), any entities which the query returns but which no
+            longer match the query (due to eventual consistency) should not be altered.
+        """
+        obj = TestFruit.objects.create(name='apple', color='green', is_mouldy=False)
+        with inconsistent_db(probability=0):
+            # alter our object, so that it should no longer match the query that we then do
+            obj.color = 'blue'
+            obj.save()
+            # Now run a query, our object is changed, but the inconsistency means it will still match
+            queryset = TestFruit.objects.filter(color='green')
+            assert queryset.count(), "inconsistent_db context manager isn't working" # sanity
+            # Now run an update with that query, the update should NOT be applied, because it
+            # should re-check that the object still matches the query
+            queryset.update(is_mouldy=True)
+        obj = TestFruit.objects.get(pk=obj.pk)
+        self.assertFalse(obj.is_mouldy)
+
 
 class ModelFormsetTest(TestCase):
     def test_reproduce_index_error(self):
@@ -545,139 +566,6 @@ class CacheTests(TestCase):
         import time
         time.sleep(1)
         self.assertEqual(cache.get('test?'), None)
-
-
-class QueryNormalizationTests(TestCase):
-    """
-        The parse_dnf function takes a Django where tree, and converts it
-        into a tree of one of the following forms:
-
-        [ (column, operator, value), (column, operator, value) ] <- AND only query
-        [ [(column, operator, value)], [(column, operator, value) ]] <- OR query, of multiple ANDs
-    """
-
-    def test_and_queries(self):
-        connection = connections['default']
-
-        qs = TestUser.objects.filter(username="test").all()
-
-        self.assertEqual(('OR', [('LIT', ('username', '=', 'test'))]), parse_dnf(qs.query.where, connection=connection)[0])
-
-        qs = TestUser.objects.filter(username="test", email="test@example.com")
-
-        expected = ('OR', [('AND', [('LIT', ('username', '=', 'test')), ('LIT', ('email', '=', 'test@example.com'))])])
-
-        self.assertEqual(expected, parse_dnf(qs.query.where, connection=connection)[0])
-        #
-        qs = TestUser.objects.filter(username="test").exclude(email="test@example.com")
-
-        expected = ('OR', [
-            ('AND', [('LIT', ('username', '=', 'test')), ('LIT', ('email', '>', 'test@example.com'))]),
-            ('AND', [('LIT', ('username', '=', 'test')), ('LIT', ('email', '<', 'test@example.com'))])
-        ])
-
-        self.assertEqual(expected, parse_dnf(qs.query.where, connection=connection)[0])
-
-        qs = TestUser.objects.filter(username__lte="test").exclude(email="test@example.com")
-        expected = ('OR', [
-            ('AND', [("username", "<=", "test"), ("email", ">", "test@example.com")]),
-            ('AND', [("username", "<=", "test"), ("email", "<", "test@example.com")]),
-        ])
-
-        #FIXME: This will raise a BadFilterError on the datastore, we should instead raise NotSupportedError in that case
-        #with self.assertRaises(NotSupportedError):
-        #    parse_dnf(qs.query.where, connection=connection)
-
-        instance = Relation(pk=1)
-        qs = instance.related_set.filter(headline__startswith='Fir')
-
-        expected = ('OR', [('AND', [('LIT', ('relation_id', '=', 1)), ('LIT', ('_idx_startswith_headline', '=', u'Fir'))])])
-
-        norm = parse_dnf(qs.query.where, connection=connection)[0]
-
-        self.assertEqual(expected, norm)
-
-    def test_or_queries(self):
-
-        connection = connections['default']
-
-        qs = TestUser.objects.filter(
-            username="python").filter(
-            Q(username__in=["ruby", "jruby"]) | (Q(username="php") & ~Q(username="perl"))
-        )
-
-        # After IN and != explosion, we have...
-        # (AND: (username='python', OR: (username='ruby', username='jruby', AND: (username='php', AND: (username < 'perl', username > 'perl')))))
-
-        # Working backwards,
-        # AND: (username < 'perl', username > 'perl') can't be simplified
-        # AND: (username='php', AND: (username < 'perl', username > 'perl')) can become (OR: (AND: username = 'php', username < 'perl'), (AND: username='php', username > 'perl'))
-        # OR: (username='ruby', username='jruby', (OR: (AND: username = 'php', username < 'perl'), (AND: username='php', username > 'perl')) can't be simplified
-        # (AND: (username='python', OR: (username='ruby', username='jruby', (OR: (AND: username = 'php', username < 'perl'), (AND: username='php', username > 'perl'))
-        # becomes...
-        # (OR: (AND: username='python', username = 'ruby'), (AND: username='python', username='jruby'), (AND: username='python', username='php', username < 'perl') \
-        #      (AND: username='python', username='php', username > 'perl')
-
-        expected = ('OR', [
-            ('AND', [('LIT', ('username', '=', 'python')), ('LIT', ('username', '=', 'ruby'))]),
-            ('AND', [('LIT', ('username', '=', 'python')), ('LIT', ('username', '=', 'jruby'))]),
-            ('AND', [('LIT', ('username', '=', 'python')), ('LIT', ('username', '=', 'php')), ('LIT', ('username', '>', 'perl'))]),
-            ('AND', [('LIT', ('username', '=', 'python')), ('LIT', ('username', '=', 'php')), ('LIT', ('username', '<', 'perl'))])
-        ])
-
-        self.assertEqual(expected, parse_dnf(qs.query.where, connection=connection)[0])
-        #
-
-        qs = TestUser.objects.filter(username="test") | TestUser.objects.filter(username="cheese")
-
-        expected = ('OR', [
-            ('LIT', ("username", "=", "test")),
-            ('LIT', ("username", "=", "cheese")),
-        ])
-
-        self.assertEqual(expected, parse_dnf(qs.query.where, connection=connection)[0])
-
-        qs = TestUser.objects.using("default").filter(username__in=set()).values_list('email')
-
-        with self.assertRaises(EmptyResultSet):
-            parse_dnf(qs.query.where, connection=connection)
-
-        qs = TestUser.objects.filter(username__startswith='Hello') |  TestUser.objects.filter(username__startswith='Goodbye')
-        expected = ('OR', [
-            ('LIT', ('_idx_startswith_username', '=', u'Hello')),
-            ('LIT', ('_idx_startswith_username', '=', u'Goodbye'))
-        ])
-        self.assertEqual(expected, parse_dnf(qs.query.where, connection=connection)[0])
-
-        qs = TestUser.objects.filter(pk__in=[1, 2, 3])
-
-        expected = ('OR', [
-            ('LIT', ("id", "=", datastore.Key.from_path(TestUser._meta.db_table, 1))),
-            ('LIT', ("id", "=", datastore.Key.from_path(TestUser._meta.db_table, 2))),
-            ('LIT', ("id", "=", datastore.Key.from_path(TestUser._meta.db_table, 3))),
-        ])
-
-        self.assertEqual(expected, parse_dnf(qs.query.where, connection=connection)[0])
-
-        qs = TestUser.objects.filter(pk__in=[1, 2, 3]).filter(username="test")
-
-        expected = ('OR', [
-            ('AND', [
-                ('LIT', (u'id', '=', datastore.Key.from_path(TestUser._meta.db_table, 1))),
-                ('LIT', ('username', '=', 'test'))
-            ]),
-            ('AND', [
-                ('LIT', (u'id', '=', datastore.Key.from_path(TestUser._meta.db_table, 2))),
-                ('LIT', ('username', '=', 'test'))
-            ]),
-            ('AND', [
-                ('LIT', (u'id', '=', datastore.Key.from_path(TestUser._meta.db_table, 3))),
-                ('LIT', ('username', '=', 'test'))
-            ])
-        ])
-        self.assertEqual(expected, parse_dnf(qs.query.where, connection=connection)[0])
-
-
 
 
 class ConstraintTests(TestCase):
@@ -1132,6 +1020,27 @@ class EdgeCaseTests(TestCase):
         self.assertEqual(2, len(results))
         self.assertItemsEqual(["A", "B"], [x.username for x in results])
 
+    def test_empty_string_key(self):
+        # Creating
+        with self.assertRaises(IntegrityError):
+            TestFruit.objects.create(name='')
+
+        # Getting
+        with self.assertRaises(TestFruit.DoesNotExist):
+            TestFruit.objects.get(name='')
+
+        # Filtering
+        results = list(TestFruit.objects.filter(name='').order_by("name"))
+        self.assertItemsEqual([], results)
+
+        # Combined filtering
+        results = list(TestFruit.objects.filter(name='', color='red').order_by("name"))
+        self.assertItemsEqual([], results)
+
+        # IN query
+        results = list(TestFruit.objects.filter(name__in=['', 'apple']))
+        self.assertItemsEqual([self.apple], results)
+
     def test_or_queryset(self):
         """
             This constructs an OR query, this is currently broken in the parse_where_and_check_projection
@@ -1290,15 +1199,15 @@ class EdgeCaseTests(TestCase):
         )
 
         dates = TestUser.objects.dates('last_login', 'day')
-        self.assertItemsEqual(
+        self.assertEqual(
             [datetime.date(2013, 4, 5), last_a_login],
-            dates
+            list(dates)
         )
 
         dates = TestUser.objects.dates('last_login', 'day', order='DESC')
-        self.assertItemsEqual(
+        self.assertEqual(
             [last_a_login, datetime.date(2013, 4, 5)],
-            dates
+            list(dates)
         )
 
     def test_in_query(self):
@@ -1318,6 +1227,10 @@ class EdgeCaseTests(TestCase):
         # Check that it's ok with PKs though
         query = TestUser.objects.filter(pk__in=list(xrange(1, 32)))
         list(query)
+        # Check that it's ok joining filters with pks
+        results = list(TestUser.objects.filter(
+            pk__in=[self.u1.pk, self.u2.pk, self.u3.pk]).filter(pk__in=[self.u1.pk, self.u2.pk]))
+        self.assertItemsEqual(results, [self.u1, self.u2])
 
     def test_self_relations(self):
         obj = SelfRelatedModel.objects.create()
@@ -1468,9 +1381,21 @@ class TestSpecialIndexers(TestCase):
     def setUp(self):
         super(TestSpecialIndexers, self).setUp()
 
-        self.names = ['Ola', 'Adam', 'Luke', 'rob', 'Daniel', 'Ela', 'Olga', 'olek', 'ola', 'Olaaa', 'OlaaA']
+        self.names = [
+            'Ola', 'Adam', 'Luke', 'rob', 'Daniel', 'Ela', 'Olga', 'olek',
+            'ola', 'Olaaa', 'OlaaA', 'Ola + Ola', '-Test-', '-test-'
+        ]
         for name in self.names:
             SpecialIndexesModel.objects.create(name=name)
+
+        self.lists = [
+            self.names,
+            ['Name', 'name', 'name + name'],
+            ['-Tesst-'],
+            ['-test-']
+        ]
+        for sample_list in self.lists:
+            SpecialIndexesModel.objects.create(sample_list=sample_list)
 
         self.qry = SpecialIndexesModel.objects.all()
 
@@ -1505,6 +1430,25 @@ class TestSpecialIndexers(TestCase):
 
             qry = self.qry.filter(name__istartswith=name)
             self.assertEqual(len(qry), len([x for x in self.names if x.lower().startswith(name.lower())]))
+
+    def test_regex_lookup_and_iregex_lookup(self):
+        tests = ['([A-Z])\w+', '([A-Z])\w+\s[+]\s([A-Z])\w+', '\-Test\-']
+        for pattern in tests:
+            qry = self.qry.filter(name__regex=pattern)
+            self.assertEqual(len(qry), len([x for x in self.names if re.search(pattern, x)]))
+
+            qry = self.qry.filter(name__iregex=pattern)
+            self.assertEqual(len(qry), len([x for x in self.names if re.search(pattern, x, flags=re.I)]))
+
+            # Check that the same works for ListField and SetField too
+            qry = self.qry.filter(sample_list__regex=pattern)
+            expected = [sample_list for sample_list in self.lists if any([bool(re.search(pattern, x)) for x in sample_list])]
+            self.assertEqual(len(qry), len(expected))
+
+            qry = self.qry.filter(sample_list__iregex=pattern)
+            expected = [sample_list for sample_list in self.lists if any([bool(re.search(pattern, x, flags=re.I)) for x in sample_list])]
+            self.assertEqual(len(qry), len(expected))
+
 
 def deferred_func():
     pass

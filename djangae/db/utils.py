@@ -6,10 +6,9 @@ from itertools import chain
 import warnings
 
 #LIBRARIES
-import django
+from django.apps import apps
 from django.conf import settings
-from django.db import models
-from django.db.backends.util import format_number
+from django.db.backends.utils import format_number
 from django.db import IntegrityError
 from django.utils import timezone
 from google.appengine.api import datastore
@@ -17,9 +16,9 @@ from google.appengine.api.datastore import Key, Query
 
 #DJANGAE
 from djangae.utils import memoized
-from djangae.indexing import special_indexes_for_column, REQUIRES_SPECIAL_INDEXES
+from djangae.db.backends.appengine.indexing import special_indexes_for_column, REQUIRES_SPECIAL_INDEXES
 from djangae.db.backends.appengine.dbapi import CouldBeSupportedError
-
+from djangae.db.backends.appengine import POLYMODEL_CLASS_ATTRIBUTE
 
 def make_timezone_naive(value):
     if value is None:
@@ -43,10 +42,7 @@ def get_model_from_db_table(db_table):
         "include_swapped": True
     }
 
-    if django.VERSION[1] == 6:
-        kwargs["only_installed"] = False
-
-    for model in models.get_models(**kwargs):
+    for model in apps.get_models(**kwargs):
         if model._meta.db_table == db_table:
             return model
 
@@ -56,7 +52,7 @@ def decimal_to_string(value, max_digits=16, decimal_places=0):
     Converts decimal to a unicode string for storage / lookup by nonrel
     databases that don't support decimals natively.
 
-    This is an extension to `django.db.backends.util.format_number`
+    This is an extension to `django.db.backends.utils.format_number`
     that preserves order -- if one decimal is less than another, their
     string representations should compare the same (as strings).
 
@@ -142,6 +138,12 @@ def get_concrete_db_tables(model):
 def has_concrete_parents(model):
     return get_concrete_parents(model) != [model]
 
+@memoized
+def get_field_from_column(model, column):
+    for field in model._meta.fields:
+        if field.column == column:
+            return field
+    return None
 
 def django_instance_to_entity(connection, model, fields, raw, instance, check_null=True):
     # uses_inheritance = False
@@ -179,8 +181,8 @@ def django_instance_to_entity(connection, model, fields, raw, instance, check_nu
 
         # Add special indexed fields
         for index in special_indexes_for_column(model, field.column):
-            indexer = REQUIRES_SPECIAL_INDEXES[index]
-            values = indexer.prep_value_for_database(value)
+            indexer = REQUIRES_SPECIAL_INDEXES[index.split('__')[0]] # Indexes can be named regex__aaa, hence splitting by __
+            values = indexer.prep_value_for_database(value, index)
 
             if values is None:
                 continue
@@ -189,7 +191,7 @@ def django_instance_to_entity(connection, model, fields, raw, instance, check_nu
                 values = [ values ]
 
             for v in values:
-                column = indexer.indexed_column_name(field.column, v)
+                column = indexer.indexed_column_name(field.column, v, index)
                 if column in field_values:
                     if not isinstance(field_values[column], list):
                         field_values[column] = [ field_values[column], v ]
@@ -218,7 +220,7 @@ def django_instance_to_entity(connection, model, fields, raw, instance, check_nu
 
     classes = get_concrete_db_tables(model)
     if len(classes) > 1:
-        entity["class"] = classes
+        entity[POLYMODEL_CLASS_ATTRIBUTE] = list(set(classes))
 
     return entity
 
@@ -262,6 +264,34 @@ def key_exists(key):
     return qry.Count(limit=1) > 0
 
 
+# Null-friendly comparison functions
+
+def lt(x, y):
+    if x is None and y is not None:
+        return True
+    elif x is not None and y is None:
+        return False
+    else:
+        return x < y
+
+
+def gt(x, y):
+    if x is None and y is not None:
+        return False
+    elif x is not None and y is None:
+        return True
+    else:
+        return x > y
+
+
+def gte(x, y):
+    return not lt(x, y)
+
+
+def lte(x, y):
+    return not gt(x, y)
+
+
 def django_ordering_comparison(ordering, lhs, rhs):
     if not ordering:
         return -1  # Really doesn't matter
@@ -274,9 +304,9 @@ def django_ordering_comparison(ordering, lhs, rhs):
         rhs_value = rhs.key() if order == "__key__" else rhs[order]
 
         if direction == ASCENDING and lhs_value != rhs_value:
-            return -1 if lhs_value < rhs_value else 1
+            return -1 if lt(lhs_value, rhs_value) else 1
         elif direction == DESCENDING and lhs_value != rhs_value:
-            return 1 if lhs_value < rhs_value else -1
+            return 1 if lt(lhs_value, rhs_value) else -1
 
     return 0
 
@@ -286,26 +316,6 @@ def entity_matches_query(entity, query):
         Return True if the entity would potentially be returned by the datastore
         query
     """
-
-    def lt(x, y):
-        if x is None and y is not None:
-            return True
-        elif x is not None and y is None:
-            return False
-        else:
-            return x < y
-
-    def gt(x, y):
-        if x is None and y is not None:
-            return False
-        elif x is not None and y is None:
-            return True
-        else:
-            return x > y
-
-    gte = lambda x, y: not lt(x, y)
-    lte = lambda x, y: not gt(x, y)
-
     OPERATORS = {
         "=": lambda x, y: x == y,
         "<": lt,

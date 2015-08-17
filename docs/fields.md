@@ -92,16 +92,21 @@ When you access the attribute of your sharded counter field on your model, you g
 
 ## GenericRelationField
 
-Documentation needed.
+This is a replacement for Django's `GenericForeignKey` field, which doesn't use Django's contenttypes, and consequently it allows querying by the related object even on the non-relational Datastore.  (Django's `GenericForeignKey` would cause a JOIN if you tried to do do that.)
+
+This field requires no special kwargs, and should accept all standard Django field kwargs as normal.
 
 
 ## JSONField
 
-Documentation needed. [See example usage](fields.md#example-usages).
+This field is not specific to to the App Engine Datastore (or any non-relational database), but is included in Djangae for convenience, especially as in a non-relational database it's often useful to be able to store structured data in a single table rather than in a complex structure of related tables.
+
 
 ## TrueOrNullField
 
-Documentation needed.
+This field is not specific to to the App Engine Datastore (or any non-relational database), but is included in Djangae for convenience.
+
+Its primary use case is for when you want a boolean field which can only be set to true for *one* object.  This is done by making use of the fact that Django (and most databases) ignore `None` values in unique constraints, so by having a field which can only store values of `True` or `None` and by setting the field to unique, you get a field which can only be `True` on one object.
 
 
 ## Example Usages
@@ -113,6 +118,7 @@ from djangae import fields
 
 class KittenSanctuary(models.Model):
 
+    is_best = fields.TrueOrNullField(unique=True)
     kittens = fields.RelatedSetField('Kitten')
     kitten_rota = fields.RelatedListField('Kitten')
     inspection_dates = fields.SetField(models.DateField())

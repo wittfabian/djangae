@@ -1,4 +1,4 @@
-from django.db.models.loading import get_apps, get_models
+from django.apps import apps
 from django.contrib.auth import get_permission_codename
 
 
@@ -22,15 +22,13 @@ def get_permission_choices():
 
     result = getattr(settings, "MANUAL_PERMISSIONS", [])
 
-    for app in get_apps():
-        for model in get_models(app):
-            for action in AUTO_PERMISSIONS:
-                opts = model._meta
-                result.append((
-                    '%s.%s' % (opts.app_label, get_permission_codename(action, opts)),
-                    'Can %s %s' % (action, opts.verbose_name_raw)
-                ))
+    for model in apps.get_models():
+        for action in AUTO_PERMISSIONS:
+            opts = model._meta
+            result.append((
+                '%s.%s' % (opts.app_label, get_permission_codename(action, opts)),
+                'Can %s %s' % (action, opts.verbose_name_raw)
+            ))
 
     PERMISSIONS_LIST = sorted(result)
     return PERMISSIONS_LIST
-

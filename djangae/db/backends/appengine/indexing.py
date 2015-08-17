@@ -2,6 +2,7 @@ import logging
 import yaml
 import os
 import datetime
+import re
 
 from djangae.sandbox import allow_mode_write
 from django.conf import settings
@@ -54,11 +55,16 @@ def special_index_exists(model_class, field_name, index_type):
 
 
 def special_indexes_for_model(model_class):
-    return _special_indexes.get(_get_table_from_model(model_class))
+    classes = [ model_class ] + model_class._meta.parents.keys()
+
+    result = {}
+    for klass in classes:
+        result.update(_special_indexes.get(_get_table_from_model(klass), {}))
+    return result
 
 
 def special_indexes_for_column(model_class, column):
-    return _special_indexes.get(_get_table_from_model(model_class), {}).get(column, [])
+    return special_indexes_for_model(model_class).get(column, [])
 
 
 def write_special_indexes():
@@ -69,9 +75,12 @@ def write_special_indexes():
             stream.write(yaml.dump(_special_indexes))
 
 
-def add_special_index(model_class, field_name, index_type):
+def add_special_index(model_class, field_name, index_type, value=None):
     from djangae.utils import on_production, in_testing
     from django.conf import settings
+
+    indexer = REQUIRES_SPECIAL_INDEXES[index_type]
+    index_type = indexer.prepare_index_type(index_type, value)
 
     field_name = field_name.encode("utf-8")  # Make sure we are working with strings
 
@@ -95,14 +104,15 @@ def add_special_index(model_class, field_name, index_type):
 
 
 class Indexer(object):
-    def validate_can_be_indexed(self, value):
+    def validate_can_be_indexed(self, value, negated):
         """Return True if the value is indexable, False otherwise"""
         raise NotImplementedError()
 
-    def prep_value_for_database(self, value): raise NotImplementedError()
+    def prep_value_for_database(self, value, index): raise NotImplementedError()
     def prep_value_for_query(self, value): raise NotImplementedError()
-    def indexed_column_name(self, field_column, value): raise NotImplementedError()
+    def indexed_column_name(self, field_column, value, index): raise NotImplementedError()
     def prep_query_operator(self, op): return "exact"
+    def prepare_index_type(self, index_type, value): return index_type
 
     def unescape(self, value):
         value = value.replace("\\_", "_")
@@ -112,10 +122,10 @@ class Indexer(object):
 
 
 class IExactIndexer(Indexer):
-    def validate_can_be_indexed(self, value):
+    def validate_can_be_indexed(self, value, negated):
         return len(value) < 500
 
-    def prep_value_for_database(self, value):
+    def prep_value_for_database(self, value, index):
         if value is None:
             return None
 
@@ -126,15 +136,15 @@ class IExactIndexer(Indexer):
     def prep_value_for_query(self, value):
         return value.lower()
 
-    def indexed_column_name(self, field_column, value):
+    def indexed_column_name(self, field_column, value, index):
         return "_idx_iexact_{0}".format(field_column)
 
 
 class DayIndexer(Indexer):
-    def validate_can_be_indexed(self, value):
+    def validate_can_be_indexed(self, value, negated):
         return isinstance(value, (datetime.datetime, datetime.date))
 
-    def prep_value_for_database(self, value):
+    def prep_value_for_database(self, value, index):
         if value:
             return value.day
         return None
@@ -147,15 +157,15 @@ class DayIndexer(Indexer):
             value = datetime.datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
         return value.day
 
-    def indexed_column_name(self, field_column, value):
+    def indexed_column_name(self, field_column, value, index):
         return "_idx_day_{0}".format(field_column)
 
 
 class YearIndexer(Indexer):
-    def validate_can_be_indexed(self, value):
+    def validate_can_be_indexed(self, value, negated):
         return isinstance(value, (datetime.datetime, datetime.date))
 
-    def prep_value_for_database(self, value):
+    def prep_value_for_database(self, value, index):
         if value:
             return value.year
         return None
@@ -169,15 +179,15 @@ class YearIndexer(Indexer):
 
         return value.year
 
-    def indexed_column_name(self, field_column, value):
+    def indexed_column_name(self, field_column, value, index):
         return "_idx_year_{0}".format(field_column)
 
 
 class MonthIndexer(Indexer):
-    def validate_can_be_indexed(self, value):
+    def validate_can_be_indexed(self, value, negated):
         return isinstance(value, (datetime.datetime, datetime.date))
 
-    def prep_value_for_database(self, value):
+    def prep_value_for_database(self, value, index):
         if value:
             return value.month
         return None
@@ -191,15 +201,15 @@ class MonthIndexer(Indexer):
 
         return value.month
 
-    def indexed_column_name(self, field_column, value):
+    def indexed_column_name(self, field_column, value, index):
         return "_idx_month_{0}".format(field_column)
 
 
 class WeekDayIndexer(Indexer):
-    def validate_can_be_indexed(self, value):
+    def validate_can_be_indexed(self, value, negated):
         return isinstance(value, (datetime.datetime, datetime.date))
 
-    def prep_value_for_database(self, value):
+    def prep_value_for_database(self, value, index):
         if value:
             zero_based_weekday = value.weekday()
             if zero_based_weekday == 6:  # Sunday
@@ -212,7 +222,7 @@ class WeekDayIndexer(Indexer):
     def prep_value_for_query(self, value):
         return value
 
-    def indexed_column_name(self, field_column, value):
+    def indexed_column_name(self, field_column, value, index):
         return "_idx_week_day_{0}".format(field_column)
 
 
@@ -220,10 +230,12 @@ class ContainsIndexer(Indexer):
     def number_of_permutations(self, value):
         return sum(range(len(value)+1))
 
-    def validate_can_be_indexed(self, value):
+    def validate_can_be_indexed(self, value, negated):
+        if negated:
+            return False
         return isinstance(value, basestring) and len(value) <= 500
 
-    def prep_value_for_database(self, value):
+    def prep_value_for_database(self, value, index):
         result = []
         if value:
             # If this a date or a datetime, or something that supports isoformat, then use that
@@ -242,12 +254,16 @@ class ContainsIndexer(Indexer):
         return result or None
 
     def prep_value_for_query(self, value):
+        if hasattr(value, "isoformat"):
+            value = value.isoformat()
+        else:
+            value = unicode(value)
         value = self.unescape(value)
         if value.startswith("%") and value.endswith("%"):
             value = value[1:-1]
         return value
 
-    def indexed_column_name(self, field_column, value):
+    def indexed_column_name(self, field_column, value, index):
         # This we use when we actually query to return the right field for a given
         # value length
         length = len(value)
@@ -258,14 +274,14 @@ class ContainsIndexer(Indexer):
         return "_idx_contains_{0}_{1}".format(field_column, column_number)
 
 class IContainsIndexer(ContainsIndexer):
-    def prep_value_for_database(self, value):
+    def prep_value_for_database(self, value, index):
         if value is None:
             return None
-        result = super(IContainsIndexer, self).prep_value_for_database(value.lower())
+        result = super(IContainsIndexer, self).prep_value_for_database(value.lower(), index)
         return result if result else None
 
-    def indexed_column_name(self, field_column, value):
-        column_name = super(IContainsIndexer, self).indexed_column_name(field_column, value)
+    def indexed_column_name(self, field_column, value, index):
+        column_name = super(IContainsIndexer, self).indexed_column_name(field_column, value, index)
         return column_name.replace('_idx_contains_', '_idx_icontains_')
 
     def prep_value_for_query(self, value):
@@ -280,10 +296,13 @@ class EndsWithIndexer(Indexer):
         of the last characters in a list field. Then we can just do an exact lookup on
         the value. Which isn't as nice, but is more flexible.
     """
-    def validate_can_be_indexed(self, value):
+    def validate_can_be_indexed(self, value, negated):
+        if negated:
+            return False
+
         return isinstance(value, basestring) and len(value) < 500
 
-    def prep_value_for_database(self, value):
+    def prep_value_for_database(self, value, index):
         results = []
         for i in xrange(len(value)):
             results.append(value[i:])
@@ -295,7 +314,7 @@ class EndsWithIndexer(Indexer):
             value = value[1:]
         return value
 
-    def indexed_column_name(self, field_column, value):
+    def indexed_column_name(self, field_column, value, index):
         return "_idx_endswith_{0}".format(field_column)
 
 
@@ -303,16 +322,16 @@ class IEndsWithIndexer(EndsWithIndexer):
     """
         Same as above, just all lower cased
     """
-    def prep_value_for_database(self, value):
+    def prep_value_for_database(self, value, index):
         if value is None:
             return None
-        result = super(IEndsWithIndexer, self).prep_value_for_database(value.lower())
+        result = super(IEndsWithIndexer, self).prep_value_for_database(value.lower(), index)
         return result or None
 
     def prep_value_for_query(self, value):
         return super(IEndsWithIndexer, self).prep_value_for_query(value.lower())
 
-    def indexed_column_name(self, field_column, value):
+    def indexed_column_name(self, field_column, value, index):
         return "_idx_iendswith_{0}".format(field_column)
 
 
@@ -321,10 +340,13 @@ class StartsWithIndexer(Indexer):
         Although we can do a startswith natively, doing it this way allows us to
         use more queries (E.g. we save an exclude)
     """
-    def validate_can_be_indexed(self, value):
+    def validate_can_be_indexed(self, value, negated):
+        if negated:
+            return False
+
         return isinstance(value, basestring) and len(value) < 500
 
-    def prep_value_for_database(self, value):
+    def prep_value_for_database(self, value, index):
         if isinstance(value, datetime.datetime):
             value = value.strftime("%Y-%m-%d %H:%M:%S")
 
@@ -343,7 +365,7 @@ class StartsWithIndexer(Indexer):
 
         return value
 
-    def indexed_column_name(self, field_column, value):
+    def indexed_column_name(self, field_column, value, index):
         return "_idx_startswith_{0}".format(field_column)
 
 
@@ -351,14 +373,71 @@ class IStartsWithIndexer(StartsWithIndexer):
     """
         Same as above, just all lower cased
     """
-    def prep_value_for_database(self, value):
-        return super(IStartsWithIndexer, self).prep_value_for_database(value.lower())
+    def prep_value_for_database(self, value, index):
+        return super(IStartsWithIndexer, self).prep_value_for_database(value.lower(), index)
 
     def prep_value_for_query(self, value):
         return super(IStartsWithIndexer, self).prep_value_for_query(value.lower())
 
-    def indexed_column_name(self, field_column, value):
+    def indexed_column_name(self, field_column, value, index):
         return "_idx_istartswith_{0}".format(field_column)
+
+
+class RegexIndexer(Indexer):
+
+    def prepare_index_type(self, index_type, value):
+        """
+            If we're dealing with RegexIndexer, we create a new index for each
+            regex pattern. Indexes are called regex__pattern.
+        """
+        return 'regex__{}'.format(value.encode("utf-8").encode('hex'))
+
+    def validate_can_be_indexed(self, value, negated):
+        if negated:
+            return False
+
+        return isinstance(value, bool)
+
+    def get_pattern(self, index):
+        try:
+            return index.split('__')[1].decode('hex').decode("utf-8")
+        except IndexError:
+            return ''
+
+    def check_if_match(self, value, index, flags=0):
+        pattern = self.get_pattern(index)
+
+        if value:
+            if hasattr(value, '__iter__'): # is a list, tuple or set?
+                if any([bool(re.search(pattern, x, flags)) for x in value]):
+                    return True
+            else:
+                if isinstance(value, (int, long)):
+                    value = str(value)
+
+                return bool(re.search(pattern, value, flags))
+        return False
+
+    def prep_value_for_database(self, value, index):
+        return self.check_if_match(value, index)
+
+    def prep_value_for_query(self, value):
+        return True
+
+    def indexed_column_name(self, field_column, value, index):
+        return "_idx_regex_{0}_{1}".format(field_column, self.get_pattern(index).encode("utf-8").encode('hex'))
+
+
+class IRegexIndexer(RegexIndexer):
+
+    def prepare_index_type(self, index_type, value):
+        return 'iregex__{}'.format(value.encode('hex'))
+
+    def prep_value_for_database(self, value, index):
+        return self.check_if_match(value, index, flags=re.IGNORECASE)
+
+    def indexed_column_name(self, field_column, value, index):
+        return "_idx_iregex_{0}_{1}".format(field_column, self.get_pattern(index).encode('hex'))
 
 
 REQUIRES_SPECIAL_INDEXES = {
@@ -372,5 +451,7 @@ REQUIRES_SPECIAL_INDEXES = {
     "endswith": EndsWithIndexer(),
     "iendswith": IEndsWithIndexer(),
     "startswith": StartsWithIndexer(),
-    "istartswith": IStartsWithIndexer()
+    "istartswith": IStartsWithIndexer(),
+    "regex": RegexIndexer(),
+    "iregex": IRegexIndexer(),
 }

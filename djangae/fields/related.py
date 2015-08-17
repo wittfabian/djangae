@@ -11,13 +11,15 @@ from djangae.forms.fields import (
 from django.utils import six
 
 class RelatedIteratorRel(ForeignObjectRel):
-    def __init__(self, to, related_name=None, limit_choices_to=None):
+    def __init__(self, field, to, related_name=None, limit_choices_to=None):
+        self.field = field
         self.to = to
         self.related_name = related_name
         self.related_query_name = None
         self.field_name = None
         self.parent_link = None
         self.on_delete = models.DO_NOTHING
+        self.symmetrical = False
 
         if limit_choices_to is None:
             limit_choices_to = {}
@@ -177,10 +179,19 @@ class RelatedIteratorObjectsDescriptor(object):
 
     @cached_property
     def related_manager_cls(self):
-        # Dynamically create a class that subclasses the related
-        # model's default manager.
+        """
+            Dynamically create a class that subclasses the related
+            model's default manager.
+        """
+
+        # Django 1.7 uses self.related.model, but >1.7 it's related.related_model
+        if hasattr(self.related, 'related_model'):
+            manager = self.related.related_model._default_manager.__class__
+        else:
+            manager = self.related.model._default_manager.__class__
+
         return create_related_iter_manager(
-            self.related.model._default_manager.__class__,
+            manager,
             self.related.field.rel
         )
 
@@ -188,7 +199,11 @@ class RelatedIteratorObjectsDescriptor(object):
         if instance is None:
             return self
 
-        rel_model = self.related.model
+        # Django 1.7 uses self.related.model, but >1.7 it's related.related_model
+        if hasattr(self.related, 'related_model'):
+            rel_model = self.related.related_model
+        else:
+            rel_model = self.related.model
         rel_field = self.related.field
 
         manager = self.related_manager_cls(
@@ -253,6 +268,7 @@ class RelatedIteratorField(RelatedField):
 
     def __init__(self, model, limit_choices_to=None, related_name=None, **kwargs):
         kwargs["rel"] = RelatedIteratorRel(
+            self,
             model,
             related_name=related_name,
             limit_choices_to=limit_choices_to
@@ -468,12 +484,8 @@ class GenericRelationField(models.Field):
     form_class = GenericRelationFormfield
 
     def __init__(self, *args, **kwargs):
-        self.vc_encoded = True
-
         kwargs.update(
             max_length=255,
-            blank=True,
-            null=True
         )
 
         if 'db_index' not in kwargs:

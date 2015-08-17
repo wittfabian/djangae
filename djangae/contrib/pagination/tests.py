@@ -11,12 +11,13 @@ from djangae.contrib.pagination import (
 from .paginator import queryset_identifier, _get_marker
 
 @paginated_model(orderings=[
-    ("first_name",),
-    ("last_name",),
+    "first_name", # single field declared as a string
+    ("last_name",), # single field declared as a tuple
     ("first_name", "last_name"),
     ("first_name", "-last_name"),
     ("created",),
-    ("-created",)
+    ("-created",),
+    "pk", # it's possible to order by the model pk
 ])
 class TestUser(models.Model):
     first_name = models.CharField(max_length=200)

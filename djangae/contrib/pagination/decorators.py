@@ -15,6 +15,10 @@ def generator(fields, instance):
     for field in fields:
         neg = field.startswith("-")
 
+        # If the field we have to paginate by is the pk, get the pk field name.
+        if field == 'pk':
+            field = instance._meta.pk.name
+
         value = instance._meta.get_field(field.lstrip("-")).value_from_object(instance)
 
         if hasattr(value, "isoformat"):
@@ -50,6 +54,7 @@ def _field_name_for_ordering(ordering):
     new_field_name = "pagination_{}".format("_".join(names))
     return new_field_name
 
+
 class PaginatedModel(object):
     """
         A class decorator which automatically generates pre-calculated fields for pagination.
@@ -63,7 +68,14 @@ class PaginatedModel(object):
         is fast even when there are many pages.
     """
     def __init__(self, orderings):
-        self.orderings = orderings
+        # Allow orderings to be specified either as single fields, or tuples/lists of fields
+        _orderings = []
+        for ordering in orderings:
+            if isinstance(ordering, basestring):
+                _orderings.append((ordering,))
+            else:
+                _orderings.append(ordering)
+        self.orderings = _orderings
 
     def __call__(self, cls):
         """

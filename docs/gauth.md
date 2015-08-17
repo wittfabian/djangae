@@ -18,7 +18,7 @@ after `'django.contrib.auth'`.
 4. Add the backend to `AUTHENTICATION_BACKENDS` in your settings file eg:
 
 ```python
-AUTHENTICATION_BACKENDS (
+AUTHENTICATION_BACKENDS = (
 	'djangae.contrib.gauth.datastore.backends.AppEngineUserAPIBackend',
 	 ...
 )
@@ -42,7 +42,7 @@ after `'django.contrib.auth'`.
 4. Add the backend to `AUTHENTICATION_BACKENDS` in your settings file eg:
 
 ```python
-AUTHENTICATION_BACKENDS (
+AUTHENTICATION_BACKENDS = (
 	'djangae.contrib.sql.backends.AppEngineUserAPIBackend',
 	 ...
 )
@@ -67,7 +67,7 @@ If you want to prevent creating users for every single Google Account visiting y
 
 Note: you don't need to pre-create User for GAE user admins.
 
-### Username/password authentication
+## Username/password authentication
 
 As well as using Djangae's Google Accounts-based authentication, you can also use the standard authentication backend from django.contrib.auth.  They can work alongside each other.  Simply include both, like this:
 
@@ -81,4 +81,26 @@ MIDDLEWARE_CLASSES = (
     'djangae.contrib.gauth.middleware.AuthenticationMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
 )
+```
+
+## Switching accounts
+
+There is a `switch_accounts` view which allows a user to change which of their Google accounts they're logged in with.
+
+The URL for the user to be sent to afterwards should be provided in `request.GET['next']``.
+
+Learn more about [Google multiple sign-in on App Engine here](https://p.ota.to/blog/2014/2/google-multiple-sign-in-on-app-engine/).
+
+### Example usage:
+
+Include GAuth urls in your main urls.py file.
+
+```python
+url(r'^gauth/', include(djangae.contrib.gauth.urls))
+```
+
+Use this URL to add "Switch account" functionality for user:
+
+```html
+<a href="{% url 'djangae_switch_accounts' %}">Switch account</a>
 ```

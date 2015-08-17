@@ -2,7 +2,7 @@
 
 **The best way to run Django on Google App Engine.**
 
-Djangae (djan-gee) is a Django app that allows you to run Django applications on Google App Engine, including (if you
+Djangae (jan-gee) is a Django app that allows you to run Django applications on Google App Engine, including (if you
 want to) using Django's models with the App Engine Datastore as the underlying database.
 
 Google Group: [https://groups.google.com/forum/#!forum/djangae-users](https://groups.google.com/forum/#!forum/djangae-users)
@@ -27,16 +27,16 @@ GitHub: [https://github.com/potatolondon/djangae](https://github.com/potatolondo
 
 ## Supported Django Versions
 
-The intention is always to support the last two versions of Django, although older versions may work. 
+The intention is always to support the last two versions of Django, although older versions may work.
 
-Currently Django 1.6 and 1.7 are supported. 
-
-Django 1.8 support is under development.
+**Currently Django 1.7 and 1.8 are supported. Django 1.9 (master) support is under development.**
 
 
 ## Contrib Applications
 
  - [Authentication with djangae.contrib.gauth](gauth.md)
+ - [Security enhancements with djangae.contrib.security](security.md)
  - [Map-reduce integration with djangae.contrib.mappers](mappers.md)
  - [Pagination with djangae.contrib.pagination](pagination.md)
-
+ - [Unique constraint repairs with djangae.contrib.uniquetool](uniquetool.md)
+ - [Help with Datastore eventual consistency with djangae.contrib.consistency](consistency.md)
