@@ -61,6 +61,12 @@ When using Google Accounts-based authentication, the `username` field of the use
 
 Djangae allows you to pre-create users by specifying their email address.  First, you need to set `DJANGAE_ALLOW_USER_PRE_CREATION` to `True` in settings, and then you can create user objects which have an email address and a `username` of `None`.  Djangae then recognises these as pre-created users, and will populate the `username` with their Google `user_id` when they first log in.
 
+## Force user Pre-Creation
+
+If you want to prevent creating users for every single Google Account visiting your website, you can allow only pre-created users to be allowed to log in. To enable that you need to set `DJANGAE_FORCE_USER_PRE_CREATION` to `True` in your settings file. 
+
+Note: you don't need to pre-create User for GAE user admins.
+
 ### Username/password authentication
 
 As well as using Djangae's Google Accounts-based authentication, you can also use the standard authentication backend from django.contrib.auth.  They can work alongside each other.  Simply include both, like this:

@@ -65,7 +65,7 @@ class BaseAppEngineUserAPIBackend(ModelBackend):
                     user_is_admin = users.is_current_user_admin()
                     if force_pre_creation and not user_is_admin:
                         # Indicate to Django that this user is not allowed
-                        raise TypeError()
+                        return
                     return User.objects.create_user(user_id, email)
 
                 # If the existing user was precreated, update and reuse it

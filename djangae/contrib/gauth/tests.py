@@ -94,8 +94,7 @@ class BackendTests(TestCase):
         google_user = users.User('1@example.com', _user_id='111111111100000000001')
         backend = AppEngineUserAPI()
 
-        with self.assertRaises(TypeError):
-            backend.authenticate(google_user=google_user,)
+        self.assertIsNone(backend.authenticate(google_user=google_user,))
         self.assertEqual(User.objects.count(), 0)
 
         # superusers don't need pre-creation of User object.
