@@ -89,7 +89,7 @@ class BackendTests(TestCase):
         user1 = User.objects.get(pk=user1.pk)
         self.assertEqual(user1.email, None)
 
-    @override_settings(DJANGAE_FORCE_USER_PRE_CREATION=True)
+    @override_settings(DJANGAE_REQUIRE_USER_PRE_CREATION=True)
     def test_force_user_pre_creation(self):
         User = get_user_model()
         self.assertEqual(User.objects.count(), 0)

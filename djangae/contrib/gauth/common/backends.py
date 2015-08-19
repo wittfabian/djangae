@@ -61,7 +61,7 @@ class BaseAppEngineUserAPIBackend(ModelBackend):
                 try:
                     existing_user = User.objects.get(email=BaseUserManager.normalize_email(email))
                 except User.DoesNotExist:
-                    force_pre_creation = getattr(settings, 'DJANGAE_FORCE_USER_PRE_CREATION', False)
+                    force_pre_creation = getattr(settings, 'DJANGAE_REQUIRE_USER_PRE_CREATION', False)
                     user_is_admin = users.is_current_user_admin()
                     if force_pre_creation and not user_is_admin:
                         # Indicate to Django that this user is not allowed

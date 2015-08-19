@@ -63,7 +63,7 @@ Djangae allows you to pre-create users by specifying their email address.  First
 
 ## Force user Pre-Creation
 
-If you want to prevent creating users for every single Google Account visiting your website, you can allow only pre-created users to be allowed to log in. To enable that you need to set `DJANGAE_FORCE_USER_PRE_CREATION` to `True` in your settings file. 
+If you want to prevent creating users for every single Google Account visiting your website, you can allow only pre-created users to be allowed to log in. To enable that you need to set `DJANGAE_REQUIRE_USER_PRE_CREATION` to `True` in your settings file.
 
 Note: you don't need to pre-create User for GAE user admins.
 
