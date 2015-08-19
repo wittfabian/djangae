@@ -3,6 +3,7 @@ from urlparse import urlparse
 
 # LIBRARIES
 from django.contrib.auth import get_user_model, get_user
+from django.contrib.auth.tests.utils import skipIfCustomUser
 from django.contrib.sessions.middleware import SessionMiddleware
 from django.http import HttpRequest
 from django.test import TestCase
@@ -263,6 +264,7 @@ class CustomPermissionsUserModelBackendTest(TestCase):
 class SwitchAccountsTests(TestCase):
     """ Tests for the switch accounts functionality. """
 
+    @skipIfCustomUser
     def test_switch_accounts(self):
         gcu = 'djangae.contrib.gauth.middleware.users.get_current_user'
         final_destination = '/death/' # there's no escaping it
