@@ -190,7 +190,7 @@ class TransformQueryTest(TestCase):
         self.assertFalse(query.projection_possible)
 
 
-from djangae.tests.test_connector import TestUser, Relation
+from djangae.tests.test_connector import Relation
 from djangae.db.backends.appengine.dnf import normalize_query
 
 
@@ -204,6 +204,7 @@ class QueryNormalizationTests(TestCase):
     """
 
     def test_and_with_child_or_promoted(self):
+        from .test_connector import TestUser
         """
             Given the following tree:
 
@@ -252,6 +253,7 @@ class QueryNormalizationTests(TestCase):
         self.assertEqual(3, len(query.where.children[1].children))
 
     def test_and_queries(self):
+        from .test_connector import TestUser
         qs = TestUser.objects.filter(username="test").all()
 
         query = normalize_query(transform_query(
@@ -325,6 +327,7 @@ class QueryNormalizationTests(TestCase):
 
 
     def test_or_queries(self):
+        from .test_connector import TestUser
         qs = TestUser.objects.filter(
             username="python").filter(
             Q(username__in=["ruby", "jruby"]) | (Q(username="php") & ~Q(username="perl"))

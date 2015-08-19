@@ -3,11 +3,10 @@ from djangae.test import TestCase
 from djangae.db import transaction
 from djangae.contrib import sleuth
 
-from .test_connector import TestUser, TestFruit
-
 
 class TransactionTests(TestCase):
     def test_atomic_decorator(self):
+        from .test_connector import TestUser
 
         @transaction.atomic
         def txn():
@@ -23,6 +22,7 @@ class TransactionTests(TestCase):
     def test_interaction_with_datastore_txn(self):
         from google.appengine.ext import db
         from google.appengine.datastore.datastore_rpc import TransactionOptions
+        from .test_connector import TestUser
 
         @db.transactional(propagation=TransactionOptions.INDEPENDENT)
         def some_indie_txn(_username):
@@ -67,6 +67,7 @@ class TransactionTests(TestCase):
             some_indie_txn("Fred3")
 
     def test_atomic_context_manager(self):
+        from .test_connector import TestUser
 
         with self.assertRaises(ValueError):
             with transaction.atomic():
@@ -77,6 +78,7 @@ class TransactionTests(TestCase):
 
 
     def test_non_atomic_context_manager(self):
+        from .test_connector import TestUser
         existing = TestUser.objects.create(username="existing", field2="exists")
 
         with transaction.atomic():
@@ -117,6 +119,7 @@ class TransactionTests(TestCase):
 
 
     def test_xg_argument(self):
+        from .test_connector import TestUser, TestFruit
 
         @transaction.atomic(xg=True)
         def txn(_username):
@@ -134,6 +137,7 @@ class TransactionTests(TestCase):
         """
             We would get a XG error if the inner transaction was not independent
         """
+        from .test_connector import TestUser, TestFruit
 
         @transaction.atomic
         def txn1(_username, _fruit):
