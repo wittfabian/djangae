@@ -61,11 +61,11 @@ When using Google Accounts-based authentication, the `username` field of the use
 
 Djangae allows you to pre-create users by specifying their email address.  First, you need to set `DJANGAE_ALLOW_USER_PRE_CREATION` to `True` in settings, and then you can create user objects which have an email address and a `username` of `None`.  Djangae then recognises these as pre-created users, and will populate the `username` with their Google `user_id` when they first log in.
 
-## Force user Pre-Creation
+## Requiring user Pre-Creation
 
-If you want to prevent creating users for every single Google Account visiting your website, you can allow only pre-created users to be allowed to log in. To enable that you need to set `DJANGAE_REQUIRE_USER_PRE_CREATION` to `True` in your settings file.
+The default behaviour is that a `User` object is created for every user who authenticates with your App Engine application using Google Accounts.  However, if all of the users of your site will be people who you know about (i.e. you don't want public users to log in/register), then you may want to change this behaviour in order to prevent uthe creation of obsolete `User` objects in your database.  To prevent the creation of `User` objects for unknown users, set `DJANGAE_REQUIRE_USER_PRE_CREATION` to `True` in your settings file.
 
-Note: you don't need to pre-create User for GAE user admins.
+Note: if a user is authenticated as an admin of the App Engine application then you don't need to pre-create a `User` for them, it will still be automatically created, even if `DJANGAE_REQUIRE_USER_PRE_CREATION` is set to `True`.
 
 ## Username/password authentication
 
