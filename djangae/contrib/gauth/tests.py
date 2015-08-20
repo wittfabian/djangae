@@ -89,10 +89,27 @@ class BackendTests(TestCase):
         user1 = User.objects.get(pk=user1.pk)
         self.assertEqual(user1.email, None)
 
+    @override_settings(DJANGAE_FORCE_USER_PRE_CREATION=True)
+    def test_force_user_pre_creation(self):
+        User = get_user_model()
+        self.assertEqual(User.objects.count(), 0)
+        google_user = users.User('1@example.com', _user_id='111111111100000000001')
+        backend = AppEngineUserAPI()
+
+        self.assertIsNone(backend.authenticate(google_user=google_user,))
+        self.assertEqual(User.objects.count(), 0)
+
+        # superusers don't need pre-creation of User object.
+        self.assertEqual(User.objects.count(), 0)
+        with sleuth.switch('google.appengine.api.users.is_current_user_admin', lambda: True):
+            user = backend.authenticate(google_user=google_user,)
+        self.assertEqual(User.objects.count(), 1)
+        self.assertEquals(User.objects.get(), user)
+
 
 @override_settings(AUTHENTICATION_BACKENDS=AUTHENTICATION_BACKENDS)
 class MiddlewareTests(TestCase):
-    """ Tets for the AuthenticationMiddleware. """
+    """ Tests for the AuthenticationMiddleware. """
 
     def test_login(self):
 
