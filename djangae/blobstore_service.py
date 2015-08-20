@@ -6,6 +6,19 @@ import re
 blobstore_service = None
 server = None
 
+from wsgiref.simple_server import WSGIRequestHandler
+
+
+class NoLogRequestHandler(WSGIRequestHandler):
+
+    def log_request(self, code='-', size='-'):
+        """Normally logs an accepted request. Bug given
+        that this is not using global logging but stdout,
+        this becomes really annoying in tests. So let's
+        not log anything.
+        """
+        pass
+
 
 def start_blobstore_service():
     """
@@ -56,7 +69,7 @@ def start_blobstore_service():
     host = os.environ['SERVER_NAME']
     logging.info("Starting blobstore service on %s:%s", host, port)
     try:
-        server = make_server(host, port, handler)
+        server = make_server(host, port, handler, handler_class=NoLogRequestHandler)
     except socket_error:
         logging.warning("Not starting blobstore service, it may already be running")
         return
