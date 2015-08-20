@@ -1,4 +1,7 @@
+# STANDARD LIBRARY
 import logging
+
+# 3RD PARTY
 from django.db import transaction
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -6,7 +9,6 @@ from django.contrib.auth.models import BaseUserManager
 from django.core.exceptions import ImproperlyConfigured
 from django.contrib.auth.backends import ModelBackend
 from django.utils import timezone
-
 from google.appengine.api import users
 
 # DJANGAE
@@ -18,6 +20,17 @@ if hasattr(settings, "ALLOW_USER_PRE_CREATION"):
     logging.warning(
         "settings.ALLOW_USER_PRE_CREATION is deprecated, "
         "please use DJANGAE_ALLOW_USER_PRE_CREATION instead"
+    )
+
+if (
+    getattr(settings, "DJANGAE_REQUIRE_USER_PRE_CREATION", None) and not
+    getattr(settings, "DJANGAE_ALLOW_USER_PRE_CREATION", None)
+):
+    raise ImproperlyConfigured(
+        "Settings for DJANGAE_ALLOW_USER_PRE_CREATION ({0}) and DJANGAE_REQUIRE_USER_PRE_CREATION "
+        "({1}) are contradictory.".format(
+            settings.DJANGAE_ALLOW_USER_PRE_CREATION, settings.DJANGAE_REQUIRE_USER_PRE_CREATION
+        )
     )
 
 
