@@ -205,7 +205,7 @@ def update_contenttypes(app, created_models, verbosity=2, db=DEFAULT_DB_ALIAS, *
         if not router.allow_syncdb(db, ContentType):
             return
     else:
-        if not router.allow_migrate(db, ContentType):
+        if not router.allow_migrate_model(db, ContentType):
             return
 
 
