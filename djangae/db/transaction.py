@@ -114,7 +114,7 @@ class AtomicDecorator(ContextDecorator):
 
         # Clear the context cache at the start of a transaction
         caching.ensure_context()
-        caching._context.stack.push()
+        caching.get_context().stack.push()
 
     def _do_exit(self, exception):
         if not self.transaction_started:
@@ -136,9 +136,9 @@ class AtomicDecorator(ContextDecorator):
 
              # Clear the context cache at the end of a transaction
             if exception:
-                caching._context.stack.pop(discard=True)
+                caching.get_context().stack.pop(discard=True)
             else:
-                caching._context.stack.pop(apply_staged=True, clear_staged=True)
+                caching.get_context().stack.pop(apply_staged=True, clear_staged=True)
 
             # Reset this; in case this method is called again
             self.transaction_started = False
@@ -161,16 +161,16 @@ class NonAtomicDecorator(ContextDecorator):
             return # Do nothing if we aren't even in a transaction
 
         self._original_connection = _PopConnection()
-        self._original_context = copy.deepcopy(caching._context)
+        self._original_stack = copy.deepcopy(caching.get_context().stack)
 
-        while len(caching._context.stack.stack) > 1:
-            caching._context.stack.pop(discard=True)
+        while len(caching.get_context().stack.stack) > 1:
+            caching.get_context().stack.pop(discard=True)
 
 
     def _do_exit(self, exception):
         if self._original_connection:
             _PushConnection(self._original_connection)
-            caching._context = self._original_context
+            caching.get_context().stack = self._original_stack
 
     def __enter__(self):
         self._do_enter()
