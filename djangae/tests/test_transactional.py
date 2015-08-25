@@ -7,6 +7,17 @@ from .test_connector import TestUser, TestFruit
 
 
 class TransactionTests(TestCase):
+    def test_repeated_usage_in_a_loop(self):
+        pk = TestUser.objects.create(username="foo").pk
+        for i in xrange(4):
+            with transaction.atomic(xg=True):
+                TestUser.objects.get(pk=pk)
+                continue
+
+        with transaction.atomic(xg=True):
+            TestUser.objects.get(pk=pk)
+
+
     def test_atomic_decorator(self):
 
         @transaction.atomic
