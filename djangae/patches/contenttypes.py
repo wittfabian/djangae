@@ -201,11 +201,14 @@ def update_contenttypes(app, created_models, verbosity=2, db=DEFAULT_DB_ALIAS, *
     except LookupError:
         return
 
-    if hasattr(router, "allow_syncdb"):
+    if hasattr(router, "allow_syncdb"):  # Django <= 1.6
         if not router.allow_syncdb(db, ContentType):
             return
-    else:
+    elif hasattr(router, "allow_migrate_model"):  # Django >= 1.8
         if not router.allow_migrate_model(db, ContentType):
+            return
+    else:
+        if not router.allow_migrate(db, ContentType):  # Django == 1.7
             return
 
 
