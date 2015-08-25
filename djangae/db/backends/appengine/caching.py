@@ -13,7 +13,16 @@ from djangae.db.backends.appengine.context import ContextStack
 
 logger = logging.getLogger("djangae")
 
-_context = threading.local()
+_context = None
+
+def get_context():
+    global _context
+
+    if not _context:
+        _context = threading.local()
+
+    return _context
+
 
 CACHE_TIMEOUT_SECONDS = getattr(settings, "DJANGAE_CACHE_TIMEOUT_SECONDS", 60 * 60)
 CACHE_ENABLED = getattr(settings, "DJANGAE_CACHE_ENABLED", True)
@@ -26,9 +35,11 @@ class CachingSituation:
 
 
 def ensure_context():
-    _context.memcache_enabled = getattr(_context, "memcache_enabled", True)
-    _context.context_enabled = getattr(_context, "context_enabled", True)
-    _context.stack = _context.stack if hasattr(_context, "stack") else ContextStack()
+    context = get_context()
+
+    context.memcache_enabled = getattr(context, "memcache_enabled", True)
+    context.context_enabled = getattr(context, "context_enabled", True)
+    context.stack = context.stack if hasattr(context, "stack") else ContextStack()
 
 
 def _add_entity_to_memcache(model, entity, identifiers):
@@ -90,7 +101,7 @@ def add_entity_to_cache(model, entity, situation):
         if entity.key():
             _remove_entity_from_memcache_by_key(entity.key())
 
-    _context.stack.top.cache_entity(identifiers, entity, situation)
+    get_context().stack.top.cache_entity(identifiers, entity, situation)
 
     # Only cache in memcache of we are doing a GET (outside a transaction) or PUT (outside a transaction)
     # the exception is GET_PUT - which we do in our own transaction so we have to ignore that!
@@ -149,18 +160,19 @@ def get_from_cache(unique_identifier):
     """
 
     ensure_context()
+    context = get_context()
 
     if not CACHE_ENABLED:
         return None
 
     ret = None
-    if _context.context_enabled:
+    if context.context_enabled:
         # It's safe to hit the context cache, because a new one was pushed on the stack at the start of the transaction
-        ret = _context.stack.top.get_entity(unique_identifier)
+        ret = context.stack.top.get_entity(unique_identifier)
         if ret is None and not datastore.IsInTransaction():
-            if _context.memcache_enabled:
+            if context.memcache_enabled:
                 ret = _get_entity_from_memcache(unique_identifier)
-    elif _context.memcache_enabled and not datastore.IsInTransaction():
+    elif context.memcache_enabled and not datastore.IsInTransaction():
         ret = _get_entity_from_memcache(unique_identifier)
 
     return ret
@@ -173,13 +185,15 @@ def reset_context(keep_disabled_flags=False, *args, **kwargs):
         flags will be preserved, this is really only useful for testing.
     """
 
-    memcache_enabled = getattr(_context, "memcache_enabled", True)
-    context_enabled = getattr(_context, "context_enabled", True)
+    context = get_context()
 
-    _context.memcache_enabled = True
-    _context.context_enabled = True
-    _context.stack = ContextStack()
+    memcache_enabled = getattr(context, "memcache_enabled", True)
+    context_enabled = getattr(context, "context_enabled", True)
+
+    context.memcache_enabled = True
+    context.context_enabled = True
+    context.stack = ContextStack()
 
     if keep_disabled_flags:
-        _context.memcache_enabled = memcache_enabled
-        _context.context_enabled = context_enabled
+        context.memcache_enabled = memcache_enabled
+        context.context_enabled = context_enabled
