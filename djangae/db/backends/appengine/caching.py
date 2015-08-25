@@ -166,8 +166,6 @@ def get_from_cache(unique_identifier):
     return ret
 
 
-@receiver(request_finished)
-@receiver(request_started)
 def reset_context(keep_disabled_flags=False, *args, **kwargs):
     """
         Called at the beginning and end of each request, resets the thread local
