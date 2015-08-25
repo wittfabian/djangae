@@ -176,11 +176,9 @@ def reset_context(keep_disabled_flags=False, *args, **kwargs):
     memcache_enabled = getattr(_context, "memcache_enabled", True)
     context_enabled = getattr(_context, "context_enabled", True)
 
-    for attr in ("stack", "memcache_enabled", "context_enabled"):
-        if hasattr(_context, attr):
-            delattr(_context, attr)
-
-    ensure_context()
+    _context.memcache_enabled = True
+    _context.context_enabled = True
+    _context.stack = ContextStack()
 
     if keep_disabled_flags:
         _context.memcache_enabled = memcache_enabled
