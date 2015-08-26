@@ -13,6 +13,7 @@ This field originated from the django_extensions project: https://github.com/dja
 """
 
 from __future__ import absolute_import
+from collections import OrderedDict
 from decimal import Decimal
 from django.db import models
 from django.conf import settings
@@ -33,11 +34,12 @@ def dumps(value):
     return DjangoJSONEncoder().encode(value)
 
 
-def loads(txt):
+def loads(txt, object_pairs_hook=None):
     value = json.loads(
         txt,
         parse_float=Decimal,
-        encoding=settings.DEFAULT_CHARSET
+        encoding=settings.DEFAULT_CHARSET,
+        object_pairs_hook=object_pairs_hook,
     )
     return value
 
@@ -67,6 +69,14 @@ class JSONList(list):
         return dumps(self)
 
 
+class JSONOrderedDict(OrderedDict):
+    """
+    As above
+    """
+    def __repr__(self):
+        return dumps(self)
+
+
 class JSONField(six.with_metaclass(models.SubfieldBase, models.TextField)):
     """JSONField is a generic textfield that neatly serializes/unserializes
     JSON objects seamlessly.  Main thingy must be a dict object."""
@@ -77,6 +87,12 @@ class JSONField(six.with_metaclass(models.SubfieldBase, models.TextField)):
             kwargs['default'] = '{}'
         elif isinstance(default, (list, dict)):
             kwargs['default'] = dumps(default)
+
+        # expose the `object_pairs_hook` parameter passed to `json.loads`
+        # to enable us to store and retrieve an `OrderedDict`
+        # @link https://docs.python.org/2/library/json.html#json.load
+        self.object_pairs_hook = kwargs.pop('object_pairs_hook', None)
+
         models.TextField.__init__(self, *args, **kwargs)
 
     def to_python(self, value):
@@ -84,8 +100,10 @@ class JSONField(six.with_metaclass(models.SubfieldBase, models.TextField)):
         if value is None or value == '':
             return {}
         elif isinstance(value, six.string_types):
-            res = loads(value)
-            if isinstance(res, dict):
+            res = loads(value, object_pairs_hook=self.object_pairs_hook)
+            if isinstance(res, OrderedDict) and self.object_pairs_hook == OrderedDict:
+                return JSONOrderedDict(res)
+            elif isinstance(res, dict):
                 return JSONDict(**res)
             elif isinstance(res, six.string_types):
                 return JSONUnicode(res)

@@ -1,3 +1,5 @@
+from collections import OrderedDict
+
 # LIBRARIES
 from django.db import models
 from django.db.utils import IntegrityError
@@ -8,6 +10,7 @@ from djangae.db import transaction
 from djangae.fields import (
     ComputedCharField,
     GenericRelationField,
+    JSONField,
     ListField,
     RelatedSetField,
     RelatedListField,
@@ -102,6 +105,10 @@ class IterableFieldModel(models.Model):
 
     class Meta:
         app_label = "djangae"
+
+
+class JSONFieldModel(models.Model):
+    json_field = JSONField(object_pairs_hook=OrderedDict)
 
 
 class ShardedCounterTest(TestCase):
@@ -613,3 +620,37 @@ class TestGenericRelationField(TestCase):
         instance.save()
         GenericRelationModel.objects.create(unique_relation_to_anything=None)
         GenericRelationModel.objects.create() # It should work even if we don't explicitly set it to None
+
+
+class JSONFieldModelTests(TestCase):
+
+    def test_object_pairs_hook_with_ordereddict(self):
+        items = [('first', 1), ('second', 2), ('third', 3), ('fourth', 4)]
+        od = OrderedDict(items)
+
+        thing = JSONFieldModel(json_field=od)
+        thing.save()
+
+        thing = JSONFieldModel.objects.get()
+        self.assertEqual(od, thing.json_field)
+
+    def test_object_pairs_hook_with_normal_dict(self):
+        """
+        Check that dict is not stored as OrderedDict if
+        object_pairs_hook is not set
+        """
+
+        # monkey patch field
+        field = JSONFieldModel._meta.get_field('json_field')
+        field.object_pairs_hook = None
+
+        normal_dict = {'a': 1, 'b': 2, 'c': 3}
+
+        thing = JSONFieldModel(json_field=normal_dict)
+        self.assertFalse(isinstance(thing.json_field, OrderedDict))
+        thing.save()
+
+        thing = JSONFieldModel.objects.get()
+        self.assertFalse(isinstance(thing.json_field, OrderedDict))
+
+        field.object_pairs_hook = OrderedDict
