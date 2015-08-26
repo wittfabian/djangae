@@ -1,5 +1,6 @@
 import copy
 import functools
+import threading
 
 from google.appengine.api.datastore import (
     CreateTransactionOptions,
@@ -21,26 +22,30 @@ def in_atomic_block():
 
 
 class ContextDecorator(object):
-    """ Base class for objects creating dual purpose decorators and context managers.
-        Sub classes need to define __enter__ and __exit__ to define the desired functionality;
-        these methods will be called whether the object is used as a decorator or a context manager.
-        Possible usages for subclasses:
-
-        @my_context_decorator
-        def my_function():
-            pass
-
-        @my_context_decorator()
-        def my_function():
-            pass
-
-        with my_context_decorator():
-            pass
     """
-    def __init__(self, func=None):
-        # If this has been used as `@decorator` without parenthesis, then the decorated function
-        # will be passed in here.
+        A thread-safe ContextDecorator. Subclasses should implement classmethods
+        called _do_enter(state, decorator_args) and _do_exit(state, decorator_args, exception)
+
+        state is a thread.local which can store state for each enter/exit. Decorator args holds
+        any arguments passed into the decorator or context manager when called.
+    """
+    VALID_ARGUMENTS = ()
+
+    def __init__(self, func=None, **kwargs):
+        # Func will be passed in if this has been called without parenthesis
+        # as a @decorator
+
+        # Make sure only valid decorator arguments were passed in
+        if len(kwargs) > len(self.__class__.VALID_ARGUMENTS):
+            raise ValueError("Unexpected decorator arguments: {}".format(
+                set(kwargs.keys()) - set(self.__class__.VALID_ARGUMENTS))
+            )
+
         self.func = func
+        self.decorator_args = { x: kwargs.get(x) for x in self.__class__.VALID_ARGUMENTS }
+        # Add thread local state for variables that change per-call rather than
+        # per insantiation of the decorator
+        self.state = threading.local()
 
     def __get__(self, obj, objtype=None):
         """ Implement descriptor protocol to support instance methods. """
@@ -52,20 +57,33 @@ class ContextDecorator(object):
         return functools.partial(self.__call__, obj)
 
     def __call__(self, *args, **kwargs):
-        # This method is only called if this has been used as a decorator (not as a context manager)
-        def decorated(*_args, **_kwargs):
-            # To allow subclasses to use attributes on `self` in a thread-safe way, we need to make
-            # a copy of ourself here
-            with copy.deepcopy(self):
-                return self.func(*_args, **_kwargs)
+        # Called if this has been used as a decorator not as a context manager
 
-        # If this has been used as `@decorator` without parenthesis
+        def decorated(*_args, **_kwargs):
+            decorator_args = self.decorator_args.copy()
+            exception = False
+            try:
+                self.__class__._do_enter(self.state, decorator_args)
+                try:
+                    return self.func(*_args, **_kwargs)
+                except:
+                    exception = True
+                    raise
+            finally:
+                self.__class__._do_exit(self.state, decorator_args, exception)
+
         if not self.func:
+            # We were instantiated with args
             self.func = args[0]
             return decorated
+        else:
+            return decorated(*args, **kwargs)
 
-        # Else... if this has been used as `@decorator()` with parenthesis
-        return decorated(*args, **kwargs)
+    def __enter__(self):
+        self.__class__._do_enter(self.state, self.decorator_args.copy())
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.__class__._do_exit(self.state, self.decorator_args.copy(), exc_type)
 
 
 class TransactionFailedError(Exception):
@@ -73,109 +91,115 @@ class TransactionFailedError(Exception):
 
 
 class AtomicDecorator(ContextDecorator):
-    def __init__(self, func=None, xg=False, independent=False, mandatory=False):
-        self.independent = independent
-        self.xg = xg
-        self.mandatory = mandatory
-        self.conn_stack = []
-        self.transaction_started = False
-        super(AtomicDecorator, self).__init__(func)
+    VALID_ARGUMENTS = ("xg", "independent", "mandatory")
 
-    def _do_enter(self):
-        if IsInTransaction():
-            if self.independent:
-                self.conn_stack.append(_PopConnection())
-                try:
-                    return self._do_enter()
-                except:
-                    _PushConnection(self.conn_stack.pop())
-                    raise
-            else:
-                # App Engine doesn't support nested transactions, so if there is a nested
-                # atomic() call we just don't do anything. This is how RunInTransaction does it
-                return
-        elif self.mandatory:
+    @classmethod
+    def _do_enter(cls, state, decorator_args):
+        mandatory = decorator_args.get("mandatory", False)
+        independent = decorator_args.get("independent", False)
+        xg = decorator_args.get("xg", False)
+
+        # Reset the state
+        state.conn_stack = []
+        state.transaction_started = False
+        state.original_stack = None
+
+        if independent:
+            # Unwind the connection stack and store it on the state so that
+            # we can replace it on exit
+            while in_atomic_block():
+                state.conn_stack.append(_PopConnection())
+            state.original_stack = copy.deepcopy(caching.get_context().stack)
+
+        elif in_atomic_block():
+            # App Engine doesn't support nested transactions, so if there is a nested
+            # atomic() call we just don't do anything. This is how RunInTransaction does it
+            return
+        elif mandatory:
             raise TransactionFailedError("You've specified that an outer transaction is mandatory, but one doesn't exist")
 
         options = CreateTransactionOptions(
-            xg=self.xg,
-            propagation=TransactionOptions.INDEPENDENT if self.independent else None
+            xg=xg,
+            propagation=TransactionOptions.INDEPENDENT if independent else None
         )
 
         conn = _GetConnection()
-
-        self.transaction_started = True
         new_conn = conn.new_transaction(options)
-
-        _PushConnection(None)
-        _SetConnection(new_conn)
+        _PushConnection(new_conn)
 
         assert(_GetConnection())
 
         # Clear the context cache at the start of a transaction
         caching.ensure_context()
         caching.get_context().stack.push()
+        state.transaction_started = True
 
-    def _do_exit(self, exception):
-        if not self.transaction_started:
-            # If we didn't start a transaction, then don't roll back or anything
-            return
+    @classmethod
+    def _do_exit(cls, state, decorator_args, exception):
+        independent = decorator_args.get("independent", False)
 
         try:
-            if exception:
-                _GetConnection().rollback()
-            else:
-                if not _GetConnection().commit():
-                    raise TransactionFailedError()
+            if state.transaction_started:
+                if exception:
+                    _GetConnection().rollback()
+                else:
+                    if not _GetConnection().commit():
+                        raise TransactionFailedError()
         finally:
-            _PopConnection()
+            if state.transaction_started:
+                _PopConnection()
 
-            if self.independent:
-                while self.conn_stack:
-                    _PushConnection(self.conn_stack.pop())
+                 # Clear the context cache at the end of a transaction
+                if exception:
+                    caching.get_context().stack.pop(discard=True)
+                else:
+                    caching.get_context().stack.pop(apply_staged=True, clear_staged=True)
 
-             # Clear the context cache at the end of a transaction
-            if exception:
-                caching.get_context().stack.pop(discard=True)
-            else:
-                caching.get_context().stack.pop(apply_staged=True, clear_staged=True)
+            # If we were in an independent transaction, put everything back
+            # the way it was!
+            if independent:
+                while state.conn_stack:
+                    _PushConnection(state.conn_stack.pop())
 
-            # Reset this; in case this method is called again
-            self.transaction_started = False
+                # Restore the in-context cache as it was
+                caching.get_context().stack = state.original_stack
 
-    def __enter__(self):
-        self._do_enter()
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        self._do_exit(exc_type)
 
 atomic = AtomicDecorator
 commit_on_success = AtomicDecorator  # Alias to the old Django name for this kinda thing
 
 
 class NonAtomicDecorator(ContextDecorator):
-    def _do_enter(self):
-        self._original_connection = None
+    @classmethod
+    def _do_enter(cls, state, decorator_args):
+        state.conn_stack = []
 
+        # We aren't in a transaction, do nothing!
         if not in_atomic_block():
-            return # Do nothing if we aren't even in a transaction
+            return
 
-        self._original_connection = _PopConnection()
-        self._original_stack = copy.deepcopy(caching.get_context().stack)
+        # Store the current in-context stack
+        state.original_stack = copy.deepcopy(caching.get_context().stack)
 
+        # Similar to independent transactions, unwind the connection statck
+        # until we aren't in a transaction
+        while in_atomic_block():
+            state.conn_stack.append(_PopConnection())
+
+        # Unwind the in-context stack
         while len(caching.get_context().stack.stack) > 1:
             caching.get_context().stack.pop(discard=True)
 
+    @classmethod
+    def _do_exit(cls, state, decorator_args, exception):
+        if not state.conn_stack:
+            return
 
-    def _do_exit(self, exception):
-        if self._original_connection:
-            _PushConnection(self._original_connection)
-            caching.get_context().stack = self._original_stack
+        # Restore the connection stack
+        while state.conn_stack:
+            _PushConnection(state.conn_stack.pop())
 
-    def __enter__(self):
-        self._do_enter()
+        caching.get_context().stack = state.original_stack
 
-    def __exit__(self, exc_type, exc_value, traceback):
-        self._do_exit(exc_type)
 
 non_atomic = NonAtomicDecorator
