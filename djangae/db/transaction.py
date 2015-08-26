@@ -149,7 +149,6 @@ class AtomicDecorator(ContextDecorator):
             if state.transaction_started:
                 _PopConnection()
 
-            if state.transaction_started:
                  # Clear the context cache at the end of a transaction
                 if exception:
                     caching.get_context().stack.pop(discard=True)
