@@ -7,11 +7,11 @@ pages:
 - Djangae Model Fields: fields.md
 - Local/remote management commands: sandbox.md
 - Contrib apps:
-	- Pagination: pagination.md
-	- Gauth: gauth.md
-	- Map Reduce: mappers.md
-	- Unique constraint tool: uniquetool.md
-	- Security: security.md
-	- Datastore eventual consistency: consistency.md
+  - Pagination: pagination.md
+  - Gauth: gauth.md
+  - Map Reduce: mappers.md
+  - Unique constraint tool: uniquetool.md
+  - Security: security.md
+  - Datastore eventual consistency: consistency.md
 - Contributing & Testing: contributing.md
 theme: readthedocs
