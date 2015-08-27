@@ -22,7 +22,7 @@ APPENGINE_SDK_FILENAME = "google_appengine_%s.zip" % APPENGINE_SDK_VERSION
 FEATURED_SDK_REPO = "https://storage.googleapis.com/appengine-sdks/featured/"
 DEPRECATED_SDK_REPO = "https://storage.googleapis.com/appengine-sdks/deprecated/%s/" % APPENGINE_SDK_VERSION.replace('.', '')
 
-DJANGO_VERSION = os.environ.get("DJANGO_VERSION", "1.6")
+DJANGO_VERSION = os.environ.get("DJANGO_VERSION", "1.7")
 NEXT_DJANGO_VERSION = {
     "1.5": "1.6",
     "1.6": "1.7",
