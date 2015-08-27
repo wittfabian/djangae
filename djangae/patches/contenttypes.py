@@ -296,11 +296,7 @@ def patch():
     if original == update_contenttypes:
         return
 
-    if hasattr(signals, "post_migrate"):
-        signals.post_migrate.disconnect(original)
-
-    if hasattr(signals, "post_syncdb"):
-        signals.post_syncdb.disconnect(original)
+    signals.post_migrate.disconnect(original)
 
     from django.conf import settings
     if getattr(settings, "DJANGAE_SIMULATE_CONTENTTYPES", False):
@@ -309,4 +305,4 @@ def patch():
         if not isinstance(models.ContentType.objects, SimulatedContentTypeManager):
             models.ContentType.objects = SimulatedContentTypeManager()
     else:
-        signals.post_syncdb.connect(update_contenttypes)
+        signals.post_migrate.connect(update_contenttypes)
