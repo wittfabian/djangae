@@ -1,5 +1,4 @@
 from django.contrib import auth
-from django.contrib.auth.management import create_permissions
 from django.contrib.auth.models import (
     python_2_unicode_compatible,
     GroupManager,
@@ -172,12 +171,3 @@ def lazy_permission_creation(**kwargs):
 
     # Call through to Django's create_permissions
     create_permissions(**kwargs)
-
-#We disconnect the built-in Django permission creation when using our custom user model
-if hasattr(signals, "post_migrate"):
-    signals.post_migrate.disconnect(dispatch_uid="django.contrib.auth.management.create_permissions")
-    signals.post_migrate.connect(lazy_permission_creation, dispatch_uid="django.contrib.auth.management.create_permissions")
-
-if hasattr(signals, "post_syncdb"):
-    signals.post_syncdb.disconnect(dispatch_uid="django.contrib.auth.management.create_permissions")
-    signals.post_syncdb.connect(lazy_permission_creation, dispatch_uid="django.contrib.auth.management.create_permissions")
