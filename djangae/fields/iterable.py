@@ -119,11 +119,14 @@ class IterableField(models.Field):
 
         # If possible, parse the string into the iterable
         if not hasattr(value, "__iter__"): # Allows list/set, not string
-            if (self._iterable_type == set and value.startswith("{") and value.endswith("}")) or \
-               (self._iterable_type == list and value.startswith("[") and value.endswith("]")):
-                value = [x.strip() for x in value[1:-1].split(",") ]
+            if isinstance(value, basestring):
+                if (self._iterable_type == set and value.startswith("{") and value.endswith("}")) or \
+                   (self._iterable_type == list and value.startswith("[") and value.endswith("]")):
+                    value = [x.strip() for x in value[1:-1].split(",") ]
+                else:
+                    raise ValueError("Unable to parse string into iterable field")
             else:
-                raise ValueError("Unable to parse string into iterable field")
+                raise TypeError("Tried to assign non-iterable to an IterableField")
 
         return self._map(self.item_field_type.to_python, value)
 
