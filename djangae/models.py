@@ -9,6 +9,3 @@ class CounterShard(models.Model):
 
     class Meta:
         app_label = "djangae"
-
-# Apply our django patches
-patches.patch()
