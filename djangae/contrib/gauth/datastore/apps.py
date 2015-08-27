@@ -3,7 +3,7 @@ from django.contrib import auth
 from django.contrib.auth.management import create_permissions
 from django.db.models.signals import post_migrate
 
-from .datastore.models import PermissionsMixin
+from .models import PermissionsMixin
 
 
 # This is slightly unnecessary, because if the project is importing this file then it is *probably*
@@ -19,9 +19,9 @@ def lazy_permission_creation(**kwargs):
     create_permissions(**kwargs)
 
 
-class GAuthConfig(AppConfig):
+class GAuthDatastoreConfig(AppConfig):
 
-   name = "djangae.contrib.gauth"
+   name = "djangae.contrib.gauth.datastore"
    verbose_name = "gauth"
 
    def ready(self):
