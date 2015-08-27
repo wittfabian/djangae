@@ -108,7 +108,7 @@ class IterableFieldModel(models.Model):
 
 
 class JSONFieldModel(models.Model):
-    json_field = JSONField(object_pairs_hook=OrderedDict)
+    json_field = JSONField(use_ordered_dict=True)
 
 
 class ShardedCounterTest(TestCase):
@@ -642,7 +642,7 @@ class JSONFieldModelTests(TestCase):
 
         # monkey patch field
         field = JSONFieldModel._meta.get_field('json_field')
-        field.object_pairs_hook = None
+        field.use_ordered_dict = False
 
         normal_dict = {'a': 1, 'b': 2, 'c': 3}
 
@@ -653,4 +653,4 @@ class JSONFieldModelTests(TestCase):
         thing = JSONFieldModel.objects.get()
         self.assertFalse(isinstance(thing.json_field, OrderedDict))
 
-        field.object_pairs_hook = OrderedDict
+        field.use_ordered_dict = True

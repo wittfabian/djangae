@@ -101,9 +101,9 @@ This field requires no special kwargs, and should accept all standard Django fie
 
 This field is not specific to to the App Engine Datastore (or any non-relational database), but is included in Djangae for convenience, especially as in a non-relational database it's often useful to be able to store structured data in a single table rather than in a complex structure of related tables.
 
-```JSONField(object_pairs_hook=collections.OrderedDict, **kwargs)```
+```JSONField(use_ordered_dict=False, **kwargs)```
 
-* `object_pairs_hook`: (optional) exposes the [`object_pairs_hook`](https://docs.python.org/2/library/json.html#json.load) parameter passed to `json.loads` to enable us to store and retrieve an `OrderedDict`.
+* `use_ordered_dict`: (default: False) Use `collections.OrderedDict` rather than built-in `dict`.
 
 
 ## TrueOrNullField

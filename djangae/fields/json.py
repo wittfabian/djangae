@@ -88,10 +88,8 @@ class JSONField(six.with_metaclass(models.SubfieldBase, models.TextField)):
         elif isinstance(default, (list, dict)):
             kwargs['default'] = dumps(default)
 
-        # expose the `object_pairs_hook` parameter passed to `json.loads`
-        # to enable us to store and retrieve an `OrderedDict`
-        # @link https://docs.python.org/2/library/json.html#json.load
-        self.object_pairs_hook = kwargs.pop('object_pairs_hook', None)
+        # use `collections.OrderedDict` rather than built-in `dict`
+        self.use_ordered_dict = kwargs.pop('use_ordered_dict', False)
 
         models.TextField.__init__(self, *args, **kwargs)
 
@@ -100,8 +98,11 @@ class JSONField(six.with_metaclass(models.SubfieldBase, models.TextField)):
         if value is None or value == '':
             return {}
         elif isinstance(value, six.string_types):
-            res = loads(value, object_pairs_hook=self.object_pairs_hook)
-            if isinstance(res, OrderedDict) and self.object_pairs_hook == OrderedDict:
+            if self.use_ordered_dict:
+                res = loads(value, object_pairs_hook=OrderedDict)
+            else:
+                res = loads(value)
+            if isinstance(res, OrderedDict) and self.use_ordered_dict:
                 return JSONOrderedDict(res)
             elif isinstance(res, dict):
                 return JSONDict(**res)
