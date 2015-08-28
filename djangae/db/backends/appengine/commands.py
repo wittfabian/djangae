@@ -825,7 +825,7 @@ class InsertCommand(object):
             ])
 
             for entity in self.entities:
-                result += "(" + ", ".join([str(entity[x]) for x in keys]) + ")"
+                result += "(" + ", ".join([unicode(entity[x]) for x in keys]) + ")"
 
             return result
         except:
