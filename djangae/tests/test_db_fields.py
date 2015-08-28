@@ -318,6 +318,9 @@ class IterableFieldTests(TestCase):
         self.assertFalse(IterableFieldModel.objects.exclude(set_field__isnull=False).exists())
         self.assertTrue(IterableFieldModel.objects.exclude(set_field__isnull=True).exists())
 
+    def test_assign_integer_throws_typeerror(self):
+        self.assertRaises(TypeError, IterableFieldModel, list_field=1)
+        self.assertRaises(TypeError, IterableFieldModel, set_field=1)
 
 class InstanceListFieldTests(TestCase):
 
