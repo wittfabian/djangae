@@ -376,6 +376,15 @@ class DatabaseOperations(BaseDatabaseOperations):
     def last_insert_id(self, cursor, db_table, column):
         return cursor.lastrowid
 
+    def last_executed_query(self, cursor, sql, params):
+        """
+            We shouldn't have to override this, but Django's BaseOperations.last_executed_query
+            assumes does u"QUERY = %r" % (sql) which blows up if you have encode unicode characters
+            in your SQL. Technically this is a bug in Django for assuming that sql is ASCII but
+            it's only our backend that will ever trigger the problem
+        """
+        return u"QUERY = {}".format(sql)
+
     def fetch_returned_insert_id(self, cursor):
         return cursor.lastrowid
 
