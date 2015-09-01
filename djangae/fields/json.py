@@ -81,7 +81,7 @@ class JSONField(six.with_metaclass(models.SubfieldBase, models.TextField)):
     """JSONField is a generic textfield that neatly serializes/unserializes
     JSON objects seamlessly.  Main thingy must be a dict object."""
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, use_ordered_dict=False, *args, **kwargs):
         default = kwargs.get('default', None)
         if default is None:
             kwargs['default'] = '{}'
@@ -89,7 +89,7 @@ class JSONField(six.with_metaclass(models.SubfieldBase, models.TextField)):
             kwargs['default'] = dumps(default)
 
         # use `collections.OrderedDict` rather than built-in `dict`
-        self.use_ordered_dict = kwargs.pop('use_ordered_dict', False)
+        self.use_ordered_dict = use_ordered_dict
 
         models.TextField.__init__(self, *args, **kwargs)
 
