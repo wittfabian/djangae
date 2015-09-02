@@ -85,3 +85,11 @@ Then run:
 If you have two-factor authentication enabled in your Google account, run:
 
     $ appcfg.py --oauth2 update ./
+
+## Modules
+
+If you are using multiple modules in your app. Just set the following setting in your Django settings:
+
+DJANGAE_ADDITIONAL_MODULES = [ "path/to/module.yaml", "path/to/other_module.yaml" ]
+
+These modules will then be launched by the runserver command automatically and be given sequential ports after the default module (e.g. 8000, 8001, 8002 etc.) 
