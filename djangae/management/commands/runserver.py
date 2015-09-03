@@ -146,11 +146,16 @@ class Command(BaseRunserverCommand):
 
         from djangae import sandbox
 
-        if int(self.port) != sandbox._OPTIONS.port:
+        # Add any additional modules specified in the settings
+        additional_modules = getattr(settings, "DJANGAE_ADDITIONAL_MODULES", [])
+        if additional_modules:
+            sandbox._OPTIONS.config_paths.extend(additional_modules)
+
+        if int(self.port) != sandbox._OPTIONS.port or additional_modules:
             # Override the port numbers
             sandbox._OPTIONS.port = int(self.port)
-            sandbox._OPTIONS.admin_port = int(self.port) + 1
-            sandbox._OPTIONS.api_port = int(self.port) + 2
+            sandbox._OPTIONS.admin_port = int(self.port) + len(additional_modules) + 1
+            sandbox._OPTIONS.api_port = int(self.port) + len(additional_modules) + 2
 
         if self.addr != sandbox._OPTIONS.host:
             sandbox._OPTIONS.host = sandbox._OPTIONS.admin_host = sandbox._OPTIONS.api_host = self.addr
@@ -179,6 +184,7 @@ class Command(BaseRunserverCommand):
         class NoConfigDevServer(devappserver2.DevelopmentServer):
             def _create_api_server(self, request_data, storage_path, options, configuration):
                 self._dispatcher = sandbox._create_dispatcher(configuration, options)
+                self._dispatcher._configuration = configuration
                 self._dispatcher._port = options.port
                 self._dispatcher._host = options.host
 
