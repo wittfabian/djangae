@@ -203,6 +203,47 @@ class Command(BaseRunserverCommand):
 
                 return sandbox._API_SERVER
 
+        from google.appengine.tools.devappserver2 import module
+
+        def logging_wrapper(func):
+            """
+                Changes logging to use the DJANGO_COLORS settings
+            """
+            def _wrapper(level, format, args):
+                status = str(args.get("status", 200))
+
+                try:
+                    msg = format % args
+                except UnicodeDecodeError:
+                    msg += "\n" # This is what Django does in WSGIRequestHandler.log_message
+
+                # Utilize terminal colors, if available
+                if status[0] == '2':
+                    # Put 2XX first, since it should be the common case
+                    msg = self.style.HTTP_SUCCESS(msg)
+                elif status[0] == '1':
+                    msg = self.style.HTTP_INFO(msg)
+                elif status == '304':
+                    msg = self.style.HTTP_NOT_MODIFIED(msg)
+                elif status[0] == '3':
+                    msg = self.style.HTTP_REDIRECT(msg)
+                elif status == '404':
+                    msg = self.style.HTTP_NOT_FOUND(msg)
+                elif status[0] == '4':
+                    # 0x16 = Handshake, 0x03 = SSL 3.0 or TLS 1.x
+                    if status.startswith(str('\x16\x03')):
+                        msg = ("You're accessing the development server over HTTPS, "
+                            "but it only supports HTTP.\n")
+                    msg = self.style.HTTP_BAD_REQUEST(msg)
+                else:
+                    # Any 5XX, or any other response
+                    msg = self.style.HTTP_SERVER_ERROR(msg)
+
+                return func(level, msg)
+            return _wrapper
+
+        module.logging.log = logging_wrapper(module.logging.log)
+
         python_runtime._RUNTIME_PATH = os.path.join(sdk_path, '_python_runtime.py')
         python_runtime._RUNTIME_ARGS = [sys.executable, python_runtime._RUNTIME_PATH]
 
