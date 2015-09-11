@@ -214,7 +214,7 @@ class Command(BaseRunserverCommand):
                     args = args[0]
                     status = str(args.get("status", 200))
                 else:
-                    status = 200
+                    status = "200"
 
                 try:
                     msg = format % args
