@@ -209,8 +209,12 @@ class Command(BaseRunserverCommand):
             """
                 Changes logging to use the DJANGO_COLORS settings
             """
-            def _wrapper(level, format, args):
-                status = str(args.get("status", 200))
+            def _wrapper(level, format, *args, **kwargs):
+                if args and len(args) == 1 and isinstance(args[0], dict):
+                    args = args[0]
+                    status = str(args.get("status", 200))
+                else:
+                    status = 200
 
                 try:
                     msg = format % args
