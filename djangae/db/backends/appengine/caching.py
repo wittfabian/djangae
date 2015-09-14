@@ -85,7 +85,7 @@ def _get_entity_from_memcache_by_key(key):
     return cache.get(cache_key)
 
 
-def add_entity_to_cache(model, entity, situation):
+def add_entity_to_cache(model, entity, situation, skip_memcache=False):
     ensure_context()
 
     identifiers = unique_identifiers_from_entity(model, entity)
@@ -108,7 +108,8 @@ def add_entity_to_cache(model, entity, situation):
     if (not datastore.IsInTransaction() and situation in (CachingSituation.DATASTORE_GET, CachingSituation.DATASTORE_PUT)) or \
             situation == CachingSituation.DATASTORE_GET_PUT:
 
-        _add_entity_to_memcache(model, entity, identifiers)
+        if not skip_memcache:
+            _add_entity_to_memcache(model, entity, identifiers)
 
 
 def remove_entity_from_cache(entity):
@@ -148,6 +149,14 @@ def get_from_cache_by_key(key):
         if ret is None and not datastore.IsInTransaction():
             if _context.memcache_enabled:
                 ret = _get_entity_from_memcache_by_key(key)
+                if ret:
+                    # Add back into the context cache
+                    add_entity_to_cache(
+                        utils.get_model_from_db_table(ret.key().kind()),
+                        ret,
+                        CachingSituation.DATASTORE_GET,
+                        skip_memcache=True # Don't put in memcache, we just got it from there!
+                    )
     elif _context.memcache_enabled and not datastore.IsInTransaction():
         ret = _get_entity_from_memcache_by_key(key)
 
@@ -172,6 +181,15 @@ def get_from_cache(unique_identifier):
         if ret is None and not datastore.IsInTransaction():
             if context.memcache_enabled:
                 ret = _get_entity_from_memcache(unique_identifier)
+                if ret:
+                    # Add back into the context cache
+                    add_entity_to_cache(
+                        utils.get_model_from_db_table(ret.key().kind()),
+                        ret,
+                        CachingSituation.DATASTORE_GET,
+                        skip_memcache=True # Don't put in memcache, we just got it from there!
+                    )
+
     elif context.memcache_enabled and not datastore.IsInTransaction():
         ret = _get_entity_from_memcache(unique_identifier)
 
