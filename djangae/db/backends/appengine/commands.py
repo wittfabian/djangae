@@ -170,7 +170,6 @@ def _convert_entity_based_on_query_options(entity, opts):
     return entity
 
 
-
 class QueryByKeys(object):
     def __init__(self, model, queries, ordering):
         def _get_key(query):
