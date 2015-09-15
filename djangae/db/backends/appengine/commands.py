@@ -187,42 +187,76 @@ class QueryByKeys(object):
         self._Query__kind = queries[0]._Query__kind
 
     def Run(self, limit=None, offset=None):
-        assert not self.queries[0]._Query__ancestor_pb #FIXME: We don't handle this yet
+        """
+            Here are the options:
 
-        # FIXME: What if the query options differ?
+            1. Single key, hit memcache
+            2. Multikey projection, async MultiQueries with ancestors chained
+            3. Full select, datastore get
+        """
+
         opts = self.queries[0]._Query__query_options
+        key_count = len(self.queries_by_key)
 
-        results = None
+        if key_count == 1:
+            # FIXME: Potentially could use get_multi in memcache and the make a query
+            # for whatever remains
+            key = self.queries_by_key.keys()[0]
+            results = [ caching.get_from_cache_by_key(key) ]
+            if results[0] is None:
+                results = datastore.Get([key])
 
-        # If we have a single key lookup going on, just hit the cache
-        if len(self.queries_by_key) == 1:
-            keys = self.queries_by_key.keys()
-            ret = caching.get_from_cache_by_key(keys[0])
-            if ret is not None:
-                results = [ret]
+        elif opts.projection:
+            # Assumes projection ancestor queries are faster than a datastore Get
+            # due to lower traffic over the RPC. This should be faster for queries with
+            # < 30 keys (which is the most common case), and faster if the entities are
+            # larger and there are many results, but there is probably a slower middle ground
+            # because the larger number of RPC calls. Still, if performance is an issue the
+            # user can just do a normal get() rather than values/values_list/only/defer
+            multi_query = []
+            final_queries = []
+            orderings = self.queries[0]._Query__orderings
+            for key, queries in self.queries_by_key.iteritems():
+                for query in queries:
+                    assert query._Query__query_options.projection == opts.projection
 
-        # If there was nothing in the cache, or we had more than one key, then use Get()
-        if results is None:
-            keys = self.queries_by_key.keys()
-            results = datastore.Get(keys)
-            for result in results:
+                    query.Ancestor(key) # Make this an ancestor query
+                    multi_query.append(query)
+                    if len(multi_query) == 30:
+                        final_queries.append(datastore.MultiQuery(multi_query, orderings).Run(limit=limit))
+                        multi_query = []
+            else:
+                if multi_query:
+                    final_queries.append(datastore.MultiQuery(multi_query, orderings).Run(limit=limit))
+
+            results = chain(*final_queries)
+        else:
+            results = datastore.Get(self.queries_by_key.keys())
+
+        def iter_results(results):
+            returned = 0
+            for result in sorted(results, cmp=partial(utils.django_ordering_comparison, self.ordering)):
                 if result is None:
                     continue
-                caching.add_entity_to_cache(self.model, result, caching.CachingSituation.DATASTORE_GET)
-            results = sorted((x for x in results if x is not None), cmp=partial(utils.django_ordering_comparison, self.ordering))
 
-        results = [
-            _convert_entity_based_on_query_options(x, opts)
-            for x in results if any([ utils.entity_matches_query(x, qry) for qry in self.queries_by_key[x.key()]])
-        ]
+                if not any([ utils.entity_matches_query(result, qry) for qry in self.queries_by_key[result.key()]]):
+                    continue
 
-        if offset:
-            results = results[offset:]
+                if offset and returned < offset:
+                    # Skip entities based on offset
+                    returned += 1
+                    continue
+                else:
+                    caching.add_entity_to_cache(self.model, result, caching.CachingSituation.DATASTORE_GET)
+                    yield _convert_entity_based_on_query_options(result, opts)
 
-        if limit is not None:
-            results = results[:limit]
+                    returned += 1
 
-        return iter(results)
+                    # If there is a limit, we might be done!
+                    if limit is not None and returned == (offset or 0) + limit:
+                        break
+
+        return iter_results(results)
 
     def Count(self, limit, offset):
         return len([ x for x in self.Run(limit, offset) ])
