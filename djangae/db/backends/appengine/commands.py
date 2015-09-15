@@ -198,6 +198,8 @@ class QueryByKeys(object):
         opts = self.queries[0]._Query__query_options
         key_count = len(self.queries_by_key)
 
+        cache = True
+
         if key_count == 1:
             # FIXME: Potentially could use get_multi in memcache and the make a query
             # for whatever remains
@@ -205,6 +207,8 @@ class QueryByKeys(object):
             results = [ caching.get_from_cache_by_key(key) ]
             if results[0] is None:
                 results = datastore.Get([key])
+            else:
+                cache = False # Don't update cache, we just got it from there
 
         elif opts.projection:
             # Assumes projection ancestor queries are faster than a datastore Get
@@ -249,7 +253,9 @@ class QueryByKeys(object):
                     returned += 1
                     continue
                 else:
-                    caching.add_entity_to_cache(self.model, result, caching.CachingSituation.DATASTORE_GET)
+                    if cache:
+                        caching.add_entity_to_cache(self.model, result, caching.CachingSituation.DATASTORE_GET)
+
                     yield _convert_entity_based_on_query_options(result, opts)
 
                     returned += 1
