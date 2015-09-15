@@ -216,12 +216,22 @@ class QueryByKeys(object):
             # larger and there are many results, but there is probably a slower middle ground
             # because the larger number of RPC calls. Still, if performance is an issue the
             # user can just do a normal get() rather than values/values_list/only/defer
+
+            additional_cols = set([ x[0] for x in self.ordering if x[0] not in opts.projection])
+
             multi_query = []
             final_queries = []
             orderings = self.queries[0]._Query__orderings
             for key, queries in self.queries_by_key.iteritems():
                 for query in queries:
-                    assert query._Query__query_options.projection == opts.projection
+                    if additional_cols:
+                        # We need to include additional orderings in the projection so that we can
+                        # sort them in memory. Annoyingly that means reinstantiating the queries
+                        query = Query(
+                            kind=query._Query__kind,
+                            filters=query,
+                            projection=list(opts.projection).extend(list(additional_cols))
+                        )
 
                     query.Ancestor(key) # Make this an ancestor query
                     multi_query.append(query)
