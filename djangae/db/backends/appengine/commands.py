@@ -226,7 +226,9 @@ class QueryByKeys(object):
                         final_queries.append(datastore.MultiQuery(multi_query, orderings).Run(limit=limit))
                         multi_query = []
             else:
-                if multi_query:
+                if len(multi_query) == 1:
+                    final_queries.append(self.queries_by_key.values()[0][0])
+                elif multi_query:
                     final_queries.append(datastore.MultiQuery(multi_query, orderings).Run(limit=limit))
 
             results = chain(*final_queries)
