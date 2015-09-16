@@ -1,6 +1,7 @@
 import datetime
 import decimal
 import re
+import random
 
 from cStringIO import StringIO
 from string import letters
@@ -284,6 +285,40 @@ class BackendTests(TestCase):
         fruit = TestFruit.objects.get()
         self.assertEqual("Unknown", fruit.origin)
 
+    @disable_cache()
+    def test_get_by_keys(self):
+        colors = [ "Red", "Green", "Blue", "Yellow", "Orange" ]
+        fruits = [ TestFruit.objects.create(name=str(x), color=random.choice(colors)) for x in range(32) ]
+
+        # Check that projections work with key lookups
+        with sleuth.watch('google.appengine.api.datastore.Query.__init__') as query_init:
+            with sleuth.watch('google.appengine.api.datastore.Query.Ancestor') as query_anc:
+                TestFruit.objects.only("color").get(pk="0").color
+                self.assertEqual(query_init.calls[0].kwargs["projection"], ["color"])
+
+                # Make sure the query is an ancestor of the key
+                self.assertEqual(query_anc.calls[0].args[1], datastore.Key.from_path(TestFruit._meta.db_table, "0"))
+
+        # Now check projections work with more than 30 things
+        with sleuth.watch('google.appengine.api.datastore.MultiQuery.__init__') as query_init:
+            with sleuth.watch('google.appengine.api.datastore.Query.Ancestor') as query_anc:
+                keys = [str(x) for x in range(32)]
+                results = list(TestFruit.objects.only("color").filter(pk__in=keys).order_by("name"))
+
+                self.assertEqual(query_init.call_count, 2) # Two multi queries
+                self.assertEqual(query_anc.call_count, 32) # 32 Ancestor calls
+                self.assertEqual(len(query_init.calls[0].args[1]), 30)
+                self.assertEqual(len(query_init.calls[1].args[1]), 2)
+
+                # Confirm the ordering is correct
+                self.assertEqual(sorted(keys), [ x.pk for x in results ])
+
+        results = list(TestFruit.objects.only("color").filter(pk__in=keys).order_by("name")[5:10])
+        self.assertEqual(len(results), 5)
+        self.assertEqual([x.pk for x in results], sorted(keys)[5:10])
+
+        # Make sure we can do a normal (non-projection) get by keys
+        self.assertItemsEqual(TestFruit.objects.filter(pk__in=keys), fruits)
 
     def test_get_or_create(self):
         """

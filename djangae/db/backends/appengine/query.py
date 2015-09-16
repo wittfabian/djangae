@@ -11,6 +11,13 @@ from django.db.models.sql.datastructures import EmptyResultSet
 from django.db.models.sql.where import EmptyWhere
 from django.db.models import AutoField
 
+try:
+    from django.db.models.expressions import Star
+except ImportError:
+    # Django < 1.8
+    class Star(object):
+        pass
+
 from django.db import NotSupportedError
 from djangae.db.backends.appengine.indexing import (
     REQUIRES_SPECIAL_INDEXES,
@@ -1128,7 +1135,8 @@ def _determine_query_kind_17(query):
 def _determine_query_kind_18(query):
     if query.annotations:
         if "__count" in query.annotations:
-            if query.annotations["__count"].input_field.value == "*":
+            field = query.annotations["__count"].input_field
+            if isinstance(field, Star) or field.value == "*":
                 return "COUNT"
 
     return "SELECT"
