@@ -199,54 +199,56 @@ class QueryByKeys(object):
 
         cache = True
 
+        results = None
         if key_count == 1:
             # FIXME: Potentially could use get_multi in memcache and the make a query
             # for whatever remains
             key = self.queries_by_key.keys()[0]
-            results = [ caching.get_from_cache_by_key(key) ]
-            if results[0] is None:
-                results = datastore.Get([key])
-            else:
+            result = caching.get_from_cache_by_key(key)
+            if result is not None:
+                results = [ result ]
                 cache = False # Don't update cache, we just got it from there
 
-        elif opts.projection:
-            # Assumes projection ancestor queries are faster than a datastore Get
-            # due to lower traffic over the RPC. This should be faster for queries with
-            # < 30 keys (which is the most common case), and faster if the entities are
-            # larger and there are many results, but there is probably a slower middle ground
-            # because the larger number of RPC calls. Still, if performance is an issue the
-            # user can just do a normal get() rather than values/values_list/only/defer
+        if results is None:
+            if opts.projection:
+                # Assumes projection ancestor queries are faster than a datastore Get
+                # due to lower traffic over the RPC. This should be faster for queries with
+                # < 30 keys (which is the most common case), and faster if the entities are
+                # larger and there are many results, but there is probably a slower middle ground
+                # because the larger number of RPC calls. Still, if performance is an issue the
+                # user can just do a normal get() rather than values/values_list/only/defer
 
-            additional_cols = set([ x[0] for x in self.ordering if x[0] not in opts.projection])
+                to_fetch = (offset or 0) + limit if limit else None
+                additional_cols = set([ x[0] for x in self.ordering if x[0] not in opts.projection])
 
-            multi_query = []
-            final_queries = []
-            orderings = self.queries[0]._Query__orderings
-            for key, queries in self.queries_by_key.iteritems():
-                for query in queries:
-                    if additional_cols:
-                        # We need to include additional orderings in the projection so that we can
-                        # sort them in memory. Annoyingly that means reinstantiating the queries
-                        query = Query(
-                            kind=query._Query__kind,
-                            filters=query,
-                            projection=list(opts.projection).extend(list(additional_cols))
-                        )
+                multi_query = []
+                final_queries = []
+                orderings = self.queries[0]._Query__orderings
+                for key, queries in self.queries_by_key.iteritems():
+                    for query in queries:
+                        if additional_cols:
+                            # We need to include additional orderings in the projection so that we can
+                            # sort them in memory. Annoyingly that means reinstantiating the queries
+                            query = Query(
+                                kind=query._Query__kind,
+                                filters=query,
+                                projection=list(opts.projection).extend(list(additional_cols))
+                            )
 
-                    query.Ancestor(key) # Make this an ancestor query
-                    multi_query.append(query)
-                    if len(multi_query) == 30:
-                        final_queries.append(datastore.MultiQuery(multi_query, orderings).Run(limit=limit))
-                        multi_query = []
+                        query.Ancestor(key) # Make this an ancestor query
+                        multi_query.append(query)
+                        if len(multi_query) == 30:
+                            final_queries.append(datastore.MultiQuery(multi_query, orderings).Run(limit=to_fetch))
+                            multi_query = []
+                else:
+                    if len(multi_query) == 1:
+                        final_queries.append(multi_query[0].Run(limit=to_fetch))
+                    elif multi_query:
+                        final_queries.append(datastore.MultiQuery(multi_query, orderings).Run(limit=to_fetch))
+
+                results = chain(*final_queries)
             else:
-                if len(multi_query) == 1:
-                    final_queries.append(self.queries_by_key.values()[0][0])
-                elif multi_query:
-                    final_queries.append(datastore.MultiQuery(multi_query, orderings).Run(limit=limit))
-
-            results = chain(*final_queries)
-        else:
-            results = datastore.Get(self.queries_by_key.keys())
+                results = datastore.Get(self.queries_by_key.keys())
 
         def iter_results(results):
             returned = 0
