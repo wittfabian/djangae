@@ -211,6 +211,8 @@ class QueryByKeys(object):
 
         if results is None:
             if opts.projection:
+                cache = False # Don't cache projection results!
+
                 # Assumes projection ancestor queries are faster than a datastore Get
                 # due to lower traffic over the RPC. This should be faster for queries with
                 # < 30 keys (which is the most common case), and faster if the entities are
