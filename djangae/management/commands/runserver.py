@@ -173,6 +173,7 @@ class Command(BaseRunserverCommand):
 
         if sandbox._OPTIONS.host == "127.0.0.1" and os.environ["HTTP_HOST"].startswith("localhost"):
             hostname = "localhost"
+            sandbox._OPTIONS.host = "localhost"
         else:
             hostname = sandbox._OPTIONS.host
 
