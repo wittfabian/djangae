@@ -479,7 +479,7 @@ class SelectCommand(object):
                     field = get_field_from_column(self.query.model, filter_node.column)
                     value = self.connection.ops.value_to_db_decimal(value, field.max_digits, field.decimal_places)
                 elif isinstance(value, basestring):
-                    value = unicode(value)
+                    value = coerce_unicode(value)
 
                 # If there is already a value for this lookup, we need to make the
                 # value a list and append the new entry
