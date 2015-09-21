@@ -3,6 +3,7 @@ import cStringIO
 import httplib
 import os
 import urlparse
+from unittest import skipIf
 
 from google.appengine.api import urlfetch
 from google.appengine.api.images import TransformationError
@@ -11,7 +12,7 @@ from django.core.files.base import File, ContentFile
 from django.test.utils import override_settings
 
 from djangae.contrib import sleuth
-from djangae.storage import BlobstoreStorage, CloudStorage
+from djangae.storage import BlobstoreStorage, CloudStorage, has_cloudstorage
 from djangae.test import TestCase
 from google.appengine.tools.devappserver2.gcs_server import GCSServer
 
@@ -20,6 +21,7 @@ from google.appengine.tools.devappserver2.gcs_server import GCSServer
 URL_INT_TO_STRING_MAP = {v: k for k, v in urlfetch._URL_STRING_MAP.items()}
 
 
+@skipIf(not has_cloudstorage, "Cloud Storage not available")
 class CloudStorageTests(TestCase):
 
     @override_settings(CLOUD_STORAGE_BUCKET='test_bucket')
