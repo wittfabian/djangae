@@ -6,6 +6,7 @@ from djangae.contrib import sleuth
 
 class TransactionTests(TestCase):
     def test_repeated_usage_in_a_loop(self):
+        from .test_connector import TestUser
         pk = TestUser.objects.create(username="foo").pk
         for i in xrange(4):
             with transaction.atomic(xg=True):
