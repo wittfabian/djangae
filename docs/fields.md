@@ -79,7 +79,7 @@ When you access the attribute of your sharded counter field on your model, you g
 * `.populate()`: Creates all the shards that the counter will need.
      - This is useful if you want to ensure that additional saves to your model object are avoided when calling `.increment()` or `.decrement()`, as these saves may cause issues if you're doing things inside a transaction or at such a rate that they cause DB contention on your model object.
      - Note that this causes your model instance to be re-saved.
-* `.reset()`: Transactionally resets the counter to 0.
+* `.reset()`: Resets the counter to 0.
     - This is done by changing the value of the shards, not by deleting them.  So you can continue to use your counter afterwards without having to call `populate()` again first.
 
 
