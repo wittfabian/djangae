@@ -4,7 +4,7 @@
 
 Alternatively, you can also follow this guide:
 
-1. Create a Django project, add app.yaml to the root. Make sure Django 1.6+ is in your project and importable
+1. Create a Django project, add app.yaml to the root. Make sure Django 1.7+ is in your project and importable
  
 
 2. Install Djangae into your project, make sure it's importable (you'll likely need to manipulate the path in manage.py and wsgi.py)

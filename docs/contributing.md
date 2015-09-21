@@ -15,7 +15,7 @@ tests on a specific Django version, simply do:
 
     $ DJANGO_VERSION=1.8 ./runtests.sh
 
-Currently the default is 1.6. TravisCI runs on 1.6 and 1.7 currently, and 1.8 in the 1-8-support branch.
+Currently the default is 1.7. TravisCI runs on 1.7 and 1.8 currently, and 1.9 in the 1-9-support branch.
 
 After you have run the tests once, you can do:
 
