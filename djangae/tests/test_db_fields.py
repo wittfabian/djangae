@@ -51,12 +51,22 @@ class ModelWithCounter(models.Model):
     class Meta:
         app_label = "djangae"
 
+
 class ModelWithManyCounters(models.Model):
     counter1 = ShardedCounterField()
     counter2 = ShardedCounterField()
 
     class Meta:
         app_label = "djangae"
+
+
+class ModelWithCounterWithManyShards(models.Model):
+    # The DEFAULT_SHARD_COUNT is based on the max allowed in a Datastore transaction
+    counter = ShardedCounterField(shard_count=DEFAULT_SHARD_COUNT+5)
+
+    class Meta:
+        app_label = "djangae"
+
 
 class ISOther(models.Model):
     name = models.CharField(max_length=500)
@@ -177,6 +187,15 @@ class ShardedCounterTest(TestCase):
         self.assertEqual(instance.counter.value(), -7)
         instance.counter.reset()
         self.assertEqual(instance.counter.value(), 0)
+
+    def test_reset_with_many_shards(self):
+        """ Test that even if the counter field has more shards than can be counted in a single
+            transaction, that the `reset` method still works.
+        """
+        instance = ModelWithCounterWithManyShards.objects.create()
+        instance.counter.populate()
+        instance.counter.increment(5)
+        instance.counter.reset()
 
     def test_populate(self):
         """ Test that the populate() method correctly generates all of the CounterShard objects. """
