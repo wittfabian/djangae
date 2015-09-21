@@ -169,6 +169,15 @@ class ShardedCounterTest(TestCase):
         instance.counter.reset()
         self.assertEqual(instance.counter.value(), 0)
 
+    def test_reset_negative_count(self):
+        """ Test resetting a negative count. """
+        instance = ModelWithCounter.objects.create()
+        self.assertEqual(instance.counter.value(), 0)
+        instance.counter.decrement(7)
+        self.assertEqual(instance.counter.value(), -7)
+        instance.counter.reset()
+        self.assertEqual(instance.counter.value(), 0)
+
     def test_populate(self):
         """ Test that the populate() method correctly generates all of the CounterShard objects. """
         instance = ModelWithCounter.objects.create()
