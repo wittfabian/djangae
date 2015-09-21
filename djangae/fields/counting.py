@@ -49,7 +49,7 @@ class RelatedShardManager(RelatedIteratorManagerBase, CounterShard._default_mana
             if value > 0:
                 self.decrement(value)
             elif value < 0:
-                self.increment(value)
+                self.increment(abs(value))
 
     def clear(self):
         # Override the default `clear` method of the parent class, as that only clears the list of
