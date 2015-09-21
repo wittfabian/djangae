@@ -1,8 +1,7 @@
 Graphy==1.0.0
-GoogleAppEngineMapReduce==1.9.17.0
-GoogleAppEnginePipeline==1.9.17.0
+GoogleAppEngineMapReduce==1.9.22.0
+GoogleAppEnginePipeline==1.9.21.1
 GoogleAppEngineCloudStorageClient==1.9.22.1
 Pillow
 webtest
 beautifulsoup4
-simplejson
