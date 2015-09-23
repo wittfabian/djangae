@@ -10,6 +10,7 @@ from django.apps import apps
 from django.conf import settings
 from django.db.backends.utils import format_number
 from django.db import IntegrityError
+from django.db.models.expressions import BaseExpression
 from django.utils import timezone
 from google.appengine.api import datastore
 from google.appengine.api.datastore import Key, Query
@@ -19,6 +20,7 @@ from djangae.utils import memoized
 from djangae.db.backends.appengine.indexing import special_indexes_for_column, REQUIRES_SPECIAL_INDEXES
 from djangae.db.backends.appengine.dbapi import CouldBeSupportedError
 from djangae.db.backends.appengine import POLYMODEL_CLASS_ATTRIBUTE
+
 
 def make_timezone_naive(value):
     if value is None:
@@ -94,6 +96,16 @@ def get_datastore_kind(model):
 
 def get_prepared_db_value(connection, instance, field, raw=False):
     value = getattr(instance, field.attname) if raw else field.pre_save(instance, instance._state.adding)
+
+    if isinstance(value, BaseExpression):
+        from djangae.db.backends.appengine.expressions import evaluate_expression
+
+        # We can't actually support F expressions on the datastore, but we can simulate
+        # them, evaluating the expression in place.
+
+        #TODO: For saves and updates we should raise a Warning. When evaluated in a filter
+        # we should raise an Error
+        value = evaluate_expression(value, instance, connection)
 
     if hasattr(value, "prepare_database_save"):
         value = value.prepare_database_save(field)
@@ -242,6 +254,8 @@ class MockInstance(object):
 
     def __init__(self, **kwargs):
         is_adding = kwargs.pop('_is_adding', False)
+        self._original = kwargs.pop('_original', None)
+        self._meta = kwargs.pop('_meta', None)
 
         class State:
             adding = is_adding

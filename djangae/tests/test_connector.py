@@ -545,6 +545,25 @@ class BackendTests(TestCase):
         self.assertItemsEqual([obj, empty_obj], date_set.dates.order_by('time'))
         self.assertItemsEqual([empty_obj, obj], date_set.dates.order_by('-time'))
 
+    def test_update_with_f_expr(self):
+        i = IntegerModel.objects.create(integer_field=1000)
+        qs = IntegerModel.objects.all()
+        qs.update(integer_field=models.F('integer_field') + 1)
+
+        self.assertRaises(IntegerModel.DoesNotExist, IntegerModel.objects.get, integer_field=1000)
+        i = IntegerModel.objects.get(pk=i.pk)
+        self.assertEqual(1001, i.integer_field)
+
+    def test_save_with_f_expr(self):
+        i = IntegerModel.objects.create(integer_field=1000)
+
+        i.integer_field = models.F('integer_field') + 1
+        i.save()
+
+        self.assertRaises(IntegerModel.DoesNotExist, IntegerModel.objects.get, integer_field=1000)
+        i = IntegerModel.objects.get(pk=i.pk)
+        self.assertEqual(1001, i.integer_field)
+
     def test_ordering_on_sparse_field(self):
         """
         Case when sorting on field that is not present in all of

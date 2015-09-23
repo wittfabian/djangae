@@ -953,7 +953,7 @@ class UpdateCommand(object):
             return False
 
         if (
-            isinstance(self.select.gae_query, (Query, UniqueQuery)) # ignore QueryByKeys and NoOpQuery
+            isinstance(self.select.gae_query, (Query, UniqueQuery))  # ignore QueryByKeys and NoOpQuery
             and not utils.entity_matches_query(result, self.select.gae_query)
         ):
             # Due to eventual consistency they query may have returned an entity which no longer
@@ -962,15 +962,19 @@ class UpdateCommand(object):
 
         original = copy.deepcopy(result)
 
-        instance_kwargs = {field.attname:value for field, param, value in self.values}
-
         # Note: If you replace MockInstance with self.model, you'll find that some delete
         # tests fail in the test app. This is because any unspecified fields would then call
         # get_default (even though we aren't going to use them) which may run a query which
         # fails inside this transaction. Given as we are just using MockInstance so that we can
         # call django_instance_to_entity it on it with the subset of fields we pass in,
         # what we have is fine.
-        instance = MockInstance(**instance_kwargs)
+        meta = self.model._meta
+        instance_kwargs = {field.attname: value for field, param, value in self.values}
+        instance = MockInstance(
+            _original=MockInstance(_meta=meta, **result),
+            _meta=meta,
+            **instance_kwargs
+            )
 
         # We need to add to the class attribute, rather than replace it!
         original_class = result.get(POLYMODEL_CLASS_ATTRIBUTE, [])
@@ -978,7 +982,7 @@ class UpdateCommand(object):
         # Update the entity we read above with the new values
         result.update(django_instance_to_entity(
             self.connection, self.model,
-            [ x[0] for x in self.values],  # Pass in the fields that were updated
+            [x[0] for x in self.values],  # Pass in the fields that were updated
             True, instance)
         )
 
