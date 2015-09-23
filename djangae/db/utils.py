@@ -10,10 +10,13 @@ from django.apps import apps
 from django.conf import settings
 from django.db.backends.utils import format_number
 from django.db import IntegrityError
-from django.db.models.expressions import BaseExpression
 from django.utils import timezone
 from google.appengine.api import datastore
 from google.appengine.api.datastore import Key, Query
+try:
+    from django.db.models.expressions import BaseExpression
+except ImportError:
+    from django.db.models.expressions import ExpressionNode as BaseExpression
 
 #DJANGAE
 from djangae.utils import memoized
