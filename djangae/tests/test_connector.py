@@ -1115,6 +1115,13 @@ class EdgeCaseTests(TestCase):
         self.assertEqual(3, TestUser.objects.exclude(username="E").exclude(username="A").count())
 
         self.assertEqual(3, TestUser.objects.exclude(username__in=["A", "B"]).count())
+        self.assertEqual(0, TestUser.objects.filter(email="test@example.com").exclude(username__in=["A", "B"]).count())
+
+    def test_exclude_with__in(self):
+        self.assertEqual(
+            set([self.u3, self.u4, self.u5]),
+            set(list(TestUser.objects.exclude(username__in=["A", "B"])))
+        )
 
     def test_deletion(self):
         count = TestUser.objects.count()
