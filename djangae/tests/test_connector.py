@@ -1114,6 +1114,8 @@ class EdgeCaseTests(TestCase):
         self.assertEqual(1, TestUser.objects.filter(username="A").exclude(email="test3@example.com").count())
         self.assertEqual(3, TestUser.objects.exclude(username="E").exclude(username="A").count())
 
+        self.assertEqual(3, TestUser.objects.exclude(username__in=["A", "B"]).count())
+
     def test_deletion(self):
         count = TestUser.objects.count()
         self.assertTrue(count)
