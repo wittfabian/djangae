@@ -44,12 +44,14 @@ class RelatedShardManager(RelatedIteratorManagerBase, CounterShard._default_mana
 
     def reset(self):
         """ Reset the counter to 0. """
-        with transaction.atomic(xg=True):
-            value = self.value()
-            if value > 0:
-                self.decrement(value)
-            elif value < 0:
-                self.increment(abs(value))
+        # This is not transactional because (1) that wouldn't work with > 24 shards, and (2) if
+        # there are other threads doing increments/decrements at the same time then it doesn't make
+        # any difference if they happen before or after our increment/decrement anyway.
+        value = self.value()
+        if value > 0:
+            self.decrement(value)
+        elif value < 0:
+            self.increment(abs(value))
 
     def clear(self):
         # Override the default `clear` method of the parent class, as that only clears the list of
