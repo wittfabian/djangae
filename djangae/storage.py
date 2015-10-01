@@ -353,7 +353,7 @@ class BlobstoreFileUploadHandler(FileUploadHandler):
         parts = data.split(self.boundary)
 
         for part in parts:
-            match = re.search('blob-key="?(?P<blob_key>[a-zA-Z0-9_=-]+)', part)
+            match = re.search('blob-key="?(?P<blob_key>[:a-zA-Z0-9_=-]+)', part)
             blob_key = match.groupdict().get('blob_key') if match else None
 
             if not blob_key:
