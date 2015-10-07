@@ -63,32 +63,6 @@ class BackendTests(TestCase):
         self.assertIsNotNone(user.last_login)
         self.assertFalse(user.has_usable_password())
 
-    @override_settings(ALLOW_USER_PRE_CREATION=True)
-    def test_user_id_switch(self):
-        """ Users sometimes login with the same email, but a different google user id. We handle those cases by
-            blanking out the email on the old user object and creating a new one with the new user id.
-        """
-        email = 'user@customexample.com'
-        old_user = users.User(email=email, _user_id='111111111100000000001')
-        new_user = users.User(email=email, _user_id='111111111100000000002')
-        User = get_user_model()
-        backend = AppEngineUserAPI()
-        # Authenticate 1st time, creating the user
-        user1 = backend.authenticate(google_user=old_user)
-        self.assertEqual(user1.email, email)
-        self.assertTrue(user1.username.endswith('1'))
-        self.assertEqual(1, User.objects.count())
-
-        # Now another user logs in using the same email
-        user2 = backend.authenticate(google_user=new_user)
-        self.assertEqual(user2.email, email)
-        self.assertTrue(user2.username.endswith('2'))
-        self.assertEqual(2, User.objects.count())
-
-        # The old account is kept around, but the email is blanked
-        user1 = User.objects.get(pk=user1.pk)
-        self.assertEqual(user1.email, None)
-
     @override_settings(DJANGAE_FORCE_USER_PRE_CREATION=True)
     def test_force_user_pre_creation(self):
         User = get_user_model()
@@ -143,25 +117,54 @@ class MiddlewareTests(TestCase):
         self.assertEqual(user.username, '111111111100000000001')
 
     def test_account_switch(self):
-        def _get_user_one():
-            return users.User('1@example.com', _user_id='111111111100000000001')
-
-        def _get_user_two():
-            return users.User('2@example.com', _user_id='222222222200000000002')
+        user1 = users.User('1@example.com', _user_id='111111111100000000001')
+        user2 = users.User('2@example.com', _user_id='222222222200000000002')
 
         request = HttpRequest()
-        SessionMiddleware().process_request(request) # Make the damn sessions work
+        SessionMiddleware().process_request(request)  # Make the damn sessions work
         middleware = AuthenticationMiddleware()
 
-        with sleuth.switch('djangae.contrib.gauth.middleware.users.get_current_user', _get_user_one):
+        with sleuth.switch('djangae.contrib.gauth.middleware.users.get_current_user', lambda: user1):
             middleware.process_request(request)
 
-        self.assertEqual(_get_user_one().user_id(), request.user.username)
+        self.assertEqual(user1.user_id(), request.user.username)
 
-        with sleuth.switch('djangae.contrib.gauth.middleware.users.get_current_user', _get_user_two):
+        with sleuth.switch('djangae.contrib.gauth.middleware.users.get_current_user', lambda: user2):
             middleware.process_request(request)
 
-        self.assertEqual(_get_user_two().user_id(), request.user.username)
+        self.assertEqual(user2.user_id(), request.user.username)
+
+    def test_user_id_switch(self):
+        """ Users sometimes login with the same email, but a different google user id. We handle those cases by
+            blanking out the email on the old user object and creating a new one with the new user id.
+        """
+        email = 'User@example.com'
+        user1 = users.User(email, _user_id='111111111100000000001')
+        user2 = users.User(email, _user_id='222222222200000000002')
+
+        User = get_user_model()
+        request = HttpRequest()
+        SessionMiddleware().process_request(request)  # Make the damn sessions work
+        middleware = AuthenticationMiddleware()
+
+        with sleuth.switch('djangae.contrib.gauth.middleware.users.get_current_user', lambda: user1):
+            middleware.process_request(request)
+
+        self.assertEqual(1, User.objects.count())
+        django_user1 = request.user
+        self.assertEqual(user1.user_id(), django_user1.username)
+        self.assertEqual(user1.email(), django_user1.email)
+
+        with sleuth.switch('djangae.contrib.gauth.middleware.users.get_current_user', lambda: user2):
+            middleware.process_request(request)
+
+        self.assertEqual(2, User.objects.count())
+        django_user2 = request.user
+        self.assertEqual(user2.user_id(), django_user2.username)
+        self.assertEqual(user2.email(), django_user2.email)
+
+        django_user1 = User.objects.get(pk=django_user1.pk)
+        self.assertEqual(django_user1.email, None)
 
 
 @override_settings(
