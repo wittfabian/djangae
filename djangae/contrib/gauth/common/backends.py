@@ -54,7 +54,7 @@ class BaseAppEngineUserAPIBackend(ModelBackend):
 
         if google_user:
             user_id = google_user.user_id()
-            email = google_user.email().lower()
+            email = BaseUserManager.normalize_email(google_user.email())
             try:
                 return User.objects.get(username=user_id)
             except User.DoesNotExist:
