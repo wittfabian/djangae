@@ -14,7 +14,7 @@ Allows the use of Django's permissions system on the Datastore, despite it usual
 after `'django.contrib.auth'`.
 2. Replace `'django.contrib.auth.middleware.AuthenticationMiddleware'` with
 `'djangae.contrib.gauth.middleware.AuthenticationMiddleware'`.
-3. Set `AUTH_USER_MODEL = 'djangae.GaeUser'` in your settings file to use the supplied user model, or create your own by subclassing `'djangae.contrib.gauth.datastore.models.AbstractBaseUser'`.
+3. Set `AUTH_USER_MODEL = 'djangae.GaeDatastoreUser'` in your settings file to use the supplied user model, or create your own by subclassing `'djangae.contrib.gauth.datastore.models.AbstractBaseUser'`.
 4. Add the backend to `AUTHENTICATION_BACKENDS` in your settings file eg:
 
 ```python
