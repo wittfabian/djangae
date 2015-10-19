@@ -213,7 +213,7 @@ class DatabaseOperations(BaseDatabaseOperations):
         elif internal_type == 'TimeField':
             converters.append(self.convert_time_value)
         elif internal_type == 'DecimalField':
-            converters.append(self.convert_time_value)
+            converters.append(self.convert_decimal_value)
         elif db_type == 'list':
             converters.append(self.convert_list_value)
         elif db_type == 'set':
