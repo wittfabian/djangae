@@ -1,4 +1,5 @@
 # coding: utf-8
+import urllib
 import mimetypes
 import re
 
@@ -233,7 +234,9 @@ class CloudStorage(Storage, BlobstoreUploadMixin):
             self.api_url = 'https://storage.googleapis.com'
 
     def url(self, filename):
-        return '{0}/{1}/{2}'.format(self.api_url, self.bucket, filename)
+        return urllib.quote(
+            '{0}{1}'.format(self.api_url, self._add_bucket(filename))
+        )
 
     def _open(self, name, mode='r'):
         # Handle 'rb' as 'r'.
@@ -242,7 +245,8 @@ class CloudStorage(Storage, BlobstoreUploadMixin):
         return File(fp)
 
     def _add_bucket(self, name):
-        return '/{0}/{1}'.format(self.bucket, name)
+        safe_name = urllib.quote(name.encode('utf-8'))
+        return '/{0}/{1}'.format(self.bucket, safe_name)
 
     def _content_type_for_name(self, name):
         # guess_type returns (None, encoding) if it can't guess.

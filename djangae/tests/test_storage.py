@@ -1,5 +1,4 @@
 # coding: utf-8
-import cStringIO
 import httplib
 import os
 import urlparse
@@ -14,7 +13,6 @@ from django.test.utils import override_settings
 from djangae.contrib import sleuth
 from djangae.storage import BlobstoreStorage, CloudStorage, has_cloudstorage
 from djangae.test import TestCase
-from google.appengine.tools.devappserver2.gcs_server import GCSServer
 
 
 # _URL_STRING_MAP is {'GET': 1, etc} so reverse dict to convert int to string
@@ -27,11 +25,12 @@ class CloudStorageTests(TestCase):
     @override_settings(CLOUD_STORAGE_BUCKET='test_bucket')
     def test_basic_actions(self):
         storage = CloudStorage()
+        name = u'tmp.ąćęłńóśźż.马铃薯.zip'
 
         f = ContentFile('content', name='my_file')
-        filename = storage.save('tmp', f)
+        filename = storage.save(name, f)
         self.assertIsInstance(filename, basestring)
-        self.assertTrue(filename.endswith('tmp'))
+        self.assertTrue(filename.endswith(name))
 
         self.assertTrue(storage.exists(filename))
         self.assertEqual(storage.size(filename), len('content'))
