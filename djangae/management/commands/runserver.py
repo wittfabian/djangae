@@ -182,9 +182,27 @@ class Command(BaseRunserverCommand):
         os.environ['SERVER_PORT'] = os.environ['HTTP_HOST'].split(':', 1)[1]
         os.environ['DEFAULT_VERSION_HOSTNAME'] = '%s:%s' % (os.environ['SERVER_NAME'], os.environ['SERVER_PORT'])
 
+        from google.appengine.api.appinfo import EnvironmentVariables
+
         class NoConfigDevServer(devappserver2.DevelopmentServer):
             def _create_api_server(self, request_data, storage_path, options, configuration):
+                # sandbox._create_dispatcher returns a singleton dispatcher instance made in sandbox
                 self._dispatcher = sandbox._create_dispatcher(configuration, options)
+                # the dispatcher may have passed environment variables, it should be propagated
+                env_vars = self._dispatcher._configuration.modules[0]._app_info_external.env_variables or EnvironmentVariables()
+                for module in configuration.modules:
+                    module_name = module._module_name
+                    if module_name == 'default':
+                        module_settings = 'DJANGO_SETTINGS_MODULE'
+                    else:
+                        module_settings = '%s_DJANGO_SETTINGS_MODULE' % module_name
+                    if module_settings in env_vars:
+                        module_env_vars = module.env_variables or EnvironmentVariables()
+                        module_env_vars['DJANGO_SETTINGS_MODULE'] = env_vars[module_settings]
+
+                        old_env_vars = module._app_info_external.env_variables
+                        new_env_vars = EnvironmentVariables.Merge(module_env_vars, old_env_vars)
+                        module._app_info_external.env_variables = new_env_vars
                 self._dispatcher._configuration = configuration
                 self._dispatcher._port = options.port
                 self._dispatcher._host = options.host
