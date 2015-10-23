@@ -545,6 +545,55 @@ class BackendTests(TestCase):
         self.assertItemsEqual([obj, empty_obj], date_set.dates.order_by('time'))
         self.assertItemsEqual([empty_obj, obj], date_set.dates.order_by('-time'))
 
+    def test_ordering_on_sparse_field(self):
+        """
+        Case when sorting on field that is not present in all of
+        Datastore entities. That can easily happen when you added
+        new field to model and did not populated all existing entities
+        """
+        # Clean state
+        self.assertEqual(TestFruit.objects.count(), 0)
+
+        # Put constistent instances to Datastore
+        TestFruit.objects.create(name='a', color='a')
+        TestFruit.objects.create(name='b', color='b')
+
+        # Put inconsistent instances to Datastore
+        # Color fields is missing (not even None)
+        # we need more than 1 so we explore all sorting branches
+        values = {'name': 'c'}
+        entity = datastore.Entity(TestFruit._meta.db_table, **values)
+        entity.update(values)
+        datastore.Put(entity)
+
+        values = {'name': 'd'}
+        entity = datastore.Entity(TestFruit._meta.db_table, **values)
+        entity.update(values)
+        datastore.Put(entity)
+
+        # Ok, we can get all 3 instances
+        self.assertEqual(TestFruit.objects.count(), 4)
+
+        # Sorted list. No exception should be raised
+        # (esp KeyError from django_ordering_comparison)
+        with sleuth.watch('djangae.db.backends.appengine.commands.utils.django_ordering_comparison') as compare:
+            all_names = ['a', 'b', 'c', 'd']
+            fruits = list(
+                TestFruit.objects.filter(name__in=all_names).order_by('color')
+            )
+            # Make sure troubled code got triggered
+            # ie. with all() it doesn't
+            self.assertTrue(compare.called)
+
+        # Missing one (None) as first
+        expected_fruits = [
+            ('c', None), ('d', None), ('a', 'a'), ('b', 'b'),
+        ]
+
+        self.assertEqual(
+            [(fruit.name, fruit.color) for fruit in fruits],
+            expected_fruits,
+        )
 
     def test_update_query_does_not_update_entities_which_no_longer_match_query(self):
         """ When doing queryset.update(field=x), any entities which the query returns but which no
