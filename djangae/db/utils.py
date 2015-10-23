@@ -301,12 +301,12 @@ def django_ordering_comparison(ordering, lhs, rhs):
 
     for order, direction in ordering:
         if lhs is not None:
-            lhs_value = lhs.key() if order == "__key__" else lhs[order]
+            lhs_value = lhs.key() if order == "__key__" else lhs.get(order)
         else:
             lhs_value = None
 
         if rhs is not None:
-            rhs_value = rhs.key() if order == "__key__" else rhs[order]
+            rhs_value = rhs.key() if order == "__key__" else rhs.get(order)
         else:
             rhs_value = None
 
