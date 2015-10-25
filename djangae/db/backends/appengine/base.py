@@ -463,6 +463,7 @@ class DatabaseCreation(BaseDatabaseCreation):
         'DateField':                  'date',
         'DateTimeField':              'datetime',
         'DecimalField':               'decimal',
+        'DurationField':              'long',
         'EmailField':                 'string',
         'FileField':                  'string',
         'FilePathField':              'string',
