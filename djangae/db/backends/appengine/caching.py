@@ -1,5 +1,6 @@
 import logging
 import threading
+import itertools
 
 from google.appengine.api import datastore
 
@@ -42,8 +43,8 @@ def ensure_context():
     context.stack = context.stack if hasattr(context, "stack") else ContextStack()
 
 
-def _add_entity_to_memcache(model, entity, identifiers):
-    cache.set_many({ x: entity for x in identifiers}, timeout=CACHE_TIMEOUT_SECONDS)
+def _add_entity_to_memcache(model, mc_key_entity_map):
+    cache.set_many(mc_key_entity_map, timeout=CACHE_TIMEOUT_SECONDS)
 
 
 def _get_cache_key_and_model_from_datastore_key(key):
@@ -60,19 +61,25 @@ def _get_cache_key_and_model_from_datastore_key(key):
     return (cache_key, model)
 
 
-def _remove_entity_from_memcache_by_key(key):
+def _remove_entities_from_memcache_by_key(keys):
     """
         Note, if the key of the entity got evicted from the cache, it's possible that stale cache
         entries would be left behind. Remember if you need pure atomicity then use disable_cache() or a
         transaction.
     """
 
-    cache_key, model = _get_cache_key_and_model_from_datastore_key(key)
-    entity = cache.get(cache_key)
+    # Key -> model
+    cache_keys = dict(
+        _get_cache_key_and_model_from_datastore_key(key) for key in keys
+    )
+    entities = cache.get_many(cache_keys.keys())
 
-    if entity:
-        identifiers = unique_identifiers_from_entity(model, entity)
-        cache.delete_many(identifiers)
+    if entities:
+        identifiers = [
+            unique_identifiers_from_entity(cache_keys[key], entity)
+            for key, entity in entities.items()
+        ]
+        cache.delete_many(itertools.chain(*identifiers))
 
 
 def _get_entity_from_memcache(identifier):
@@ -85,10 +92,8 @@ def _get_entity_from_memcache_by_key(key):
     return cache.get(cache_key)
 
 
-def add_entity_to_cache(model, entity, situation, skip_memcache=False):
+def add_entities_to_cache(model, entities, situation, skip_memcache=False):
     ensure_context()
-
-    identifiers = unique_identifiers_from_entity(model, entity)
 
     # Don't cache on Get if we are inside a transaction, even in the context
     # This is because transactions don't see the current state of the datastore
@@ -98,10 +103,14 @@ def add_entity_to_cache(model, entity, situation, skip_memcache=False):
 
     if situation in (CachingSituation.DATASTORE_PUT, CachingSituation.DATASTORE_GET_PUT) and datastore.IsInTransaction():
         # We have to wipe the entity from memcache
-        if entity.key():
-            _remove_entity_from_memcache_by_key(entity.key())
+        _remove_entities_from_memcache_by_key([entity.key() for entity in entities if entity.key()])
 
-    get_context().stack.top.cache_entity(identifiers, entity, situation)
+    identifiers = [
+        unique_identifiers_from_entity(model, entity) for entity in entities
+    ]
+
+    for ent_identifiers, entity in zip(identifiers, entities):
+        get_context().stack.top.cache_entity(ent_identifiers, entity, situation)
 
     # Only cache in memcache of we are doing a GET (outside a transaction) or PUT (outside a transaction)
     # the exception is GET_PUT - which we do in our own transaction so we have to ignore that!
@@ -109,15 +118,21 @@ def add_entity_to_cache(model, entity, situation, skip_memcache=False):
             situation == CachingSituation.DATASTORE_GET_PUT:
 
         if not skip_memcache:
-            _add_entity_to_memcache(model, entity, identifiers)
+
+            mc_key_entity_map = {}
+            for ent_identifiers, entity in zip(identifiers, entities):
+                mc_key_entity_map.update({
+                    identifier: entity for identifier in ent_identifiers
+                })
+            _add_entity_to_memcache(model, mc_key_entity_map)
 
 
-def remove_entity_from_cache(entity):
-    key = entity.key()
-    remove_entity_from_cache_by_key(key)
+def remove_entities_from_cache(entities):
+    keys = [entity.key() for entity in entities if entity.key()]
+    remove_entities_from_cache_by_key(keys)
 
 
-def remove_entity_from_cache_by_key(key, memcache_only=False):
+def remove_entities_from_cache_by_key(keys, memcache_only=False):
     """
         Removes an entity from all caches (both context and memcache)
         or just memcache if specified
@@ -125,11 +140,12 @@ def remove_entity_from_cache_by_key(key, memcache_only=False):
     ensure_context()
 
     if not memcache_only:
-        for identifier in _context.stack.top.reverse_cache.get(key, []):
-            if identifier in _context.stack.top.cache:
-                del _context.stack.top.cache[identifier]
+        for key in keys:
+            for identifier in _context.stack.top.reverse_cache.get(key, []):
+                if identifier in _context.stack.top.cache:
+                    del _context.stack.top.cache[identifier]
 
-    _remove_entity_from_memcache_by_key(key)
+    _remove_entities_from_memcache_by_key(keys)
 
 
 def get_from_cache_by_key(key):
@@ -151,9 +167,9 @@ def get_from_cache_by_key(key):
                 ret = _get_entity_from_memcache_by_key(key)
                 if ret:
                     # Add back into the context cache
-                    add_entity_to_cache(
+                    add_entities_to_cache(
                         utils.get_model_from_db_table(ret.key().kind()),
-                        ret,
+                        [ret],
                         CachingSituation.DATASTORE_GET,
                         skip_memcache=True # Don't put in memcache, we just got it from there!
                     )
@@ -183,9 +199,9 @@ def get_from_cache(unique_identifier):
                 ret = _get_entity_from_memcache(unique_identifier)
                 if ret:
                     # Add back into the context cache
-                    add_entity_to_cache(
+                    add_entities_to_cache(
                         utils.get_model_from_db_table(ret.key().kind()),
-                        ret,
+                        [ret],
                         CachingSituation.DATASTORE_GET,
                         skip_memcache=True # Don't put in memcache, we just got it from there!
                     )
