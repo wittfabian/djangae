@@ -119,8 +119,9 @@ class ContextStack(object):
         if apply_staged:
             while self.staged:
                 to_apply = self.staged.pop()
-                for key in to_apply.reverse_cache.keys():
-                    caching.remove_entity_from_cache_by_key(key, memcache_only=True)
+                caching.remove_entities_from_cache_by_key(
+                    to_apply.reverse_cache.keys(), memcache_only=True
+                )
 
                 self.top.apply(to_apply)
 

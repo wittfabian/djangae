@@ -399,6 +399,36 @@ class MemcacheCachingTests(TestCase):
 
         self.assertTrue(datastore_query.called)
 
+    @disable_cache(memcache=False, context=True)
+    def test_bulk_cache(self):
+        with sleuth.watch("django.core.cache.cache.set_many") as set_many_1:
+            CachingTestModel.objects.create(field1="Apple", comb1=1, comb2="Cherry")
+        self.assertEqual(set_many_1.call_count, 1)
+        self.assertEqual(len(set_many_1.calls[0].args[0]), 3)
+
+        with sleuth.watch("django.core.cache.cache.set_many") as set_many_2:
+            CachingTestModel.objects.bulk_create([
+                CachingTestModel(field1="Banana", comb1=2, comb2="Cherry"),
+                CachingTestModel(field1="Orange", comb1=3, comb2="Cherry"),
+            ])
+        self.assertEqual(set_many_2.call_count, 1)
+        self.assertEqual(len(set_many_2.calls[0].args[0]), 3*2)
+
+        pks = list(CachingTestModel.objects.values_list('pk', flat=True))
+        with sleuth.watch("django.core.cache.cache.set_many") as set_many_3:
+            list(CachingTestModel.objects.filter(pk__in=pks).all())
+        self.assertEqual(set_many_3.call_count, 1)
+        self.assertEqual(len(set_many_3.calls[0].args[0]), 3*len(pks))
+
+        with sleuth.watch("django.core.cache.cache.get_many") as get_many:
+            with sleuth.watch("django.core.cache.cache.delete_many") as delete_many:
+                CachingTestModel.objects.all().delete()
+
+        self.assertEqual(get_many.call_count, 1)
+        self.assertEqual(delete_many.call_count, 1)
+        self.assertEqual(len(get_many.calls[0].args[0]), 3)  # Get by pk from cache
+
+
 class ContextCachingTests(TestCase):
     """
         We can be a bit more liberal with hitting the context cache as it's

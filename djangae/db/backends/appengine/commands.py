@@ -254,9 +254,13 @@ class QueryByKeys(object):
 
         def iter_results(results):
             returned = 0
-            for result in sorted(results, cmp=partial(utils.django_ordering_comparison, self.ordering)):
-                if result is None:
-                    continue
+            # This is safe, because Django is fetching all results any way :(
+            sorted_results = sorted(results, cmp=partial(utils.django_ordering_comparison, self.ordering))
+            sorted_results = [result for result in sorted_results if result is not None]
+            if cache and sorted_results:
+                caching.add_entities_to_cache(self.model, sorted_results, caching.CachingSituation.DATASTORE_GET)
+
+            for result in sorted_results:
 
                 if not any([ utils.entity_matches_query(result, qry) for qry in self.queries_by_key[result.key()]]):
                     continue
@@ -266,8 +270,6 @@ class QueryByKeys(object):
                     returned += 1
                     continue
                 else:
-                    if cache:
-                        caching.add_entity_to_cache(self.model, result, caching.CachingSituation.DATASTORE_GET)
 
                     yield _convert_entity_based_on_query_options(result, opts)
 
@@ -327,7 +329,7 @@ class UniqueQuery(object):
             # Do a consistent get so we don't cache stale data, and recheck the result matches the query
             ret = [ x for x in datastore.Get(keys) if x and utils.entity_matches_query(x, self._gae_query) ]
             if len(ret) == 1:
-                caching.add_entity_to_cache(self._model, ret[0], caching.CachingSituation.DATASTORE_GET)
+                caching.add_entities_to_cache(self._model, [ret[0]], caching.CachingSituation.DATASTORE_GET)
             return iter(ret)
 
         return iter([ ret ])
@@ -820,7 +822,7 @@ class InsertCommand(object):
                             results.append(datastore.Put(ent))
                             if not was_in_transaction:
                                 # We can cache if we weren't in a transaction before this little nested one
-                                caching.add_entity_to_cache(self.model, ent, caching.CachingSituation.DATASTORE_GET_PUT)
+                                caching.add_entities_to_cache(self.model, [ent], caching.CachingSituation.DATASTORE_GET_PUT)
                         except:
                             # Make sure we delete any created markers before we re-raise
                             constraints.release_markers(markers)
@@ -837,8 +839,7 @@ class InsertCommand(object):
             if not constraints.constraint_checks_enabled(self.model):
                 # Fast path, just bulk insert
                 results = datastore.Put(self.entities)
-                for entity in self.entities:
-                    caching.add_entity_to_cache(self.model, entity, caching.CachingSituation.DATASTORE_PUT)
+                caching.add_entities_to_cache(self.model, self.entities, caching.CachingSituation.DATASTORE_PUT)
                 return results
             else:
                 markers = []
@@ -848,8 +849,7 @@ class InsertCommand(object):
                     markers = constraints.acquire_bulk(self.model, self.entities)
                     results = datastore.Put(self.entities)
 
-                    for entity in self.entities:
-                        caching.add_entity_to_cache(self.model, entity, caching.CachingSituation.DATASTORE_PUT)
+                    caching.add_entities_to_cache(self.model, self.entities, caching.CachingSituation.DATASTORE_PUT)
 
                 except:
                     to_delete = chain(*markers)
@@ -919,7 +919,7 @@ class DeleteCommand(object):
             if constraints.constraint_checks_enabled(self.model):
                 constraints.release(self.model, entity)
 
-            caching.remove_entity_from_cache_by_key(entity.key())
+        caching.remove_entities_from_cache_by_key(keys)
         datastore.Delete(keys)
 
     def lower(self):
@@ -944,7 +944,7 @@ class UpdateCommand(object):
 
     @db.transactional
     def _update_entity(self, key):
-        caching.remove_entity_from_cache_by_key(key)
+        caching.remove_entities_from_cache_by_key([key])
 
         try:
             result = datastore.Get(key)
@@ -996,7 +996,7 @@ class UpdateCommand(object):
         if not constraints.constraint_checks_enabled(self.model):
             # The fast path, no constraint checking
             datastore.Put(result)
-            caching.add_entity_to_cache(self.model, result, caching.CachingSituation.DATASTORE_PUT)
+            caching.add_entities_to_cache(self.model, [result], caching.CachingSituation.DATASTORE_PUT)
         else:
             to_acquire, to_release = constraints.get_markers_for_update(self.model, original, result)
 
@@ -1004,7 +1004,7 @@ class UpdateCommand(object):
             constraints.acquire_identifiers(to_acquire, result.key())
             try:
                 datastore.Put(result)
-                caching.add_entity_to_cache(self.model, result, caching.CachingSituation.DATASTORE_PUT)
+                caching.add_entities_to_cache(self.model, [result], caching.CachingSituation.DATASTORE_PUT)
             except:
                 constraints.release_identifiers(to_acquire)
                 raise
