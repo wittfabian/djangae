@@ -63,6 +63,7 @@ def start_blobstore_service():
         if re.match(blob_image.BLOBIMAGE_URL_PATTERN, path.lstrip("/")):
             return blob_image.Application()(environ, start_response)
 
+        environ["PATH_INFO"] = environ["PATH_INFO"].replace('http://localhost:8080', '')
         return blob_upload.Application(call_internal_upload)(environ, start_response)
 
     port = int(os.environ['SERVER_PORT'])
