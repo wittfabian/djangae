@@ -35,6 +35,8 @@ a quick list:
 * `ManyToManyField` - a non-relational database simply can't do these (or not efficiently).  However, you can probably
   solve these kind of problems using djangae's `ListField`.  We may even create a many-to-many replacement based on
   that in the future.
+* Use `F` objects when filtering, e.g. `qs.filter(this=F('that'))`. This is a limitation of the Datastore. Additionally,
+  you cannot use `F` objects when updating a model - but this will change soon.
 * `__in` queries with more than 30 values.  This is a limitation of the Datastore.  You can filter for up to 500 values
   on the primary key field though.
 * More than one inequality filter, i.e. you can't do `.exclude(a=1, b=2)`.  This is a limitation of the Datastore.
