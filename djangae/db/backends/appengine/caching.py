@@ -78,6 +78,7 @@ def _remove_entities_from_memcache_by_key(keys):
         identifiers = [
             unique_identifiers_from_entity(cache_keys[key], entity)
             for key, entity in entities.items()
+            if entity
         ]
         cache.delete_many(itertools.chain(*identifiers))
 
