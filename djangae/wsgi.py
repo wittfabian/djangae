@@ -55,19 +55,11 @@ class DjangaeApplication(object):
         from django.core.exceptions import ImproperlyConfigured
         from django import VERSION
 
-
-        if VERSION[:2] == (1,6):
-            for app in settings.INSTALLED_APPS[::-1]:
-                if app.startswith("django."):
-                    raise ImproperlyConfigured("You must place 'djangae' after 'django' apps in installed apps")
-                elif app == "djangae":
-                    break
-        else:
-            for app in settings.INSTALLED_APPS:
-                if app.startswith("django."):
-                    raise ImproperlyConfigured("In django 1.7 and above, you must place 'djangae' before any 'django' apps in installed apps")
-                elif app == "djangae":
-                    break
+        for app in settings.INSTALLED_APPS:
+            if app.startswith("django."):
+                raise ImproperlyConfigured("You must place 'djangae' before any 'django' apps in INSTALLED_APPS")
+            elif app == "djangae":
+                break
 
         self.wrapped_app = application
 

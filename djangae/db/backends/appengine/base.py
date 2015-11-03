@@ -18,7 +18,7 @@ try:
     from django.db.backends.base.creation import BaseDatabaseCreation
     from django.db.backends.base.schema import BaseDatabaseSchemaEditor
 except ImportError:
-    # Django <= 1.7 (I think, at least 1.6)
+    # Django 1.7
     from django.db.backends import (
         BaseDatabaseOperations,
         BaseDatabaseClient,
@@ -28,13 +28,7 @@ except ImportError:
         BaseDatabaseValidation
     )
     from django.db.backends.creation import BaseDatabaseCreation
-
-    try:
-        from django.db.backends.schema import BaseDatabaseSchemaEditor
-    except ImportError:
-        #Django < 1.7 doesn't have BaseDatabaseSchemaEditor
-        class BaseDatabaseSchemaEditor(object):
-            pass
+    from django.db.backends.schema import BaseDatabaseSchemaEditor
 
 
 from django.utils import timezone
@@ -619,7 +613,3 @@ class DatabaseWrapper(BaseDatabaseWrapper):
 
     def schema_editor(self, *args, **kwargs):
         return DatabaseSchemaEditor(self, *args, **kwargs)
-
-    def _cursor(self):
-        # For < Django 1.6 compatibility
-        return self.create_cursor()
