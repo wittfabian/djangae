@@ -32,6 +32,7 @@ ALLOWED_HOSTS = []
 # Application definition
 
 INSTALLED_APPS = [
+    'djangae',
     'django.contrib.admin',
     'django.contrib.auth',
     'djangae.contrib.gauth.datastore',
@@ -46,13 +47,8 @@ INSTALLED_APPS = [
     'djangae.contrib.mappers',
     'djangae.contrib.pagination',
     'djangae.contrib.uniquetool',
-    'djangae',
     'testapp'
 ]
-# In 1.7+, djangae needs to come first in INSTALLED_APPS
-if django.VERSION >= (1, 7, 0, 0, 0):
-    INSTALLED_APPS.remove('djangae')
-    INSTALLED_APPS = ['djangae'] + INSTALLED_APPS
 
 TO_TEST = []
 

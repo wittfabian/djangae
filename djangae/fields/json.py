@@ -13,21 +13,17 @@ This field originated from the django_extensions project: https://github.com/dja
 """
 
 from __future__ import absolute_import
+
+import json
 from collections import OrderedDict
 from decimal import Decimal
+
 from django.db import models
 from django.conf import settings
 from django.utils import six
 from django.core.serializers.json import DjangoJSONEncoder
 
 __all__ = ( 'JSONField',)
-
-try:
-    # Django >= 1.7
-    import json
-except ImportError:
-    # Django <= 1.6 backwards compatibility
-    from django.utils import simplejson as json
 
 
 def dumps(value):

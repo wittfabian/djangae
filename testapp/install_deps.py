@@ -23,14 +23,6 @@ FEATURED_SDK_REPO = "https://storage.googleapis.com/appengine-sdks/featured/"
 DEPRECATED_SDK_REPO = "https://storage.googleapis.com/appengine-sdks/deprecated/%s/" % APPENGINE_SDK_VERSION.replace('.', '')
 
 DJANGO_VERSION = os.environ.get("DJANGO_VERSION", "1.7")
-NEXT_DJANGO_VERSION = {
-    "1.5": "1.6",
-    "1.6": "1.7",
-    "1.7": "1.8",
-    "1.8": "1.9",
-    "1.9": "2.0",
-    "2.0": "2.1",
-}
 
 if DJANGO_VERSION != "master":
     DJANGO_FOR_PIP = "https://github.com/django/django/archive/stable/{}.x.tar.gz".format(DJANGO_VERSION)
