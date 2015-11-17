@@ -17,19 +17,12 @@ class AuthenticationMiddleware(DjangoMiddleware):
             if django_user:
                 login(request, django_user)
         else:
-            # Otherwise, we don't do anything else except set the django_user
-            # if the authenticated user was authenticated with a different backend
+            # Otherwise, we don't do anything else except set request.user if the authenticated
+            # user was authenticated with a different backend. Doing this allows this middleware
+            # to be used *instead* of django.contrib.auth.middleware.AuthenticationMiddleware.
             backend_str = request.session.get(BACKEND_SESSION_KEY)
-
-            if not backend_str:
-                # Not logged in most likely, not logged in with the gauth backend
-                # anyway
-                request.user = django_user
-                return
-
-            backend = load_backend(backend_str)
-
-            if not isinstance(backend, BaseAppEngineUserAPIBackend):
+            if (not backend_str) or not isinstance(load_backend(backend_str), BaseAppEngineUserAPIBackend):
+                # Not logged in most likely, and definitely not logged in with the gauth backend
                 request.user = django_user
                 return
 
@@ -39,7 +32,7 @@ class AuthenticationMiddleware(DjangoMiddleware):
             # If we are logged in with django, but not longer logged in with Google
             # then log out
             logout(request)
-            django_user = None
+            django_user = AnonymousUser()
         elif not django_user.is_anonymous() and django_user.username != google_user.user_id():
             # If the Google user changed, we need to log in with the new one
             logout(request)
