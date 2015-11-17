@@ -47,7 +47,10 @@ class AuthenticationMiddleware(DjangoMiddleware):
             if django_user:
                 login(request, django_user)
 
-        request.user = django_user or AnonymousUser()
+        # authenticate() returns None rather than AnonymousUser() if it fails, hence:
+        django_user = django_user or AnonymousUser()
+
+        request.user = django_user
 
         if not isinstance(request.user, AnonymousUser):
             # Now make sure we update is_superuser and is_staff appropriately
