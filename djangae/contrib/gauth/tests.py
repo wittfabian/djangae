@@ -195,6 +195,20 @@ class MiddlewareTests(TestCase):
         django_user1 = User.objects.get(pk=django_user1.pk)
         self.assertEqual(django_user1.email, None)
 
+    @override_settings(DJANGAE_FORCE_USER_PRE_CREATION=True)
+    def test_force_user_pre_creation(self):
+        email = 'User@example.com'
+        user1 = users.User(email, _user_id='111111111100000000001')
+        with sleuth.switch('djangae.contrib.gauth.middleware.users.get_current_user', lambda: user1):
+            request = HttpRequest()
+            SessionMiddleware().process_request(request)  # Make the damn sessions work
+            middleware = AuthenticationMiddleware()
+            middleware.process_request(request)
+
+        # We expect request.user to be AnonymousUser(), because there was no User object in the DB
+        # and so with pre-creation required, authentication should have failed
+        self.assertTrue(isinstance(request.user, AnonymousUser))
+
 
 @override_settings(
     AUTH_USER_MODEL='djangae.GaeDatastoreUser',
