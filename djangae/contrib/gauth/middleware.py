@@ -13,8 +13,8 @@ class AuthenticationMiddleware(DjangoMiddleware):
 
         if django_user.is_anonymous() and google_user:
             # If there is a google user, but we are anonymous, log in!
-            django_user = authenticate(google_user=google_user)
-            if django_user:
+            django_user = authenticate(google_user=google_user) or AnonymousUser()
+            if django_user.is_authenticated():
                 login(request, django_user)
         else:
             # Otherwise, we don't do anything else except set request.user if the authenticated
@@ -36,12 +36,10 @@ class AuthenticationMiddleware(DjangoMiddleware):
         elif not django_user.is_anonymous() and django_user.username != google_user.user_id():
             # If the Google user changed, we need to log in with the new one
             logout(request)
-            django_user = authenticate(google_user=google_user)
-            if django_user:
+            django_user = authenticate(google_user=google_user) or AnonymousUser()
+            if django_user.is_authenticated():
                 login(request, django_user)
 
-        # authenticate() returns None rather than AnonymousUser() if it fails, hence:
-        django_user = django_user or AnonymousUser()
 
         request.user = django_user
 
