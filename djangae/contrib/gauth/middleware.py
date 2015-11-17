@@ -1,7 +1,6 @@
 from django.contrib.auth import authenticate, login, logout, get_user, BACKEND_SESSION_KEY, load_backend
 from django.contrib.auth.middleware import AuthenticationMiddleware as DjangoMiddleware
 from django.contrib.auth.models import BaseUserManager, AnonymousUser
-from django.utils.functional import SimpleLazyObject
 from djangae.contrib.gauth.common.backends import BaseAppEngineUserAPIBackend
 
 from google.appengine.api import users
@@ -9,7 +8,7 @@ from google.appengine.api import users
 
 class AuthenticationMiddleware(DjangoMiddleware):
     def process_request(self, request):
-        django_user = SimpleLazyObject(lambda: get_user(request))
+        django_user = get_user(request)
         google_user = users.get_current_user()
 
         if django_user.is_anonymous() and google_user:
