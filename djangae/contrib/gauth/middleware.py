@@ -11,39 +11,36 @@ class AuthenticationMiddleware(DjangoMiddleware):
         django_user = get_user(request)
         google_user = users.get_current_user()
 
-        if django_user.is_anonymous() and google_user:
-            # If there is a google user, but we are anonymous, log in!
-            django_user = authenticate(google_user=google_user) or AnonymousUser()
-            if django_user.is_authenticated():
-                login(request, django_user)
-        else:
-            # Otherwise, we don't do anything else except set request.user if the authenticated
-            # user was authenticated with a different backend. Doing this allows this middleware
-            # to be used *instead* of django.contrib.auth.middleware.AuthenticationMiddleware.
+        # Check to see if the user is authenticated with a different backend, if so, just set
+        # request.user and bail
+        if django_user.is_authenticated():
             backend_str = request.session.get(BACKEND_SESSION_KEY)
             if (not backend_str) or not isinstance(load_backend(backend_str), BaseAppEngineUserAPIBackend):
-                # Not logged in most likely, and definitely not logged in with the gauth backend
                 request.user = django_user
                 return
 
-        # We only do this next bit if the user was authenticated with the AppEngineUserAPI
-        # backend, or one of its subclasses
-        if not django_user.is_anonymous() and not google_user:
-            # If we are logged in with django, but not longer logged in with Google
-            # then log out
-            logout(request)
-            django_user = AnonymousUser()
-        elif not django_user.is_anonymous() and django_user.username != google_user.user_id():
-            # If the Google user changed, we need to log in with the new one
-            logout(request)
+        if django_user.is_anonymous() and google_user:
+            # If there is a google user, but we are anonymous, log in!
+            # Note that if DJANGAE_FORCE_USER_PRE_CREATION is True then this may not authenticate
             django_user = authenticate(google_user=google_user) or AnonymousUser()
             if django_user.is_authenticated():
                 login(request, django_user)
 
+        if django_user.is_authenticated():
+            if not google_user:
+                # If we are logged in with django, but not longer logged in with Google
+                # then log out
+                logout(request)
+                django_user = AnonymousUser()
+            elif django_user.username != google_user.user_id():
+                # If the Google user changed, we need to log in with the new one
+                logout(request)
+                django_user = authenticate(google_user=google_user) or AnonymousUser()
+                if django_user.is_authenticated():
+                    login(request, django_user)
 
-        request.user = django_user
-
-        if not isinstance(request.user, AnonymousUser):
+        # Note that the logic above may have logged us out, hence new `if` statement
+        if django_user.is_authenticated():
             # Now make sure we update is_superuser and is_staff appropriately
             is_superuser = users.is_current_user_admin()
             google_email = BaseUserManager.normalize_email(google_user.email())
@@ -60,3 +57,5 @@ class AuthenticationMiddleware(DjangoMiddleware):
 
             if resave:
                 django_user.save()
+
+        request.user = django_user
