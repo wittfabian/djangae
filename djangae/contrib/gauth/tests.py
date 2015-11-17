@@ -2,7 +2,7 @@
 from urlparse import urlparse
 
 # LIBRARIES
-from django.contrib.auth import get_user_model, get_user
+from django.contrib.auth import get_user_model, get_user, BACKEND_SESSION_KEY
 from django.contrib.sessions.middleware import SessionMiddleware
 from django.http import HttpRequest
 from django.test import TestCase
@@ -63,6 +63,32 @@ class BackendTests(TestCase):
         self.assertIsNotNone(user.last_login)
         self.assertFalse(user.has_usable_password())
 
+    @override_settings(ALLOW_USER_PRE_CREATION=True)
+    def test_user_id_switch(self):
+        """ Users sometimes login with the same email, but a different google user id. We handle those cases by
+            blanking out the email on the old user object and creating a new one with the new user id.
+        """
+        email = 'user@customexample.com'
+        old_user = users.User(email=email, _user_id='111111111100000000001')
+        new_user = users.User(email=email, _user_id='111111111100000000002')
+        User = get_user_model()
+        backend = AppEngineUserAPI()
+        # Authenticate 1st time, creating the user
+        user1 = backend.authenticate(google_user=old_user)
+        self.assertEqual(user1.email, email)
+        self.assertTrue(user1.username.endswith('1'))
+        self.assertEqual(1, User.objects.count())
+
+        # Now another user logs in using the same email
+        user2 = backend.authenticate(google_user=new_user)
+        self.assertEqual(user2.email, email)
+        self.assertTrue(user2.username.endswith('2'))
+        self.assertEqual(2, User.objects.count())
+
+        # The old account is kept around, but the email is blanked
+        user1 = User.objects.get(pk=user1.pk)
+        self.assertEqual(user1.email, None)
+
     @override_settings(DJANGAE_FORCE_USER_PRE_CREATION=True)
     def test_force_user_pre_creation(self):
         User = get_user_model()
@@ -92,6 +118,7 @@ class MiddlewareTests(TestCase):
 
         request = HttpRequest()
         SessionMiddleware().process_request(request) # Make the damn sessions work
+        request.session[BACKEND_SESSION_KEY] = 'djangae.contrib.gauth.backends.AppEngineUserAPI'
         middleware = AuthenticationMiddleware()
         # Check that we're not logged in already
         user = get_user(request)
@@ -122,6 +149,7 @@ class MiddlewareTests(TestCase):
 
         request = HttpRequest()
         SessionMiddleware().process_request(request)  # Make the damn sessions work
+        request.session[BACKEND_SESSION_KEY] = 'djangae.contrib.gauth.backends.AppEngineUserAPI'
         middleware = AuthenticationMiddleware()
 
         with sleuth.switch('djangae.contrib.gauth.middleware.users.get_current_user', lambda: user1):
@@ -145,6 +173,7 @@ class MiddlewareTests(TestCase):
         User = get_user_model()
         request = HttpRequest()
         SessionMiddleware().process_request(request)  # Make the damn sessions work
+        request.session[BACKEND_SESSION_KEY] = 'djangae.contrib.gauth.backends.AppEngineUserAPI'
         middleware = AuthenticationMiddleware()
 
         with sleuth.switch('djangae.contrib.gauth.middleware.users.get_current_user', lambda: user1):
