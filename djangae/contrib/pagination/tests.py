@@ -29,6 +29,7 @@ class TestUser(models.Model):
 
     class Meta:
         db_table = "pagination"
+        ordering = ("first_name", "last_name")
 
 
 class PaginatedModelTests(TestCase):
@@ -60,6 +61,12 @@ class DatastorePaginatorTests(TestCase):
         self.u2 = TestUser.objects.create(id=2, first_name="A", last_name="B")
         self.u3 = TestUser.objects.create(id=3, first_name="B", last_name="A")
         self.u4 = TestUser.objects.create(id=4, first_name="B", last_name="B")
+
+    def test_default_ordering(self):
+        """ Tests that pagination works using just the model's default ordering. """
+        paginator = Paginator(TestUser.objects.all(), 1, readahead=2)
+        paginator.page(1)
+        self.assertEqual([self.u1, self.u2, self.u3, self.u4], list(paginator.object_list))
 
     def test_ordering(self):
         paginator = Paginator(TestUser.objects.all().order_by("created"), 1, readahead=2)
