@@ -1151,3 +1151,13 @@ def transform_query(connection, query):
     version = django.VERSION[:2]
     kind = _KIND_FACTORY[version](query)
     return _FACTORY[version](connection, kind, query)
+
+_ORDERING_FACTORY = {
+    (1, 7): _extract_ordering_from_query_17,
+    (1, 8): _extract_ordering_from_query_18,
+    (1, 9): _extract_ordering_from_query_18  # Same as 1.8
+}
+
+def extract_ordering(query):
+    version = django.VERSION[:2]
+    return _ORDERING_FACTORY[version](query)
