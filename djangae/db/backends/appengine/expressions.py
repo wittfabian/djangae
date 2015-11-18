@@ -11,10 +11,10 @@ CONNECTORS = {
 
 
 def evaluate_expression(expression, instance, connection):
-    """ A limited evaluator for Django's F expressions. Although they're evaluated
-        before the database call, so they don't provide the race condition protection,
-        but neither does our update() implementation so we provide this for convenience.
+    """ A limited evaluator for Django's F expressions. This are evaluated within
+        the get/put transaction in _update_entity so these will happen atomically
     """
+
     if isinstance(expression, (basestring, int, float)):
         return expression
 
