@@ -371,17 +371,24 @@ def activate(sandbox_name, add_sdk_to_path=False, new_env_vars=None, **overrides
 
 @contextlib.contextmanager
 def allow_mode_write():
+    import tempfile
     from google.appengine.tools.devappserver2.python import stubs
 
     original_modes = stubs.FakeFile.ALLOWED_MODES
     new_modes = set(stubs.FakeFile.ALLOWED_MODES)
     new_modes.add('w')
     new_modes.add('wb')
+
+    original_dirs = stubs.FakeFile._allowed_dirs
+    new_dirs = set(stubs.FakeFile._allowed_dirs).union({ tempfile.gettempdir() })
+
     stubs.FakeFile.ALLOWED_MODES = frozenset(new_modes)
+    stubs.FakeFile._allowed_dirs = frozenset(new_dirs)
     try:
         yield
     finally:
         stubs.FakeFile.ALLOWED_MODES = original_modes
+        stubs.FakeFile._allowed_dirs = original_dirs
 
 
 def allow_modules(func, *args):
