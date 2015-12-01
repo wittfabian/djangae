@@ -550,9 +550,13 @@ class SelectCommand(object):
                 # didn't seem to indicate much of a performance difference, even when doing the pk__in
                 # with GetAsync while the count was running. That might not be true of prod though so
                 # if anyone comes up with a faster idea let me know!
-                count_query = Query(query._Query__kind, keys_only=True)
-                count_query.update(query)
-                resultset = count_query.Run(limit=limit, offset=offset)
+                if isinstance(query, QueryByKeys):
+                    # If this is a QueryByKeys, just do the datastore Get and count the results
+                    resultset = (x.key() for x in query.Run(limit=limit, offset=offset) if x)
+                else:
+                    count_query = Query(query._Query__kind, keys_only=True)
+                    count_query.update(query)
+                    resultset = count_query.Run(limit=limit, offset=offset)
                 self.results = (x for x in [ len([ y for y in resultset if y not in self.excluded_pks]) ])
             else:
                 self.results = (x for x in [query.Count(limit=limit, offset=offset)])

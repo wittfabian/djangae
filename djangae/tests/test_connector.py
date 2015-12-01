@@ -270,6 +270,12 @@ class BackendTests(TestCase):
         entity["name"] = [ "Bob", "Fred", "Dave" ]
         self.assertTrue(entity_matches_query(entity, query))  # ListField test
 
+    def test_count_on_excluded_pks(self):
+        TestFruit.objects.create(name="Apple", color="Red")
+        TestFruit.objects.create(name="Orange", color="Orange")
+
+        self.assertEqual(1, TestFruit.objects.filter(pk__in=["Apple", "Orange"]).exclude(pk__in=["Apple"]).count())
+
     def test_defaults(self):
         fruit = TestFruit.objects.create(name="Apple", color="Red")
         self.assertEqual("Unknown", fruit.origin)
