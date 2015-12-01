@@ -1239,6 +1239,13 @@ class EdgeCaseTests(TestCase):
             perms = list(Permission.objects.all().values_list("user__username", "perm"))
             self.assertEqual("A", perms[0][0])
 
+    def test_invalid_id_value_on_insert(self):
+        user = TestUser.objects.get(username="A")
+        # pass in a User object as if it's an int
+        permission = Permission(user_id=user, perm="test_perm")
+        with self.assertRaises(TypeError):
+            permission.save(force_insert=True)
+
     def test_values_list_on_pk_does_keys_only_query(self):
         from google.appengine.api.datastore import Query
 
