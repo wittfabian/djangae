@@ -793,6 +793,15 @@ class InsertCommand(object):
                 # We zip() self.entities and self.included_keys in execute(), so they should be the same length
                 self.included_keys.append(None)
 
+            # We don't use the values returned, but this does make sure we're
+            # doing the same validation as Django. See issue #493 for an
+            # example of how not doing this can mess things up
+            for field in fields:
+                field.get_db_prep_save(
+                    getattr(obj, field.attname) if raw else field.pre_save(obj, True),
+                    connection=connection,
+                )
+
             self.entities.append(
                 django_instance_to_entity(connection, model, fields, raw, obj)
             )
