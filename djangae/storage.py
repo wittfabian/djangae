@@ -18,6 +18,7 @@ from django.core.files.uploadhandler import FileUploadHandler, \
 from django.http import HttpResponse
 from django.utils.encoding import smart_str, force_unicode
 from django.test.client import encode_multipart, MULTIPART_CONTENT, BOUNDARY
+from djangae.db import transaction
 
 from google.appengine.api import urlfetch
 from google.appengine.api import app_identity
@@ -210,7 +211,10 @@ class BlobstoreStorage(Storage, BlobstoreUploadMixin):
         return BlobInfo.get(self._get_key(name))
 
     def _create_upload_url(self):
-        return create_upload_url(reverse('djangae_internal_upload_handler'))
+        # Creating the upload URL can't be atomic, otherwise the session
+        # key will not be consistent when uploading the file
+        with transaction.non_atomic():
+            return create_upload_url(reverse('djangae_internal_upload_handler'))
 
 
 class CloudStorage(Storage, BlobstoreUploadMixin):
