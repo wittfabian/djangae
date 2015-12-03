@@ -1,6 +1,7 @@
 import random
 
 from django.core.exceptions import ImproperlyConfigured
+from django.db import models
 from google.appengine.datastore.datastore_rpc import BaseConnection
 from google.appengine.datastore.datastore_stub_util import _MAX_EG_PER_TXN
 
@@ -9,7 +10,6 @@ from djangae.fields.related import (
     RelatedIteratorManagerBase,
     ReverseRelatedObjectsDescriptor,
 )
-from djangae.models import CounterShard
 from djangae.db import transaction
 
 
@@ -20,7 +20,7 @@ MAX_ENTITIES_PER_GET = BaseConnection.MAX_GET_KEYS
 DEFAULT_SHARD_COUNT = MAX_SHARDS_PER_TRANSACTION = _MAX_EG_PER_TXN - 1
 
 
-class RelatedShardManager(RelatedIteratorManagerBase, CounterShard._default_manager.__class__):
+class RelatedShardManager(RelatedIteratorManagerBase, models.Manager):
     """ This is what is given to you when you access the field attribute on an instance.  It's a
         model manager with the usual queryset methods (the same as for RelatedSetField) but with
         the additional increment()/decrement()/reset() methods for the counting.
