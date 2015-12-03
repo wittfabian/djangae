@@ -13,7 +13,7 @@ from django.utils import six
 class RelatedIteratorRel(ForeignObjectRel):
     def __init__(self, field, to, related_name=None, limit_choices_to=None):
         self.field = field
-        self.to = to
+        self.model = to
         self.related_name = related_name
         self.related_query_name = None
         self.field_name = None
@@ -31,7 +31,7 @@ class RelatedIteratorRel(ForeignObjectRel):
         return self.related_name and self.related_name[-1] == '+'
 
     def set_field_name(self):
-        self.field_name = self.field_name or self.to._meta.pk.name
+        self.field_name = self.field_name or self.model._meta.pk.name
 
     def get_related_field(self):
         """
@@ -39,7 +39,7 @@ class RelatedIteratorRel(ForeignObjectRel):
         (this is always the primary key on the target model). Provided for
         symmetry with ManyToOneRel.
         """
-        return self.to._meta.pk
+        return self.model._meta.pk
 
 
 class OrderedQuerySet(QuerySet):
