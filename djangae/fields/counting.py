@@ -105,11 +105,13 @@ class RelatedShardManager(RelatedIteratorManagerBase, models.Manager):
                 new_instance.save()
         else:
             with transaction.atomic():
+                from djangae.models import CounterShard
                 shard = CounterShard.objects.get(pk=shard_pk)
                 shard.count += step
                 shard.save()
 
     def _create_shard(self, count):
+        from djangae.models import CounterShard
         return CounterShard.objects.create(
             count=count, label="%s.%s" % (self.instance._meta.db_table, self.field.name)
         )
@@ -142,6 +144,7 @@ class ShardedCounterField(RelatedSetField):
                 "fetching in a single Get operation (%d)" % MAX_ENTITIES_PER_GET
             )
         kwargs.setdefault("related_name", "+")
+        from djangae.models import CounterShard
         super(ShardedCounterField, self).__init__(CounterShard, *args, **kwargs)
 
     def contribute_to_class(self, cls, name):
