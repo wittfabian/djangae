@@ -8,7 +8,7 @@ from itertools import chain, imap
 from django.core.exceptions import FieldError
 from django.db.models.fields import FieldDoesNotExist
 from django.db.models.sql.datastructures import EmptyResultSet
-from django.db.models.sql.where import EmptyWhere
+
 from django.db.models import AutoField
 
 try:
@@ -979,6 +979,7 @@ def _django_17_query_walk_trunk(node, negated, new_parent, **kwargs):
 
 def _transform_query_17(connection, kind, query):
     from django.db.models.sql.datastructures import Date, DateTime
+    from django.db.models.sql.where import EmptyWhere
 
     if isinstance(query.where, EmptyWhere):
         # Empty where means return nothing!
@@ -1054,6 +1055,7 @@ def _transform_query_17(connection, kind, query):
 
 
 def _transform_query_18(connection, kind, query):
+    from django.db.models.sql.where import EmptyWhere
     if isinstance(query.where, EmptyWhere):
         # Empty where means return nothing!
         raise EmptyResultSet()
@@ -1112,8 +1114,64 @@ def _transform_query_18(connection, kind, query):
     return ret
 
 
-def _transform_query_19(kind, query):
-    pass
+def _transform_query_19(connection, kind, query):
+    from django.db.models.sql.where import NothingNode
+    if isinstance(query.where, NothingNode):
+        # Empty where means return nothing!
+        raise EmptyResultSet()
+
+    ret = Query(query.model, kind)
+    ret.connection = connection
+
+    # Add the root concrete table as the source table
+    root_table = get_top_concrete_parent(query.model)._meta.db_table
+    ret.add_source_table(root_table)
+
+    # Extract the ordering of the query results
+    for order_col in _extract_ordering_from_query_18(query):
+        ret.add_order_by(order_col)
+
+    # Extract any projected columns (values/values_list/only/defer)
+    for projected_col in _extract_projected_columns_from_query_18(query):
+        ret.add_projected_column(projected_col)
+
+    # Add any extra selects
+    for col, select in query.extra_select.items():
+        ret.add_extra_select(col, select[0])
+
+    if query.distinct:
+        # This must happen after extracting projected cols
+        ret.set_distinct(list(query.distinct_fields))
+
+    # Process annotations!
+    if query.annotation_select:
+        for k, v in query.annotation_select.items():
+            ret.add_annotation(k, v)
+
+    # Extract any query offsets and limits
+    ret.low_mark = query.low_mark
+    ret.high_mark = query.high_mark
+
+    output = WhereNode()
+    output.connector = query.where.connector
+
+    _walk_django_where(
+        query,
+        _django_17_query_walk_trunk,
+        _django_17_query_walk_leaf,
+        new_parent=output,
+        connection=connection,
+        negated=query.where.negated,
+        model=query.model
+    )
+
+    # If there no child nodes, just wipe out the where
+    if not output.children:
+        output = None
+
+    ret.where = output
+
+    return ret
 
 
 _FACTORY = {
