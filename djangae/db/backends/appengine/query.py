@@ -1199,10 +1199,19 @@ def _determine_query_kind_18(query):
 
     return "SELECT"
 
+def _determine_query_kind_19(query):
+    if query.annotations:
+        if "__count" in query.annotations:
+            field = query.annotations["__count"].source_expressions[0]
+            if isinstance(field, Star) or field.value == "*":
+                return "COUNT"
+
+    return "SELECT"
+
 _KIND_FACTORY = {
     (1, 7): _determine_query_kind_17,
     (1, 8): _determine_query_kind_18,
-    (1, 9): _determine_query_kind_18 # Same as 1.8
+    (1, 9): _determine_query_kind_19
 }
 
 def transform_query(connection, query):
