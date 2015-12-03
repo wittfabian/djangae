@@ -914,7 +914,7 @@ class DeleteCommand(object):
 
         queries = [spawn_query(x.key().kind(), x.key()) for x in self.select.results]
         if not queries:
-            return
+            return 0
 
         for entity in QueryByKeys(self.model, queries, []).Run():
             keys.append(entity.key())
@@ -925,6 +925,7 @@ class DeleteCommand(object):
 
         caching.remove_entities_from_cache_by_key(keys)
         datastore.Delete(keys)
+        return len(keys)
 
     def lower(self):
         """
