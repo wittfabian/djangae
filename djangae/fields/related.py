@@ -1,3 +1,4 @@
+import django
 from django import forms
 from django.db import router, models
 from django.db.models.query import QuerySet
@@ -13,6 +14,8 @@ from django.utils import six
 class RelatedIteratorRel(ForeignObjectRel):
     def __init__(self, field, to, related_name=None, limit_choices_to=None):
         self.field = field
+        if django.VERSION[1] < 9: # Django 1.7 and 1.8 compatibility
+            self.to = to
         self.model = to
         self.related_name = related_name
         self.related_query_name = None
