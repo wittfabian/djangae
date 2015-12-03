@@ -277,7 +277,7 @@ class RelatedIteratorField(RelatedField):
 
     def deconstruct(self):
         name, path, args, kwargs = super(RelatedIteratorField, self).deconstruct()
-        args = (self.rel.to,)
+        args = (self.rel.model,)
         del kwargs["null"]
         del kwargs["default"]
         return name, path, args, kwargs
@@ -292,7 +292,7 @@ class RelatedIteratorField(RelatedField):
         # specify *what* on my non-reversible relation?!"), so we set it up
         # automatically. The funky name reduces the chance of an accidental
         # clash.
-        if (self.rel.to == "self" or self.rel.to == cls._meta.object_name):
+        if (self.rel.model == "self" or self.rel.model == cls._meta.object_name):
             self.rel.related_name = "%s_rel_+" % name
 
         super(RelatedIteratorField, self).contribute_to_class(cls, name)
@@ -338,7 +338,7 @@ class RelatedIteratorField(RelatedField):
         getattr(instance, self.attname).clear() #Wipe out existing things
 
         for value in data:
-            if isinstance(value, self.rel.to):
+            if isinstance(value, self.rel.model):
                 getattr(instance, self.name).add(value)
             else:
                 getattr(instance, self.attname).add(value)
@@ -347,7 +347,7 @@ class RelatedIteratorField(RelatedField):
         db = kwargs.pop('using', None)
         defaults = {
             'form_class': forms.ModelMultipleChoiceField,
-            'queryset': self.rel.to._default_manager.using(db).complex_filter(self.rel.limit_choices_to)
+            'queryset': self.rel.model._default_manager.using(db).complex_filter(self.rel.limit_choices_to)
         }
         defaults.update(kwargs)
         # If initial is passed in, it's a list of related objects, but the
@@ -387,11 +387,11 @@ class RelatedSetField(RelatedIteratorField):
             if not value:
                 return set()
 
-            ids = [self.rel.to._meta.pk.to_python(x) for x in value.split(",")]
+            ids = [self.rel.model._meta.pk.to_python(x) for x in value.split(",")]
             # Annoyingly Django special cases FK and M2M in the Python deserialization code,
             # to assign to the attname, whereas all other fields (including this one) are required to
             # populate field.name instead. So we have to query here... we have no choice :(
-            return set(self.rel.to._default_manager.db_manager('default').filter(pk__in=ids))
+            return set(self.rel.model._default_manager.db_manager('default').filter(pk__in=ids))
 
         return set(value)
 
@@ -422,11 +422,11 @@ class RelatedListField(RelatedIteratorField):
             if not value:
                 return list()
 
-            ids = [self.rel.to._meta.pk.to_python(x) for x in value.split(",")]
+            ids = [self.rel.model._meta.pk.to_python(x) for x in value.split(",")]
             # Annoyingly Django special cases FK and M2M in the Python deserialization code,
             # to assign to the attname, whereas all other fields (including this one) are required to
             # populate field.name instead. So we have to query here... we have no choice :(
-            return list(self.rel.to._default_manager.db_manager('default').filter(pk__in=ids))
+            return list(self.rel.model._default_manager.db_manager('default').filter(pk__in=ids))
 
         return list(value)
 
