@@ -44,12 +44,14 @@ class RelatedShardManager(RelatedIteratorManagerBase, CounterShard._default_mana
 
     def reset(self):
         """ Reset the counter to 0. """
-        with transaction.atomic(xg=True):
-            value = self.value()
-            if value > 0:
-                self.decrement(value)
-            elif value < 0:
-                self.increment(value)
+        # This is not transactional because (1) that wouldn't work with > 24 shards, and (2) if
+        # there are other threads doing increments/decrements at the same time then it doesn't make
+        # any difference if they happen before or after our increment/decrement anyway.
+        value = self.value()
+        if value > 0:
+            self.decrement(value)
+        elif value < 0:
+            self.increment(abs(value))
 
     def clear(self):
         # Override the default `clear` method of the parent class, as that only clears the list of
@@ -63,16 +65,20 @@ class RelatedShardManager(RelatedIteratorManagerBase, CounterShard._default_mana
         """
         total_to_create = self.field.shard_count - len(self)
         while total_to_create:
-            num_to_create = min(total_to_create, MAX_SHARDS_PER_TRANSACTION)
             with transaction.atomic(xg=True):
-                new_shard_pks = set()
-                for x in xrange(num_to_create):
-                    new_shard_pks.add(self._create_shard(count=0).pk)
                 # We must re-fetch the instance to ensure that we do this atomically, but we must
                 # also update self.instance so that the calling code which is referencing
                 # self.instance also gets the updated list of shard PKs
                 new_instance = self.instance._default_manager.get(pk=self.instance.pk)
                 new_instance_shard_pks = getattr(new_instance, self.field.attname, set())
+                # Re-check / update the number to create based on the refreshed instance from the DB
+                total_to_create = self.field.shard_count - len(new_instance_shard_pks)
+                num_to_create = min(total_to_create, MAX_SHARDS_PER_TRANSACTION)
+
+                new_shard_pks = set()
+                for x in xrange(num_to_create):
+                    new_shard_pks.add(self._create_shard(count=0).pk)
+
                 new_instance_shard_pks.update(new_shard_pks)
                 setattr(self.instance, self.field.attname, new_instance_shard_pks)
                 new_instance.save()

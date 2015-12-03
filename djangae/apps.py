@@ -7,4 +7,10 @@ class DjangaeConfig(AppConfig):
 
     def ready(self):
         from .patches.contenttypes import patch
-        patch()
+        patch(sender=self)
+
+        from djangae.db.backends.appengine.caching import reset_context
+        from django.core.signals import request_finished, request_started
+
+        request_finished.connect(reset_context, dispatch_uid="request_finished_context_reset")
+        request_started.connect(reset_context, dispatch_uid="request_started_context_reset")

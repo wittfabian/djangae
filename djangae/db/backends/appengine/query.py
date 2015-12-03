@@ -11,6 +11,13 @@ from django.db.models.sql.datastructures import EmptyResultSet
 from django.db.models.sql.where import EmptyWhere
 from django.db.models import AutoField
 
+try:
+    from django.db.models.expressions import Star
+except ImportError:
+    # Django < 1.8
+    class Star(object):
+        pass
+
 from django.db import NotSupportedError
 from djangae.db.backends.appengine.indexing import (
     REQUIRES_SPECIAL_INDEXES,
@@ -567,7 +574,7 @@ class Query(object):
         result["order_by"] = self.order_by
         result["low_mark"] = self.low_mark
         result["high_mark"] = self.high_mark
-        result["excluded_pks"] = list(self.excluded_pks)
+        result["excluded_pks"] = map(str, self.excluded_pks)
 
         where = []
 
@@ -1128,7 +1135,8 @@ def _determine_query_kind_17(query):
 def _determine_query_kind_18(query):
     if query.annotations:
         if "__count" in query.annotations:
-            if query.annotations["__count"].input_field.value == "*":
+            field = query.annotations["__count"].input_field
+            if isinstance(field, Star) or field.value == "*":
                 return "COUNT"
 
     return "SELECT"
@@ -1143,3 +1151,13 @@ def transform_query(connection, query):
     version = django.VERSION[:2]
     kind = _KIND_FACTORY[version](query)
     return _FACTORY[version](connection, kind, query)
+
+_ORDERING_FACTORY = {
+    (1, 7): _extract_ordering_from_query_17,
+    (1, 8): _extract_ordering_from_query_18,
+    (1, 9): _extract_ordering_from_query_18  # Same as 1.8
+}
+
+def extract_ordering(query):
+    version = django.VERSION[:2]
+    return _ORDERING_FACTORY[version](query)

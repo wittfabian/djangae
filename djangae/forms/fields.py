@@ -9,7 +9,7 @@ from django.core.urlresolvers import reverse
 from django.contrib.admin.templatetags.admin_static import static
 from djangae.utils import memoized
 
-class TrueOrNullFormField(forms.Field):
+class TrueOrNullFormField(forms.BooleanField):
     def clean(self, value):
         if value:
             return True

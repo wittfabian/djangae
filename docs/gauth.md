@@ -14,7 +14,7 @@ Allows the use of Django's permissions system on the Datastore, despite it usual
 after `'django.contrib.auth'`.
 2. Replace `'django.contrib.auth.middleware.AuthenticationMiddleware'` with
 `'djangae.contrib.gauth.middleware.AuthenticationMiddleware'`.
-3. Set `AUTH_USER_MODEL = 'djangae.GaeUser'` in your settings file to use the supplied user model, or create your own by subclassing `'djangae.contrib.gauth.datastore.models.AbstractBaseUser'`.
+3. Set `AUTH_USER_MODEL = 'djangae.GaeDatastoreUser'` in your settings file to use the supplied user model, or create your own by subclassing `djangae.contrib.gauth.datastore.models.GaeAbstractDatastoreUser`.
 4. Add the backend to `AUTHENTICATION_BACKENDS` in your settings file eg:
 
 ```python
@@ -38,12 +38,12 @@ The Datastore-based user models have a `user_permissions` list field, which take
 after `'django.contrib.auth'`.
 2. Replace `'django.contrib.auth.middleware.AuthenticationMiddleware'` with
 `'djangae.contrib.gauth.middleware.AuthenticationMiddleware'`.
-3. Set `AUTH_USER_MODEL = 'djangae.GaeUser'` in your settings file to use the supplied user model or create your own by subclassing `'djangae.contrib.gauth.sql.models.AbstractBaseUser'`.
+3. Set `AUTH_USER_MODEL = 'djangae.GaeUser'` in your settings file to use the supplied user model or create your own by subclassing `djangae.contrib.gauth.sql.models.GaeAbstractUser`.
 4. Add the backend to `AUTHENTICATION_BACKENDS` in your settings file eg:
 
 ```python
 AUTHENTICATION_BACKENDS = (
-	'djangae.contrib.sql.backends.AppEngineUserAPIBackend',
+	'djangae.contrib.gauth.sql.backends.AppEngineUserAPIBackend',
 	 ...
 )
 ```
@@ -61,7 +61,13 @@ When using Google Accounts-based authentication, the `username` field of the use
 
 Djangae allows you to pre-create users by specifying their email address.  First, you need to set `DJANGAE_ALLOW_USER_PRE_CREATION` to `True` in settings, and then you can create user objects which have an email address and a `username` of `None`.  Djangae then recognises these as pre-created users, and will populate the `username` with their Google `user_id` when they first log in.
 
-### Username/password authentication
+## Force user Pre-Creation
+
+If you want to prevent creating users for every single Google Account visiting your website, you can allow only pre-created users to be allowed to log in. To enable that you need to set `DJANGAE_FORCE_USER_PRE_CREATION` to `True` in your settings file.
+
+Note: you don't need to pre-create User for GAE user admins.
+
+## Username/password authentication
 
 As well as using Djangae's Google Accounts-based authentication, you can also use the standard authentication backend from django.contrib.auth.  They can work alongside each other.  Simply include both, like this:
 
@@ -75,4 +81,26 @@ MIDDLEWARE_CLASSES = (
     'djangae.contrib.gauth.middleware.AuthenticationMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
 )
+```
+
+## Switching accounts
+
+There is a `switch_accounts` view which allows a user to change which of their Google accounts they're logged in with.
+
+The URL for the user to be sent to afterwards should be provided in `request.GET['next']``.
+
+Learn more about [Google multiple sign-in on App Engine here](https://p.ota.to/blog/2014/2/google-multiple-sign-in-on-app-engine/).
+
+### Example usage:
+
+Include GAuth urls in your main urls.py file.
+
+```python
+url(r'^gauth/', include(djangae.contrib.gauth.urls))
+```
+
+Use this URL to add "Switch account" functionality for user:
+
+```html
+<a href="{% url 'djangae_switch_accounts' %}">Switch account</a>
 ```

@@ -79,7 +79,7 @@ When you access the attribute of your sharded counter field on your model, you g
 * `.populate()`: Creates all the shards that the counter will need.
      - This is useful if you want to ensure that additional saves to your model object are avoided when calling `.increment()` or `.decrement()`, as these saves may cause issues if you're doing things inside a transaction or at such a rate that they cause DB contention on your model object.
      - Note that this causes your model instance to be re-saved.
-* `.reset()`: Transactionally resets the counter to 0.
+* `.reset()`: Resets the counter to 0.
     - This is done by changing the value of the shards, not by deleting them.  So you can continue to use your counter afterwards without having to call `populate()` again first.
 
 
@@ -101,6 +101,10 @@ This field requires no special kwargs, and should accept all standard Django fie
 
 This field is not specific to to the App Engine Datastore (or any non-relational database), but is included in Djangae for convenience, especially as in a non-relational database it's often useful to be able to store structured data in a single table rather than in a complex structure of related tables.
 
+```JSONField(use_ordered_dict=False, **kwargs)```
+
+* `use_ordered_dict`: (default: False) Use `collections.OrderedDict` rather than built-in `dict`.
+
 
 ## TrueOrNullField
 
@@ -118,7 +122,7 @@ from djangae import fields
 
 class KittenSanctuary(models.Model):
 
-	is_best = fields.TrueOrNullField(unique=True)
+    is_best = fields.TrueOrNullField(unique=True)
     kittens = fields.RelatedSetField('Kitten')
     kitten_rota = fields.RelatedListField('Kitten')
     inspection_dates = fields.SetField(models.DateField())

@@ -18,7 +18,7 @@ try:
     from django.db.backends.base.creation import BaseDatabaseCreation
     from django.db.backends.base.schema import BaseDatabaseSchemaEditor
 except ImportError:
-    # Django <= 1.7 (I think, at least 1.6)
+    # Django 1.7
     from django.db.backends import (
         BaseDatabaseOperations,
         BaseDatabaseClient,
@@ -28,13 +28,7 @@ except ImportError:
         BaseDatabaseValidation
     )
     from django.db.backends.creation import BaseDatabaseCreation
-
-    try:
-        from django.db.backends.schema import BaseDatabaseSchemaEditor
-    except ImportError:
-        #Django < 1.7 doesn't have BaseDatabaseSchemaEditor
-        class BaseDatabaseSchemaEditor(object):
-            pass
+    from django.db.backends.schema import BaseDatabaseSchemaEditor
 
 
 from django.utils import timezone
@@ -213,7 +207,7 @@ class DatabaseOperations(BaseDatabaseOperations):
         elif internal_type == 'TimeField':
             converters.append(self.convert_time_value)
         elif internal_type == 'DecimalField':
-            converters.append(self.convert_time_value)
+            converters.append(self.convert_decimal_value)
         elif db_type == 'list':
             converters.append(self.convert_list_value)
         elif db_type == 'set':
@@ -376,6 +370,15 @@ class DatabaseOperations(BaseDatabaseOperations):
     def last_insert_id(self, cursor, db_table, column):
         return cursor.lastrowid
 
+    def last_executed_query(self, cursor, sql, params):
+        """
+            We shouldn't have to override this, but Django's BaseOperations.last_executed_query
+            assumes does u"QUERY = %r" % (sql) which blows up if you have encode unicode characters
+            in your SQL. Technically this is a bug in Django for assuming that sql is ASCII but
+            it's only our backend that will ever trigger the problem
+        """
+        return u"QUERY = {}".format(sql)
+
     def fetch_returned_insert_id(self, cursor):
         return cursor.lastrowid
 
@@ -454,6 +457,7 @@ class DatabaseCreation(BaseDatabaseCreation):
         'DateField':                  'date',
         'DateTimeField':              'datetime',
         'DecimalField':               'decimal',
+        'DurationField':              'long',
         'EmailField':                 'string',
         'FileField':                  'string',
         'FilePathField':              'string',
@@ -609,7 +613,3 @@ class DatabaseWrapper(BaseDatabaseWrapper):
 
     def schema_editor(self, *args, **kwargs):
         return DatabaseSchemaEditor(self, *args, **kwargs)
-
-    def _cursor(self):
-        # For < Django 1.6 compatibility
-        return self.create_cursor()

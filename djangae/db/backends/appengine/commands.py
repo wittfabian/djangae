@@ -170,7 +170,6 @@ def _convert_entity_based_on_query_options(entity, opts):
     return entity
 
 
-
 class QueryByKeys(object):
     def __init__(self, model, queries, ordering):
         def _get_key(query):
@@ -178,48 +177,109 @@ class QueryByKeys(object):
             return result
 
         self.model = model
-        self.queries = queries
-        self.queries_by_key = { a: list(b) for a, b in groupby(queries, _get_key) }
+
+        # groupby requires that the iterable is sorted by the given key before grouping
+        self.queries = sorted(queries, key=_get_key)
+        self.queries_by_key = { a: list(b) for a, b in groupby(self.queries, _get_key) }
+
         self.ordering = ordering
         self._Query__kind = queries[0]._Query__kind
 
     def Run(self, limit=None, offset=None):
-        assert not self.queries[0]._Query__ancestor_pb #FIXME: We don't handle this yet
+        """
+            Here are the options:
 
-        # FIXME: What if the query options differ?
+            1. Single key, hit memcache
+            2. Multikey projection, async MultiQueries with ancestors chained
+            3. Full select, datastore get
+        """
+
         opts = self.queries[0]._Query__query_options
+        key_count = len(self.queries_by_key)
+
+        cache = True
 
         results = None
+        if key_count == 1:
+            # FIXME: Potentially could use get_multi in memcache and the make a query
+            # for whatever remains
+            key = self.queries_by_key.keys()[0]
+            result = caching.get_from_cache_by_key(key)
+            if result is not None:
+                results = [ result ]
+                cache = False # Don't update cache, we just got it from there
 
-        # If we have a single key lookup going on, just hit the cache
-        if len(self.queries_by_key) == 1:
-            keys = self.queries_by_key.keys()
-            ret = caching.get_from_cache_by_key(keys[0])
-            if ret is not None:
-                results = [ret]
-
-        # If there was nothing in the cache, or we had more than one key, then use Get()
         if results is None:
-            keys = self.queries_by_key.keys()
-            results = datastore.Get(keys)
-            for result in results:
-                if result is None:
+            if opts.projection:
+                cache = False # Don't cache projection results!
+
+                # Assumes projection ancestor queries are faster than a datastore Get
+                # due to lower traffic over the RPC. This should be faster for queries with
+                # < 30 keys (which is the most common case), and faster if the entities are
+                # larger and there are many results, but there is probably a slower middle ground
+                # because the larger number of RPC calls. Still, if performance is an issue the
+                # user can just do a normal get() rather than values/values_list/only/defer
+
+                to_fetch = (offset or 0) + limit if limit else None
+                additional_cols = set([ x[0] for x in self.ordering if x[0] not in opts.projection])
+
+                multi_query = []
+                final_queries = []
+                orderings = self.queries[0]._Query__orderings
+                for key, queries in self.queries_by_key.iteritems():
+                    for query in queries:
+                        if additional_cols:
+                            # We need to include additional orderings in the projection so that we can
+                            # sort them in memory. Annoyingly that means reinstantiating the queries
+                            query = Query(
+                                kind=query._Query__kind,
+                                filters=query,
+                                projection=list(opts.projection).extend(list(additional_cols))
+                            )
+
+                        query.Ancestor(key) # Make this an ancestor query
+                        multi_query.append(query)
+                        if len(multi_query) == 30:
+                            final_queries.append(datastore.MultiQuery(multi_query, orderings).Run(limit=to_fetch))
+                            multi_query = []
+                else:
+                    if len(multi_query) == 1:
+                        final_queries.append(multi_query[0].Run(limit=to_fetch))
+                    elif multi_query:
+                        final_queries.append(datastore.MultiQuery(multi_query, orderings).Run(limit=to_fetch))
+
+                results = chain(*final_queries)
+            else:
+                results = datastore.Get(self.queries_by_key.keys())
+
+        def iter_results(results):
+            returned = 0
+            # This is safe, because Django is fetching all results any way :(
+            sorted_results = sorted(results, cmp=partial(utils.django_ordering_comparison, self.ordering))
+            sorted_results = [result for result in sorted_results if result is not None]
+            if cache and sorted_results:
+                caching.add_entities_to_cache(self.model, sorted_results, caching.CachingSituation.DATASTORE_GET)
+
+            for result in sorted_results:
+
+                if not any([ utils.entity_matches_query(result, qry) for qry in self.queries_by_key[result.key()]]):
                     continue
-                caching.add_entity_to_cache(self.model, result, caching.CachingSituation.DATASTORE_GET)
-            results = sorted((x for x in results if x is not None), cmp=partial(utils.django_ordering_comparison, self.ordering))
 
-        results = [
-            _convert_entity_based_on_query_options(x, opts)
-            for x in results if any([ utils.entity_matches_query(x, qry) for qry in self.queries_by_key[x.key()]])
-        ]
+                if offset and returned < offset:
+                    # Skip entities based on offset
+                    returned += 1
+                    continue
+                else:
 
-        if offset:
-            results = results[offset:]
+                    yield _convert_entity_based_on_query_options(result, opts)
 
-        if limit is not None:
-            results = results[:limit]
+                    returned += 1
 
-        return iter(results)
+                    # If there is a limit, we might be done!
+                    if limit is not None and returned == (offset or 0) + limit:
+                        break
+
+        return iter_results(results)
 
     def Count(self, limit, offset):
         return len([ x for x in self.Run(limit, offset) ])
@@ -269,7 +329,7 @@ class UniqueQuery(object):
             # Do a consistent get so we don't cache stale data, and recheck the result matches the query
             ret = [ x for x in datastore.Get(keys) if x and utils.entity_matches_query(x, self._gae_query) ]
             if len(ret) == 1:
-                caching.add_entity_to_cache(self._model, ret[0], caching.CachingSituation.DATASTORE_GET)
+                caching.add_entities_to_cache(self._model, [ret[0]], caching.CachingSituation.DATASTORE_GET)
             return iter(ret)
 
         return iter([ ret ])
@@ -421,11 +481,11 @@ class SelectCommand(object):
                     field = get_field_from_column(self.query.model, filter_node.column)
                     value = self.connection.ops.value_to_db_decimal(value, field.max_digits, field.decimal_places)
                 elif isinstance(value, basestring):
-                    value = unicode(value)
+                    value = coerce_unicode(value)
 
                 # If there is already a value for this lookup, we need to make the
                 # value a list and append the new entry
-                if lookup in query and not isinstance(query[lookup], (list, tuple)):
+                if lookup in query and not isinstance(query[lookup], (list, tuple)) and query[lookup] != value:
                     query[lookup] = [ query[lookup ] ] + [ value ]
                 else:
                     # If the value is a list, we can't just assign it to the query
@@ -490,9 +550,13 @@ class SelectCommand(object):
                 # didn't seem to indicate much of a performance difference, even when doing the pk__in
                 # with GetAsync while the count was running. That might not be true of prod though so
                 # if anyone comes up with a faster idea let me know!
-                count_query = Query(query._Query__kind, keys_only=True)
-                count_query.update(query)
-                resultset = count_query.Run(limit=limit, offset=offset)
+                if isinstance(query, QueryByKeys):
+                    # If this is a QueryByKeys, just do the datastore Get and count the results
+                    resultset = (x.key() for x in query.Run(limit=limit, offset=offset) if x)
+                else:
+                    count_query = Query(query._Query__kind, keys_only=True)
+                    count_query.update(query)
+                    resultset = count_query.Run(limit=limit, offset=offset)
                 self.results = (x for x in [ len([ y for y in resultset if y not in self.excluded_pks]) ])
             else:
                 self.results = (x for x in [query.Count(limit=limit, offset=offset)])
@@ -762,7 +826,7 @@ class InsertCommand(object):
                             results.append(datastore.Put(ent))
                             if not was_in_transaction:
                                 # We can cache if we weren't in a transaction before this little nested one
-                                caching.add_entity_to_cache(self.model, ent, caching.CachingSituation.DATASTORE_GET_PUT)
+                                caching.add_entities_to_cache(self.model, [ent], caching.CachingSituation.DATASTORE_GET_PUT)
                         except:
                             # Make sure we delete any created markers before we re-raise
                             constraints.release_markers(markers)
@@ -779,8 +843,7 @@ class InsertCommand(object):
             if not constraints.constraint_checks_enabled(self.model):
                 # Fast path, just bulk insert
                 results = datastore.Put(self.entities)
-                for entity in self.entities:
-                    caching.add_entity_to_cache(self.model, entity, caching.CachingSituation.DATASTORE_PUT)
+                caching.add_entities_to_cache(self.model, self.entities, caching.CachingSituation.DATASTORE_PUT)
                 return results
             else:
                 markers = []
@@ -790,8 +853,7 @@ class InsertCommand(object):
                     markers = constraints.acquire_bulk(self.model, self.entities)
                     results = datastore.Put(self.entities)
 
-                    for entity in self.entities:
-                        caching.add_entity_to_cache(self.model, entity, caching.CachingSituation.DATASTORE_PUT)
+                    caching.add_entities_to_cache(self.model, self.entities, caching.CachingSituation.DATASTORE_PUT)
 
                 except:
                     to_delete = chain(*markers)
@@ -810,25 +872,24 @@ class InsertCommand(object):
         """
         return str(self).lower()
 
-
     def __unicode__(self):
         try:
             keys = self.entities[0].keys()
             result = u" ".join([
-                "INSERT INTO",
+                u"INSERT INTO",
                 self.entities[0].kind(),
-                "(" + ", ".join(keys) + ")",
-                "VALUES"
+                u"(" + u", ".join(keys) + u")",
+                u"VALUES"
             ])
 
             for entity in self.entities:
-                result += "(" + ", ".join([str(entity[x]) for x in keys]) + ")"
+                result += u"(" + u", ".join([unicode(entity[x]) for x in keys]) + u")"
 
             return result
         except:
             # We never want this to cause things to die
             logging.exception("Unable to translate query to string")
-            return "QUERY TRANSLATION ERROR"
+            return u"QUERY TRANSLATION ERROR"
 
     def __repr__(self):
         return self.__unicode__().encode("utf-8")
@@ -862,7 +923,7 @@ class DeleteCommand(object):
             if constraints.constraint_checks_enabled(self.model):
                 constraints.release(self.model, entity)
 
-            caching.remove_entity_from_cache_by_key(entity.key())
+        caching.remove_entities_from_cache_by_key(keys)
         datastore.Delete(keys)
 
     def lower(self):
@@ -887,7 +948,7 @@ class UpdateCommand(object):
 
     @db.transactional
     def _update_entity(self, key):
-        caching.remove_entity_from_cache_by_key(key)
+        caching.remove_entities_from_cache_by_key([key])
 
         try:
             result = datastore.Get(key)
@@ -896,7 +957,7 @@ class UpdateCommand(object):
             return False
 
         if (
-            isinstance(self.select.gae_query, (Query, UniqueQuery)) # ignore QueryByKeys and NoOpQuery
+            isinstance(self.select.gae_query, (Query, UniqueQuery))  # ignore QueryByKeys and NoOpQuery
             and not utils.entity_matches_query(result, self.select.gae_query)
         ):
             # Due to eventual consistency they query may have returned an entity which no longer
@@ -905,15 +966,19 @@ class UpdateCommand(object):
 
         original = copy.deepcopy(result)
 
-        instance_kwargs = {field.attname:value for field, param, value in self.values}
-
         # Note: If you replace MockInstance with self.model, you'll find that some delete
         # tests fail in the test app. This is because any unspecified fields would then call
         # get_default (even though we aren't going to use them) which may run a query which
         # fails inside this transaction. Given as we are just using MockInstance so that we can
         # call django_instance_to_entity it on it with the subset of fields we pass in,
         # what we have is fine.
-        instance = MockInstance(**instance_kwargs)
+        meta = self.model._meta
+        instance_kwargs = {field.attname: value for field, param, value in self.values}
+        instance = MockInstance(
+            _original=MockInstance(_meta=meta, **result),
+            _meta=meta,
+            **instance_kwargs
+            )
 
         # We need to add to the class attribute, rather than replace it!
         original_class = result.get(POLYMODEL_CLASS_ATTRIBUTE, [])
@@ -921,21 +986,25 @@ class UpdateCommand(object):
         # Update the entity we read above with the new values
         result.update(django_instance_to_entity(
             self.connection, self.model,
-            [ x[0] for x in self.values],  # Pass in the fields that were updated
+            [x[0] for x in self.values],  # Pass in the fields that were updated
             True, instance)
         )
 
         # Make sure we keep all classes in the inheritence tree!
         if original_class:
-            if result[POLYMODEL_CLASS_ATTRIBUTE]:
+            if result[POLYMODEL_CLASS_ATTRIBUTE] is not None:
                 result[POLYMODEL_CLASS_ATTRIBUTE].extend(original_class)
+                # Make sure we don't add duplicates
             else:
                 result[POLYMODEL_CLASS_ATTRIBUTE] = original_class
+
+        if POLYMODEL_CLASS_ATTRIBUTE in result:
+            result[POLYMODEL_CLASS_ATTRIBUTE] = list(set(result[POLYMODEL_CLASS_ATTRIBUTE]))
 
         if not constraints.constraint_checks_enabled(self.model):
             # The fast path, no constraint checking
             datastore.Put(result)
-            caching.add_entity_to_cache(self.model, result, caching.CachingSituation.DATASTORE_PUT)
+            caching.add_entities_to_cache(self.model, [result], caching.CachingSituation.DATASTORE_PUT)
         else:
             to_acquire, to_release = constraints.get_markers_for_update(self.model, original, result)
 
@@ -943,7 +1012,7 @@ class UpdateCommand(object):
             constraints.acquire_identifiers(to_acquire, result.key())
             try:
                 datastore.Put(result)
-                caching.add_entity_to_cache(self.model, result, caching.CachingSituation.DATASTORE_PUT)
+                caching.add_entities_to_cache(self.model, [result], caching.CachingSituation.DATASTORE_PUT)
             except:
                 constraints.release_identifiers(to_acquire)
                 raise

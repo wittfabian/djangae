@@ -1,6 +1,7 @@
 import datetime
 import decimal
 import re
+import random
 
 from cStringIO import StringIO
 from string import letters
@@ -269,6 +270,12 @@ class BackendTests(TestCase):
         entity["name"] = [ "Bob", "Fred", "Dave" ]
         self.assertTrue(entity_matches_query(entity, query))  # ListField test
 
+    def test_count_on_excluded_pks(self):
+        TestFruit.objects.create(name="Apple", color="Red")
+        TestFruit.objects.create(name="Orange", color="Orange")
+
+        self.assertEqual(1, TestFruit.objects.filter(pk__in=["Apple", "Orange"]).exclude(pk__in=["Apple"]).count())
+
     def test_defaults(self):
         fruit = TestFruit.objects.create(name="Apple", color="Red")
         self.assertEqual("Unknown", fruit.origin)
@@ -284,6 +291,40 @@ class BackendTests(TestCase):
         fruit = TestFruit.objects.get()
         self.assertEqual("Unknown", fruit.origin)
 
+    @disable_cache()
+    def test_get_by_keys(self):
+        colors = [ "Red", "Green", "Blue", "Yellow", "Orange" ]
+        fruits = [ TestFruit.objects.create(name=str(x), color=random.choice(colors)) for x in range(32) ]
+
+        # Check that projections work with key lookups
+        with sleuth.watch('google.appengine.api.datastore.Query.__init__') as query_init:
+            with sleuth.watch('google.appengine.api.datastore.Query.Ancestor') as query_anc:
+                TestFruit.objects.only("color").get(pk="0").color
+                self.assertEqual(query_init.calls[0].kwargs["projection"], ["color"])
+
+                # Make sure the query is an ancestor of the key
+                self.assertEqual(query_anc.calls[0].args[1], datastore.Key.from_path(TestFruit._meta.db_table, "0"))
+
+        # Now check projections work with more than 30 things
+        with sleuth.watch('google.appengine.api.datastore.MultiQuery.__init__') as query_init:
+            with sleuth.watch('google.appengine.api.datastore.Query.Ancestor') as query_anc:
+                keys = [str(x) for x in range(32)]
+                results = list(TestFruit.objects.only("color").filter(pk__in=keys).order_by("name"))
+
+                self.assertEqual(query_init.call_count, 2) # Two multi queries
+                self.assertEqual(query_anc.call_count, 32) # 32 Ancestor calls
+                self.assertEqual(len(query_init.calls[0].args[1]), 30)
+                self.assertEqual(len(query_init.calls[1].args[1]), 2)
+
+                # Confirm the ordering is correct
+                self.assertEqual(sorted(keys), [ x.pk for x in results ])
+
+        results = list(TestFruit.objects.only("color").filter(pk__in=keys).order_by("name")[5:10])
+        self.assertEqual(len(results), 5)
+        self.assertEqual([x.pk for x in results], sorted(keys)[5:10])
+
+        # Make sure we can do a normal (non-projection) get by keys
+        self.assertItemsEqual(TestFruit.objects.filter(pk__in=keys), fruits)
 
     def test_get_or_create(self):
         """
@@ -510,6 +551,74 @@ class BackendTests(TestCase):
         self.assertItemsEqual([obj, empty_obj], date_set.dates.order_by('time'))
         self.assertItemsEqual([empty_obj, obj], date_set.dates.order_by('-time'))
 
+    def test_update_with_f_expr(self):
+        i = IntegerModel.objects.create(integer_field=1000)
+        qs = IntegerModel.objects.all()
+        qs.update(integer_field=models.F('integer_field') + 1)
+
+        self.assertRaises(IntegerModel.DoesNotExist, IntegerModel.objects.get, integer_field=1000)
+        i = IntegerModel.objects.get(pk=i.pk)
+        self.assertEqual(1001, i.integer_field)
+
+    def test_save_with_f_expr(self):
+        i = IntegerModel.objects.create(integer_field=1000)
+
+        i.integer_field = models.F('integer_field') + 1
+        i.save()
+
+        self.assertRaises(IntegerModel.DoesNotExist, IntegerModel.objects.get, integer_field=1000)
+        i = IntegerModel.objects.get(pk=i.pk)
+        self.assertEqual(1001, i.integer_field)
+
+    def test_ordering_on_sparse_field(self):
+        """
+        Case when sorting on field that is not present in all of
+        Datastore entities. That can easily happen when you added
+        new field to model and did not populated all existing entities
+        """
+        # Clean state
+        self.assertEqual(TestFruit.objects.count(), 0)
+
+        # Put constistent instances to Datastore
+        TestFruit.objects.create(name='a', color='a')
+        TestFruit.objects.create(name='b', color='b')
+
+        # Put inconsistent instances to Datastore
+        # Color fields is missing (not even None)
+        # we need more than 1 so we explore all sorting branches
+        values = {'name': 'c'}
+        entity = datastore.Entity(TestFruit._meta.db_table, **values)
+        entity.update(values)
+        datastore.Put(entity)
+
+        values = {'name': 'd'}
+        entity = datastore.Entity(TestFruit._meta.db_table, **values)
+        entity.update(values)
+        datastore.Put(entity)
+
+        # Ok, we can get all 3 instances
+        self.assertEqual(TestFruit.objects.count(), 4)
+
+        # Sorted list. No exception should be raised
+        # (esp KeyError from django_ordering_comparison)
+        with sleuth.watch('djangae.db.backends.appengine.commands.utils.django_ordering_comparison') as compare:
+            all_names = ['a', 'b', 'c', 'd']
+            fruits = list(
+                TestFruit.objects.filter(name__in=all_names).order_by('color')
+            )
+            # Make sure troubled code got triggered
+            # ie. with all() it doesn't
+            self.assertTrue(compare.called)
+
+        # Missing one (None) as first
+        expected_fruits = [
+            ('c', None), ('d', None), ('a', 'a'), ('b', 'b'),
+        ]
+
+        self.assertEqual(
+            [(fruit.name, fruit.color) for fruit in fruits],
+            expected_fruits,
+        )
 
     def test_update_query_does_not_update_entities_which_no_longer_match_query(self):
         """ When doing queryset.update(field=x), any entities which the query returns but which no
@@ -1079,6 +1188,15 @@ class EdgeCaseTests(TestCase):
         self.assertEqual(1, TestUser.objects.filter(username="A").exclude(email="test3@example.com").count())
         self.assertEqual(3, TestUser.objects.exclude(username="E").exclude(username="A").count())
 
+        self.assertEqual(3, TestUser.objects.exclude(username__in=["A", "B"]).count())
+        self.assertEqual(0, TestUser.objects.filter(email="test@example.com").exclude(username__in=["A", "B"]).count())
+
+    def test_exclude_with__in(self):
+        self.assertEqual(
+            set([self.u3, self.u4, self.u5]),
+            set(list(TestUser.objects.exclude(username__in=["A", "B"])))
+        )
+
     def test_deletion(self):
         count = TestUser.objects.count()
         self.assertTrue(count)
@@ -1227,6 +1345,10 @@ class EdgeCaseTests(TestCase):
         # Check that it's ok with PKs though
         query = TestUser.objects.filter(pk__in=list(xrange(1, 32)))
         list(query)
+        # Check that it's ok joining filters with pks
+        results = list(TestUser.objects.filter(
+            pk__in=[self.u1.pk, self.u2.pk, self.u3.pk]).filter(pk__in=[self.u1.pk, self.u2.pk]))
+        self.assertItemsEqual(results, [self.u1, self.u2])
 
     def test_self_relations(self):
         obj = SelfRelatedModel.objects.create()

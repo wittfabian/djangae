@@ -146,11 +146,16 @@ class Command(BaseRunserverCommand):
 
         from djangae import sandbox
 
-        if int(self.port) != sandbox._OPTIONS.port:
+        # Add any additional modules specified in the settings
+        additional_modules = getattr(settings, "DJANGAE_ADDITIONAL_MODULES", [])
+        if additional_modules:
+            sandbox._OPTIONS.config_paths.extend(additional_modules)
+
+        if int(self.port) != sandbox._OPTIONS.port or additional_modules:
             # Override the port numbers
             sandbox._OPTIONS.port = int(self.port)
-            sandbox._OPTIONS.admin_port = int(self.port) + 1
-            sandbox._OPTIONS.api_port = int(self.port) + 2
+            sandbox._OPTIONS.admin_port = int(self.port) + len(additional_modules) + 1
+            sandbox._OPTIONS.api_port = int(self.port) + len(additional_modules) + 2
 
         if self.addr != sandbox._OPTIONS.host:
             sandbox._OPTIONS.host = sandbox._OPTIONS.admin_host = sandbox._OPTIONS.api_host = self.addr
@@ -168,6 +173,7 @@ class Command(BaseRunserverCommand):
 
         if sandbox._OPTIONS.host == "127.0.0.1" and os.environ["HTTP_HOST"].startswith("localhost"):
             hostname = "localhost"
+            sandbox._OPTIONS.host = "localhost"
         else:
             hostname = sandbox._OPTIONS.host
 
@@ -176,9 +182,28 @@ class Command(BaseRunserverCommand):
         os.environ['SERVER_PORT'] = os.environ['HTTP_HOST'].split(':', 1)[1]
         os.environ['DEFAULT_VERSION_HOSTNAME'] = '%s:%s' % (os.environ['SERVER_NAME'], os.environ['SERVER_PORT'])
 
+        from google.appengine.api.appinfo import EnvironmentVariables
+
         class NoConfigDevServer(devappserver2.DevelopmentServer):
             def _create_api_server(self, request_data, storage_path, options, configuration):
+                # sandbox._create_dispatcher returns a singleton dispatcher instance made in sandbox
                 self._dispatcher = sandbox._create_dispatcher(configuration, options)
+                # the dispatcher may have passed environment variables, it should be propagated
+                env_vars = self._dispatcher._configuration.modules[0]._app_info_external.env_variables or EnvironmentVariables()
+                for module in configuration.modules:
+                    module_name = module._module_name
+                    if module_name == 'default':
+                        module_settings = 'DJANGO_SETTINGS_MODULE'
+                    else:
+                        module_settings = '%s_DJANGO_SETTINGS_MODULE' % module_name
+                    if module_settings in env_vars:
+                        module_env_vars = module.env_variables or EnvironmentVariables()
+                        module_env_vars['DJANGO_SETTINGS_MODULE'] = env_vars[module_settings]
+
+                        old_env_vars = module._app_info_external.env_variables
+                        new_env_vars = EnvironmentVariables.Merge(module_env_vars, old_env_vars)
+                        module._app_info_external.env_variables = new_env_vars
+                self._dispatcher._configuration = configuration
                 self._dispatcher._port = options.port
                 self._dispatcher._host = options.host
 
@@ -196,6 +221,51 @@ class Command(BaseRunserverCommand):
                     task_queue.StartBackgroundExecution()
 
                 return sandbox._API_SERVER
+
+        from google.appengine.tools.devappserver2 import module
+
+        def logging_wrapper(func):
+            """
+                Changes logging to use the DJANGO_COLORS settings
+            """
+            def _wrapper(level, format, *args, **kwargs):
+                if args and len(args) == 1 and isinstance(args[0], dict):
+                    args = args[0]
+                    status = str(args.get("status", 200))
+                else:
+                    status = "200"
+
+                try:
+                    msg = format % args
+                except UnicodeDecodeError:
+                    msg += "\n" # This is what Django does in WSGIRequestHandler.log_message
+
+                # Utilize terminal colors, if available
+                if status[0] == '2':
+                    # Put 2XX first, since it should be the common case
+                    msg = self.style.HTTP_SUCCESS(msg)
+                elif status[0] == '1':
+                    msg = self.style.HTTP_INFO(msg)
+                elif status == '304':
+                    msg = self.style.HTTP_NOT_MODIFIED(msg)
+                elif status[0] == '3':
+                    msg = self.style.HTTP_REDIRECT(msg)
+                elif status == '404':
+                    msg = self.style.HTTP_NOT_FOUND(msg)
+                elif status[0] == '4':
+                    # 0x16 = Handshake, 0x03 = SSL 3.0 or TLS 1.x
+                    if status.startswith(str('\x16\x03')):
+                        msg = ("You're accessing the development server over HTTPS, "
+                            "but it only supports HTTP.\n")
+                    msg = self.style.HTTP_BAD_REQUEST(msg)
+                else:
+                    # Any 5XX, or any other response
+                    msg = self.style.HTTP_SERVER_ERROR(msg)
+
+                return func(level, msg)
+            return _wrapper
+
+        module.logging.log = logging_wrapper(module.logging.log)
 
         python_runtime._RUNTIME_PATH = os.path.join(sdk_path, '_python_runtime.py')
         python_runtime._RUNTIME_ARGS = [sys.executable, python_runtime._RUNTIME_PATH]

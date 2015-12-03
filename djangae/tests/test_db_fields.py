@@ -1,3 +1,5 @@
+from collections import OrderedDict
+
 # LIBRARIES
 from django.db import models
 from django.db.utils import IntegrityError
@@ -8,12 +10,14 @@ from djangae.db import transaction
 from djangae.fields import (
     ComputedCharField,
     GenericRelationField,
+    JSONField,
     ListField,
     RelatedSetField,
     RelatedListField,
     ShardedCounterField,
     SetField,
 )
+from djangae.fields.counting import DEFAULT_SHARD_COUNT
 from djangae.models import CounterShard
 from djangae.test import TestCase
 
@@ -44,10 +48,24 @@ class ComputedFieldTests(TestCase):
 class ModelWithCounter(models.Model):
     counter = ShardedCounterField()
 
+    class Meta:
+        app_label = "djangae"
+
 
 class ModelWithManyCounters(models.Model):
     counter1 = ShardedCounterField()
     counter2 = ShardedCounterField()
+
+    class Meta:
+        app_label = "djangae"
+
+
+class ModelWithCounterWithManyShards(models.Model):
+    # The DEFAULT_SHARD_COUNT is based on the max allowed in a Datastore transaction
+    counter = ShardedCounterField(shard_count=DEFAULT_SHARD_COUNT+5)
+
+    class Meta:
+        app_label = "djangae"
 
 
 class ISOther(models.Model):
@@ -97,6 +115,10 @@ class IterableFieldModel(models.Model):
 
     class Meta:
         app_label = "djangae"
+
+
+class JSONFieldModel(models.Model):
+    json_field = JSONField(use_ordered_dict=True)
 
 
 class ShardedCounterTest(TestCase):
@@ -157,6 +179,24 @@ class ShardedCounterTest(TestCase):
         instance.counter.reset()
         self.assertEqual(instance.counter.value(), 0)
 
+    def test_reset_negative_count(self):
+        """ Test resetting a negative count. """
+        instance = ModelWithCounter.objects.create()
+        self.assertEqual(instance.counter.value(), 0)
+        instance.counter.decrement(7)
+        self.assertEqual(instance.counter.value(), -7)
+        instance.counter.reset()
+        self.assertEqual(instance.counter.value(), 0)
+
+    def test_reset_with_many_shards(self):
+        """ Test that even if the counter field has more shards than can be counted in a single
+            transaction, that the `reset` method still works.
+        """
+        instance = ModelWithCounterWithManyShards.objects.create()
+        instance.counter.populate()
+        instance.counter.increment(5)
+        instance.counter.reset()
+
     def test_populate(self):
         """ Test that the populate() method correctly generates all of the CounterShard objects. """
         instance = ModelWithCounter.objects.create()
@@ -166,6 +206,19 @@ class ShardedCounterTest(TestCase):
         instance.counter.populate()
         expected_num_shards = instance._meta.get_field('counter').shard_count
         self.assertEqual(len(instance.counter), expected_num_shards)
+
+    def test_populate_is_idempotent_across_threads(self):
+        """ Edge case test to make sure that 2 different threads calling .populate() on a field
+            don't cause it to exceed the corrent number of shards.
+        """
+        instance = ModelWithCounter.objects.create()
+        same_instance = ModelWithCounter.objects.get()
+        instance.counter.populate()
+        same_instance.counter.populate()
+        # Now reload it from the DB and check that it has the correct number of shards
+        instance = ModelWithCounter.objects.get()
+        self.assertEqual(instance.counter.all().count(), DEFAULT_SHARD_COUNT)
+
 
     def test_label_reference_is_saved(self):
         """ Test that each CounterShard which the field creates is saved with the label of the
@@ -300,6 +353,9 @@ class IterableFieldTests(TestCase):
         self.assertFalse(IterableFieldModel.objects.exclude(set_field__isnull=False).exists())
         self.assertTrue(IterableFieldModel.objects.exclude(set_field__isnull=True).exists())
 
+    def test_assign_integer_throws_typeerror(self):
+        self.assertRaises(TypeError, IterableFieldModel, list_field=1)
+        self.assertRaises(TypeError, IterableFieldModel, set_field=1)
 
 class InstanceListFieldTests(TestCase):
 
@@ -595,3 +651,37 @@ class TestGenericRelationField(TestCase):
         instance.save()
         GenericRelationModel.objects.create(unique_relation_to_anything=None)
         GenericRelationModel.objects.create() # It should work even if we don't explicitly set it to None
+
+
+class JSONFieldModelTests(TestCase):
+
+    def test_object_pairs_hook_with_ordereddict(self):
+        items = [('first', 1), ('second', 2), ('third', 3), ('fourth', 4)]
+        od = OrderedDict(items)
+
+        thing = JSONFieldModel(json_field=od)
+        thing.save()
+
+        thing = JSONFieldModel.objects.get()
+        self.assertEqual(od, thing.json_field)
+
+    def test_object_pairs_hook_with_normal_dict(self):
+        """
+        Check that dict is not stored as OrderedDict if
+        object_pairs_hook is not set
+        """
+
+        # monkey patch field
+        field = JSONFieldModel._meta.get_field('json_field')
+        field.use_ordered_dict = False
+
+        normal_dict = {'a': 1, 'b': 2, 'c': 3}
+
+        thing = JSONFieldModel(json_field=normal_dict)
+        self.assertFalse(isinstance(thing.json_field, OrderedDict))
+        thing.save()
+
+        thing = JSONFieldModel.objects.get()
+        self.assertFalse(isinstance(thing.json_field, OrderedDict))
+
+        field.use_ordered_dict = True

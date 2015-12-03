@@ -1,4 +1,5 @@
 # coding: utf-8
+import urllib
 import mimetypes
 import re
 
@@ -7,6 +8,7 @@ try:
 except ImportError:
     from StringIO import StringIO
 
+from django.conf import settings
 from django.core.urlresolvers import reverse
 from django.core.files.base import File
 from django.core.files.storage import Storage
@@ -18,6 +20,7 @@ from django.utils.encoding import smart_str, force_unicode
 from django.test.client import encode_multipart, MULTIPART_CONTENT, BOUNDARY
 
 from google.appengine.api import urlfetch
+from google.appengine.api import app_identity
 from google.appengine.api.images import (
     get_serving_url,
     NotImageError,
@@ -41,6 +44,8 @@ try:
 except ImportError:
     has_cloudstorage = False
 
+BUCKET_KEY = 'CLOUD_STORAGE_BUCKET'
+DEFAULT_CONTENT_TYPE = 'application/binary'
 
 def serve_file(request, blob_key_or_info, as_download=False, content_type=None, filename=None, offset=None, size=None):
     """
@@ -100,7 +105,48 @@ def serve_file(request, blob_key_or_info, as_download=False, content_type=None, 
     return response
 
 
-class BlobstoreStorage(Storage):
+def get_bucket_name():
+    """
+        Returns the bucket name for Google Cloud Storage, either from your
+        settings or the default app bucket.
+    """
+    bucket = getattr(settings, BUCKET_KEY, None)
+    if not bucket:
+        # No explicit setting, lets try the default bucket for your application.
+        bucket = app_identity.get_default_gcs_bucket_name()
+    if not bucket:
+        from django.core.exceptions import ImproperlyConfigured
+        message = '%s not set or no default bucket configured' % BUCKET_KEY
+        raise ImproperlyConfigured(message)
+    return bucket
+
+
+class BlobstoreUploadMixin():
+
+    def _upload_to_blobstore(self, name, content):
+        # With the files api deprecated, we provide a workaround here, an inline upload
+        # to the blobstore, using the djangae.views.internalupload handler to return the blob key
+
+        # `encode_multipart()` expects files to have a `name`, even though
+        # they’re optional
+        if not content.name:
+            content.name = 'untitled'
+
+        url = self._create_upload_url()
+
+        response = urlfetch.fetch(url=url,
+            payload=encode_multipart(BOUNDARY, {'file': content}),
+            method=urlfetch.POST,
+            deadline=60,
+            follow_redirects=False,
+            headers={'Content-Type': MULTIPART_CONTENT}
+        )
+        if response.status_code != 200:
+            raise ValueError("The internal upload to blobstore failed, check the app's logs.")
+        return '%s/%s' % (response.content, name.lstrip('/'))
+
+
+class BlobstoreStorage(Storage, BlobstoreUploadMixin):
     """Google App Engine Blobstore storage backend."""
 
     def _open(self, name, mode='rb'):
@@ -163,26 +209,81 @@ class BlobstoreStorage(Storage):
     def _get_blobinfo(self, name):
         return BlobInfo.get(self._get_key(name))
 
-    def _upload_to_blobstore(self, name, content):
-        # With the files api deprecated, we provide a workaround here, an inline upload
-        # to the blobstore, using the djangae.views.internalupload handler to return the blob key
+    def _create_upload_url(self):
+        return create_upload_url(reverse('djangae_internal_upload_handler'))
 
-        # `encode_multipart()` expects files to have a `name`, even though
-        # they’re optional
-        if not content.name:
-            content.name = 'untitled'
 
-        response = urlfetch.fetch(url=create_upload_url(reverse('djangae_internal_upload_handler')),
-            payload=encode_multipart(BOUNDARY, {'file': content}),
-            method=urlfetch.POST,
-            deadline=60,
-            follow_redirects=False,
-            headers={'Content-Type': MULTIPART_CONTENT}
+class CloudStorage(Storage, BlobstoreUploadMixin):
+    """
+        Google Cloud Storage backend, set this as your default backend
+        for ease of use, you can speicify and non-default bucket in the
+        constructor
+    """
+    write_options = None
+
+    def __init__(self, bucket=None):
+        if not bucket:
+            bucket = get_bucket_name()
+        self.bucket = bucket
+        # +2 for the slashes.
+        self._bucket_prefix_len = len(bucket) + 2
+        if cloudstorage.common.local_run() and not cloudstorage.common.get_access_token():
+            # We do it this way so that the stubs override in tests
+            self.api_url = '/_ah/gcs'
+        else:
+            self.api_url = 'https://storage.googleapis.com'
+
+    def url(self, filename):
+        return urllib.quote(
+            '{0}{1}'.format(self.api_url, self._add_bucket(filename))
         )
-        if response.status_code != 200:
-            raise ValueError("The internal upload to blobstore failed, check the app's logs.")
-        return '%s/%s' % (response.content, name.lstrip('/'))
 
+    def _open(self, name, mode='r'):
+        # Handle 'rb' as 'r'.
+        mode = mode[:1]
+        fp = cloudstorage.open(self._add_bucket(name), mode=mode)
+        return File(fp)
+
+    def _add_bucket(self, name):
+        safe_name = urllib.quote(name.encode('utf-8'))
+        return '/{0}/{1}'.format(self.bucket, safe_name)
+
+    def _content_type_for_name(self, name):
+        # guess_type returns (None, encoding) if it can't guess.
+        return mimetypes.guess_type(name)[0] or DEFAULT_CONTENT_TYPE
+
+    def _save(self, name, content):
+        kwargs = {
+            'content_type': self._content_type_for_name(name),
+            'options': self.write_options,
+        }
+        with cloudstorage.open(self._add_bucket(name), 'w', **kwargs) as fp:
+            fp.write(content.read())
+        return name
+
+    def delete(self, name):
+        try:
+            cloudstorage.delete(self._add_bucket(name))
+        except cloudstorage.NotFoundError:
+            pass
+
+    def exists(self, name):
+        size = self.size(name)
+        return size is not None
+
+    def size(self, name):
+        try:
+            info = cloudstorage.stat(self._add_bucket(name))
+        except cloudstorage.NotFoundError:
+            return None
+        else:
+            return info.st_size
+
+    def _create_upload_url(self):
+        return create_upload_url(
+            reverse('djangae_internal_upload_handler'),
+            gs_bucket_name=self.bucket_name
+        )
 
 class UniversalNewLineBlobReader(BlobReader):
     def readline(self, size=-1):
@@ -256,7 +357,7 @@ class BlobstoreFileUploadHandler(FileUploadHandler):
         parts = data.split(self.boundary)
 
         for part in parts:
-            match = re.search('blob-key="?(?P<blob_key>[a-zA-Z0-9_=-]+)', part)
+            match = re.search('blob-key="?(?P<blob_key>[:a-zA-Z0-9_=-]+)', part)
             blob_key = match.groupdict().get('blob_key') if match else None
 
             if not blob_key:

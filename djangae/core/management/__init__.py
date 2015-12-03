@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 import argparse
 
@@ -21,10 +22,18 @@ def _execute_from_command_line(sandbox_name, argv, **sandbox_overrides):
     # the sandbox if found.
     parser = argparse.ArgumentParser(prog='manage.py')
     parser.add_argument('--settings', nargs='?')
-    settings = parser.parse_known_args(argv)[0].settings
+    parsed = parser.parse_known_args(argv)
+    settings = parsed[0].settings
     env_vars = {}
     if settings:
         env_vars['DJANGO_SETTINGS_MODULE'] = settings
+
+    # retrieve additional overridden module settings
+    for arg in parsed[1]:
+        m = re.match(r'--(?P<module_name>.+)-settings=(?P<settings_path>.+)', arg)
+        if m:
+            argv.remove(arg)
+            env_vars['%s_DJANGO_SETTINGS_MODULE' % m.group('module_name')] = m.group('settings_path')
 
     with sandbox.activate(
         sandbox_name,

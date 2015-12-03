@@ -2,8 +2,10 @@ from hashlib import md5
 from django.conf import settings
 from django.db import models
 from django.core import paginator
-from djangae.contrib.pagination.decorators import _field_name_for_ordering
 from django.core.cache import cache
+
+from djangae.contrib.pagination.decorators import _field_name_for_ordering
+from djangae.db.backends.appengine.query import extract_ordering
 
 
 # TODO: it would be nice to be able to define a function which is given the queryset and returns
@@ -101,7 +103,7 @@ class Paginator(paginator.Paginator):
         if not object_list.ordered:
             object_list.order_by("pk") # Just order by PK by default
 
-        self.original_orderings = object_list.query.order_by
+        self.original_orderings = extract_ordering(object_list.query)
         self.field_required = _field_name_for_ordering(self.original_orderings[:])
         self.readahead = readahead
         self.allow_empty_first_page = allow_empty_first_page

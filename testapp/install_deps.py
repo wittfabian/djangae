@@ -14,7 +14,7 @@ TARGET_DIR = os.path.join(PROJECT_DIR, "libs")
 
 APPENGINE_TARGET_DIR = os.path.join(TARGET_DIR, "google_appengine")
 
-APPENGINE_SDK_VERSION = "1.9.22"
+APPENGINE_SDK_VERSION = "1.9.26"
 APPENGINE_SDK_FILENAME = "google_appengine_%s.zip" % APPENGINE_SDK_VERSION
 
 # Google move versions from 'featured' to 'deprecated' when they bring
@@ -22,21 +22,13 @@ APPENGINE_SDK_FILENAME = "google_appengine_%s.zip" % APPENGINE_SDK_VERSION
 FEATURED_SDK_REPO = "https://storage.googleapis.com/appengine-sdks/featured/"
 DEPRECATED_SDK_REPO = "https://storage.googleapis.com/appengine-sdks/deprecated/%s/" % APPENGINE_SDK_VERSION.replace('.', '')
 
-DJANGO_VERSION = os.environ.get("DJANGO_VERSION", "1.6")
-NEXT_DJANGO_VERSION = {
-    "1.5": "1.6",
-    "1.6": "1.7",
-    "1.7": "1.8",
-    "1.8": "1.9",
-    "1.9": "2.0",
-    "2.0": "2.1",
-}
+DJANGO_VERSION = os.environ.get("DJANGO_VERSION", "1.7")
 
 if DJANGO_VERSION != "master":
-    DJANGO_FOR_PIP = "django>={},<{}".format(DJANGO_VERSION, NEXT_DJANGO_VERSION[DJANGO_VERSION])
+    DJANGO_FOR_PIP = "https://github.com/django/django/archive/stable/{}.x.tar.gz".format(DJANGO_VERSION)
     DJANGO_TESTS_URL = "https://github.com/django/django/archive/stable/{}.x.zip".format(DJANGO_VERSION)
 else:
-    DJANGO_FOR_PIP = "git+git://github.com/django/django.git@master"
+    DJANGO_FOR_PIP = "https://github.com/django/django/archive/master.tar.gz"
     DJANGO_TESTS_URL = "https://github.com/django/django/archive/master.zip"
 
 if __name__ == '__main__':

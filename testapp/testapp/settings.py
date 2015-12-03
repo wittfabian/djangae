@@ -32,10 +32,12 @@ ALLOWED_HOSTS = []
 # Application definition
 
 INSTALLED_APPS = [
+    'djangae',
     'django.contrib.admin',
     'django.contrib.auth',
     'djangae.contrib.gauth.datastore',
     'djangae.contrib.security',
+    'djangae.contrib.consistency',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.sites',
@@ -45,13 +47,8 @@ INSTALLED_APPS = [
     'djangae.contrib.mappers',
     'djangae.contrib.pagination',
     'djangae.contrib.uniquetool',
-    'djangae',
     'testapp'
 ]
-# In 1.7+, djangae needs to come first in INSTALLED_APPS
-if django.VERSION >= (1, 7, 0, 0, 0):
-    INSTALLED_APPS.remove('djangae')
-    INSTALLED_APPS = ['djangae'] + INSTALLED_APPS
 
 TO_TEST = []
 
@@ -60,10 +57,9 @@ if "test" in sys.argv:
     import tempfile
     import django
 
-    if 'alpha' in django.VERSION or 'beta' in django.VERSION or 'rc' in django.VERSION:
-        tests_dir = os.path.join(BASE_DIR, "libs", "django-master/tests".format(*django.VERSION[:2]))
-    else:
-        tests_dir = os.path.join(BASE_DIR, "libs", "django-stable-{}.{}.x/tests".format(*django.VERSION[:2]))
+    tests_dir = os.path.join(BASE_DIR, "libs", "django-stable-{}.{}.x/tests".format(*django.VERSION[:2]))
+    if not os.path.exists(tests_dir):
+        tests_dir = os.path.join(BASE_DIR, "libs", "django-master/tests")
 
     sys.path.insert(0, tests_dir)
 

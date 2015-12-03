@@ -187,34 +187,34 @@ class SimulatedContentTypeManager(Manager):
         pass
 
 
-def update_contenttypes(app, created_models, verbosity=2, db=DEFAULT_DB_ALIAS, **kwargs):
+def update_contenttypes(sender, verbosity=2, db=DEFAULT_DB_ALIAS, **kwargs):
     """
         Django's default update_contenttypes relies on many inconsistent queries which causes problems
         with syncdb. This monkeypatch replaces it with a version that does look ups on unique constraints
         which are slightly better protected from eventual consistency issues by the context cache.
     """
     if verbosity >= 2:
-        print("Running Djangae version of update_contenttypes on {}".format(app))
+        print("Running Djangae version of update_contenttypes on {}".format(sender))
 
     try:
         apps.get_model('contenttypes', 'ContentType')
     except LookupError:
         return
 
-    if hasattr(router, "allow_syncdb"):
-        if not router.allow_syncdb(db, ContentType):
+    if hasattr(router, "allow_migrate_model"):  # Django >= 1.8
+        if not router.allow_migrate_model(db, ContentType):
             return
     else:
-        if not router.allow_migrate(db, ContentType):
+        if not router.allow_migrate(db, ContentType):  # Django == 1.7
             return
 
 
     ContentType.objects.clear_cache()
-    app_models = apps.get_models(app)
+    app_models = sender.get_models()
     if not app_models:
         return
     # They all have the same app_label, get the first one.
-    app_label = app_models[0]._meta.app_label
+    app_label = sender.label
     app_models = dict(
         (model._meta.model_name, model)
         for model in app_models
@@ -287,17 +287,13 @@ If you're unsure, answer 'no'.
                 print("Stale content types remain.")
 
 
-def patch():
+def patch(sender):
     from django.contrib.contenttypes.management import update_contenttypes as original
 
     if original == update_contenttypes:
         return
 
-    if hasattr(signals, "post_migrate"):
-        signals.post_migrate.disconnect(original)
-
-    if hasattr(signals, "post_syncdb"):
-        signals.post_syncdb.disconnect(original)
+    signals.post_migrate.disconnect(original)
 
     from django.conf import settings
     if getattr(settings, "DJANGAE_SIMULATE_CONTENTTYPES", False):
@@ -306,4 +302,4 @@ def patch():
         if not isinstance(models.ContentType.objects, SimulatedContentTypeManager):
             models.ContentType.objects = SimulatedContentTypeManager()
     else:
-        signals.post_syncdb.connect(update_contenttypes)
+        signals.post_migrate.connect(update_contenttypes, sender=sender)

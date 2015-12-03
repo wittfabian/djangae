@@ -48,8 +48,12 @@ def preprocess_node(node, negated):
                         lhs.value = rhs.value = value
                         lhs.operator = "<"
                         rhs.operator = ">"
-                        new_children.append(lhs)
-                        new_children.append(rhs)
+
+                        bridge = WhereNode()
+                        bridge.connector = "OR"
+                        bridge.children = [ lhs, rhs ]
+
+                        new_children.append(bridge)
                     else:
                         new_node = WhereNode()
                         new_node.operator = "="
@@ -59,7 +63,7 @@ def preprocess_node(node, negated):
 
                 child.column = None
                 child.operator = None
-                child.connector = "OR"
+                child.connector = "AND" if negated else "OR"
                 child.value = None
                 child.children = new_children
 

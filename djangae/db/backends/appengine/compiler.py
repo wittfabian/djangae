@@ -1,16 +1,6 @@
 #LIBRARIES
+import django
 from django.db.models.sql import compiler
-# Following two ImportError blocks are for < 1.6 compatibility
-try:
-    from django.db.models.sql.compiler import SQLDateCompiler as DateCompiler
-except ImportError:
-    class DateCompiler(object):
-        pass
-try:
-    from django.db.models.sql.compiler import SQLDateTimeCompiler as DateTimeCompiler
-except ImportError:
-    class DateTimeCompiler(object):
-        pass
 
 #DJANGAE
 from .commands import (
@@ -77,11 +67,17 @@ class SQLAggregateCompiler(compiler.SQLAggregateCompiler, SQLCompiler):
         return SQLCompiler.as_sql(self, with_limits, with_col_aliases, subquery)
 
 
-class SQLDateCompiler(DateCompiler, SQLCompiler):
-    def as_sql(self, with_limits=True, with_col_aliases=False, subquery=False):
-        return SQLCompiler.as_sql(self, with_limits, with_col_aliases, subquery)
+if django.VERSION < (1, 8):
+    from django.db.models.sql.compiler import (
+        SQLDateCompiler as DateCompiler,
+        SQLDateTimeCompiler as DateTimeCompiler
+    )
+
+    class SQLDateCompiler(DateCompiler, SQLCompiler):
+        def as_sql(self, with_limits=True, with_col_aliases=False, subquery=False):
+            return SQLCompiler.as_sql(self, with_limits, with_col_aliases, subquery)
 
 
-class SQLDateTimeCompiler(DateTimeCompiler, SQLCompiler):
-    def as_sql(self, with_limits=True, with_col_aliases=False, subquery=False):
-        return SQLCompiler.as_sql(self, with_limits, with_col_aliases, subquery)
+    class SQLDateTimeCompiler(DateTimeCompiler, SQLCompiler):
+        def as_sql(self, with_limits=True, with_col_aliases=False, subquery=False):
+            return SQLCompiler.as_sql(self, with_limits, with_col_aliases, subquery)

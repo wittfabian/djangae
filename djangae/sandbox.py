@@ -186,13 +186,42 @@ def _remote(configuration=None, remote_api_stub=None, apiproxy_stub_map=None, **
     os.environ['HTTP_HOST'] = '{0}.appspot.com'.format(app_id)
     os.environ['DEFAULT_VERSION_HOSTNAME'] = os.environ['HTTP_HOST']
 
-    remote_api_stub.ConfigureRemoteApi(
-        None,
-        '/_ah/remote_api',
-        auth_func,
-        servername='{0}.appspot.com'.format(app_id),
-        secure=True,
-    )
+    try:
+        from google.appengine.tools.appcfg import APPCFG_CLIENT_ID, APPCFG_CLIENT_NOTSOSECRET
+        from google.appengine.tools import appengine_rpc_httplib2
+
+        params = appengine_rpc_httplib2.HttpRpcServerOAuth2.OAuth2Parameters(
+            access_token=None,
+            client_id=APPCFG_CLIENT_ID,
+            client_secret=APPCFG_CLIENT_NOTSOSECRET,
+            scope=remote_api_stub._OAUTH_SCOPES,
+            refresh_token=None,
+            credential_file=os.path.expanduser("~/.djangae_oauth2_tokens"),
+            token_uri=None
+        )
+
+        def factory(*args, **kwargs):
+            kwargs["auth_tries"] = 3
+            return appengine_rpc_httplib2.HttpRpcServerOAuth2(*args, **kwargs)
+
+        remote_api_stub.ConfigureRemoteApi(
+            app_id=None,
+            path='/_ah/remote_api',
+            auth_func=params,
+            servername='{0}.appspot.com'.format(app_id),
+            secure=True,
+            save_cookies=True,
+            rpc_server_factory=factory
+        )
+    except ImportError:
+        logging.exception("Unable to use oauth2 falling back to username/password")
+        remote_api_stub.ConfigureRemoteApi(
+            None,
+            '/_ah/remote_api',
+            auth_func,
+            servername='{0}.appspot.com'.format(app_id),
+            secure=True,
+        )
 
     ps1 = getattr(sys, 'ps1', None)
     red = "\033[0;31m"
@@ -275,7 +304,7 @@ def activate(sandbox_name, add_sdk_to_path=False, new_env_vars=None, **overrides
     _PATHS = wrapper_util.Paths(sdk_path)
 
     # Set the path to just the app engine SDK
-    sys.path[:] = _PATHS.script_paths(_SCRIPT_NAME) + _PATHS.scrub_path(_SCRIPT_NAME, original_path)
+    sys.path[:] = _PATHS.script_paths(_SCRIPT_NAME) + _PATHS.scrub_path(_SCRIPT_NAME, original_path) + _PATHS.oauth_client_extra_paths
 
     # Gotta set the runtime properly otherwise it changes appengine imports, like wepapp
     # when you are not running dev_appserver
@@ -342,17 +371,24 @@ def activate(sandbox_name, add_sdk_to_path=False, new_env_vars=None, **overrides
 
 @contextlib.contextmanager
 def allow_mode_write():
+    import tempfile
     from google.appengine.tools.devappserver2.python import stubs
 
     original_modes = stubs.FakeFile.ALLOWED_MODES
     new_modes = set(stubs.FakeFile.ALLOWED_MODES)
     new_modes.add('w')
     new_modes.add('wb')
+
+    original_dirs = stubs.FakeFile._allowed_dirs
+    new_dirs = set(stubs.FakeFile._allowed_dirs).union({ tempfile.gettempdir() })
+
     stubs.FakeFile.ALLOWED_MODES = frozenset(new_modes)
+    stubs.FakeFile._allowed_dirs = frozenset(new_dirs)
     try:
         yield
     finally:
         stubs.FakeFile.ALLOWED_MODES = original_modes
+        stubs.FakeFile._allowed_dirs = original_dirs
 
 
 def allow_modules(func, *args):
@@ -384,7 +420,7 @@ def allow_modules(func, *args):
             mod.__dict__.update(_system.__dict__)
 
         # We have to maintain the environment, or bad things happen
-        os.environ = environ
+        os.environ = environ # This gets monkey patched by GAE
 
         try:
             return func(*args, **kwargs)
@@ -395,5 +431,7 @@ def allow_modules(func, *args):
             for mod in patch_modules:
                 _system = reload(mod)
                 mod.__dict__.update(_system.__dict__)
+            # Put the original os back, again
+            os.environ = environ
 
     return _wrapped

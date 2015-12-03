@@ -13,7 +13,11 @@ This field originated from the django_extensions project: https://github.com/dja
 """
 
 from __future__ import absolute_import
+
+import json
+from collections import OrderedDict
 from decimal import Decimal
+
 from django.db import models
 from django.conf import settings
 from django.utils import six
@@ -21,23 +25,17 @@ from django.core.serializers.json import DjangoJSONEncoder
 
 __all__ = ( 'JSONField',)
 
-try:
-    # Django >= 1.7
-    import json
-except ImportError:
-    # Django <= 1.6 backwards compatibility
-    from django.utils import simplejson as json
-
 
 def dumps(value):
     return DjangoJSONEncoder().encode(value)
 
 
-def loads(txt):
+def loads(txt, object_pairs_hook=None):
     value = json.loads(
         txt,
         parse_float=Decimal,
-        encoding=settings.DEFAULT_CHARSET
+        encoding=settings.DEFAULT_CHARSET,
+        object_pairs_hook=object_pairs_hook,
     )
     return value
 
@@ -67,16 +65,28 @@ class JSONList(list):
         return dumps(self)
 
 
+class JSONOrderedDict(OrderedDict):
+    """
+    As above
+    """
+    def __repr__(self):
+        return dumps(self)
+
+
 class JSONField(six.with_metaclass(models.SubfieldBase, models.TextField)):
     """JSONField is a generic textfield that neatly serializes/unserializes
     JSON objects seamlessly.  Main thingy must be a dict object."""
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, use_ordered_dict=False, *args, **kwargs):
         default = kwargs.get('default', None)
         if default is None:
             kwargs['default'] = '{}'
         elif isinstance(default, (list, dict)):
             kwargs['default'] = dumps(default)
+
+        # use `collections.OrderedDict` rather than built-in `dict`
+        self.use_ordered_dict = use_ordered_dict
+
         models.TextField.__init__(self, *args, **kwargs)
 
     def to_python(self, value):
@@ -84,8 +94,13 @@ class JSONField(six.with_metaclass(models.SubfieldBase, models.TextField)):
         if value is None or value == '':
             return {}
         elif isinstance(value, six.string_types):
-            res = loads(value)
-            if isinstance(res, dict):
+            if self.use_ordered_dict:
+                res = loads(value, object_pairs_hook=OrderedDict)
+            else:
+                res = loads(value)
+            if isinstance(res, OrderedDict) and self.use_ordered_dict:
+                return JSONOrderedDict(res)
+            elif isinstance(res, dict):
                 return JSONDict(**res)
             elif isinstance(res, six.string_types):
                 return JSONUnicode(res)
