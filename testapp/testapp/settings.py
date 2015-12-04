@@ -155,6 +155,10 @@ DJANGAE_ADDITIONAL_TEST_APPS = ["djangae"] + TO_TEST
 
 
 # Here because of "You haven't defined a TEMPLATES setting" deprecation message
-TEMPLATES = []
+TEMPLATES = [
+    {
+        'BACKEND': 'django.template.backends.django.DjangoTemplates',
+    },
+]
 
 from djangae.contrib.gauth.settings import *
