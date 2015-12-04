@@ -19,7 +19,7 @@ class _FakeModel(object):
         setattr(self, field.attname, value)
 
 
-class IterableField(models.TextField):
+class IterableField(models.Field):
     @property
     def _iterable_type(self): raise NotImplementedError()
 
