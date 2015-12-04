@@ -20,6 +20,9 @@ class ComputedFieldMixin(object):
         del kwargs["editable"]
         return name, path, args, kwargs
 
+    def from_db_value(self, value, expression, connection, context):
+        return self.to_python(value)
+
 
 class ComputedCharField(ComputedFieldMixin, models.CharField):
     pass
