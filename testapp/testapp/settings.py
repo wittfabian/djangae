@@ -92,7 +92,9 @@ if "test" in sys.argv:
         "update",
     ]
 
-    for folder in TO_TEST:
+    ADDITIONAL_INSTALLED_APPS = ["file_uploads"]
+
+    for folder in TO_TEST + ADDITIONAL_INSTALLED_APPS:
         if os.path.exists(os.path.join(tests_dir, folder, "tests.py")):
             INSTALLED_APPS.append(folder)
 
