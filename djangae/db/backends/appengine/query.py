@@ -834,7 +834,7 @@ def _extract_projected_columns_from_query_17(query):
         # for all (concrete) inherited models and then only include columns if they appear in that list
         only_load = query.get_loaded_field_names()
         if only_load:
-            for field, model in query.model._meta.get_fields():
+            for field, model in _get_concrete_fields(query.model):
                 model = model or query.model
                 try:
                     if field.name in only_load[model]:
@@ -862,7 +862,7 @@ def _extract_projected_columns_from_query_18(query):
         # for all (concrete) inherited models and then only include columns if they appear in that list
         only_load = query.get_loaded_field_names()
         if only_load:
-            for field, model in query.model._meta.get_fields():
+            for field, model in _get_concrete_fields(query.model):
                 model = model or query.model
                 try:
                     if field.column in only_load[model]:
@@ -968,6 +968,7 @@ def _django_17_query_walk_leaf(node, negated, new_parent, connection, model):
 
     new_parent.children.append(new_node)
 
+
 def _django_17_query_walk_trunk(node, negated, new_parent, **kwargs):
     new_node = WhereNode()
     new_node.connector = node.connector
@@ -976,6 +977,19 @@ def _django_17_query_walk_trunk(node, negated, new_parent, **kwargs):
     new_parent.children.append(new_node)
 
     return new_node
+
+
+def _get_concrete_fields(model):
+    return [
+        (f, f.model if f.model != model else None)
+        for f in model._meta.get_fields()
+        if f.concrete and (
+            not f.is_relation
+            or f.one_to_one
+            or (f.many_to_one and f.related_model)
+        )
+    ]
+
 
 def _transform_query_17(connection, kind, query):
     from django.db.models.sql.datastructures import Date, DateTime
@@ -1180,6 +1194,7 @@ _FACTORY = {
     (1, 9): _transform_query_19
 }
 
+
 def _determine_query_kind_17(query):
     from django.db.models.sql.aggregates import Count
     if query.aggregates:
@@ -1190,6 +1205,7 @@ def _determine_query_kind_17(query):
 
     return "SELECT"
 
+
 def _determine_query_kind_18(query):
     if query.annotations:
         if "__count" in query.annotations:
@@ -1198,6 +1214,7 @@ def _determine_query_kind_18(query):
                 return "COUNT"
 
     return "SELECT"
+
 
 def _determine_query_kind_19(query):
     if query.annotations:
@@ -1214,16 +1231,19 @@ _KIND_FACTORY = {
     (1, 9): _determine_query_kind_19
 }
 
+
 def transform_query(connection, query):
     version = django.VERSION[:2]
     kind = _KIND_FACTORY[version](query)
     return _FACTORY[version](connection, kind, query)
+
 
 _ORDERING_FACTORY = {
     (1, 7): _extract_ordering_from_query_17,
     (1, 8): _extract_ordering_from_query_18,
     (1, 9): _extract_ordering_from_query_18  # Same as 1.8
 }
+
 
 def extract_ordering(query):
     version = django.VERSION[:2]
