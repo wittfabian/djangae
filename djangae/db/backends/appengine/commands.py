@@ -479,7 +479,7 @@ class SelectCommand(object):
                 # conversion here, when really it should be handled elsewhere
                 if isinstance(value, decimal.Decimal):
                     field = get_field_from_column(self.query.model, filter_node.column)
-                    value = self.connection.ops.value_to_db_decimal(value, field.max_digits, field.decimal_places)
+                    value = self.connection.ops.adapt_decimalfield_value(value, field.max_digits, field.decimal_places)
                 elif isinstance(value, basestring):
                     value = coerce_unicode(value)
 

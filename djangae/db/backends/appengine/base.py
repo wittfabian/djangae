@@ -312,13 +312,13 @@ class DatabaseOperations(BaseDatabaseOperations):
         if isinstance(value, datetime.datetime):
             return value
 
-        return self.value_to_db_date(value)
+        return self.adapt_datefield_value(value)
 
     def prep_lookup_time(self, model, value, field):
         if isinstance(value, datetime.datetime):
             return value
 
-        return self.value_to_db_time(value)
+        return self.adapt_timefield_value(value)
 
     def prep_lookup_value(self, model, value, field, column=None):
         if field.primary_key and (not column or column == model._meta.pk.column):
@@ -357,7 +357,7 @@ class DatabaseOperations(BaseDatabaseOperations):
             # Store BlobField, DictField and EmbeddedModelField values as Blobs.
             value = Blob(value)
         elif db_type == 'decimal':
-            value = self.value_to_db_decimal(value, field.max_digits, field.decimal_places)
+            value = self.adapt_decimalfield_value(value, field.max_digits, field.decimal_places)
         elif db_type in ('list', 'set'):
             if hasattr(value, "__len__") and not value:
                 value = None #Convert empty lists to None
@@ -382,25 +382,37 @@ class DatabaseOperations(BaseDatabaseOperations):
     def fetch_returned_insert_id(self, cursor):
         return cursor.lastrowid
 
-    def value_to_db_datetime(self, value):
+    def adapt_datetimefield_value(self, value):
         value = make_timezone_naive(value)
         return value
 
-    def value_to_db_date(self, value):
+    def value_to_db_datetime(self, value):  # Django 1.8 compatibility
+        return self.adapt_datetimefield_value(value)
+
+    def adapt_datefield_value(self, value):
         if value is not None:
             value = datetime.datetime.combine(value, datetime.time())
         return value
 
-    def value_to_db_time(self, value):
+    def value_to_db_date(self, value):  # Django 1.8 compatibility
+        return self.adapt_datefield_value(value)
+
+    def adapt_timefield_value(self, value):
         if value is not None:
             value = make_timezone_naive(value)
             value = datetime.datetime.combine(datetime.datetime.fromtimestamp(0), value)
         return value
 
-    def value_to_db_decimal(self, value, max_digits, decimal_places):
+    def value_to_db_time(self, value):  # Django 1.8 compatibility
+        return self.adapt_timefield_value(value)
+
+    def adapt_decimalfield_value(self, value, max_digits, decimal_places):
         if isinstance(value, decimal.Decimal):
             return decimal_to_string(value, max_digits, decimal_places)
         return value
+
+    def value_to_db_decimal(self, value, max_digits, decimal_places):  # Django 1.8 compatibility
+        return self.adapt_decimalfield_value(value, max_digits, decimal_places)
 
     # Unlike value_to_db, these are not overridden or standard Django, it's just nice to have symmetry
     def value_from_db_datetime(self, value):
