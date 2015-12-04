@@ -619,7 +619,7 @@ def _extract_ordering_from_query_17(query):
             idx = abs(col) - 1
             try:
                 field_name = query.select[idx].col.col[-1]
-                field = query.model._meta.get_field_by_name(field_name)[0]
+                field = query.model._meta.get_field(field_name)
                 final.append("-" + field.column if col < 0 else field.column)
             except IndexError:
                 raise NotSupportedError("Unsupported order_by %s" % col)
@@ -634,7 +634,7 @@ def _extract_ordering_from_query_17(query):
         else:
             try:
                 column = col.lstrip("-")
-                field = query.model._meta.get_field_by_name(column)[0]
+                field = query.model._meta.get_field(column)
                 column = "__key__" if field.primary_key else field.column
                 final.append("-" + column if col.startswith("-") else column)
             except FieldDoesNotExist:
@@ -642,7 +642,7 @@ def _extract_ordering_from_query_17(query):
                     # If the column is in the extra select we transform to the original
                     # column
                     try:
-                        field = opts.get_field_by_name(query.extra_select[col][0])[0]
+                        field = opts.get_field(query.extra_select[col][0])
                         column = "__key__" if field.primary_key else field.column
                         final.append("-" + column if col.startswith("-") else column)
                         continue
@@ -739,7 +739,7 @@ def _extract_ordering_from_query_18(query):
             idx = abs(col) - 1
             try:
                 field_name = query.select[idx].col.col[-1]
-                field = query.model._meta.get_field_by_name(field_name)[0]
+                field = query.model._meta.get_field(field_name)
                 final.append("-" + field.column if col < 0 else field.column)
             except IndexError:
                 raise NotSupportedError("Unsupported order_by %s" % col)
@@ -772,7 +772,7 @@ def _extract_ordering_from_query_18(query):
                         else:
                             column = annotation.col.output_field.column
 
-                field = query.model._meta.get_field_by_name(column)[0]
+                field = query.model._meta.get_field(column)
                 column = "__key__" if field.primary_key else field.column
                 final.append("-" + column if col.startswith("-") else column)
             except FieldDoesNotExist:
@@ -780,7 +780,7 @@ def _extract_ordering_from_query_18(query):
                     # If the column is in the extra select we transform to the original
                     # column
                     try:
-                        field = opts.get_field_by_name(query.extra_select[col][0])[0]
+                        field = opts.get_field(query.extra_select[col][0])
                         column = "__key__" if field.primary_key else field.column
                         final.append("-" + column if col.startswith("-") else column)
                         continue
@@ -834,7 +834,7 @@ def _extract_projected_columns_from_query_17(query):
         # for all (concrete) inherited models and then only include columns if they appear in that list
         only_load = query.get_loaded_field_names()
         if only_load:
-            for field, model in query.model._meta.get_concrete_fields_with_model():
+            for field, model in query.model._meta.get_fields():
                 model = model or query.model
                 try:
                     if field.name in only_load[model]:
@@ -862,7 +862,7 @@ def _extract_projected_columns_from_query_18(query):
         # for all (concrete) inherited models and then only include columns if they appear in that list
         only_load = query.get_loaded_field_names()
         if only_load:
-            for field, model in query.model._meta.get_concrete_fields_with_model():
+            for field, model in query.model._meta.get_fields():
                 model = model or query.model
                 try:
                     if field.column in only_load[model]:
