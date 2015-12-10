@@ -6,8 +6,10 @@ import random
 from cStringIO import StringIO
 from string import letters
 from hashlib import md5
+from unittest import skipIf
 
 # LIBRARIES
+import django
 from django.core.files.uploadhandler import StopFutureHandlers
 from django.core.cache import cache
 from django.core.exceptions import ValidationError
@@ -231,6 +233,15 @@ class DateTimeModel(models.Model):
 
     class Meta:
         app_label = "djangae"
+
+
+if django.VERSION >= (1, 8):
+    # DurationField was only introducd in Django 1.8
+
+    class DurationModel(models.Model):
+
+        duration_field = models.DurationField()
+        duration_field_nullable = models.DurationField(blank=True, null=True)
 
 
 class PaginatorModel(models.Model):
@@ -637,6 +648,40 @@ class BackendTests(TestCase):
             queryset.update(is_mouldy=True)
         obj = TestFruit.objects.get(pk=obj.pk)
         self.assertFalse(obj.is_mouldy)
+
+    @skipIf(django.VERSION < (1, 8), "DurationField only applies to Django <= 1.8")
+    def test_duration_field_stored_as_float(self):
+        """ See issue #512.  We have a bug report that the DurationField comes back as None when
+            the value is set to a particular value which is roughly 3 days. This is caused by it
+            being stored as a float instead of an int in the DB.
+        """
+        td2 = datetime.timedelta(days=2)
+        # If the duration value is stored as a float instead of an int then this particular duration
+        # will cause django.db.backends.base.operations.BaseDatabaseOperations.convert_durationfield_value
+        # to return the value as None
+        td3 = datetime.timedelta(days=3, seconds=14658, microseconds=886540)
+        durations_as_2 = DurationModel.objects.create(
+            duration_field=td2,
+            duration_field_nullable=td2
+        )
+        durations_as_3 = DurationModel.objects.create(
+            duration_field=td3,
+            duration_field_nullable=td3
+        )
+        self.assertEqual(durations_as_2.duration_field, td2)
+        self.assertEqual(durations_as_2.duration_field_nullable, td2)
+        self.assertEqual(durations_as_3.duration_field, td3)
+        self.assertEqual(durations_as_3.duration_field_nullable, td3)
+        durations_as_2 = DurationModel.objects.get(pk=durations_as_2.pk)
+        durations_as_3 = DurationModel.objects.get(pk=durations_as_3.pk)
+        self.assertEqual(durations_as_2.duration_field, td2)
+        self.assertEqual(durations_as_2.duration_field_nullable, td2)
+        self.assertEqual(durations_as_3.duration_field, td3)
+        self.assertEqual(durations_as_3.duration_field_nullable, td3)
+        # And just for good measure, check the raw value in the datastore
+        key = datastore.Key.from_path(DurationModel._meta.db_table, durations_as_3.pk)
+        entity = datastore.Get(key)
+        self.assertTrue(isinstance(entity['duration_field'], (int, long)))
 
 
 class ModelFormsetTest(TestCase):
