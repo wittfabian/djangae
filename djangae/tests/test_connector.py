@@ -235,10 +235,13 @@ class DateTimeModel(models.Model):
         app_label = "djangae"
 
 
-class DurationModel(models.Model):
+if django.VERSION >= (1, 8):
+    # DurationField was only introducd in Django 1.8
 
-    duration_field = models.DurationField()
-    duration_field_nullable = models.DurationField(blank=True, null=True)
+    class DurationModel(models.Model):
+
+        duration_field = models.DurationField()
+        duration_field_nullable = models.DurationField(blank=True, null=True)
 
 
 class PaginatorModel(models.Model):
