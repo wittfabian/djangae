@@ -349,7 +349,15 @@ class DatabaseOperations(BaseDatabaseOperations):
 
         db_type = field.db_type(self.connection)
 
-        if db_type == 'string' or db_type == 'text':
+        if db_type in ('integer', 'long'):
+            if isinstance(value, float):
+                # round() always returns a float, which has a smaller max value than an int
+                # so only round() it if it's already a float
+                value = round(value)
+            value = long(value)
+        elif db_type == 'float':
+            value = float(value)
+        elif db_type == 'string' or db_type == 'text':
             value = coerce_unicode(value)
             if db_type == 'text':
                 value = Text(value)
