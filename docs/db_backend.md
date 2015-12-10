@@ -214,7 +214,6 @@ multiple database support. To configure multiple datastore namespaces, you can a
 DATABASES = {
     'default': {
         'ENGINE': 'djangae.db.backends.appengine'
-        'NAMESPACE': 'default'
     },
     'archive': {
         'ENGINE': 'djangae.db.backends.appengine'
@@ -222,6 +221,8 @@ DATABASES = {
     }
 }
 ```
+
+If you do not specify a `NAMESPACE` for a connection, then the Datastore's default namespace will be used (i.e. no namespace).
 
 You can make use of Django's routers, the `using()` method, and the `save(using='...')` in the same way as normal multi-database support.
 
