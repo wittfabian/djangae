@@ -1670,6 +1670,7 @@ class TestSpecialIndexers(TestCase):
 
 
 class NamespaceTests(TestCase):
+    multi_db = True
 
     @skipIf("ns1" not in settings.DATABASES, "This test is designed for the Djangae testapp settings")
     def test_database_specific_namespaces(self):
