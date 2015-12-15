@@ -489,12 +489,14 @@ class Query(object):
             for child in node.children[:]:
                 if (negated and child.operator == "=") or child.operator in (">", "<", ">=", "<="):
                     inequality_fields.add(child.column)
-                    if len(inequality_fields) > 1:
-                        raise NotSupportedError(
-                            "You can only have one inequality filter per query on the datastore"
-                        )
-
                 walk(child, negated)
+
+            if len(inequality_fields) > 1:
+                raise NotSupportedError(
+                    "You can only have one inequality filter per query on the datastore. "
+                    "Filters were: %s" % ' '.join(inequality_fields)
+                )
+
         if self.where:
             walk(self._where, False)
 
