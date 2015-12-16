@@ -217,7 +217,7 @@ class ModelWithUniquesAndOverride(models.Model):
 
 
 class SpecialIndexesModel(models.Model):
-    name = models.CharField(max_length=255)
+    name = models.CharField(max_length=255, primary_key=True)
     sample_list = ListField(models.CharField)
 
     def __unicode__(self):
@@ -1557,8 +1557,8 @@ class TestSpecialIndexers(TestCase):
             ['-Tesst-'],
             ['-test-']
         ]
-        for sample_list in self.lists:
-            SpecialIndexesModel.objects.create(sample_list=sample_list)
+        for i, sample_list in enumerate(self.lists):
+            SpecialIndexesModel.objects.create(name=i, sample_list=sample_list)
 
         self.qry = SpecialIndexesModel.objects.all()
 

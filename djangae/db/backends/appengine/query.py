@@ -146,6 +146,10 @@ class WhereNode(object):
 
         # Do any special index conversions necessary to perform this lookup
         if operator in REQUIRES_SPECIAL_INDEXES:
+            if is_pk_field:
+                column = model._meta.pk.column
+                value = unicode(value.id_or_name())
+
             add_special_index(target_field.model, column, operator, value)
             indexer = REQUIRES_SPECIAL_INDEXES[operator]
             index_type = indexer.prepare_index_type(operator, value)
