@@ -65,7 +65,11 @@ def acquire_identifiers(identifiers, entity_key):
             if not marker.instance and (datetime.datetime.utcnow() - marker.created).seconds > 5:
                 marker.delete()
             elif marker.instance and marker.instance != entity_key and key_exists(marker.instance):
-                raise IntegrityError("Unable to acquire marker for %s" % identifier)
+                fields_and_values = identifier.split("|")
+                table_name = fields_and_values[0]
+                fields_and_values = fields_and_values[1:]
+                fields = [ x.split(":")[0] for x in fields_and_values ]
+                raise IntegrityError("Unique constraint violation for kind {} on fields: {}".format(table_name, ", ".join(fields)))
             else:
                 # The marker is ours anyway
                 return marker
