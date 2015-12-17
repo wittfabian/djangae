@@ -225,7 +225,7 @@ class CloudStorage(Storage, BlobstoreUploadMixin):
     """
     write_options = None
 
-    def __init__(self, bucket=None):
+    def __init__(self, bucket=None, google_acl='private'):
         if not bucket:
             bucket = get_bucket_name()
         self.bucket = bucket
@@ -236,6 +236,9 @@ class CloudStorage(Storage, BlobstoreUploadMixin):
             self.api_url = '/_ah/gcs'
         else:
             self.api_url = 'https://storage.googleapis.com'
+
+        self.write_options = self.__class__.write_options or {}
+        self.write_options['x-goog-acl'] = google_acl
 
     def url(self, filename):
         return urllib.quote(
