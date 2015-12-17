@@ -41,7 +41,7 @@ class GaeAbstractBaseUser(AbstractBaseUser):
     username = models.CharField(
         # This stores the Google user_id, or custom username for non-Google-based users.
         # We allow it to be null so that Google-based users can be pre-created before they log in.
-        _('User ID'), max_length=21, unique=True, null=True, default=None,
+        _('User ID'), max_length=21, unique=True, null=True, blank=True, default=None,
         validators=[
             validators.RegexValidator(re.compile('^\d{21}$'), _('User Id should be 21 digits.'), 'invalid')
         ]
