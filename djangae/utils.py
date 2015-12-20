@@ -163,13 +163,25 @@ def djangae_webapp(request_handler):
         class Route:
             handler_method = request.method.lower()
 
-        req = Request(request.environ)
+        environ = request.environ
+        environ.pop('CONTENT_LENGTH', None)
+        environ.pop('HTTP_CONTENT_LENGTH', None)
+        environ.pop('wsgi.input', None)
+
+        req = Request(environ)
+        req.body = request.body
         req.route = Route()
         req.route_args = args
         req.route_kwargs = kwargs
         req.app = WSGIApplication()
+
+        # Might be a good idea to make sure that __local is always used here. See docs:
+        # https://webapp-improved.appspot.com/api/webapp2.html#webapp2.WSGIApplication.set_globals
+        req.app.set_globals(app=req.app, request=req)
+
         response = Response()
         view_func = request_handler(req, response)
+
         view_func.dispatch()
 
         django_response = HttpResponse(response.body, status=int(str(response.status).split(" ")[0]))
