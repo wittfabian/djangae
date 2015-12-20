@@ -27,8 +27,5 @@ class ProgrammingError(DatabaseError):
 class InterfaceError(DatabaseError):
     pass
 
-def Binary(val):
-    return val
-
 Error = DatabaseError
 Warning = DatabaseError
