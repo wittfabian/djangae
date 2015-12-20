@@ -482,6 +482,7 @@ class DatabaseCreation(BaseDatabaseCreation):
         'URLField':                   'string',
         'TextField':                  'text',
         'XMLField':                   'text',
+        'BinaryField':                'bytes'
     }
 
     def __init__(self, *args, **kwargs):
