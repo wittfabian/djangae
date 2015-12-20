@@ -888,7 +888,7 @@ class InsertCommand(object):
             return result
         except:
             # We never want this to cause things to die
-            logging.exception("Unable to translate query to string")
+            logging.info("InsertCommand is unable to translate query to string")
             return u"QUERY TRANSLATION ERROR"
 
     def __repr__(self):
