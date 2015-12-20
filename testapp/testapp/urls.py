@@ -5,6 +5,7 @@ from django.contrib import admin
 admin.autodiscover()
 
 import djangae.urls
+import djangae.contrib.mapreduce.urls
 
 def do_something():
     return
@@ -24,6 +25,7 @@ urlpatterns = patterns('',
     url(r'^_ah/', include(djangae.urls)),
     url(r'^admin/', include(admin.site.urls)),
     url(r'^auth/', include('djangae.contrib.gauth.urls')),
+    url(r'^mapreduce/', include(djangae.contrib.mapreduce.urls)),
     url(r'^$', view_that_defers),
 )
 
