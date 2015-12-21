@@ -76,10 +76,3 @@ class DjangoInputReader(input_readers.InputReader):
         assert len(sorted_keys) >= shard_count
         index_stride = len(sorted_keys) / float(shard_count)
         return [sorted_keys[int(round(index_stride * i))] for i in range(1, shard_count)]
-
-    @classmethod
-    def validate(cls, mapper_spec):
-        """
-        """
-        if mapper_spec.input_reader_class() != cls:
-            raise BadReaderParamsError("Input reader class mismatch")
