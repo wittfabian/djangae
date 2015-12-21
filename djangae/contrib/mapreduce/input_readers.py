@@ -12,6 +12,8 @@ class DjangoInputReader(input_readers.InputReader):
         self.pk__gt = pk__gt
         self.pk__lte = pk__lte
         self.filters = filters
+        self.shard_id = shard_id
+        print 'NEW_SHARD:{0}'.format(shard_id)
 
     def __iter__(self):
         filters = {}
@@ -37,12 +39,14 @@ class DjangoInputReader(input_readers.InputReader):
             'pk__gt': self.pk__gt,
             'pk__lte': self.pk__lte,
             'filters': self.filters,
+            'shard_id': self.shard_id,
         }
 
     @classmethod
     def split_input(cls, mapper_spec):
         """
         """
+        print 'SPLITTING'
         params = input_readers._get_params(mapper_spec)
         app, model = params['model'].split('.')
         model = apps.get_model(app, model)
@@ -56,15 +60,14 @@ class DjangoInputReader(input_readers.InputReader):
 
         random_keys.sort()
         if len(random_keys) > shard_count:
-            random_keys = cls._choose_split_points(random_keys, shard_count)
-
+            random_keys = cls._choose_split_points(random_keys, shard_count) + [None,]
         keyranges = []
-        keyranges.append(DjangoInputReader(params['model'], pk__lte=random_keys[0], filters=filters))
-        if len(random_keys) > 2:
-            for i in range(1, len(keyranges)-2):
-                keyranges.append(DjangoInputReader(params['model'], pk__gt=random_keys[i-1], pk__lte=random_keys[i], filters=filters))
-        keyranges.append(DjangoInputReader(params['model'], pk__gt=random_keys[len(keyranges) - 1], filters=filters))
-
+        for i, key in enumerate(random_keys):
+            if key is None:
+                break
+            if i == 0:
+                keyranges.append(DjangoInputReader(params['model'], pk__lte=key, filters=filters, shard_id=i))
+            keyranges.append(DjangoInputReader(params['model'], pk__gt=key, pk__lte=random_keys[i+1], filters=filters, shard_id=i+1))
         return keyranges
 
     @classmethod

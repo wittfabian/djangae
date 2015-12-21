@@ -23,7 +23,7 @@ class MapreduceTestCase(TestCase):
         super(MapreduceTestCase, self).setUp()
 
 
-    def test_mapreduce(self):
+    def test_mapreduce_basic(self):
         """
             Tests mapreduce
         """
@@ -40,7 +40,10 @@ class MapreduceTestCase(TestCase):
         pipe.start()
         process_task_queues()
 
-    def test_django_input(self):
+    def test_mapreduce_django_input(self):
+        nodes = TestNode.objects.all()
+        for node in nodes:
+            self.assertEqual(node.counter, 1)
         pipe = MapreducePipeline(
             "word_count",
             "djangae.contrib.mapreduce.tests.model_counter_increment",
@@ -49,22 +52,25 @@ class MapreduceTestCase(TestCase):
             "mapreduce.output_writers.GoogleCloudStorageOutputWriter",
             mapper_params={'count': 10, 'input_reader': {'model': 'mapreduce.TestNode'}},
             reducer_params={"mime_type": "text/plain", 'output_writer': {'bucket_name': 'test'}},
-            shards=3
+            shards=5
         )
         pipe.start()
         process_task_queues()
+        nodes = TestNode.objects.all()
+        for node in nodes:
+            self.assertEqual(node.counter, 2)
 
 
 def letter_count_map(data):
     """Word Count map function."""
     letters = [x for x in data]
-    logging.debug("Got %s", letters)
     for l in letters:
         yield (l, "")
 
 def model_counter_increment(instance):
     """Word Count map function."""
     instance.counter += 1
+    instance.save()
     yield (instance.pk, "")
 
 def word_count_reduce(key, values):
