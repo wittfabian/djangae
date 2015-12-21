@@ -13,7 +13,6 @@ class DjangoInputReader(input_readers.InputReader):
         self.pk__lte = pk__lte
         self.filters = filters
         self.shard_id = shard_id
-        print 'NEW_SHARD:{0}'.format(shard_id)
 
     def __iter__(self):
         filters = {}
@@ -46,7 +45,6 @@ class DjangoInputReader(input_readers.InputReader):
     def split_input(cls, mapper_spec):
         """
         """
-        print 'SPLITTING'
         params = input_readers._get_params(mapper_spec)
         app, model = params['model'].split('.')
         model = apps.get_model(app, model)
