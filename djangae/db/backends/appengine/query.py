@@ -492,6 +492,10 @@ class Query(object):
                 walk(child, negated)
 
             if len(inequality_fields) > 1:
+                # Debugging for #540
+                logging.info("self.where: %s", self.where)
+                # End debugging
+
                 raise NotSupportedError(
                     "You can only have one inequality filter per query on the datastore. "
                     "Filters were: %s" % ' '.join(inequality_fields)
