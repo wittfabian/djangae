@@ -498,6 +498,9 @@ class BackendTests(TestCase):
         # But apparently excluding the same field twice is OK
         self.assertItemsEqual([banana], list(TestFruit.objects.exclude(origin="England").exclude(name="Pear").order_by("origin")))
 
+        # And apparently having both a __gt and a __lt filter on the same field is also fine
+        self.assertItemsEqual([banana], list(TestFruit.objects.order_by().filter(name__lt="Pear", name__gt="Apple")))
+
     def test_excluding_pks_is_emulated(self):
         apple = TestFruit.objects.create(name="Apple", color="Green", is_mouldy=True, origin="England")
         banana = TestFruit.objects.create(name="Banana", color="Yellow", is_mouldy=True, origin="Dominican Republic")
