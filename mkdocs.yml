@@ -6,6 +6,7 @@ pages:
 - The Database Backend: db_backend.md
 - Djangae Model Fields: fields.md
 - Local/remote management commands: sandbox.md
+- Storage backends: storage.md
 - Contrib apps:
   - Pagination: pagination.md
   - Gauth: gauth.md
