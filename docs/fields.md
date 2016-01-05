@@ -71,7 +71,7 @@ It works by creating a set of `CounterShard` objects, each of which stores a cou
 
 When you access the attribute of your sharded counter field on your model, you get a `RelatedShardManager` object, which has the following API:
 
-* `.value()`: Gives you the value of counter.
+* `.value()`: Gives you the value of counter.  This is immediately consistent (i.e. is not affected by the Datastore's eventual consistency behaviour).
 * `.increment(step=1)`: Transactionally increment the counter by the given step.
     - If you have not yet called `.populate()` then this might also cause your model object to be re-saved, depending on whether or not it needs to create a new shard.
 * `.decrement(step=1)`: Transactionally decrement the counter by the given step.
