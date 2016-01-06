@@ -150,9 +150,6 @@ class WhereNode(object):
             indexer = REQUIRES_SPECIAL_INDEXES[operator]
             index_type = indexer.prepare_index_type(operator, value)
             value = indexer.prep_value_for_query(value)
-            if not indexer.validate_can_be_indexed(value, negated):
-                raise NotSupportedError("Unsupported special index or value '%s %s'" % (column, operator))
-
             column = indexer.indexed_column_name(column, value, index_type)
             operator = indexer.prep_query_operator(operator)
 
