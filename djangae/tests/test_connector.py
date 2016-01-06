@@ -1320,6 +1320,14 @@ class EdgeCaseTests(TestCase):
         user = TestUser.objects.get(id__iexact=str(self.u1.id))
         self.assertEqual("A", user.username)
 
+    def test_year(self):
+        user = TestUser.objects.create(username="Z", email="z@example.com")
+        user.last_login = datetime.datetime(2000,1,1,0,0,0)
+        user.save()
+
+        self.assertEqual(len(TestUser.objects.filter(last_login__year=3000)), 0)
+        self.assertEqual(TestUser.objects.filter(last_login__year=2000).first().pk, user.pk)
+
     def test_ordering(self):
         users = TestUser.objects.all().order_by("username")
 
