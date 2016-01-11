@@ -1,7 +1,9 @@
 import os
+import re
 from optparse import make_option
 
 from django.core.management.commands.runserver import BaseRunserverCommand
+from django.conf import settings
 
 from datetime import datetime
 
@@ -11,6 +13,9 @@ from google.appengine.tools.sdk_update_checker import (
     _VersionList
 )
 
+DJANGAE_RUNSERVER_IGNORED_FILES_REGEXES = []
+if settings.DJANGAE_RUNSERVER_IGNORED_FILES_REGEXES:
+    DJANGAE_RUNSERVER_IGNORED_FILES_REGEXES = [re.compile(regex) for regex in settings.DJANGAE_RUNSERVER_IGNORED_FILES_REGEXES]
 
 def ignore_file(filename):
     """Report whether a file should not be watched."""
@@ -19,8 +24,10 @@ def ignore_file(filename):
     return(
         filename.startswith(watcher_common._IGNORED_PREFIX) or
         any(filename.endswith(suffix) for suffix in watcher_common._IGNORED_FILE_SUFFIXES) or
-        watcher_common._IGNORED_REGEX.match(filename)
+        watcher_common._IGNORED_REGEX.match(filename) or
+        any(regex.match(filename) for regex in DJANGAE_RUNSERVER_IGNORED_FILES_REGEXES)
     )
+
 
 
 class Command(BaseRunserverCommand):
