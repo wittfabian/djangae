@@ -13,9 +13,9 @@ from google.appengine.tools.sdk_update_checker import (
     _VersionList
 )
 
-DJANGAE_RUNSERVER_IGNORED_FILES_REGEXES = []
-if settings.DJANGAE_RUNSERVER_IGNORED_FILES_REGEXES:
-    DJANGAE_RUNSERVER_IGNORED_FILES_REGEXES = [re.compile(regex) for regex in settings.DJANGAE_RUNSERVER_IGNORED_FILES_REGEXES]
+DJANGAE_RUNSERVER_IGNORED_FILES_REGEXES = getattr(settings, "DJANGAE_RUNSERVER_IGNORED_FILES_REGEXES", [])
+if DJANGAE_RUNSERVER_IGNORED_FILES_REGEXES:
+    DJANGAE_RUNSERVER_IGNORED_FILES_REGEXES = [re.compile(regex) for regex in DJANGAE_RUNSERVER_IGNORED_FILES_REGEXES]
 
 def ignore_file(filename):
     """Report whether a file should not be watched."""
