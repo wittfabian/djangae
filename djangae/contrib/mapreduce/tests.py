@@ -3,6 +3,7 @@ from django.db import models
 from djangae.test import TestCase
 from djangae.test import process_task_queues
 from djangae.contrib.mapreduce.input_readers import DjangoInputReader
+from djangae.contrib.mapreduce.shortcuts import django_csv_reduce_pipeline
 import webapp2
 from mapreduce.mapreduce_pipeline import MapreducePipeline
 
@@ -95,6 +96,13 @@ class MapreduceTestCase(TestCase):
         nodes = TestNode.objects.all()
         for node in nodes:
             self.assertEqual(node.counter, 2)
+
+    def test_csv_shortcut(self):
+        pipe = django_csv_reduce_pipeline('mapreduce.TestNode', ['counter',])
+        pipe.start()
+        process_task_queues()
+        import ipdb; ipdb.set_trace()
+        pipline_id = pipe.pipeline_id
 
 
 def letter_count_map(data):

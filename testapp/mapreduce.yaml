@@ -1,0 +1,8 @@
+mapreduce:
+- name: Check this shit out
+  mapper:
+    input_reader: mapreduce.input_readers.DatastoreInputReader
+    handler: main.process
+    params:
+    - name: entity_kind
+      default: lol

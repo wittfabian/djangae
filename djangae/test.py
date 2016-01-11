@@ -55,40 +55,60 @@ def _flush_tasks(stub, queue_name=None):
         for queue in stub.GetQueues():
             stub.FlushQueue(queue["name"])
 
+def process_task(task, client=None):
+    decoded_body = task['body'].decode('base64')
+    post_data = decoded_body
+    headers = { "HTTP_{}".format(x.replace("-", "_").upper()): y for x, y in task['headers'] }
+    if client is None:
+        client = Client()
+    #FIXME: set headers like the queue name etc.
+    method = task['method']
+
+    if method.upper() == "POST":
+        #Fixme: post data?
+        response = client.post(task['url'], data=post_data, content_type=headers['HTTP_CONTENT_TYPE'], **headers)
+    else:
+        response = client.get(task['url'], **headers)
+
+    if response.status_code != 200:
+        logging.info("Unexpected status ({}) while simulating task with url: {}".format(response.status_code, task['url']))
+
+def process_pipelines(queue_name=None):
+    """
+        Processes any queued tasks inline without a server.
+        This is useful for end-to-end testing background tasks.
+    """
+    stub = apiproxy_stub_map.apiproxy.GetStub("taskqueue")
+    tasks = _get_queued_tasks(stub, queue_name)
+    client = Client() # Instantiate a test client for processing the tasks
+
+    while tasks:
+        task = tasks[0] # Get the first task
+        try:
+            process_task(task, client=client)
+            tasks.pop(0)
+        except Exception as exc:
+            continue
+        if not tasks:
+            #The map reduce may have added more tasks, so refresh the list
+            tasks = _get_queued_tasks(stub, queue_name)
+
 def process_task_queues(queue_name=None):
     """
         Processes any queued tasks inline without a server.
         This is useful for end-to-end testing background tasks.
     """
-
     stub = apiproxy_stub_map.apiproxy.GetStub("taskqueue")
-
     tasks = _get_queued_tasks(stub, queue_name)
-
     client = Client() # Instantiate a test client for processing the tasks
 
     while tasks:
         task = tasks.pop(0) # Get the first task
-
-        decoded_body = task['body'].decode('base64')
-        post_data = decoded_body
-        headers = { "HTTP_{}".format(x.replace("-", "_").upper()): y for x, y in task['headers'] }
-
-        #FIXME: set headers like the queue name etc.
-        method = task['method']
-
-        if method.upper() == "POST":
-            #Fixme: post data?
-            response = client.post(task['url'], data=post_data, content_type=headers['HTTP_CONTENT_TYPE'], **headers)
-        else:
-            response = client.get(task['url'], **headers)
-
-        if response.status_code != 200:
-            logging.info("Unexpected status ({}) while simulating task with url: {}".format(response.status_code, task['url']))
-
+        process_task(task, client=client)
         if not tasks:
             #The map reduce may have added more tasks, so refresh the list
             tasks = _get_queued_tasks(stub, queue_name)
+
 
 class TestCase(test.TestCase):
     def setUp(self):
