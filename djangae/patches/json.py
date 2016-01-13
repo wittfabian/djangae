@@ -4,8 +4,8 @@ def additional_type_handler(func):
     @wraps(func)
     def _wrapper(self, o):
         if isinstance(o, set):
-            # Return a string representing a set
-            return "{" + ",".join([str(x) for x in o]) + "}"
+            # Treat sets as lists.
+            return list(o)
         else:
             return func(self, o)
 
