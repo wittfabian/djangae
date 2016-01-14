@@ -281,6 +281,22 @@ class BackendTests(TestCase):
         entity["name"] = [ "Bob", "Fred", "Dave" ]
         self.assertTrue(entity_matches_query(entity, query))  # ListField test
 
+    def test_exclude_pks_with_slice(self):
+        for i in range(10):
+            TestFruit.objects.create(name=str(i), color=str(i))
+
+        to_exclude = [ str(x) for x in range(5) ]
+
+        to_return = TestFruit.objects.exclude(pk__in=set(to_exclude)).values_list("pk", flat=True)[:2]
+        self.assertEqual(2, len(to_return))
+
+        qs = TestFruit.objects.filter(
+            pk__in=to_return
+        )
+
+        self.assertEqual(2, len(qs))
+
+
     def test_count_on_excluded_pks(self):
         TestFruit.objects.create(name="Apple", color="Red")
         TestFruit.objects.create(name="Orange", color="Orange")

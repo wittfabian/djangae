@@ -154,6 +154,7 @@ There are various solutions and workarounds for these issues.
     - The model has got concrete parents.
 * Doing an `.only('foo')` or `.defer('bar')` with a `pk_in=[...]` filter may not be more efficient. This is because we must perform a projection query for each key, and although we send them over the RPC in batches of 30, the RPC costs may outweigh the savings of a plain old datastore.Get. You should profile and check to see whether using only/defer results in a speed improvement for your use case.
 * Due to the way it has to be implemented on the Datastore, an `update()` query is not particularly fast, and other than avoiding calling the `save()` method on each object it doesn't offer much speed advantage over iterating over the objects and modifying them.  However, it does offer significant integrity advantages, see [General behaviours](#general-behaviours) section above.
+* Doing filter(pk__in=Something.objects.values_list('pk', flat=True)) will implicitly evaluate the inner query while preparing to run the outer one. This means two queries, not one like SQL would do!
 
 
 
