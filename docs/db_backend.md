@@ -203,6 +203,32 @@ The following functions are available to manage transactions:
  - `djangae.db.transaction.in_atomic_block` - Returns True if inside a transaction, False otherwise
 
 
+## Multiple Namespaces (Experimental)
+
+**Namespace support is new and experimental, please make sure your code is well tested and report any bugs**
+
+It's possible to create separate "databases" on the datastore via "namespaces". This is supported in Djangae through the normal Django
+multiple database support. To configure multiple datastore namespaces, you can add an optional "NAMESPACE" to the DATABASES setting:
+
+```
+DATABASES = {
+    'default': {
+        'ENGINE': 'djangae.db.backends.appengine'
+    },
+    'archive': {
+        'ENGINE': 'djangae.db.backends.appengine'
+        'NAMESPACE': 'archive'
+    }
+}
+```
+
+If you do not specify a `NAMESPACE` for a connection, then the Datastore's default namespace will be used (i.e. no namespace).
+
+You can make use of Django's routers, the `using()` method, and the `save(using='...')` in the same way as normal multi-database support.
+
+Cross-namespace foreign keys aren't supported. Also namespaces effect caching keys and unique markers (which are also restricted to a namespace).
+
+
 ## Migrations
 
 The App Engine Datastore is a schemaless database, so the idea of migrations in the normal Django sense doesn't really apply in the same way.
@@ -217,3 +243,4 @@ However, there are some behaviours of the Datastore which mean that in some case
 * If you remove a model field, the underlying Datastore entities will still contain the value until they are re-saved.  When you re-save each instance of the model the underlying entity will be overwritten, wiping out the removed field, but if you want to immediately destroy some sensitive data or reduce your used storage quota then simplying removing the field from the model will have no effect.
 
 For these reasons there is a legitimate case for implementing some kind of variant of the Django migration system for Datastore-backed models.  See the [migrations ticket on GitHub](https://github.com/potatolondon/djangae/issues/438) for more info.
+
