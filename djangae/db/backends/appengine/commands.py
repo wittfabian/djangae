@@ -1046,7 +1046,12 @@ class UpdateCommand(object):
         # fails inside this transaction. Given as we are just using MockInstance so that we can
         # call django_instance_to_entity it on it with the subset of fields we pass in,
         # what we have is fine.
-        instance = MockInstance(**instance_kwargs)
+        meta = self.model._meta
+        instance = MockInstance(
+            _original=MockInstance(_meta=meta, **result),
+            _meta=meta,
+            **instance_kwargs
+        )
 
         # We need to add to the class attribute, rather than replace it!
         original_class = result.get(POLYMODEL_CLASS_ATTRIBUTE, [])

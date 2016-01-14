@@ -9,6 +9,7 @@ from hashlib import md5
 from unittest import skipIf
 
 # LIBRARIES
+import django
 from django.conf import settings
 from django.core.files.uploadhandler import StopFutureHandlers
 from django.core.cache import cache
@@ -684,7 +685,7 @@ class BackendTests(TestCase):
         self.assertEqual(durations_as_3.duration_field, td3)
         self.assertEqual(durations_as_3.duration_field_nullable, td3)
         # And just for good measure, check the raw value in the datastore
-        key = datastore.Key.from_path(DurationModel._meta.db_table, durations_as_3.pk)
+        key = datastore.Key.from_path(DurationModel._meta.db_table, durations_as_3.pk, namespace=DEFAULT_NAMESPACE)
         entity = datastore.Get(key)
         self.assertTrue(isinstance(entity['duration_field'], (int, long)))
 
