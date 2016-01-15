@@ -746,16 +746,16 @@ class SelectCommand(object):
 
             result = u" ".join([
                 qry["kind"],
-                ", ".join(qry["columns"] if qry["projection_possible"] and qry["columns"] else ["*"]),
-                "FROM",
+                u", ".join(qry["columns"] if qry["projection_possible"] and qry["columns"] else ["*"]),
+                u"FROM",
                 qry["concrete_table"]
             ])
 
             if qry["where"]:
-                result += " " + u" ".join([
-                    "WHERE",
-                    " OR ".join([
-                        " AND ".join( [ "{} {}".format(k, v) for k, v in x.iteritems() ])
+                result += u" " + u" ".join([
+                    u"WHERE",
+                    u" OR ".join([
+                        u" AND ".join( [ u"{} {}".format(k, v) for k, v in x.iteritems() ])
                         for x in qry["where"]
                     ])
                 ])

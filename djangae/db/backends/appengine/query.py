@@ -588,7 +588,7 @@ class Query(object):
 
                 query = {}
                 for lookup in node.children:
-                    query[''.join([lookup.column, lookup.operator])] = str(lookup.value)
+                    query[''.join([lookup.column, lookup.operator])] = unicode(lookup.value)
 
                 where.append(query)
 
