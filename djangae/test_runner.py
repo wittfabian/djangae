@@ -102,10 +102,14 @@ def bed_wrap(test):
 class SkipUnsupportedTestResult(TextTestResult):
     def addError(self, test, err):
         skip = os.environ.get("SKIP_UNSUPPORTED", True)
-        if skip and err[0] in (NotSupportedError,):
+        # If the error is a NotSupportedError and the test is a Django test (where we expect some
+        # functionality to be unsupported) rather than a Djangae test (where our tests should be
+        # written to explicitly state which things are and aren't supported) then skip it
+        if skip and err[0] in (NotSupportedError,) and test.__module__.split(".")[0] != "djangae":
             self.addExpectedFailure(test, err)
         else:
             super(SkipUnsupportedTestResult, self).addError(test, err)
+
 
 class DjangaeTestSuiteRunner(DiscoverRunner):
     def _discover_additional_tests(self):

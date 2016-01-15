@@ -1,10 +1,8 @@
-import unittest
-
 from google.appengine.api import datastore
 from google.appengine.api import datastore_errors
 from google.appengine.ext.db import non_transactional
 
-from django.db import models
+from django.db import connection as default_connection, models
 from django.http import HttpRequest
 from django.core.signals import request_finished, request_started
 from django.core.cache import cache
@@ -16,6 +14,9 @@ from djangae.db import transaction
 from djangae.db.backends.appengine.context import ContextStack
 from djangae.db.backends.appengine import caching
 from djangae.db.caching import disable_cache, clear_context_cache
+
+
+DEFAULT_NAMESPACE = default_connection.ops.connection.settings_dict.get("NAMESPACE")
 
 
 class FakeEntity(dict):
@@ -126,7 +127,10 @@ class MemcacheCachingTests(TestCase):
             "comb2": "Cherry"
         }
 
-        identifiers = unique_utils.unique_identifiers_from_entity(CachingTestModel, FakeEntity(entity_data, id=222))
+        identifiers = caching._apply_namespace(
+            unique_utils.unique_identifiers_from_entity(CachingTestModel, FakeEntity(entity_data, id=222)),
+            DEFAULT_NAMESPACE,
+        )
 
         instance = CachingTestModel.objects.create(id=222, **entity_data)
         for identifier in identifiers:
@@ -154,7 +158,10 @@ class MemcacheCachingTests(TestCase):
             "comb2": "Cherry"
         }
 
-        identifiers = unique_utils.unique_identifiers_from_entity(CachingTestModel, FakeEntity(entity_data, id=222))
+        identifiers = caching._apply_namespace(
+            unique_utils.unique_identifiers_from_entity(CachingTestModel, FakeEntity(entity_data, id=222)),
+            DEFAULT_NAMESPACE,
+        )
 
         for identifier in identifiers:
             self.assertIsNone(cache.get(identifier))
@@ -184,7 +191,10 @@ class MemcacheCachingTests(TestCase):
             "comb2": "Cherry"
         }
 
-        identifiers = unique_utils.unique_identifiers_from_entity(CachingTestModel, FakeEntity(entity_data, id=222))
+        identifiers = caching._apply_namespace(
+            unique_utils.unique_identifiers_from_entity(CachingTestModel, FakeEntity(entity_data, id=222)),
+            DEFAULT_NAMESPACE,
+        )
 
         for identifier in identifiers:
             self.assertIsNone(cache.get(identifier))
@@ -205,7 +215,13 @@ class MemcacheCachingTests(TestCase):
         entity_data = {
             "field1": "old",
         }
-        identifiers = unique_utils.unique_identifiers_from_entity(CachingTestModel, FakeEntity(entity_data, id=222))
+
+        identifiers = caching._apply_namespace(
+            unique_utils.unique_identifiers_from_entity(
+                CachingTestModel, FakeEntity(entity_data, id=222)
+            ),
+            DEFAULT_NAMESPACE,
+        )
 
         for identifier in identifiers:
             self.assertIsNone(cache.get(identifier))
@@ -235,7 +251,10 @@ class MemcacheCachingTests(TestCase):
             "comb2": "Cherry"
         }
 
-        identifiers = unique_utils.unique_identifiers_from_entity(CachingTestModel, FakeEntity(entity_data, id=222))
+        identifiers = caching._apply_namespace(
+            unique_utils.unique_identifiers_from_entity(CachingTestModel, FakeEntity(entity_data, id=222)),
+            DEFAULT_NAMESPACE,
+        )
 
         for identifier in identifiers:
             self.assertIsNone(cache.get(identifier))
@@ -263,7 +282,10 @@ class MemcacheCachingTests(TestCase):
             "comb2": "Cherry"
         }
 
-        identifiers = unique_utils.unique_identifiers_from_entity(CachingTestModel, FakeEntity(entity_data, id=222))
+        identifiers = caching._apply_namespace(
+            unique_utils.unique_identifiers_from_entity(CachingTestModel, FakeEntity(entity_data, id=222)),
+            DEFAULT_NAMESPACE,
+        )
 
         for identifier in identifiers:
             self.assertIsNone(cache.get(identifier))
@@ -607,7 +629,6 @@ class ContextCachingTests(TestCase):
             A read inside a transaction shouldn't update the context cache outside that
             transaction
         """
-
         entity_data = {
             "field1": "Apple",
             "comb1": 1,

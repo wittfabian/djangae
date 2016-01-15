@@ -18,6 +18,7 @@ from django.core.files.uploadhandler import FileUploadHandler, \
 from django.http import HttpResponse
 from django.utils.encoding import smart_str, force_unicode
 from django.test.client import encode_multipart, MULTIPART_CONTENT, BOUNDARY
+from djangae.db import transaction
 
 from google.appengine.api import urlfetch
 from google.appengine.api import app_identity
@@ -210,18 +211,21 @@ class BlobstoreStorage(Storage, BlobstoreUploadMixin):
         return BlobInfo.get(self._get_key(name))
 
     def _create_upload_url(self):
-        return create_upload_url(reverse('djangae_internal_upload_handler'))
+        # Creating the upload URL can't be atomic, otherwise the session
+        # key will not be consistent when uploading the file
+        with transaction.non_atomic():
+            return create_upload_url(reverse('djangae_internal_upload_handler'))
 
 
 class CloudStorage(Storage, BlobstoreUploadMixin):
     """
         Google Cloud Storage backend, set this as your default backend
-        for ease of use, you can speicify and non-default bucket in the
+        for ease of use, you can specify and non-default bucket in the
         constructor
     """
     write_options = None
 
-    def __init__(self, bucket=None):
+    def __init__(self, bucket=None, google_acl='private'):
         if not bucket:
             bucket = get_bucket_name()
         self.bucket = bucket
@@ -233,10 +237,12 @@ class CloudStorage(Storage, BlobstoreUploadMixin):
         else:
             self.api_url = 'https://storage.googleapis.com'
 
+        self.write_options = self.__class__.write_options or {}
+        self.write_options['x-goog-acl'] = google_acl
+
     def url(self, filename):
-        return urllib.quote(
-            '{0}{1}'.format(self.api_url, self._add_bucket(filename))
-        )
+        quoted_filename = urllib.quote(self._add_bucket(filename))
+        return '{0}{1}'.format(self.api_url, quoted_filename)
 
     def _open(self, name, mode='r'):
         # Handle 'rb' as 'r'.

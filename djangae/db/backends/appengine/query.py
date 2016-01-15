@@ -100,7 +100,7 @@ class WhereNode(object):
     def append_child(self, node):
         self.children.append(node)
 
-    def set_leaf(self, column, operator, value, is_pk_field, negated, target_field=None):
+    def set_leaf(self, column, operator, value, is_pk_field, negated, namespace, target_field=None):
         assert column
         assert operator
         assert isinstance(is_pk_field, bool)
@@ -122,7 +122,7 @@ class WhereNode(object):
 
             if isinstance(value, (list, tuple)):
                 value = [
-                    datastore.Key.from_path(table, x)
+                    datastore.Key.from_path(table, x, namespace=namespace)
                     for x in value if x
                 ]
             else:
@@ -141,18 +141,19 @@ class WhereNode(object):
                     value = datastore.Key.from_path('', 1)
                     operator = '<'
                 else:
-                    value = datastore.Key.from_path(table, value)
+                    value = datastore.Key.from_path(table, value, namespace=namespace)
             column = "__key__"
 
         # Do any special index conversions necessary to perform this lookup
         if operator in REQUIRES_SPECIAL_INDEXES:
+            if is_pk_field:
+                column = model._meta.pk.column
+                value = unicode(value.id_or_name())
+
             add_special_index(target_field.model, column, operator, value)
             indexer = REQUIRES_SPECIAL_INDEXES[operator]
             index_type = indexer.prepare_index_type(operator, value)
             value = indexer.prep_value_for_query(value)
-            if not indexer.validate_can_be_indexed(value, negated):
-                raise NotSupportedError("Unsupported special index or value '%s %s'" % (column, operator))
-
             column = indexer.indexed_column_name(column, value, index_type)
             operator = indexer.prep_query_operator(operator)
 
@@ -489,12 +490,14 @@ class Query(object):
             for child in node.children[:]:
                 if (negated and child.operator == "=") or child.operator in (">", "<", ">=", "<="):
                     inequality_fields.add(child.column)
-                    if len(inequality_fields) > 1:
-                        raise NotSupportedError(
-                            "You can only have one inequality filter per query on the datastore"
-                        )
-
                 walk(child, negated)
+
+            if len(inequality_fields) > 1:
+                raise NotSupportedError(
+                    "You can only have one inequality filter per query on the datastore. "
+                    "Filters were: %s" % ' '.join(inequality_fields)
+                )
+
         if self.where:
             walk(self._where, False)
 
@@ -954,6 +957,7 @@ def _django_17_query_walk_leaf(node, negated, new_parent, connection, model):
         rhs,
         is_pk_field=field==model._meta.pk,
         negated=negated,
+        namespace=connection.ops.connection.settings_dict.get("NAMESPACE"),
         target_field=node.lhs.target,
     )
 

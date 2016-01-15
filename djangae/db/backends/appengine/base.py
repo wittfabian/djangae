@@ -33,7 +33,6 @@ except ImportError:
 
 from django.utils import timezone
 from google.appengine.api.datastore_types import Blob, Text
-from google.appengine.ext.db import metadata
 from google.appengine.datastore import datastore_stub_util
 from google.appengine.api import datastore, datastore_errors
 
@@ -278,7 +277,7 @@ class DatabaseOperations(BaseDatabaseOperations):
         return value
 
     def sql_flush(self, style, tables, seqs, allow_cascade=False):
-        return [ FlushCommand(table) for table in tables ]
+        return [ FlushCommand(table, self.connection) for table in tables ]
 
     def prep_lookup_key(self, model, value, field):
         if isinstance(value, basestring):
@@ -349,7 +348,15 @@ class DatabaseOperations(BaseDatabaseOperations):
 
         db_type = field.db_type(self.connection)
 
-        if db_type == 'string' or db_type == 'text':
+        if db_type in ('integer', 'long'):
+            if isinstance(value, float):
+                # round() always returns a float, which has a smaller max value than an int
+                # so only round() it if it's already a float
+                value = round(value)
+            value = long(value)
+        elif db_type == 'float':
+            value = float(value)
+        elif db_type == 'string' or db_type == 'text':
             value = coerce_unicode(value)
             if db_type == 'text':
                 value = Text(value)
@@ -486,6 +493,7 @@ class DatabaseCreation(BaseDatabaseCreation):
         'URLField':                   'string',
         'TextField':                  'text',
         'XMLField':                   'text',
+        'BinaryField':                'bytes'
     }
 
     def __init__(self, *args, **kwargs):
@@ -535,10 +543,11 @@ class DatabaseCreation(BaseDatabaseCreation):
 class DatabaseIntrospection(BaseDatabaseIntrospection):
     @datastore.NonTransactional
     def get_table_list(self, cursor):
-        kinds = metadata.get_kinds()
+        namespace = self.connection.settings_dict.get("NAMESPACE")
+        kinds = [kind.key().id_or_name() for kind in datastore.Query('__kind__', namespace=namespace).Run()]
         try:
             from django.db.backends.base.introspection import TableInfo
-            return [ TableInfo(x, "t") for x in kinds ]
+            return [TableInfo(x, "t") for x in kinds]
         except ImportError:
             return kinds # Django <= 1.7
 

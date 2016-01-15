@@ -25,6 +25,7 @@ djangae_testfruit:
   color: [icontains, contains, iexact, iendswith, endswith, istartswith, startswith]
 djangae_testuser:
   username: [iexact, contains, startswith]
+  last_login: [year]
 djangae_user:
   username: [iexact]
 lookup_article:
