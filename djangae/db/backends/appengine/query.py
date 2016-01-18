@@ -10,6 +10,7 @@ from django.db.models.fields import FieldDoesNotExist
 from django.db.models.sql.datastructures import EmptyResultSet
 from django.db.models.sql.where import EmptyWhere
 from django.db.models import AutoField
+from django.db.models.query import ValuesListQuerySet
 
 try:
     from django.db.models.expressions import Star
@@ -935,6 +936,14 @@ def _django_17_query_walk_leaf(node, negated, new_parent, connection, model):
         if hasattr(node.rhs, "get_compiler"):
             # This is a subquery
             raise NotSupportedError("Attempted to run a subquery on the datastore")
+        elif isinstance(node.rhs, ValuesListQuerySet):
+            # We explicitly handle ValuesListQuerySet because of the
+            # common case of pk__in=Something.objects.values_list("pk", flat=True)
+            # this WILL execute another query, but that is to be expected on a
+            # non-relational datastore.
+
+            node.rhs = [ x for x in node.rhs ] # Evaluate the queryset
+            rhs = node.process_rhs(None, connection) # Process the RHS as if it was a list
         else:
             rhs = node.process_rhs(None, connection)
     except EmptyResultSet:
