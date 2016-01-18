@@ -2,6 +2,12 @@
 import django
 
 from django.db.models.sql import compiler
+try:
+    from django.db.models.expressions import Value, OrderBy
+except ImportError:
+    pass
+
+from django.db.models.sql.query import get_order_dir
 
 #DJANGAE
 from .commands import (
@@ -13,6 +19,24 @@ from .commands import (
 
 
 class SQLCompiler(compiler.SQLCompiler):
+
+    def find_ordering_name(self, name, opts, alias=None, default_order='ASC', already_seen=None):
+
+        # This allow special appengine properties (e.g. __scatter__) to be supplied as an ordering
+        # even though they don't (and can't) exist as Django model fields
+        if name.startswith("__") and name.endswith("__"):
+            name, order = get_order_dir(name, default_order)
+            descending = True if order == 'DESC' else False
+            return [ OrderBy(Value('__scatter__'), descending=descending) ]
+
+        return super(SQLCompiler, self).find_ordering_name(
+            name,
+            opts,
+            alias=alias,
+            default_order=default_order,
+            already_seen=already_seen
+        )
+
     def as_sql(self, with_limits=True, with_col_aliases=False, subquery=False):
         self.pre_sql_setup()
         self.refcounts_before = self.query.alias_refcount.copy()

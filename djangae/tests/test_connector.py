@@ -2,6 +2,7 @@ import datetime
 import decimal
 import re
 import random
+import logging
 
 from cStringIO import StringIO
 from string import letters
@@ -602,6 +603,13 @@ class BackendTests(TestCase):
         self.assertRaises(IntegerModel.DoesNotExist, IntegerModel.objects.get, integer_field=1000)
         i = IntegerModel.objects.get(pk=i.pk)
         self.assertEqual(1001, i.integer_field)
+
+    def test_ordering_by_scatter_property(self):
+        try:
+            list(TestFruit.objects.order_by("__scatter__"))
+        except:
+            logging.exception("Error sorting on __scatter__")
+            self.fail("Unable to sort on __scatter__ property like we should")
 
     def test_ordering_on_sparse_field(self):
         """
