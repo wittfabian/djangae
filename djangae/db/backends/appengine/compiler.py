@@ -34,7 +34,7 @@ class SQLCompiler(compiler.SQLCompiler):
         if name.startswith("__") and name.endswith("__"):
             name, order = get_order_dir(name, default_order)
             descending = True if order == 'DESC' else False
-            return [ OrderBy(Value('__scatter__'), descending=descending) ]
+            return [ (OrderBy(Value('__scatter__'), descending=descending), False) ]
 
         return super(SQLCompiler, self).find_ordering_name(
             name,
