@@ -633,6 +633,9 @@ def _extract_ordering_from_query_17(query):
             final.append("-" + pk_col if col.startswith("-") else pk_col)
         elif col == "?":
             raise NotSupportedError("Random ordering is not supported on the datastore")
+        elif col.lstrip("-").startswith("__") and col.endswith("__"):
+            # Allow stuff like __scatter__
+            final.append(col)
         elif "__" in col:
             continue
         else:
