@@ -1,7 +1,9 @@
 import os
+import re
 from optparse import make_option
 
 from django.core.management.commands.runserver import BaseRunserverCommand
+from django.conf import settings
 
 from datetime import datetime
 
@@ -10,6 +12,22 @@ from google.appengine.tools.sdk_update_checker import (
     GetVersionObject,
     _VersionList
 )
+
+DJANGAE_RUNSERVER_IGNORED_FILES_REGEXES = getattr(settings, "DJANGAE_RUNSERVER_IGNORED_FILES_REGEXES", [])
+if DJANGAE_RUNSERVER_IGNORED_FILES_REGEXES:
+    DJANGAE_RUNSERVER_IGNORED_FILES_REGEXES = [re.compile(regex) for regex in DJANGAE_RUNSERVER_IGNORED_FILES_REGEXES]
+
+def ignore_file(filename):
+    """Report whether a file should not be watched."""
+    from google.appengine.tools.devappserver2 import watcher_common
+    filename = os.path.basename(filename)
+    return(
+        filename.startswith(watcher_common._IGNORED_PREFIX) or
+        any(filename.endswith(suffix) for suffix in watcher_common._IGNORED_FILE_SUFFIXES) or
+        watcher_common._IGNORED_REGEX.match(filename) or
+        any(regex.match(filename) for regex in DJANGAE_RUNSERVER_IGNORED_FILES_REGEXES)
+    )
+
 
 
 class Command(BaseRunserverCommand):
@@ -223,6 +241,15 @@ class Command(BaseRunserverCommand):
                 return sandbox._API_SERVER
 
         from google.appengine.tools.devappserver2 import module
+
+        def fix_watcher_files(regex):
+            from google.appengine.tools.devappserver2 import watcher_common
+            watcher_common._IGNORED_REGEX = regex
+            watcher_common.ignore_file = ignore_file
+
+        regex = sandbox._CONFIG.modules[0].skip_files
+        if regex:
+            fix_watcher_files(regex)
 
         def logging_wrapper(func):
             """

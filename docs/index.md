@@ -24,6 +24,7 @@ GitHub: [https://github.com/potatolondon/djangae](https://github.com/potatolondo
 * A `runserver` command which fires up the App Engine SDK to serve your app (while still using Django's code reloading).
 * [The ability to run management commands locally or on the remote App Engine Datastore](sandbox.md).
 * A `shell` command that correctly sets up the environment/database. (Note, we should support this set up for any custom commands as well, see [TODO.md](https://github.com/potatolondon/djangae/blob/master/TODO.md)).
+* [Storage backends](storage.md) for Cloud Storage and Blobstore.
 
 ## Supported Django Versions
 

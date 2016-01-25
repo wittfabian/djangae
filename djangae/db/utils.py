@@ -230,7 +230,8 @@ def django_instance_to_entity(connection, model, fields, raw, instance, check_nu
         else:
             raise ValueError("Invalid primary key value")
 
-    entity = datastore.Entity(db_table, **kwargs)
+    namespace = connection.settings_dict.get("NAMESPACE")
+    entity = datastore.Entity(db_table, namespace=namespace, **kwargs)
     entity.update(field_values)
 
     classes = get_concrete_db_tables(model)
@@ -240,12 +241,12 @@ def django_instance_to_entity(connection, model, fields, raw, instance, check_nu
     return entity
 
 
-def get_datastore_key(model, pk):
+def get_datastore_key(model, pk, namespace):
     """ Return a datastore.Key for the given model and primary key.
     """
 
     kind = get_top_concrete_parent(model)._meta.db_table
-    return Key.from_path(kind, pk)
+    return Key.from_path(kind, pk, namespace=namespace)
 
 
 class MockInstance(object):
@@ -276,7 +277,7 @@ class MockInstance(object):
 
 
 def key_exists(key):
-    qry = Query(keys_only=True)
+    qry = Query(keys_only=True, namespace=key.namespace())
     qry.Ancestor(key)
     return qry.Count(limit=1) > 0
 

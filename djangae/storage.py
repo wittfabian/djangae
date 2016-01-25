@@ -220,7 +220,7 @@ class BlobstoreStorage(Storage, BlobstoreUploadMixin):
 class CloudStorage(Storage, BlobstoreUploadMixin):
     """
         Google Cloud Storage backend, set this as your default backend
-        for ease of use, you can speicify and non-default bucket in the
+        for ease of use, you can specify and non-default bucket in the
         constructor
     """
     write_options = None
@@ -241,9 +241,8 @@ class CloudStorage(Storage, BlobstoreUploadMixin):
         self.write_options['x-goog-acl'] = google_acl
 
     def url(self, filename):
-        return urllib.quote(
-            '{0}{1}'.format(self.api_url, self._add_bucket(filename))
-        )
+        quoted_filename = urllib.quote(self._add_bucket(filename))
+        return '{0}{1}'.format(self.api_url, quoted_filename)
 
     def _open(self, name, mode='r'):
         # Handle 'rb' as 'r'.

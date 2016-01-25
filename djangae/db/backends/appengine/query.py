@@ -10,6 +10,7 @@ from django.db.models.fields import FieldDoesNotExist
 from django.db.models.sql.datastructures import EmptyResultSet
 from django.db.models.sql.where import EmptyWhere
 from django.db.models import AutoField
+from django.db.models.query import ValuesListQuerySet
 
 try:
     from django.db.models.expressions import Star
@@ -100,7 +101,7 @@ class WhereNode(object):
     def append_child(self, node):
         self.children.append(node)
 
-    def set_leaf(self, column, operator, value, is_pk_field, negated, target_field=None):
+    def set_leaf(self, column, operator, value, is_pk_field, negated, namespace, target_field=None):
         assert column
         assert operator
         assert isinstance(is_pk_field, bool)
@@ -122,7 +123,7 @@ class WhereNode(object):
 
             if isinstance(value, (list, tuple)):
                 value = [
-                    datastore.Key.from_path(table, x)
+                    datastore.Key.from_path(table, x, namespace=namespace)
                     for x in value if x
                 ]
             else:
@@ -141,18 +142,19 @@ class WhereNode(object):
                     value = datastore.Key.from_path('', 1)
                     operator = '<'
                 else:
-                    value = datastore.Key.from_path(table, value)
+                    value = datastore.Key.from_path(table, value, namespace=namespace)
             column = "__key__"
 
         # Do any special index conversions necessary to perform this lookup
         if operator in REQUIRES_SPECIAL_INDEXES:
+            if is_pk_field:
+                column = model._meta.pk.column
+                value = unicode(value.id_or_name())
+
             add_special_index(target_field.model, column, operator, value)
             indexer = REQUIRES_SPECIAL_INDEXES[operator]
             index_type = indexer.prepare_index_type(operator, value)
             value = indexer.prep_value_for_query(value)
-            if not indexer.validate_can_be_indexed(value, negated):
-                raise NotSupportedError("Unsupported special index or value '%s %s'" % (column, operator))
-
             column = indexer.indexed_column_name(column, value, index_type)
             operator = indexer.prep_query_operator(operator)
 
@@ -587,7 +589,7 @@ class Query(object):
 
                 query = {}
                 for lookup in node.children:
-                    query[''.join([lookup.column, lookup.operator])] = str(lookup.value)
+                    query[''.join([lookup.column, lookup.operator])] = unicode(lookup.value)
 
                 where.append(query)
 
@@ -631,6 +633,9 @@ def _extract_ordering_from_query_17(query):
             final.append("-" + pk_col if col.startswith("-") else pk_col)
         elif col == "?":
             raise NotSupportedError("Random ordering is not supported on the datastore")
+        elif col.lstrip("-").startswith("__") and col.endswith("__"):
+            # Allow stuff like __scatter__
+            final.append(col)
         elif "__" in col:
             continue
         else:
@@ -750,6 +755,9 @@ def _extract_ordering_from_query_18(query):
             final.append("-" + pk_col if col.startswith("-") else pk_col)
         elif col == "?":
             raise NotSupportedError("Random ordering is not supported on the datastore")
+        elif col.lstrip("-").startswith("__") and col.endswith("__"):
+            # Allow stuff like __scatter__
+            final.append(col)
         elif "__" in col:
             continue
         else:
@@ -934,6 +942,14 @@ def _django_17_query_walk_leaf(node, negated, new_parent, connection, model):
         if hasattr(node.rhs, "get_compiler"):
             # This is a subquery
             raise NotSupportedError("Attempted to run a subquery on the datastore")
+        elif isinstance(node.rhs, ValuesListQuerySet):
+            # We explicitly handle ValuesListQuerySet because of the
+            # common case of pk__in=Something.objects.values_list("pk", flat=True)
+            # this WILL execute another query, but that is to be expected on a
+            # non-relational datastore.
+
+            node.rhs = [ x for x in node.rhs ] # Evaluate the queryset
+            rhs = node.process_rhs(None, connection) # Process the RHS as if it was a list
         else:
             rhs = node.process_rhs(None, connection)
     except EmptyResultSet:
@@ -956,6 +972,7 @@ def _django_17_query_walk_leaf(node, negated, new_parent, connection, model):
         rhs,
         is_pk_field=field==model._meta.pk,
         negated=negated,
+        namespace=connection.ops.connection.settings_dict.get("NAMESPACE"),
         target_field=node.lhs.target,
     )
 

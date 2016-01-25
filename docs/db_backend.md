@@ -154,6 +154,7 @@ There are various solutions and workarounds for these issues.
     - The model has got concrete parents.
 * Doing an `.only('foo')` or `.defer('bar')` with a `pk_in=[...]` filter may not be more efficient. This is because we must perform a projection query for each key, and although we send them over the RPC in batches of 30, the RPC costs may outweigh the savings of a plain old datastore.Get. You should profile and check to see whether using only/defer results in a speed improvement for your use case.
 * Due to the way it has to be implemented on the Datastore, an `update()` query is not particularly fast, and other than avoiding calling the `save()` method on each object it doesn't offer much speed advantage over iterating over the objects and modifying them.  However, it does offer significant integrity advantages, see [General behaviours](#general-behaviours) section above.
+* Doing filter(pk__in=Something.objects.values_list('pk', flat=True)) will implicitly evaluate the inner query while preparing to run the outer one. This means two queries, not one like SQL would do!
 
 
 
@@ -201,3 +202,46 @@ The following functions are available to manage transactions:
  - `djangae.db.transaction.atomic` - Decorator and Context Manager. Starts a new transaction, accepted `xg`, `indepedendent` and `mandatory` args
  - `djangae.db.transaction.non_atomic` - Decorator and Context Manager. Breaks out of any current transactions so you can run queries outside the transaction
  - `djangae.db.transaction.in_atomic_block` - Returns True if inside a transaction, False otherwise
+
+
+## Multiple Namespaces (Experimental)
+
+**Namespace support is new and experimental, please make sure your code is well tested and report any bugs**
+
+It's possible to create separate "databases" on the datastore via "namespaces". This is supported in Djangae through the normal Django
+multiple database support. To configure multiple datastore namespaces, you can add an optional "NAMESPACE" to the DATABASES setting:
+
+```
+DATABASES = {
+    'default': {
+        'ENGINE': 'djangae.db.backends.appengine'
+    },
+    'archive': {
+        'ENGINE': 'djangae.db.backends.appengine'
+        'NAMESPACE': 'archive'
+    }
+}
+```
+
+If you do not specify a `NAMESPACE` for a connection, then the Datastore's default namespace will be used (i.e. no namespace).
+
+You can make use of Django's routers, the `using()` method, and the `save(using='...')` in the same way as normal multi-database support.
+
+Cross-namespace foreign keys aren't supported. Also namespaces effect caching keys and unique markers (which are also restricted to a namespace).
+
+
+## Migrations
+
+The App Engine Datastore is a schemaless database, so the idea of migrations in the normal Django sense doesn't really apply in the same way.
+
+In order to add a new Django model, you just save an instance of that model, you don't need to tell the database to add a "table" (called a "Kind" in the Datastore) for it.
+Similarly, if you want to add a new field to a model, you just add the field and start saving your objects, there's no need to create a new column in the database first.
+
+However, there are some behaviours of the Datastore which mean that in some cases you will want to run some kind of "migration".  The relevant behaviours are:
+
+* If you remove one of your Django models and you want to delete all of the instances, you can't just `DROP` the "table", you must run a task which maps over each object and deletes it.
+* If you add a new model field with a default value, that value won't get populated into the database until you re-save each instance.  When you load an instance of the model, the default value will be assigned, but the value won't actually be stored in the database until you re-save the object.  This means that querying for objects with that value will not return any objects that have not been re-saved.  This is true even if the default value is `None` (because the Datastore differentiates between a value being set to `None` and a value not existing at all).
+* If you remove a model field, the underlying Datastore entities will still contain the value until they are re-saved.  When you re-save each instance of the model the underlying entity will be overwritten, wiping out the removed field, but if you want to immediately destroy some sensitive data or reduce your used storage quota then simplying removing the field from the model will have no effect.
+
+For these reasons there is a legitimate case for implementing some kind of variant of the Django migration system for Datastore-backed models.  See the [migrations ticket on GitHub](https://github.com/potatolondon/djangae/issues/438) for more info.
+
