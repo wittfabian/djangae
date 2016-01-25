@@ -1,16 +1,39 @@
-import logging
 from django.db import models
 from djangae.test import TestCase
 from djangae.test import process_task_queues
 from djangae.contrib.mapreduce.input_readers import DjangoInputReader
-from djangae.contrib.mapreduce.shortcuts import django_csv_reduce_pipeline
-import webapp2
 from mapreduce.mapreduce_pipeline import MapreducePipeline
 
 
 class TestNode(models.Model):
     data = models.CharField(max_length=32)
     counter = models.IntegerField()
+
+
+class MapPipelineTestCase(TestCase):
+
+    def setUp(self):
+        for x in range(100):
+            self.testnode = TestNode()
+            self.testnode.data = 'Lol'
+            self.testnode.counter = 1
+            self.testnode.save()
+        super(MapPipelineTestCase, self).setUp()
+
+    def test_map_works(self):
+        from djangae.contrib.mapreduce.pipelines import MapPipeline
+        pipe = MapPipeline(
+            "increment",
+            "djangae.contrib.mapreduce.tests.model_counter_increment",
+            "djangae.contrib.mapreduce.input_readers.DjangoInputReader",
+            mapper_params={'input_reader': {'model': 'mapreduce.TestNode'}},
+            shards=10
+        )
+        pipe.start()
+        process_task_queues()
+        nodes = TestNode.objects.all()
+        for node in nodes:
+            self.assertEqual(node.counter, 2)
 
 
 class DjangoInputReaderTestCase(TestCase):
@@ -108,7 +131,7 @@ def model_counter_increment(instance):
     """Word Count map function."""
     instance.counter += 1
     instance.save()
-    yield (instance.pk, "")
+    yield (instance.pk, "{0}".format(instance.counter))
 
 def word_count_reduce(key, values):
     """Word Count reduce function."""
