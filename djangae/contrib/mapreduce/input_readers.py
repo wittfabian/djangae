@@ -7,7 +7,10 @@ class DjangoInputReader(input_readers.InputReader):
     """
     def __init__(self, model_path=None, pk__gt=None, pk__lte=None, filters=None, shard_id=None):
         self.model_path = model_path
-        app, model = self.model_path.split('.')
+        try:
+            app, model = self.model_path.split('.')
+        except ValueError:
+            app, model = self.model_path.split(',')
         self.model = apps.get_model(app, model)
         self.pk__gt = pk__gt
         self.pk__lte = pk__lte
@@ -46,7 +49,10 @@ class DjangoInputReader(input_readers.InputReader):
         """
         """
         params = input_readers._get_params(mapper_spec)
-        app, model = params['model'].split('.')
+        try:
+            app, model = params['model'].split('.')
+        except ValueError:
+            app, model = params['model'].split(',')
         model = apps.get_model(app, model)
         filters = params.get('filters', None)
 
@@ -60,12 +66,20 @@ class DjangoInputReader(input_readers.InputReader):
         if len(random_keys) > shard_count:
             random_keys = cls._choose_split_points(random_keys, shard_count) + [None,]
         keyranges = []
-        for i, key in enumerate(random_keys):
-            if key is None:
-                break
-            if i == 0:
-                keyranges.append(DjangoInputReader(params['model'], pk__lte=key, filters=filters, shard_id=i))
-            keyranges.append(DjangoInputReader(params['model'], pk__gt=key, pk__lte=random_keys[i+1], filters=filters, shard_id=i+1))
+        if len(random_keys) > 2:
+            for i, key in enumerate(random_keys):
+                if key is None:
+                    break
+                if i == 0:
+                    keyranges.append(DjangoInputReader(params['model'], pk__lte=key, filters=filters, shard_id=i))
+                keyranges.append(DjangoInputReader(params['model'], pk__gt=key, pk__lte=random_keys[i+1], filters=filters, shard_id=i+1))
+        elif len(random_keys) == 2:
+            keyranges.append(DjangoInputReader(params['model'], pk__lte=random_keys[0], filters=filters, shard_id=0))
+            keyranges.append(DjangoInputReader(params['model'], pk__gt=random_keys[0], pk__lte=random_keys[1], filters=filters, shard_id=1))
+            keyranges.append(DjangoInputReader(params['model'], pk__gt=random_keys[1], filters=filters, shard_id=2))
+        elif len(random_keys) == 1:
+            keyranges.append(DjangoInputReader(params['model'], pk__lte=random_keys[0], filters=filters, shard_id=0))
+            keyranges.append(DjangoInputReader(params['model'], pk__gt=random_keys[0], filters=filters, shard_id=0))
         return keyranges
 
     @classmethod
