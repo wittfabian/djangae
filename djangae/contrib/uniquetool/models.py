@@ -1,5 +1,6 @@
 import datetime
 import pipeline
+import logging
 from mapreduce import operation as op, context
 from mapreduce import pipeline_base
 
@@ -62,7 +63,6 @@ class UniqueAction(models.Model):
     status = models.CharField(choices=ACTION_STATUSES, default=ACTION_STATUSES[0][0], editable=False, max_length=100)
     logs = RelatedSetField(ActionLog, editable=False)
 
-import logging
 def _log_action(action_id, log_type, instance_key, marker_key):
     @transaction.atomic(xg=True)
     def _atomic(action_id, log_type, instance_key, marker_key):
@@ -76,7 +76,6 @@ def _log_action(action_id, log_type, instance_key, marker_key):
             instance_key=instance_key,
             marker_key=marker_key)
         action.logs.add(log)
-        logging.info(log)
         action.save()
     _atomic(action_id, log_type, instance_key, marker_key)
 

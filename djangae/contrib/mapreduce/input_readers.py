@@ -14,10 +14,10 @@ class DjangoInputReader(input_readers.InputReader):
         self.model = apps.get_model(app, model)
         self.pk__gt = pk__gt
         self.pk__lte = pk__lte
+        # logging.info('gt {0} - lte {1}'.format(self.pk__gt, self.pk__lte))
         self.filters = filters
         self.shard_id = shard_id
         self.db = db
-        logging.info('DB IS {0}'.format(self.db))
 
     def __iter__(self):
         filters = {}
@@ -25,9 +25,11 @@ class DjangoInputReader(input_readers.InputReader):
             filters['pk__gt'] = self.pk__gt
         if self.pk__lte is not None:
             filters['pk__lte'] = self.pk__lte
-        qs = self.model.objects.using(self.db).filter(**filters)
+        if self.db:
+            qs = self.model.objects.using(self.db).filter(**filters)
+        else:
+            qs = self.model.objects.filter(**filters)
         for model in qs.order_by('pk'):
-            logging.info(model._state.db)
             yield model
 
     @classmethod
@@ -53,6 +55,7 @@ class DjangoInputReader(input_readers.InputReader):
         """
         """
         params = input_readers._get_params(mapper_spec)
+        db = params.get('db', None)
         try:
             app, model = params['model'].split('.')
         except ValueError:
@@ -61,31 +64,34 @@ class DjangoInputReader(input_readers.InputReader):
         filters = params.get('filters', None)
 
         shard_count = mapper_spec.shard_count
-        scatter_query = model.objects.using(params['db']).values_list('pk')
+        if db:
+            scatter_query = model.objects.using(db)
+        else:
+            scatter_query = model.objects
+        scatter_query = scatter_query.values_list('pk').order_by('__scatter__')
         oversampling_factor = 32
         # FIXME values
         random_keys = [x[0] for x in scatter_query[:shard_count * oversampling_factor]]
 
         random_keys.sort()
         if len(random_keys) > shard_count:
-            random_keys = cls._choose_split_points(random_keys, shard_count) + [None,]
+            random_keys = cls._choose_split_points(random_keys, shard_count)
         keyranges = []
-        logging.info('DB WILL BE {0}'.format(params['db']))
         if len(random_keys) > 2:
-            for i, key in enumerate(random_keys):
-                if key is None:
-                    break
-                if i == 0:
-                    keyranges.append(DjangoInputReader(params['model'], pk__lte=key, filters=filters, shard_id=i, db=params['db']))
-                keyranges.append(DjangoInputReader(params['model'], pk__gt=key, pk__lte=random_keys[i+1], filters=filters, shard_id=i+1, db=params['db']))
-            keyranges.append(DjangoInputReader(params['model'], pk__gt=key, filters=filters, shard_id=i+1, db=params['db']))
+            logging.info(random_keys)
+            keyranges.append(DjangoInputReader(params['model'], pk__lte=random_keys[0], filters=filters, shard_id=0, db=db))
+            for x in xrange((len(random_keys) - 1)):
+                keyranges.append(DjangoInputReader(params['model'], pk__gt=random_keys[x], pk__lte=random_keys[x+1], filters=filters, shard_id=x+1, db=db))
+            keyranges.append(DjangoInputReader(params['model'], pk__gt=random_keys[x+1], filters=filters, shard_id=x+2, db=db))
         elif len(random_keys) == 2:
-            keyranges.append(DjangoInputReader(params['model'], pk__lte=random_keys[0], filters=filters, shard_id=0, db=params['db']))
-            keyranges.append(DjangoInputReader(params['model'], pk__gt=random_keys[0], pk__lte=random_keys[1], filters=filters, shard_id=1, db=params['db']))
-            keyranges.append(DjangoInputReader(params['model'], pk__gt=random_keys[1], filters=filters, shard_id=2, db=params['db']))
+            keyranges.append(DjangoInputReader(params['model'], pk__lte=random_keys[0], filters=filters, shard_id=0, db=db))
+            keyranges.append(DjangoInputReader(params['model'], pk__gt=random_keys[0], pk__lte=random_keys[1], filters=filters, shard_id=1, db=db))
+            keyranges.append(DjangoInputReader(params['model'], pk__gt=random_keys[1], filters=filters, shard_id=2, db=db))
         elif len(random_keys) == 1:
-            keyranges.append(DjangoInputReader(params['model'], pk__lte=random_keys[0], filters=filters, shard_id=0, db=params['db']))
-            keyranges.append(DjangoInputReader(params['model'], pk__gt=random_keys[0], filters=filters, shard_id=0, db=params['db']))
+            keyranges.append(DjangoInputReader(params['model'], pk__lte=random_keys[0], filters=filters, shard_id=0, db=db))
+            keyranges.append(DjangoInputReader(params['model'], pk__gt=random_keys[0], filters=filters, shard_id=1, db=db))
+        else:
+            keyranges.append(DjangoInputReader(params['model'], filters=filters, shard_id=0, db=db))
         return keyranges
 
     @classmethod
