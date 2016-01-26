@@ -1,5 +1,7 @@
 import datetime
+import pipeline
 from mapreduce import operation as op, context
+from mapreduce import pipeline_base
 
 from django.conf import settings
 from django.apps import apps
@@ -16,6 +18,7 @@ from djangae.db.utils import django_instance_to_entity
 from djangae.db.unique_utils import unique_identifiers_from_entity
 from djangae.db.constraints import UniqueMarker
 from djangae.db.caching import disable_cache
+from djangae.contrib.mapreduce.pipelines import MapPipeline
 
 ACTION_TYPES = [
     ('check', 'Check'),  # Verify all models unique contraint markers exist and are assigned to it.
@@ -101,7 +104,8 @@ def start_action(sender, instance, created, raw, **kwargs):
 
     if instance.action_type == "clean":
         kwargs.update(model=instance.model)
-        CleanMapper(db=instance.db).start(**kwargs)
+        # CleanMapper(db=instance.db).start(**kwargs)
+        pipe = NewCleanMapper(model=instance.model, db=instance.db, action_pk=instance.pk)
     else:
         pipe = NewCheckRepairMapper(model=instance.model, db=instance.db, action_pk=instance.pk, repair=instance.action_type=="repair")
     pipe.start()
@@ -120,10 +124,8 @@ def check_repair_map(instance, *args, **kwargs):
     """ Figure out what markers the instance should use and verify they're attached to
     this instance. Log any weirdness and in repair mode - recreate missing markers. """
     params = context.get().mapreduce_spec.mapper.params
-
     action_id = params.get("action_pk")
     repair = params.get("repair")
-
     alias = params.get("db", "default")
     namespace = settings.DATABASES.get(alias, {}).get("NAMESPACE")
     assert alias == (instance._state.db or "default")
@@ -171,19 +173,14 @@ def check_repair_map(instance, *args, **kwargs):
                 # Also log in repair mode as reparing would break the other instance.
 
     if markers_to_save:
-        for marker in markers_to_save:
-            yield op.db.Put(marker)
+        datastore.Put(markers_to_save)
 
-
-from mapreduce import pipeline_base
 
 class CallbackPipeline(pipeline_base.PipelineBase):
 
     def run(self, *args, **kwargs):
         _finish(*args, **kwargs)
 
-import pipeline
-from djangae.contrib.mapreduce.pipelines import MapPipeline
 
 class NewCheckRepairMapper(pipeline_base.PipelineBase):
 
@@ -204,65 +201,58 @@ class NewCheckRepairMapper(pipeline_base.PipelineBase):
             yield CallbackPipeline(kwargs['action_pk'])
 
 
-class RawMapperMixin(object):
-    def get_model_app_(self):
-        return None
+def clean_map(entity, *args, **kwargs):
+    """ The Clean mapper maps over all UniqueMarker instances. """
+    params = context.get().mapreduce_spec.mapper.params
+    model = params['model']
 
-    def start(self, *args, **kwargs):
-        kwargs['db'] = self.db
-        mapper_parameters = {
-            'entity_kind': self.kind,
+    alias = params.get("namespace", "default")
+    namespace = settings.DATABASES.get(alias, {}).get("NAMESPACE")
+
+    model = decode_model(model)
+    if not entity.key().id_or_name().startswith(model._meta.db_table + "|"):
+        # Only include markers which are for this model
+        return
+
+    assert namespace == entity.namespace()
+    with disable_cache():
+        # At this point, the entity is a unique marker that is linked to an instance of 'model', now we should see if that instance exists!
+        instance_id = entity["instance"].id_or_name()
+        try:
+            instance = model.objects.using(alias).get(pk=instance_id)
+        except model.DoesNotExist:
+            logging.info("Deleting unique marker {} because the associated instance no longer exists".format(entity.key().id_or_name()))
+            datastore.Delete(entity)
+            return
+
+        # Get the possible unique markers for the entity, if this one doesn't exist in that list then delete it
+        instance_entity = django_instance_to_entity(connections[alias], model, instance._meta.fields, raw=True, instance=instance, check_null=False)
+        identifiers = unique_identifiers_from_entity(model, instance_entity, ignore_pk=True)
+        identifier_keys = [datastore.Key.from_path(UniqueMarker.kind(), i, namespace=entity["instance"].namespace()) for i in identifiers]
+        if entity.key() not in identifier_keys:
+            logging.info("Deleting unique marker {} because the it no longer represents the associated instance state".format(entity.key().id_or_name()))
+            datastore.Delete(entity)
+
+class NewCleanMapper(pipeline_base.PipelineBase):
+
+    def run(self, *args, **kwargs):
+        mapper_params = {}
+        mapper_params['input_reader'] = {
+            'entity_kind': '_djangae_unique_marker',
             'keys_only': False,
             'kwargs': kwargs,
             'args': args,
-            'namespace': settings.DATABASES.get(self.db, {}).get('NAMESPACE'),
+            'namespace': settings.DATABASES.get(kwargs['db'], {}).get('NAMESPACE'),
         }
-        mapper_parameters['_map'] = self.get_relative_path(self.map)
-        pipe = DjangaeMapperPipeline(
-            self.job_name,
-            'djangae.contrib.mappers.thunks.thunk_map',
-            'mapreduce.input_readers.RawDatastoreInputReader',
-            params=mapper_parameters,
-            shards=self.shard_count
+        mapper_params['action_pk'] = kwargs['action_pk']
+        mapper_params['namespace'] = kwargs['db']
+        mapper_params['model'] = kwargs['model']
+        map_pipeline = yield MapPipeline(
+            "check-repair",
+            "djangae.contrib.uniquetool.models.clean_map",
+            "mapreduce.input_readers.RawDatastoreInputReader",
+            mapper_params=mapper_params,
+            shards=10
         )
-        pipe.start(base_path=PIPELINE_BASE_PATH)
-
-
-# class CleanMapper(RawMapperMixin, MapReduceTask):
-#     name = 'action_clean_mapper'
-#     kind = '_djangae_unique_marker'
-#
-#     @staticmethod
-#     def finish(*args, **kwargs):
-#         _finish(*args, **kwargs)
-#
-#     @staticmethod
-#     def map(entity, model, *args, **kwargs):
-#         """ The Clean mapper maps over all UniqueMarker instances. """
-#
-#         alias = kwargs.get("db", "default")
-#         namespace = settings.DATABASES.get(alias, {}).get("NAMESPACE")
-#
-#         model = decode_model(model)
-#         if not entity.key().id_or_name().startswith(model._meta.db_table + "|"):
-#             # Only include markers which are for this model
-#             return
-#
-#         assert namespace == entity.namespace()
-#         with disable_cache():
-#             # At this point, the entity is a unique marker that is linked to an instance of 'model', now we should see if that instance exists!
-#             instance_id = entity["instance"].id_or_name()
-#             try:
-#                 instance = model.objects.using(alias).get(pk=instance_id)
-#             except model.DoesNotExist:
-#                 logging.info("Deleting unique marker {} because the associated instance no longer exists".format(entity.key().id_or_name()))
-#                 datastore.Delete(entity)
-#                 return
-#
-#             # Get the possible unique markers for the entity, if this one doesn't exist in that list then delete it
-#             instance_entity = django_instance_to_entity(connections[alias], model, instance._meta.fields, raw=True, instance=instance, check_null=False)
-#             identifiers = unique_identifiers_from_entity(model, instance_entity, ignore_pk=True)
-#             identifier_keys = [datastore.Key.from_path(UniqueMarker.kind(), i, namespace=entity["instance"].namespace()) for i in identifiers]
-#             if entity.key() not in identifier_keys:
-#                 logging.info("Deleting unique marker {} because the it no longer represents the associated instance state".format(entity.key().id_or_name()))
-#                 datastore.Delete(entity)
+        with pipeline.After(map_pipeline):
+            yield CallbackPipeline(kwargs['action_pk'])
