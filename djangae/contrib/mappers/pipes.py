@@ -128,6 +128,10 @@ class MapReduceTask(object):
         raise NotImplementedError('You must supply a finish function')
 
     def start(self, *args, **kwargs):
+        # Allow a queue to be specified either as a keyword argument when
+        # starting the task, or as a class-level attribute on the task.
+        queue_name = kwargs.pop('queue_name', self.queue_name)
+
         kwargs['db'] = self.db
         mapper_parameters = {
             'model': self.get_model_app_(),
@@ -152,4 +156,4 @@ class MapReduceTask(object):
             shards=shard_count
         )
         pipe.with_params(target=self.target)
-        pipe.start(base_path=PIPELINE_BASE_PATH)
+        pipe.start(base_path=PIPELINE_BASE_PATH, queue_name=queue_name)
