@@ -685,3 +685,16 @@ class JSONFieldModelTests(TestCase):
         self.assertFalse(isinstance(thing.json_field, OrderedDict))
 
         field.use_ordered_dict = True
+
+    def test_float_values(self):
+        """ Tests that float values in JSONFields are correctly serialized over repeated saves.
+            Regression test for 46e685d4, which fixes floats being returned as strings after a second save.
+        """
+        test_instance = JSONFieldModel(json_field={'test': 0.1})
+        test_instance.save()
+
+        test_instance = JSONFieldModel.objects.get()
+        test_instance.save()
+
+        test_instance = JSONFieldModel.objects.get()
+        self.assertEqual(test_instance.json_field['test'], 0.1)
