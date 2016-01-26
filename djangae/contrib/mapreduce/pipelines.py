@@ -1,16 +1,11 @@
-from google.appengine.api import app_identity
-from mapreduce import errors
 from mapreduce import mapper_pipeline
 from mapreduce import pipeline_base
 from mapreduce import shuffler
 from mapreduce.mapreduce_pipeline import _ReturnPipeline
 from mapreduce.mapper_pipeline import MapperPipeline as _MapPipeline
-
 import pipeline
 
-
 MapperPipeline = mapper_pipeline.MapperPipeline
-
 CleanupPipeline = shuffler._GCSCleanupPipeline
 
 
