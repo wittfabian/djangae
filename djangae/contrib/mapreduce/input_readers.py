@@ -61,7 +61,7 @@ class DjangoInputReader(input_readers.InputReader):
         filters = params.get('filters', None)
 
         shard_count = mapper_spec.shard_count
-        scatter_query = model.objects.using(params['db']).values_list('pk').order_by('__scatter__')
+        scatter_query = model.objects.using(params['db']).values_list('pk')
         oversampling_factor = 32
         # FIXME values
         random_keys = [x[0] for x in scatter_query[:shard_count * oversampling_factor]]
@@ -78,6 +78,7 @@ class DjangoInputReader(input_readers.InputReader):
                 if i == 0:
                     keyranges.append(DjangoInputReader(params['model'], pk__lte=key, filters=filters, shard_id=i, db=params['db']))
                 keyranges.append(DjangoInputReader(params['model'], pk__gt=key, pk__lte=random_keys[i+1], filters=filters, shard_id=i+1, db=params['db']))
+            keyranges.append(DjangoInputReader(params['model'], pk__gt=key, filters=filters, shard_id=i+1, db=params['db']))
         elif len(random_keys) == 2:
             keyranges.append(DjangoInputReader(params['model'], pk__lte=random_keys[0], filters=filters, shard_id=0, db=params['db']))
             keyranges.append(DjangoInputReader(params['model'], pk__gt=random_keys[0], pk__lte=random_keys[1], filters=filters, shard_id=1, db=params['db']))
