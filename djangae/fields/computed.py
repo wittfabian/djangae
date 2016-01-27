@@ -33,3 +33,7 @@ class ComputedTextField(ComputedFieldMixin, models.TextField):
 
 class ComputedPositiveIntegerField(ComputedFieldMixin, models.PositiveIntegerField):
     __metaclass__ = models.SubfieldBase
+
+
+class ComputedBooleanField(ComputedFieldMixin, models.BooleanField):
+    __metaclass__ = models.SubfieldBase
