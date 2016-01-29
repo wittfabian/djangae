@@ -1519,6 +1519,14 @@ class EdgeCaseTests(TestCase):
         qry = TestFruit.objects.filter(color__icontains='8901')
         self.assertEqual(len(list(qry)), 0)
 
+    def test_values_list_on_distinct(self):
+        TestFruit.objects.create(name="Kiwi", origin="New Zealand", color="Green")
+        TestFruit.objects.create(name="Apple", origin="New Zealand", color="Green")
+        TestFruit.objects.create(name="Grape", origin="New Zealand", color="Red")
+        nz_colours = TestFruit.objects.filter(
+            origin="New Zealand"
+        ).distinct("color").values_list("color", flat=True)
+        self.assertEqual(sorted(nz_colours), ["Green", "Red"])
 
 
 class BlobstoreFileUploadHandlerTest(TestCase):
