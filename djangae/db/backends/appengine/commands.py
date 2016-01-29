@@ -464,7 +464,10 @@ class SelectCommand(object):
             # If we specified we wanted a distinct query, but we didn't specify
             # an ordering, we must set the ordering to the distinct columns, otherwise
             # App Engine shouts at us. Nastily. And without remorse.
-            ordering = self.query.columns[:]
+            # The order of the columns in `ordering` makes a difference, but `distinct` is a set
+            # and therefore unordered, but in  this situation (where the ordering has not been
+            # explicitly defined) any order of the columns will do
+            ordering = list(self.query.columns)
 
         # Deal with the no filters case
         if self.query.where is None:

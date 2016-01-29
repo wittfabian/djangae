@@ -103,14 +103,14 @@ class TransformQueryTest(TestCase):
             TransformTestModel.objects.values_list("field1").query
         )
 
-        self.assertEqual(["field1"], query.columns)
+        self.assertEqual(set(["field1"]), query.columns)
 
         query = transform_query(
             connections['default'],
             TransformTestModel.objects.defer("field1", "field4").query
         )
 
-        self.assertItemsEqual(["id", "field2", "field3"], query.columns)
+        self.assertItemsEqual(set(["id", "field2", "field3"]), query.columns)
 
     def test_no_results_returns_emptyresultset(self):
         self.assertRaises(
@@ -145,7 +145,7 @@ class TransformQueryTest(TestCase):
         )
 
         self.assertTrue(query.distinct)
-        self.assertEqual(query.columns, ["field2", "field3"])
+        self.assertEqual(query.columns, set(["field2", "field3"]))
 
         query = transform_query(
             connections['default'],
@@ -153,7 +153,7 @@ class TransformQueryTest(TestCase):
         )
 
         self.assertTrue(query.distinct)
-        self.assertEqual(query.columns, ["field2", "field3"])
+        self.assertEqual(query.columns, set(["field2", "field3"]))
 
     def test_order_by_pk(self):
         query = transform_query(

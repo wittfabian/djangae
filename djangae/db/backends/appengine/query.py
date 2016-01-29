@@ -326,7 +326,7 @@ class Query(object):
                 (lambda x: process_date(x, annotation.lookup_type), [getattr(annotation, "lookup", column)]))
             )
             # Override the projection so that we only get this column
-            self.columns = [ getattr(annotation, "lookup", column) ]
+            self.columns = set([ getattr(annotation, "lookup", column) ])
 
 
     def add_projected_column(self, column):
@@ -349,9 +349,9 @@ class Query(object):
             return
 
         if not self.columns:
-            self.columns = [ column ]
+            self.columns = set([ column ])
         else:
-            self.columns.append(column)
+            self.columns.add(column)
 
     def add_row(self, data):
         assert self.columns
@@ -517,7 +517,7 @@ class Query(object):
 
         walk(self._where)
 
-        if equality_columns and equality_columns.intersection(set(self.columns)):
+        if equality_columns and equality_columns.intersection(self.columns):
             self.columns = None
             self.projection_possible = False
 
@@ -571,7 +571,7 @@ class Query(object):
         result["kind"] = self.kind
         result["table"] = self.model._meta.db_table
         result["concrete_table"] = self.concrete_model._meta.db_table
-        result["columns"] = self.columns
+        result["columns"] = list(self.columns or []) # set() is not JSONifiable
         result["projection_possible"] = self.projection_possible
         result["init_list"] = self.init_list
         result["distinct"] = self.distinct
