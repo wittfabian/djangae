@@ -1,6 +1,7 @@
 import random
 
 from django.core.exceptions import ImproperlyConfigured
+from django.db import models
 from google.appengine.datastore.datastore_rpc import BaseConnection
 from google.appengine.datastore.datastore_stub_util import _MAX_EG_PER_TXN
 
@@ -81,7 +82,7 @@ class RelatedShardManager(RelatedIteratorManagerBase, CounterShard._default_mana
 
                 new_instance_shard_pks.update(new_shard_pks)
                 setattr(self.instance, self.field.attname, new_instance_shard_pks)
-                new_instance.save()
+                models.Model.save(new_instance) # avoid custom save method, which might do DB lookups
                 total_to_create -= num_to_create
 
     def _update_or_create_shard(self, step):
@@ -102,7 +103,7 @@ class RelatedShardManager(RelatedIteratorManagerBase, CounterShard._default_mana
                 new_instance_shard_pks = getattr(new_instance, self.field.attname, set())
                 new_instance_shard_pks.add(new_shard.pk)
                 setattr(self.instance, self.field.attname, new_instance_shard_pks)
-                new_instance.save()
+                models.Model.save(new_instance) # avoid custom save method, which might do DB lookups
         else:
             with transaction.atomic():
                 shard = CounterShard.objects.get(pk=shard_pk)
