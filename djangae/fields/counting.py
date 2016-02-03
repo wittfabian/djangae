@@ -136,6 +136,14 @@ class ShardedCounterField(RelatedSetField):
     def __init__(self, shard_count=DEFAULT_SHARD_COUNT, *args, **kwargs):
         # Note that by removing the related_name by default we avoid reverse name clashes caused by
         # having multiple ShardedCounterFields on the same model.
+
+        if "default" in kwargs:
+            # We don't allow default because it causes all kinds of issues
+            raise ImproperlyConfigured(
+                "It is not possible to set a default value "
+                "on a ShardedCounterField, use increment() after creation instead"
+            )
+
         self.shard_count = shard_count
         if shard_count > MAX_ENTITIES_PER_GET:
             raise ImproperlyConfigured(
@@ -148,3 +156,19 @@ class ShardedCounterField(RelatedSetField):
     def contribute_to_class(self, cls, name):
         super(ShardedCounterField, self).contribute_to_class(cls, name)
         setattr(cls, self.name, ReverseRelatedShardsDescriptor(self))
+
+    def deconstruct(self):
+        name, path, args, kwargs = super(ShardedCounterField, self).deconstruct()
+
+        args = tuple() # We don't take any non-kwargs (we override "model" in __ini__)
+
+        # Add the shard count if necessary
+        if self.shard_count != DEFAULT_SHARD_COUNT:
+            kwargs["shard_count"] = self.shard_count
+
+        # Default is not a valid kwarg
+        if "default" in kwargs:
+            del kwargs["default"]
+
+        return name, path, args, kwargs
+
