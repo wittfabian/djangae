@@ -221,7 +221,11 @@ class CloudStorage(Storage, BlobstoreUploadMixin):
     """
         Google Cloud Storage backend, set this as your default backend
         for ease of use, you can specify and non-default bucket in the
-        constructor
+        constructor.
+
+        You can modify objects access control by changing google_acl
+        attribute to one of mentioned by docs (XML column):
+        https://cloud.google.com/storage/docs/access-control?hl=en#predefined-acl
     """
     write_options = None
 
