@@ -420,6 +420,14 @@ class UniqueQuery(object):
         self._gae_query = gae_query
         self._model = model
 
+        self._Query__kind = gae_query._Query__kind
+
+    def get(self, x):
+        return self._gae_query.get(x)
+
+    def keys(self):
+        return self._gae_query.keys()
+
     def Run(self, limit, offset):
         opts = self._gae_query._Query__query_options
         if opts.keys_only or opts.projection:
@@ -436,12 +444,16 @@ class UniqueQuery(object):
             keys = keys_query.Run(limit=limit, offset=offset)
 
             # Do a consistent get so we don't cache stale data, and recheck the result matches the query
-            ret = [ x for x in datastore.Get(keys) if x and utils.entity_matches_query(x, self._gae_query) ]
+            ret = [x for x in datastore.Get(keys) if x and utils.entity_matches_query(x, self._gae_query)]
             if len(ret) == 1:
-                caching.add_entity_to_cache(self._model, ret[0], caching.CachingSituation.DATASTORE_GET)
+                caching.add_entities_to_cache(
+                    self._model,
+                    [ret[0]],
+                    caching.CachingSituation.DATASTORE_GET,
+                )
             return iter(ret)
 
-        return iter([ ret ])
+        return iter([ret])
 
     def Count(self, limit, offset):
         return sum(1 for x in self.Run(limit, offset))
