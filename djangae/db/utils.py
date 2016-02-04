@@ -298,8 +298,15 @@ def django_ordering_comparison(ordering, lhs, rhs):
     DESCENDING = 2
 
     for order, direction in ordering:
-        lhs_value = lhs.key() if order == "__key__" else lhs[order]
-        rhs_value = rhs.key() if order == "__key__" else rhs[order]
+        if lhs is not None:
+            lhs_value = lhs.key() if order == "__key__" else lhs.get(order)
+        else:
+            lhs_value = None
+
+        if rhs is not None:
+            rhs_value = rhs.key() if order == "__key__" else rhs.get(order)
+        else:
+            rhs_value = None
 
         if direction == ASCENDING and lhs_value != rhs_value:
             return -1 if lt(lhs_value, rhs_value) else 1
