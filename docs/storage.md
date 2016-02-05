@@ -12,7 +12,23 @@ as you would with other storage backends. Google Cloud storage is a general purp
 You can serve files directly from cloudstorage with the key or you can use the included `django.storage.serve_file`
 * serve_file will create a proxy in the blobstore which can then be used to serve the file, this may be more useful for access control.
 
+### Example usage
+
+Images in this model will be publicly accesqsible and stored in main bucket of application.
+
 Allowed storage permission levels are defined in [docs -  XML column](https://cloud.google.com/storage/docs/access-control?hl=en#predefined-acl).
+
+```
+from django.db import models
+from djangae import fields, storage
+
+public_storage = storage.CloudStorage(google_acl='public-read')
+
+class Image(models.Model):
+    image_file = models.ImageField(upload_to='/somewhere/', storage=public_storage)
+
+```
+
 
 ## Blobstore
 
