@@ -15,10 +15,6 @@ from djangae.storage import BlobstoreStorage, CloudStorage, has_cloudstorage
 from djangae.test import TestCase
 
 
-# _URL_STRING_MAP is {'GET': 1, etc} so reverse dict to convert int to string
-URL_INT_TO_STRING_MAP = {v: k for k, v in urlfetch._URL_STRING_MAP.items()}
-
-
 @skipIf(not has_cloudstorage, "Cloud Storage not available")
 class CloudStorageTests(TestCase):
 
@@ -58,6 +54,34 @@ class CloudStorageTests(TestCase):
         storage = CloudStorage()
         f2 = ContentFile('nameless-content')
         storage.save('tmp2', f2)
+
+    @override_settings(CLOUD_STORAGE_BUCKET='test_bucket')
+    def test_new_objects_get_the_default_acl(self):
+        storage = CloudStorage()
+        filename = 'example.txt'
+        fileobj = ContentFile('content', name=filename)
+
+        with sleuth.watch('cloudstorage.open') as open_func:
+            storage.save(filename, fileobj)
+
+        self.assertTrue(storage.exists(filename))
+        # There's no x-goog-acl argument, so default perms are applied.
+        self.assertEqual(open_func.calls[0].kwargs['options'], {})
+
+    @override_settings(CLOUD_STORAGE_BUCKET='test_bucket')
+    def test_new_objects_with_an_explicit_acl(self):
+        storage = CloudStorage(google_acl='public-read')
+        filename = 'example.txt'
+        fileobj = ContentFile('content', name=filename)
+
+        with sleuth.watch('cloudstorage.open') as open_func:
+            storage.save(filename, fileobj)
+
+        self.assertTrue(storage.exists(filename))
+        self.assertEqual(
+            open_func.calls[0].kwargs['options'],
+            {'x-goog-acl': 'public-read'},
+        )
 
 
 class BlobstoreStorageTests(TestCase):
