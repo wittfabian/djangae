@@ -118,9 +118,37 @@ def _finish(*args, **kwargs):
 
     finish_the_action()
 
+class RawMapperMixin(object):
+    def get_model_app_(self):
+        return None
+
+    def start(self, *args, **kwargs):
+        kwargs['db'] = self.db
+        mapper_parameters = {
+            'entity_kind': self.kind,
+            'keys_only': False,
+            'kwargs': kwargs,
+            'args': args,
+            'namespace': settings.DATABASES.get(self.db, {}).get('NAMESPACE'),
+        }
+        mapper_parameters['_map'] = self.get_relative_path(self.map)
+        pipe = DjangaeMapperPipeline(
+            self.job_name,
+            'djangae.contrib.mappers.thunks.thunk_map',
+            'mapreduce.input_readers.RawDatastoreInputReader',
+            params=mapper_parameters,
+            shards=self.shard_count
+        )
+        pipe.start(base_path=PIPELINE_BASE_PATH)
+
 
 class CheckRepairMapper(MapReduceTask):
     name = 'action_mapper'
+    kind = '_djangae_unique_marker'
+
+    def start(self, *args, **kwargs):
+        kwargs['db'] = self.db
+        return super(CheckRepairMapper, self).start(*args, **kwargs)
 
     @staticmethod
     def finish(*args, **kwargs):
@@ -182,30 +210,6 @@ class CheckRepairMapper(MapReduceTask):
 
         if markers_to_save:
             datastore.Put(markers_to_save)
-
-
-class RawMapperMixin(object):
-    def get_model_app_(self):
-        return None
-
-    def start(self, *args, **kwargs):
-        kwargs['db'] = self.db
-        mapper_parameters = {
-            'entity_kind': self.kind,
-            'keys_only': False,
-            'kwargs': kwargs,
-            'args': args,
-            'namespace': settings.DATABASES.get(self.db, {}).get('NAMESPACE'),
-        }
-        mapper_parameters['_map'] = self.get_relative_path(self.map)
-        pipe = DjangaeMapperPipeline(
-            self.job_name,
-            'djangae.contrib.mappers.thunks.thunk_map',
-            'mapreduce.input_readers.RawDatastoreInputReader',
-            params=mapper_parameters,
-            shards=self.shard_count
-        )
-        pipe.start(base_path=PIPELINE_BASE_PATH)
 
 
 class CleanMapper(RawMapperMixin, MapReduceTask):

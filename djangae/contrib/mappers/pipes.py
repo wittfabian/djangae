@@ -132,12 +132,12 @@ class MapReduceTask(object):
         # starting the task, or as a class-level attribute on the task.
         queue_name = kwargs.pop('queue_name', self.queue_name)
 
-        kwargs['db'] = self.db
         mapper_parameters = {
             'model': self.get_model_app_(),
             'kwargs': kwargs,
             'args': args,
             'namespace': settings.DATABASES.get(self.db, {}).get("NAMESPACE"),
+            'db': self.db
         }
         if 'map' not in self.__class__.__dict__:
             raise Exception('No static map method defined on class {cls}'.format(self.__class__))

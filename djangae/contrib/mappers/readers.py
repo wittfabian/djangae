@@ -56,7 +56,7 @@ class DjangoInputReader(input_readers.InputReader):
         params = input_readers._get_params(mapper_spec)
         logging.info("Params: %s" % params)
 
-        db = params['kwargs']['db']
+        db = params['db']
         # Unpickle the query
         app, model = params['model'].split('.')
         model = apps.get_model(app, model)
