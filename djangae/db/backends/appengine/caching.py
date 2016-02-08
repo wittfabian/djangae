@@ -11,6 +11,8 @@ from djangae.db import utils
 from djangae.db.unique_utils import unique_identifiers_from_entity, _format_value_for_identifier
 from djangae.db.backends.appengine.context import ContextStack
 
+_local = threading.local()
+
 logger = logging.getLogger("djangae")
 
 _context = None
@@ -32,6 +34,67 @@ class CachingSituation:
     DATASTORE_GET = 0
     DATASTORE_PUT = 1
     DATASTORE_GET_PUT = 2 # When we are doing an update
+
+
+def ensure_memcache_client():
+    from google.appengine.api.memcache import Client
+
+    class KeyPrefixedClient(Client):
+        ALLOWED_PROPERTIES = ("get_multi", "set_multi_async", "delete_multi_async")
+
+        def __init__(self, *args, **kwargs):
+            self.futures = []
+            super(KeyPrefixedClient, self).__init__(*args, **kwargs)
+
+        def _force_rpc(self):
+            if self.futures:
+                ret = [ x.get_result() for x in self.futures ]
+                self.futures = []
+                return ret
+
+        def __getattr__(self, attr):
+            if attr not in KeyPrefixedClient.ALLOWED_PROPERTIES and not attr.startswith("__"):
+                raise ValueError("Attempted to use non-wrapped memcache API")
+
+            return super(KeyPrefixedClient, self).__getattr__(attr)
+
+        def get_multi(self, keys, key_prefix='', namespace=None, for_cas=False):
+            if key_prefix:
+                raise NotImplementedError("key_prefix is intentionally disallowed")
+
+            self._force_rpc()
+
+            key_prefix = getattr(settings, "KEY_PREFIX", "")
+            return super(KeyPrefixedClient, self).get_multi(
+                keys, key_prefix=key_prefix, namespace=namespace, for_cas=for_cas
+            )
+
+        def set_multi_async(self, mapping, time=0,  key_prefix='', min_compress_len=0, namespace=None, rpc=None):
+            if key_prefix:
+                raise NotImplementedError("key_prefix is intentionally disallowed")
+
+            key_prefix = getattr(settings, "KEY_PREFIX", "")
+            ret = super(KeyPrefixedClient, self).set_multi_async(
+                mapping, time=time, key_prefix=key_prefix,
+                min_compress_len=min_compress_len, namespace=namespace, rpc=rpc
+            )
+            self.futures.append(ret)
+            return ret
+
+        def delete_multi_async(self, keys, seconds=0, key_prefix='', namespace=None, rpc=None):
+            if key_prefix:
+                raise NotImplementedError("key_prefix is intentionally disallowed")
+
+            key_prefix = getattr(settings, "KEY_PREFIX", "")
+            ret = super(KeyPrefixedClient, self).delete_multi_async(
+                keys, seconds=seconds, key_prefix=key_prefix,
+                namespace=namespace, rpc=rpc
+            )
+            self.futures.append(ret)
+            return ret
+
+    if not hasattr(_local, "memcache"):
+        _local.memcache = KeyPrefixedClient()
 
 
 def ensure_context():
@@ -66,7 +129,8 @@ def _strip_namespace(value_or_map):
 
 
 def _add_entity_to_memcache(model, mc_key_entity_map, namespace):
-    cache.set_many(_apply_namespace(mc_key_entity_map, namespace), timeout=CACHE_TIMEOUT_SECONDS)
+    ensure_memcache_client()
+    _local.memcache.set_multi_async(_apply_namespace(mc_key_entity_map, namespace), time=CACHE_TIMEOUT_SECONDS)
 
 
 def _get_cache_key_and_model_from_datastore_key(key):
@@ -93,29 +157,32 @@ def _remove_entities_from_memcache_by_key(keys, namespace):
         transaction.
         In theory the keys should all have the same namespace as `namespace`.
     """
+    ensure_memcache_client()
+
     # Key -> model
     cache_keys = dict(
         _get_cache_key_and_model_from_datastore_key(key) for key in keys
     )
-    entities = _strip_namespace(cache.get_many(_apply_namespace(cache_keys.keys(), namespace)))
+    entities = _strip_namespace(_local.memcache.get_multi(_apply_namespace(cache_keys.keys(), namespace)))
 
     if entities:
         identifiers = [
             unique_identifiers_from_entity(cache_keys[key], entity)
             for key, entity in entities.items()
         ]
-        cache.delete_many(_apply_namespace(itertools.chain(*identifiers), namespace))
+        _local.memcache.delete_multi_async(_apply_namespace(itertools.chain(*identifiers), namespace))
 
 
 def _get_entity_from_memcache(cache_key):
-    return cache.get(cache_key)
+    ensure_memcache_client()
+    return _local.memcache.get_multi([cache_key]).get(cache_key)
 
 
 def _get_entity_from_memcache_by_key(key):
     # We build the cache key for the ID of the instance
     cache_key, _ = _get_cache_key_and_model_from_datastore_key(key)
     namespace = key.namespace() or None
-    return cache.get(_apply_namespace(cache_key, namespace))
+    return _get_entity_from_memcache(_apply_namespace(cache_key, namespace))
 
 
 def add_entities_to_cache(model, entities, situation, namespace, skip_memcache=False):

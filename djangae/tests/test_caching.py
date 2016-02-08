@@ -261,6 +261,8 @@ class MemcacheCachingTests(TestCase):
 
         CachingTestModel.objects.create(id=222, **entity_data)
 
+        caching._local.memcache._force_rpc()
+
         for identifier in identifiers:
             self.assertEqual(entity_data, cache.get(identifier))
 
