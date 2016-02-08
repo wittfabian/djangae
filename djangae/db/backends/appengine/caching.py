@@ -4,6 +4,9 @@ import itertools
 
 from google.appengine.api import datastore
 from google.appengine.api import namespace_manager
+from google.appengine.api.memcache import Client
+from django.core.cache.backends.base import default_key_func
+
 
 from django.conf import settings
 from django.core.cache import cache
@@ -36,63 +39,82 @@ class CachingSituation:
     DATASTORE_GET_PUT = 2 # When we are doing an update
 
 
-def ensure_memcache_client():
-    from google.appengine.api.memcache import Client
+VERSION = 1 # This is so we can invalidate the cache after a backwards incompatible change
+KEY_PREFIX = getattr(settings, "KEY_PREFIX", "") # Use the Django key_prefix
 
-    class KeyPrefixedClient(Client):
-        ALLOWED_PROPERTIES = ("get_multi", "set_multi_async", "delete_multi_async")
 
-        def __init__(self, *args, **kwargs):
+class KeyPrefixedClient(Client):
+    """
+        This is a special wrapper around some of the GAE memcache functions. It is
+        used only for the datastore backend caching.
+
+        Only 3 methods are permitted: get_multi, set_multi_async, and delete_multi_async. This
+        ensures that we do things as quickly as possible.
+
+        If a thread calls get_multi after a previous set_multi_async or delete_multi_async then
+        the get_multi will block until the sets and deletes have completed. This is the best way
+        to ensure that a get following a delete won't return an entity etc. This may still mean
+        that another thread will get an entity from the cache that was just deleted, but unfortunately
+        that's the toss-up between generally fast performance elsewhere.
+
+        We have to map keys back and forth to include the prefix and version. That's why some of the
+        code may look weird.
+    """
+
+    ALLOWED_PROPERTIES = ("get_multi", "set_multi_async", "delete_multi_async")
+
+    def __init__(self, *args, **kwargs):
+        self.futures = []
+        super(KeyPrefixedClient, self).__init__(*args, **kwargs)
+
+    def _force_rpc(self):
+        if self.futures:
+            ret = [ x.get_result() for x in self.futures ]
             self.futures = []
-            super(KeyPrefixedClient, self).__init__(*args, **kwargs)
-
-        def _force_rpc(self):
-            if self.futures:
-                ret = [ x.get_result() for x in self.futures ]
-                self.futures = []
-                return ret
-
-        def __getattr__(self, attr):
-            if attr not in KeyPrefixedClient.ALLOWED_PROPERTIES and not attr.startswith("__"):
-                raise ValueError("Attempted to use non-wrapped memcache API")
-
-            return super(KeyPrefixedClient, self).__getattr__(attr)
-
-        def get_multi(self, keys, key_prefix='', namespace=None, for_cas=False):
-            if key_prefix:
-                raise NotImplementedError("key_prefix is intentionally disallowed")
-
-            self._force_rpc()
-
-            key_prefix = getattr(settings, "KEY_PREFIX", "")
-            return super(KeyPrefixedClient, self).get_multi(
-                keys, key_prefix=key_prefix, namespace=namespace, for_cas=for_cas
-            )
-
-        def set_multi_async(self, mapping, time=0,  key_prefix='', min_compress_len=0, namespace=None, rpc=None):
-            if key_prefix:
-                raise NotImplementedError("key_prefix is intentionally disallowed")
-
-            key_prefix = getattr(settings, "KEY_PREFIX", "")
-            ret = super(KeyPrefixedClient, self).set_multi_async(
-                mapping, time=time, key_prefix=key_prefix,
-                min_compress_len=min_compress_len, namespace=namespace, rpc=rpc
-            )
-            self.futures.append(ret)
             return ret
 
-        def delete_multi_async(self, keys, seconds=0, key_prefix='', namespace=None, rpc=None):
-            if key_prefix:
-                raise NotImplementedError("key_prefix is intentionally disallowed")
+    def __getattr__(self, attr):
+        if attr not in KeyPrefixedClient.ALLOWED_PROPERTIES and not attr.startswith("__"):
+            raise ValueError("Attempted to use non-wrapped memcache API")
 
-            key_prefix = getattr(settings, "KEY_PREFIX", "")
-            ret = super(KeyPrefixedClient, self).delete_multi_async(
-                keys, seconds=seconds, key_prefix=key_prefix,
-                namespace=namespace, rpc=rpc
-            )
-            self.futures.append(ret)
-            return ret
+        return super(KeyPrefixedClient, self).__getattr__(attr)
 
+    def get_multi(self, keys, key_prefix='', namespace=None, for_cas=False):
+        key_mapping = { default_key_func(x, KEY_PREFIX, VERSION): x for x in keys }
+
+        self._force_rpc()
+
+        ret = super(KeyPrefixedClient, self).get_multi(
+            key_mapping.keys(), key_prefix=key_prefix, namespace=namespace, for_cas=for_cas
+        )
+
+        return { key_mapping[k]: v for k, v in ret.iteritems() }
+
+    def set_multi_async(self, mapping, time=0,  key_prefix='', min_compress_len=0, namespace=None, rpc=None):
+        mapping = mapping.copy()
+        for key in mapping.keys():
+            mapping[default_key_func(key, KEY_PREFIX, VERSION)] = mapping[key]
+            del mapping[key]
+
+        ret = super(KeyPrefixedClient, self).set_multi_async(
+            mapping, time=time, key_prefix=key_prefix,
+            min_compress_len=min_compress_len, namespace=namespace, rpc=rpc
+        )
+        self.futures.append(ret)
+        return ret
+
+    def delete_multi_async(self, keys, seconds=0, key_prefix='', namespace=None, rpc=None):
+        keys = [ default_key_func(x, KEY_PREFIX, VERSION) for x in keys ]
+
+        ret = super(KeyPrefixedClient, self).delete_multi_async(
+            keys, seconds=seconds, key_prefix=key_prefix,
+            namespace=namespace, rpc=rpc
+        )
+        self.futures.append(ret)
+        return ret
+
+
+def ensure_memcache_client():
     if not hasattr(_local, "memcache"):
         _local.memcache = KeyPrefixedClient()
 
