@@ -118,6 +118,14 @@ class MemcacheCachingTests(TestCase):
          - filter/get by anything else does not (eventually consistent)
     """
 
+    def setUp(self, *args, **kwargs):
+        caching._local.memcache.set_sync_mode(True)
+        return super(MemcacheCachingTests, self).setUp(*args, **kwargs)
+
+    def tearDown(self, *args, **kwargs):
+        caching._local.memcache.set_sync_mode(False)
+        return super(MemcacheCachingTests, self).tearDown(*args, **kwargs)
+
     @disable_cache(memcache=False, context=True)
     def test_save_inside_transaction_evicts_cache(self):
         entity_data = {

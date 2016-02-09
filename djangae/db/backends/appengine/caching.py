@@ -3,16 +3,19 @@ import threading
 import itertools
 
 from google.appengine.api import datastore
+from google.appengine.api import memcache
+from google.appengine.api.memcache import Client
 
 from django.conf import settings
-from django.core.cache import cache
 from djangae.db import utils
 from djangae.db.unique_utils import unique_identifiers_from_entity, _format_value_for_identifier
+from django.core.cache.backends.base import default_key_func
 from djangae.db.backends.appengine.context import ContextStack
 
 logger = logging.getLogger("djangae")
 
 _context = None
+_local = threading.local()
 
 def get_context():
     global _context
@@ -32,6 +35,88 @@ class CachingSituation:
     DATASTORE_PUT = 1
     DATASTORE_GET_PUT = 2 # When we are doing an update
 
+VERSION = 1 # This is so we can invalidate the cache after a backwards incompatible change
+# If we ever have to change VERSION it will break our memcache tests (which django.core.cache with VERSION==1)
+# in which case we should update them to call memcache.get directly instead
+
+KEY_PREFIX = getattr(settings, "KEY_PREFIX", "") # Use the Django key_prefix
+
+
+class KeyPrefixedClient(Client):
+    """
+        This is a special wrapper around some of the GAE memcache functions. It is
+        used only for the datastore backend caching.
+        Only 3 methods are permitted: get_multi, set_multi_async, and delete_multi_async. This
+        ensures that we do things as quickly as possible.
+        We have to map keys back and forth to include the prefix and version. That's why some of the
+        code may look weird.
+    """
+
+    ALLOWED_PROPERTIES = ("get_multi", "set_multi_async", "delete_multi_async")
+
+    def __init__(self, *args, **kwargs):
+        self.sync_mode = False
+        super(KeyPrefixedClient, self).__init__(*args, **kwargs)
+
+    def set_sync_mode(self, value):
+        """
+            Enables synchronous RPC calls, useful for testing
+        """
+        self.sync_mode = bool(value)
+
+    def __getattr__(self, attr):
+        if attr not in KeyPrefixedClient.ALLOWED_PROPERTIES and not attr.startswith("__"):
+            raise NotImplementedError("Attempted to use non-wrapped memcache API")
+
+        return super(KeyPrefixedClient, self).__getattr__(attr)
+
+    def get_multi(self, keys, key_prefix='', namespace=None, for_cas=False):
+        key_mapping = { default_key_func(x, KEY_PREFIX, VERSION): x for x in keys }
+
+        ret = super(KeyPrefixedClient, self).get_multi(
+            key_mapping.keys(), key_prefix=key_prefix, namespace=namespace, for_cas=for_cas
+        )
+
+        return { key_mapping[k]: v for k, v in ret.iteritems() }
+
+    def set_multi_async(self, mapping, time=0,  key_prefix='', min_compress_len=0, namespace=None, rpc=None):
+        mapping = mapping.copy()
+        for key in mapping.keys():
+            mapping[default_key_func(key, KEY_PREFIX, VERSION)] = mapping[key]
+            del mapping[key]
+
+        if self.sync_mode:
+            # We don't call up, because set_multi calls set_multi_async
+            return memcache.set_multi(
+                mapping, time=time, key_prefix=key_prefix,
+                min_compress_len=min_compress_len, namespace=namespace
+            )
+        else:
+            return super(KeyPrefixedClient, self).set_multi_async(
+                mapping, time=time, key_prefix=key_prefix,
+                min_compress_len=min_compress_len, namespace=namespace, rpc=rpc
+            )
+
+    def delete_multi_async(self, keys, seconds=0, key_prefix='', namespace=None, rpc=None):
+        keys = [ default_key_func(x, KEY_PREFIX, VERSION) for x in keys ]
+
+        if self.sync_mode:
+            # We don't call up, because delete_multi calls delete_multi_async
+            return memcache.delete_multi(
+                keys, seconds=seconds, key_prefix=key_prefix,
+                namespace=namespace
+            )
+        else:
+            return super(KeyPrefixedClient, self).delete_multi_async(
+                keys, seconds=seconds, key_prefix=key_prefix,
+                namespace=namespace, rpc=rpc
+            )
+
+
+def ensure_memcache_client():
+    if not hasattr(_local, "memcache"):
+        _local.memcache = KeyPrefixedClient()
+
 
 def ensure_context():
     context = get_context()
@@ -42,7 +127,8 @@ def ensure_context():
 
 
 def _add_entity_to_memcache(model, mc_key_entity_map):
-    cache.set_many(mc_key_entity_map, timeout=CACHE_TIMEOUT_SECONDS)
+    ensure_memcache_client()
+    _local.memcache.set_multi_async(mc_key_entity_map, time=CACHE_TIMEOUT_SECONDS)
 
 
 def _get_cache_key_and_model_from_datastore_key(key):
@@ -68,28 +154,31 @@ def _remove_entities_from_memcache_by_key(keys):
         entries would be left behind. Remember if you need pure atomicity then use disable_cache() or a
         transaction.
     """
+    ensure_memcache_client()
+
     # Key -> model
     cache_keys = dict(
         _get_cache_key_and_model_from_datastore_key(key) for key in keys
     )
-    entities = cache.get_many(cache_keys.keys())
+    entities = _local.memcache.get_multi(cache_keys.keys())
 
     if entities:
         identifiers = [
             unique_identifiers_from_entity(cache_keys[key], entity)
             for key, entity in entities.items()
         ]
-        cache.delete_many(itertools.chain(*identifiers))
+        _local.memcache.delete_multi_async(itertools.chain(*identifiers))
 
 
 def _get_entity_from_memcache(cache_key):
-    return cache.get(cache_key)
+    ensure_memcache_client()
+    return _local.memcache.get_multi([cache_key]).get(cache_key)
 
 
 def _get_entity_from_memcache_by_key(key):
     # We build the cache key for the ID of the instance
     cache_key, _ = _get_cache_key_and_model_from_datastore_key(key)
-    return cache.get(cache_key)
+    return _get_entity_from_memcache(cache_key)
 
 
 def add_entities_to_cache(model, entities, situation, skip_memcache=False):
