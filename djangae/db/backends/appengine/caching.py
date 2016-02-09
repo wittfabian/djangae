@@ -70,7 +70,7 @@ class KeyPrefixedClient(Client):
 
     def __getattr__(self, attr):
         if attr not in KeyPrefixedClient.ALLOWED_PROPERTIES and not attr.startswith("__"):
-            raise ValueError("Attempted to use non-wrapped memcache API")
+            raise NotImplementedError("Attempted to use non-wrapped memcache API")
 
         return super(KeyPrefixedClient, self).__getattr__(attr)
 
