@@ -52,12 +52,6 @@ class KeyPrefixedClient(Client):
         Only 3 methods are permitted: get_multi, set_multi_async, and delete_multi_async. This
         ensures that we do things as quickly as possible.
 
-        If a thread calls get_multi after a previous set_multi_async or delete_multi_async then
-        the get_multi will block until the sets and deletes have completed. This is the best way
-        to ensure that a get following a delete won't return an entity etc. This may still mean
-        that another thread will get an entity from the cache that was just deleted, but unfortunately
-        that's the toss-up between generally fast performance elsewhere.
-
         We have to map keys back and forth to include the prefix and version. That's why some of the
         code may look weird.
     """
