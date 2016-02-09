@@ -13,22 +13,19 @@ from django.conf import settings
 from django.core.cache import cache
 from djangae.db import utils
 from djangae.db.unique_utils import unique_identifiers_from_entity, _format_value_for_identifier
-from djangae.db.backends.appengine.context import ContextStack
+from djangae.db.backends.appengine.context import ContextCache
 
 _local = threading.local()
 
 logger = logging.getLogger("djangae")
 
-_context = None
-
 
 def get_context():
-    global _context
-
-    if not _context:
-        _context = threading.local()
-
-    return _context
+    try:
+        return _local.context
+    except AttributeError:
+        _local.context = ContextCache()
+        return _local.context
 
 
 def get_memcache_client():
@@ -129,14 +126,6 @@ class KeyPrefixedClient(Client):
             )
 
 
-def ensure_context():
-    context = get_context()
-
-    context.memcache_enabled = getattr(context, "memcache_enabled", True)
-    context.context_enabled = getattr(context, "context_enabled", True)
-    context.stack = context.stack if hasattr(context, "stack") else ContextStack()
-
-
 def _apply_namespace(value_or_map, namespace):
     """ Add the given namespace to the given cache key(s). """
     if hasattr(value_or_map, "keys"):
@@ -220,8 +209,6 @@ def _get_entity_from_memcache_by_key(key):
 
 
 def add_entities_to_cache(model, entities, situation, namespace, skip_memcache=False):
-    ensure_context()
-
     # Don't cache on Get if we are inside a transaction, even in the context
     # This is because transactions don't see the current state of the datastore
     # We can still cache in the context on Put() but not in memcache
@@ -264,14 +251,13 @@ def remove_entities_from_cache_by_key(keys, namespace, memcache_only=False):
         Given an iterable of datastore.Keys objects, remove the corresponding entities from caches,
         both context and memcache, or just memcache if specified.
     """
-    ensure_context()
-
+    context = get_context()
     if not memcache_only:
         for key in keys:
-            identifiers = _context.stack.top.reverse_cache.get(key, [])
+            identifiers = context.stack.top.reverse_cache.get(key, [])
             for identifier in identifiers:
-                if identifier in _context.stack.top.cache:
-                    del _context.stack.top.cache[identifier]
+                if identifier in context.stack.top.cache:
+                    del context.stack.top.cache[identifier]
 
     _remove_entities_from_memcache_by_key(keys, namespace)
 
@@ -281,19 +267,17 @@ def get_from_cache_by_key(key):
         Given a datastore.Key (which should already have the namespace applied to it), return an
         entity from the context cache, falling back to memcache when possible.
     """
-
-    ensure_context()
-
     if not CACHE_ENABLED:
         return None
 
+    context = get_context()
     namespace = key.namespace() or None
     ret = None
-    if _context.context_enabled:
+    if context.context_enabled:
         # It's safe to hit the context cache, because a new one was pushed on the stack at the start of the transaction
-        ret = _context.stack.top.get_entity_by_key(key)
+        ret = context.stack.top.get_entity_by_key(key)
         if ret is None and not datastore.IsInTransaction():
-            if _context.memcache_enabled:
+            if context.memcache_enabled:
                 ret = _get_entity_from_memcache_by_key(key)
                 if ret:
                     # Add back into the context cache
@@ -304,7 +288,7 @@ def get_from_cache_by_key(key):
                         namespace,
                         skip_memcache=True # Don't put in memcache, we just got it from there!
                     )
-    elif _context.memcache_enabled and not datastore.IsInTransaction():
+    elif context.memcache_enabled and not datastore.IsInTransaction():
         ret = _get_entity_from_memcache_by_key(key)
 
     return ret
@@ -314,8 +298,6 @@ def get_from_cache(unique_identifier, namespace):
     """
         Return an entity from the context cache, falling back to memcache when possible
     """
-
-    ensure_context()
     context = get_context()
 
     if not CACHE_ENABLED:
@@ -353,14 +335,4 @@ def reset_context(keep_disabled_flags=False, *args, **kwargs):
     """
 
     context = get_context()
-
-    memcache_enabled = getattr(context, "memcache_enabled", True)
-    context_enabled = getattr(context, "context_enabled", True)
-
-    context.memcache_enabled = True
-    context.context_enabled = True
-    context.stack = ContextStack()
-
-    if keep_disabled_flags:
-        context.memcache_enabled = memcache_enabled
-        context.context_enabled = context_enabled
+    context.reset(keep_disabled_flags=keep_disabled_flags)

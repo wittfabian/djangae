@@ -30,6 +30,23 @@ class CopyDict(collections.MutableMapping):
     def __len__(self):
         return len(self._store)
 
+
+class ContextCache(object):
+    """ Object via which the stack of Context objects and the settings for the context caching are
+        accessed. A separate instance of this should exist per thread.
+    """
+    def __init__(self):
+        self.memcache_enabled = True
+        self.context_enabled = True
+        self.stack = ContextStack()
+
+    def reset(self, keep_disabled_flags):
+        self.stack = ContextStack()
+        if not keep_disabled_flags:
+            self.memcache_enabled = True
+            self.context_enabled = True
+
+
 class Context(object):
 
     def __init__(self, stack):

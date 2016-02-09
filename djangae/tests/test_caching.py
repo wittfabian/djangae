@@ -578,17 +578,17 @@ class ContextCachingTests(TestCase):
             atomic block which isn't marked as independent, the atomic is a no-op. Therefore
             we shouldn't push a context here, and we shouldn't pop it at the end either.
         """
-
-        self.assertEqual(1, caching._context.stack.size)
+        context = caching.get_context()
+        self.assertEqual(1, context.stack.size)
         with transaction.atomic():
-            self.assertEqual(2, caching._context.stack.size)
+            self.assertEqual(2, context.stack.size)
             with transaction.atomic():
-                self.assertEqual(2, caching._context.stack.size)
+                self.assertEqual(2, context.stack.size)
                 with transaction.atomic():
-                    self.assertEqual(2, caching._context.stack.size)
-                self.assertEqual(2, caching._context.stack.size)
-            self.assertEqual(2, caching._context.stack.size)
-        self.assertEqual(1, caching._context.stack.size)
+                    self.assertEqual(2, context.stack.size)
+                self.assertEqual(2, context.stack.size)
+            self.assertEqual(2, context.stack.size)
+        self.assertEqual(1, context.stack.size)
 
     @disable_cache(memcache=True, context=False)
     def test_nested_rollback_doesnt_apply_on_outer_commit(self):

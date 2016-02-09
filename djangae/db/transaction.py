@@ -130,14 +130,13 @@ class AtomicDecorator(ContextDecorator):
         assert(_GetConnection())
 
         # Clear the context cache at the start of a transaction
-        caching.ensure_context()
         caching.get_context().stack.push()
         state.transaction_started = True
 
     @classmethod
     def _do_exit(cls, state, decorator_args, exception):
         independent = decorator_args.get("independent", False)
-
+        context = caching.get_context()
         try:
             if state.transaction_started:
                 if exception:
@@ -151,9 +150,9 @@ class AtomicDecorator(ContextDecorator):
 
                  # Clear the context cache at the end of a transaction
                 if exception:
-                    caching.get_context().stack.pop(discard=True)
+                    context.stack.pop(discard=True)
                 else:
-                    caching.get_context().stack.pop(apply_staged=True, clear_staged=True)
+                    context.stack.pop(apply_staged=True, clear_staged=True)
 
             # If we were in an independent transaction, put everything back
             # the way it was!
@@ -162,7 +161,7 @@ class AtomicDecorator(ContextDecorator):
                     _PushConnection(state.conn_stack.pop())
 
                 # Restore the in-context cache as it was
-                caching.get_context().stack = state.original_stack
+                context.stack = state.original_stack
 
 
 atomic = AtomicDecorator
@@ -173,13 +172,14 @@ class NonAtomicDecorator(ContextDecorator):
     @classmethod
     def _do_enter(cls, state, decorator_args):
         state.conn_stack = []
+        context = caching.get_context()
 
         # We aren't in a transaction, do nothing!
         if not in_atomic_block():
             return
 
         # Store the current in-context stack
-        state.original_stack = copy.deepcopy(caching.get_context().stack)
+        state.original_stack = copy.deepcopy(context.stack)
 
         # Similar to independent transactions, unwind the connection statck
         # until we aren't in a transaction
@@ -187,8 +187,8 @@ class NonAtomicDecorator(ContextDecorator):
             state.conn_stack.append(_PopConnection())
 
         # Unwind the in-context stack
-        while len(caching.get_context().stack.stack) > 1:
-            caching.get_context().stack.pop(discard=True)
+        while len(context.stack.stack) > 1:
+            context.stack.pop(discard=True)
 
     @classmethod
     def _do_exit(cls, state, decorator_args, exception):
