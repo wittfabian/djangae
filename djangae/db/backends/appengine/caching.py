@@ -41,6 +41,9 @@ class CachingSituation:
 
 
 VERSION = 1 # This is so we can invalidate the cache after a backwards incompatible change
+# If we ever have to change VERSION it will break our memcache tests (which django.core.cache with VERSION==1)
+# in which case we should update them to call memcache.get directly instead
+
 KEY_PREFIX = getattr(settings, "KEY_PREFIX", "") # Use the Django key_prefix
 
 
