@@ -1097,6 +1097,26 @@ class EdgeCaseTests(TestCase):
         self.assertEqual(instance2, ModelWithDates.objects.get(start__gt=datetime.date(2014, 1, 2)))
         self.assertEqual(instance2, ModelWithDates.objects.get(start__gte=datetime.date(2014, 2, 1)))
 
+    def projection_plus_keys_filtering(self):
+        """
+            If you do a query like this:
+
+            MyModel.objects.filter(pk__in=[1, 2]).filter(field1="Bananas").values_list("id", "someotherfield")
+
+            Then a projection query is run. The problem is that the entities returned only include "id" and "someotherfield"
+            but not "field1". Our entity-matches-query code should not run in this situation as we pass
+            all filters to the ancestor queries and so any entities returned should match.
+        """
+
+        user = TestUser.objects.create(username="test", email="test@example.com")
+
+        self.assertItemsEqual(
+            [(user.pk, user.username)],
+            TestUser.objects.filter(
+                pk__in=[user.pk, user.pk+1]).filter(email="test@example.com"
+            ).values_list("id", "username")
+        )
+
     def test_double_starts_with(self):
         qs = TestUser.objects.filter(username__startswith='Hello') |  TestUser.objects.filter(username__startswith='Goodbye')
 

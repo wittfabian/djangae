@@ -204,7 +204,7 @@ class QueryByKeys(object):
         opts = self.queries[0]._Query__query_options
         key_count = len(self.queries_by_key)
 
-        cache = True
+        is_projection = False
 
         results = None
         if key_count == 1:
@@ -218,7 +218,7 @@ class QueryByKeys(object):
 
         if results is None:
             if opts.projection:
-                cache = False # Don't cache projection results!
+                is_projection = True # Don't cache projection results!
 
                 # Assumes projection ancestor queries are faster than a datastore Get
                 # due to lower traffic over the RPC. This should be faster for queries with
@@ -265,7 +265,7 @@ class QueryByKeys(object):
             # This is safe, because Django is fetching all results any way :(
             sorted_results = sorted(results, cmp=partial(utils.django_ordering_comparison, self.ordering))
             sorted_results = [result for result in sorted_results if result is not None]
-            if cache and sorted_results:
+            if not is_projection and sorted_results:
                 caching.add_entities_to_cache(
                     self.model,
                     sorted_results,
@@ -274,8 +274,14 @@ class QueryByKeys(object):
                 )
 
             for result in sorted_results:
+                if is_projection:
+                    entity_matches_query = True
+                else:
+                    entity_matches_query = any(
+                        utils.entity_matches_query(result, qry) for qry in self.queries_by_key[result.key()]
+                    )
 
-                if not any([ utils.entity_matches_query(result, qry) for qry in self.queries_by_key[result.key()]]):
+                if not entity_matches_query:
                     continue
 
                 if offset and returned < offset:
@@ -821,7 +827,7 @@ def reserve_id(kind, id_or_name, namespace):
 
 class InsertCommand(object):
     def __init__(self, connection, model, objs, fields, raw):
-        self.has_pk = any([x.primary_key for x in fields])
+        self.has_pk = any(x.primary_key for x in fields)
         self.model = model
         self.objs = objs
         self.connection = connection
