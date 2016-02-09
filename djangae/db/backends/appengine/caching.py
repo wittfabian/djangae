@@ -10,7 +10,6 @@ from django.core.cache.backends.base import default_key_func
 
 
 from django.conf import settings
-from django.core.cache import cache
 from djangae.db import utils
 from djangae.db.unique_utils import unique_identifiers_from_entity, _format_value_for_identifier
 from djangae.db.backends.appengine.context import ContextCache
