@@ -119,6 +119,14 @@ class MemcacheCachingTests(TestCase):
          - filter/get by anything else does not (eventually consistent)
     """
 
+    def setUp(self, *args, **kwargs):
+        caching._local.memcache.set_sync_mode(True)
+        return super(MemcacheCachingTests, self).setUp(*args, **kwargs)
+
+    def tearDown(self, *args, **kwargs):
+        caching._local.memcache.set_sync_mode(False)
+        return super(MemcacheCachingTests, self).tearDown(*args, **kwargs)
+
     @disable_cache(memcache=False, context=True)
     def test_save_inside_transaction_evicts_cache(self):
         entity_data = {
@@ -133,7 +141,6 @@ class MemcacheCachingTests(TestCase):
         )
 
         instance = CachingTestModel.objects.create(id=222, **entity_data)
-        caching._local.memcache._force_rpc()
 
         for identifier in identifiers:
             self.assertEqual(entity_data, cache.get(identifier))
@@ -169,13 +176,11 @@ class MemcacheCachingTests(TestCase):
             self.assertIsNone(cache.get(identifier))
 
         instance = CachingTestModel.objects.create(id=222, **entity_data)
-        caching._local.memcache._force_rpc()
 
         for identifier in identifiers:
             self.assertEqual(entity_data, cache.get(identifier))
 
         instance.delete()
-        caching._local.memcache._force_rpc()
 
         for identifier in identifiers:
             self.assertIsNone(cache.get(identifier))
@@ -183,7 +188,6 @@ class MemcacheCachingTests(TestCase):
         with transaction.atomic():
             instance = CachingTestModel.objects.create(**entity_data)
 
-        caching._local.memcache._force_rpc()
         for identifier in identifiers:
             self.assertIsNone(cache.get(identifier))
 
@@ -204,7 +208,6 @@ class MemcacheCachingTests(TestCase):
             self.assertIsNone(cache.get(identifier))
 
         instance = CachingTestModel.objects.create(id=222, **entity_data)
-        caching._local.memcache._force_rpc()
 
         for identifier in identifiers:
             self.assertEqual(entity_data, cache.get(identifier))
@@ -232,7 +235,6 @@ class MemcacheCachingTests(TestCase):
             self.assertIsNone(cache.get(identifier))
 
         instance = CachingTestModel.objects.create(id=222, **entity_data)
-        caching._local.memcache._force_rpc()
 
         for identifier in identifiers:
             self.assertEqual("old", cache.get(identifier)["field1"])
@@ -246,7 +248,7 @@ class MemcacheCachingTests(TestCase):
             instance.save()
             non_transactional_read(instance.pk)  # could potentially recache the old object
 
-        caching._local.memcache._force_rpc()
+
         for identifier in identifiers:
             self.assertIsNone(cache.get(identifier))
 
@@ -268,8 +270,6 @@ class MemcacheCachingTests(TestCase):
 
         CachingTestModel.objects.create(id=222, **entity_data)
 
-        caching._local.memcache._force_rpc()
-
         for identifier in identifiers:
             self.assertEqual(entity_data, cache.get(identifier))
 
@@ -279,8 +279,6 @@ class MemcacheCachingTests(TestCase):
             self.assertIsNone(cache.get(identifier))
 
         CachingTestModel.objects.get(id=222) # Consistent read
-
-        caching._local.memcache._force_rpc()
 
         for identifier in identifiers:
             self.assertEqual(entity_data, cache.get(identifier))
@@ -302,8 +300,6 @@ class MemcacheCachingTests(TestCase):
             self.assertIsNone(cache.get(identifier))
 
         CachingTestModel.objects.create(id=222, **entity_data)
-
-        caching._local.memcache._force_rpc()
 
         for identifier in identifiers:
             self.assertEqual(entity_data, cache.get(identifier))
@@ -372,7 +368,7 @@ class MemcacheCachingTests(TestCase):
         }
 
         original = CachingTestModel.objects.create(**entity_data)
-        caching._local.memcache._force_rpc()
+
 
         with sleuth.watch("google.appengine.api.datastore.Get") as datastore_get:
             instance = CachingTestModel.objects.get(pk=original.pk)

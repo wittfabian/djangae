@@ -4,6 +4,7 @@ import itertools
 
 from google.appengine.api import datastore
 from google.appengine.api import namespace_manager
+from google.appengine.api import memcache
 from google.appengine.api.memcache import Client
 from django.core.cache.backends.base import default_key_func
 
@@ -64,14 +65,14 @@ class KeyPrefixedClient(Client):
     ALLOWED_PROPERTIES = ("get_multi", "set_multi_async", "delete_multi_async")
 
     def __init__(self, *args, **kwargs):
-        self.futures = []
+        self.sync_mode = False
         super(KeyPrefixedClient, self).__init__(*args, **kwargs)
 
-    def _force_rpc(self):
-        if self.futures:
-            ret = [ x.get_result() for x in self.futures ]
-            self.futures = []
-            return ret
+    def set_sync_mode(self, value):
+        """
+            Enables synchronous RPC calls, useful for testing
+        """
+        self.sync_mode = bool(value)
 
     def __getattr__(self, attr):
         if attr not in KeyPrefixedClient.ALLOWED_PROPERTIES and not attr.startswith("__"):
@@ -81,8 +82,6 @@ class KeyPrefixedClient(Client):
 
     def get_multi(self, keys, key_prefix='', namespace=None, for_cas=False):
         key_mapping = { default_key_func(x, KEY_PREFIX, VERSION): x for x in keys }
-
-        self._force_rpc()
 
         ret = super(KeyPrefixedClient, self).get_multi(
             key_mapping.keys(), key_prefix=key_prefix, namespace=namespace, for_cas=for_cas
@@ -96,22 +95,32 @@ class KeyPrefixedClient(Client):
             mapping[default_key_func(key, KEY_PREFIX, VERSION)] = mapping[key]
             del mapping[key]
 
-        ret = super(KeyPrefixedClient, self).set_multi_async(
-            mapping, time=time, key_prefix=key_prefix,
-            min_compress_len=min_compress_len, namespace=namespace, rpc=rpc
-        )
-        self.futures.append(ret)
-        return ret
+        if self.sync_mode:
+            # We don't call up, because set_multi calls set_multi_async
+            return memcache.set_multi(
+                mapping, time=time, key_prefix=key_prefix,
+                min_compress_len=min_compress_len, namespace=namespace
+            )
+        else:
+            return super(KeyPrefixedClient, self).set_multi_async(
+                mapping, time=time, key_prefix=key_prefix,
+                min_compress_len=min_compress_len, namespace=namespace, rpc=rpc
+            )
 
     def delete_multi_async(self, keys, seconds=0, key_prefix='', namespace=None, rpc=None):
         keys = [ default_key_func(x, KEY_PREFIX, VERSION) for x in keys ]
 
-        ret = super(KeyPrefixedClient, self).delete_multi_async(
-            keys, seconds=seconds, key_prefix=key_prefix,
-            namespace=namespace, rpc=rpc
-        )
-        self.futures.append(ret)
-        return ret
+        if self.sync_mode:
+            # We don't call up, because delete_multi calls delete_multi_async
+            return memcache.delete_multi(
+                keys, seconds=seconds, key_prefix=key_prefix,
+                namespace=namespace
+            )
+        else:
+            return super(KeyPrefixedClient, self).delete_multi_async(
+                keys, seconds=seconds, key_prefix=key_prefix,
+                namespace=namespace, rpc=rpc
+            )
 
 
 def ensure_memcache_client():
