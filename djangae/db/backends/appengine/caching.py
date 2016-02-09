@@ -87,6 +87,7 @@ class KeyPrefixedClient(Client):
         return super(KeyPrefixedClient, self).__getattr__(attr)
 
     def get_multi(self, keys, key_prefix='', namespace=None, for_cas=False):
+        # Convert the given keys to our prefixed keys, then map the results back onto the original keys
         key_mapping = { default_key_func(x, KEY_PREFIX, VERSION): x for x in keys }
 
         ret = super(KeyPrefixedClient, self).get_multi(
