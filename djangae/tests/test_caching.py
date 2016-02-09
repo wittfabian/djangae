@@ -615,8 +615,10 @@ class ContextCachingTests(TestCase):
         original = CachingTestModel.objects.get(pk=original.pk)
         self.assertEqual("Apple", original.field1) # Shouldn't have changed
 
-    @disable_cache(memcache=True, context=False)
     def test_save_caches(self):
+        """ Test that after saving something, it exists in the context cache and therefore when we
+            fetch it we don't hit memcache or the Datastore.
+        """
         entity_data = {
             "field1": "Apple",
             "comb1": 1,
@@ -626,11 +628,13 @@ class ContextCachingTests(TestCase):
         original = CachingTestModel.objects.create(**entity_data)
 
         with sleuth.watch("google.appengine.api.datastore.Get") as datastore_get:
-            with sleuth.watch("django.core.cache.cache.get") as memcache_get:
-                original = CachingTestModel.objects.get(pk=original.pk)
+            with sleuth.watch("google.appengine.api.memcache.get") as memcache_get:
+                with sleuth.watch("google.appengine.api.memcache.get_multi") as memcache_get_multi:
+                    original = CachingTestModel.objects.get(pk=original.pk)
 
         self.assertFalse(datastore_get.called)
         self.assertFalse(memcache_get.called)
+        self.assertFalse(memcache_get_multi.called)
 
     @disable_cache(memcache=True, context=False)
     def test_consistent_read_updates_cache_outside_transaction(self):
