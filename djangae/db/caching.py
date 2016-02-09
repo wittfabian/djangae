@@ -34,8 +34,6 @@ class DisableCache(object):
             return call_func(*args, **kwargs)
 
     def __enter__(self):
-        caching.ensure_context()
-
         ctx = caching.get_context()
 
         self.orig_memcache = ctx.memcache_enabled
@@ -51,16 +49,3 @@ class DisableCache(object):
         ctx.context_enabled = self.orig_context
 
 disable_cache = DisableCache
-
-
-def clear_context_cache():
-    """
-        Resets the context cache, don't do this inside a transaction... in fact, probably
-        just don't do this.
-    """
-
-    if datastore.IsInTransaction():
-        raise RuntimeError("Clearing the context cache inside a transaction breaks everything, we can't let you do that")
-
-
-    caching.reset_context(keep_disabled_flags=True)
