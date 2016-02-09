@@ -62,9 +62,10 @@ class KeyPrefixedClient(Client):
 
         We have to map keys back and forth to include the prefix and version. That's why some of the
         code may look weird.
-    """
 
-    ALLOWED_PROPERTIES = ("get_multi", "set_multi_async", "delete_multi_async")
+        Note that methods such as `get_multi_async` which are not overridden on this class should
+        not be used.
+    """
 
     def __init__(self, *args, **kwargs):
         self.sync_mode = False
@@ -75,12 +76,6 @@ class KeyPrefixedClient(Client):
             Enables synchronous RPC calls, useful for testing
         """
         self.sync_mode = bool(value)
-
-    def __getattr__(self, attr):
-        if attr not in KeyPrefixedClient.ALLOWED_PROPERTIES and not attr.startswith("__"):
-            raise NotImplementedError("Attempted to use non-wrapped memcache API")
-
-        return super(KeyPrefixedClient, self).__getattr__(attr)
 
     def get_multi(self, keys, key_prefix='', namespace=None, for_cas=False):
         # Convert the given keys to our prefixed keys, then map the results back onto the original keys
