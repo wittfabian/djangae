@@ -21,6 +21,7 @@ logger = logging.getLogger("djangae")
 
 _context = None
 
+
 def get_context():
     global _context
 
@@ -28,6 +29,14 @@ def get_context():
         _context = threading.local()
 
     return _context
+
+
+def get_memcache_client():
+    try:
+        return _local.memcache
+    except AttributeError:
+        _local.memcache = KeyPrefixedClient()
+        return _local.memcache
 
 
 CACHE_TIMEOUT_SECONDS = getattr(settings, "DJANGAE_CACHE_TIMEOUT_SECONDS", 60 * 60)
@@ -119,13 +128,6 @@ class KeyPrefixedClient(Client):
             )
 
 
-def get_memcache_client():
-    if not hasattr(_local, "memcache"):
-        _local.memcache = KeyPrefixedClient()
-
-    return _local.memcache
-
-
 def ensure_context():
     context = get_context()
 
@@ -158,7 +160,9 @@ def _strip_namespace(value_or_map):
 
 
 def _add_entity_to_memcache(model, mc_key_entity_map, namespace):
-    get_memcache_client().set_multi_async(_apply_namespace(mc_key_entity_map, namespace), time=CACHE_TIMEOUT_SECONDS)
+    get_memcache_client().set_multi_async(
+        _apply_namespace(mc_key_entity_map, namespace), time=CACHE_TIMEOUT_SECONDS
+    )
 
 
 def _get_cache_key_and_model_from_datastore_key(key):
@@ -189,14 +193,18 @@ def _remove_entities_from_memcache_by_key(keys, namespace):
     cache_keys = dict(
         _get_cache_key_and_model_from_datastore_key(key) for key in keys
     )
-    entities = _strip_namespace(get_memcache_client().get_multi(_apply_namespace(cache_keys.keys(), namespace)))
+    entities = _strip_namespace(
+        get_memcache_client().get_multi(_apply_namespace(cache_keys.keys(), namespace))
+    )
 
     if entities:
         identifiers = [
             unique_identifiers_from_entity(cache_keys[key], entity)
             for key, entity in entities.items()
         ]
-        get_memcache_client().delete_multi_async(_apply_namespace(itertools.chain(*identifiers), namespace))
+        get_memcache_client().delete_multi_async(
+            _apply_namespace(itertools.chain(*identifiers), namespace)
+        )
 
 
 def _get_entity_from_memcache(cache_key):
