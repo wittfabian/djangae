@@ -33,7 +33,6 @@ from djangae.db import constraints, utils
 from djangae.db.backends.appengine import caching
 from djangae.db.unique_utils import query_is_unique
 from djangae.db.backends.appengine import transforms
-from djangae.db.caching import clear_context_cache
 
 DATE_TRANSFORMS = {
     "year": transforms.year_transform,
@@ -809,7 +808,7 @@ class FlushCommand(object):
         # TODO: ideally we would only clear the cached objects for the table that was flushed, but
         # we have no way of doing that
         cache.clear()
-        clear_context_cache()
+        caching.get_context().reset()
 
 
 @db.non_transactional

@@ -40,7 +40,12 @@ class ContextCache(object):
         self.context_enabled = True
         self.stack = ContextStack()
 
-    def reset(self, keep_disabled_flags):
+    def reset(self, keep_disabled_flags=False):
+        if datastore.IsInTransaction():
+            raise RuntimeError(
+                "Clearing the context cache inside a transaction breaks everything, "
+                "we can't let you do that"
+            )
         self.stack = ContextStack()
         if not keep_disabled_flags:
             self.memcache_enabled = True

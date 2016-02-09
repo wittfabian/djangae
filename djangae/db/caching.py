@@ -49,15 +49,3 @@ class DisableCache(object):
         ctx.context_enabled = self.orig_context
 
 disable_cache = DisableCache
-
-
-def clear_context_cache():
-    """
-        Resets the context cache, don't do this inside a transaction... in fact, probably
-        just don't do this.
-    """
-
-    if datastore.IsInTransaction():
-        raise RuntimeError("Clearing the context cache inside a transaction breaks everything, we can't let you do that")
-
-    caching.reset_context(keep_disabled_flags=True)

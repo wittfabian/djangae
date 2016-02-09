@@ -13,7 +13,7 @@ from djangae.db import unique_utils
 from djangae.db import transaction
 from djangae.db.backends.appengine.context import ContextStack
 from djangae.db.backends.appengine import caching
-from djangae.db.caching import disable_cache, clear_context_cache
+from djangae.db.caching import disable_cache
 
 
 DEFAULT_NAMESPACE = default_connection.ops.connection.settings_dict.get("NAMESPACE")
@@ -646,7 +646,7 @@ class ContextCachingTests(TestCase):
 
         original = CachingTestModel.objects.create(**entity_data)
 
-        clear_context_cache()
+        caching.get_context().reset(keep_disabled_flags=True)
 
         CachingTestModel.objects.get(pk=original.pk) # Should update the cache
 
@@ -655,7 +655,7 @@ class ContextCachingTests(TestCase):
 
         self.assertFalse(datastore_get.called)
 
-        clear_context_cache()
+        caching.get_context().reset(keep_disabled_flags=True)
 
         with transaction.atomic():
             with sleuth.watch("google.appengine.api.datastore.Get") as datastore_get:
@@ -677,7 +677,7 @@ class ContextCachingTests(TestCase):
 
         original = CachingTestModel.objects.create(**entity_data)
 
-        clear_context_cache()
+        caching.get_context().reset(keep_disabled_flags=True)
 
         CachingTestModel.objects.all() # Inconsistent
 
