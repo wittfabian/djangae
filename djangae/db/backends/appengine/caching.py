@@ -87,20 +87,19 @@ class KeyPrefixedClient(Client):
         return { key_mapping[k]: v for k, v in ret.iteritems() }
 
     def set_multi_async(self, mapping, time=0,  key_prefix='', min_compress_len=0, namespace=None, rpc=None):
-        mapping = mapping.copy()
-        for key in mapping.keys():
-            mapping[default_key_func(key, KEY_PREFIX, VERSION)] = mapping[key]
-            del mapping[key]
+        prefixed_mapping = {}
+        for key, value in mapping.items():
+            prefixed_mapping[default_key_func(key, KEY_PREFIX, VERSION)] = value
 
         if self.sync_mode:
             # We don't call up, because set_multi calls set_multi_async
             return memcache.set_multi(
-                mapping, time=time, key_prefix=key_prefix,
+                prefixed_mapping, time=time, key_prefix=key_prefix,
                 min_compress_len=min_compress_len, namespace=namespace
             )
         else:
             return super(KeyPrefixedClient, self).set_multi_async(
-                mapping, time=time, key_prefix=key_prefix,
+                prefixed_mapping, time=time, key_prefix=key_prefix,
                 min_compress_len=min_compress_len, namespace=namespace, rpc=rpc
             )
 
