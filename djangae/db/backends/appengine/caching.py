@@ -120,9 +120,11 @@ class KeyPrefixedClient(Client):
             )
 
 
-def ensure_memcache_client():
+def get_memcache_client():
     if not hasattr(_local, "memcache"):
         _local.memcache = KeyPrefixedClient()
+
+    return _local.memcache
 
 
 def ensure_context():
@@ -157,8 +159,7 @@ def _strip_namespace(value_or_map):
 
 
 def _add_entity_to_memcache(model, mc_key_entity_map, namespace):
-    ensure_memcache_client()
-    _local.memcache.set_multi_async(_apply_namespace(mc_key_entity_map, namespace), time=CACHE_TIMEOUT_SECONDS)
+    get_memcache_client().set_multi_async(_apply_namespace(mc_key_entity_map, namespace), time=CACHE_TIMEOUT_SECONDS)
 
 
 def _get_cache_key_and_model_from_datastore_key(key):
@@ -185,25 +186,22 @@ def _remove_entities_from_memcache_by_key(keys, namespace):
         transaction.
         In theory the keys should all have the same namespace as `namespace`.
     """
-    ensure_memcache_client()
-
     # Key -> model
     cache_keys = dict(
         _get_cache_key_and_model_from_datastore_key(key) for key in keys
     )
-    entities = _strip_namespace(_local.memcache.get_multi(_apply_namespace(cache_keys.keys(), namespace)))
+    entities = _strip_namespace(get_memcache_client().get_multi(_apply_namespace(cache_keys.keys(), namespace)))
 
     if entities:
         identifiers = [
             unique_identifiers_from_entity(cache_keys[key], entity)
             for key, entity in entities.items()
         ]
-        _local.memcache.delete_multi_async(_apply_namespace(itertools.chain(*identifiers), namespace))
+        get_memcache_client().delete_multi_async(_apply_namespace(itertools.chain(*identifiers), namespace))
 
 
 def _get_entity_from_memcache(cache_key):
-    ensure_memcache_client()
-    return _local.memcache.get_multi([cache_key]).get(cache_key)
+    return get_memcache_client().get_multi([cache_key]).get(cache_key)
 
 
 def _get_entity_from_memcache_by_key(key):
