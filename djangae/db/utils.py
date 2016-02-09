@@ -382,7 +382,10 @@ def entity_matches_query(entity, query):
                 # The query value can be a list of ANDed values
                 query_attrs = query_attr
 
-            query_attrs = [ getattr(query, x) if x == "_Query__kind" else query.get(x) for x in query_attrs ]
+            query_attrs = (
+                getattr(query, x) if x == "_Query__kind" else query.get(x)
+                for x in query_attrs
+            )
 
             if not isinstance(ent_attr, (list, tuple)):
                 ent_attr = [ ent_attr ]
@@ -390,7 +393,7 @@ def entity_matches_query(entity, query):
             matches = False
             for query_attr in query_attrs:  # [22, 23]
                 #If any of the values don't match then this query doesn't match
-                if not any([op(attr, query_attr) for attr in ent_attr]):
+                if not any(op(attr, query_attr) for attr in ent_attr):
                     matches = False
                     break
             else:
