@@ -525,7 +525,8 @@ class InstanceSetFieldTests(TestCase):
         self.assertEqual({other.pk}, main.related_things_ids)
         self.assertEqual(list(ISOther.objects.filter(pk__in=main.related_things_ids)), list(main.related_things.all()))
 
-        self.assertEqual([main], list(other.ismodel_set.all()))
+        self.assertItemsEqual([main], ISModel.objects.filter(related_things=other).all())
+        self.assertItemsEqual([main], list(other.ismodel_set.all()))
 
         main.related_things.remove(other)
         self.assertFalse(main.related_things_ids)
