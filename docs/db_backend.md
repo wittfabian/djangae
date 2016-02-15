@@ -159,6 +159,7 @@ caveats:
  - If no ordering is specified, the instance will be returned first
  - Only ordering on the queryset is respected, if you are relying on model ordering the instance may be returned in the wrong place (patches welcome!)
  - This causes an extra iteration over the returned queryset once it's retrieved
+ - If your queryset has additional filters, the object may be returned even if it doesn't match them (again, patches welcome!)
 
 ### Speed
 
