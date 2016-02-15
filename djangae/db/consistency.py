@@ -53,8 +53,6 @@ def ensure_instance_included(queryset, included_id):
                 if included and item.pk == included.pk:
                     if included_added:
                         continue
-                    else:
-                        item = included
 
                 if not included and item.pk == included_id:
                     # The specified object was deleted but came back, so just ignore it
@@ -64,7 +62,8 @@ def ensure_instance_included(queryset, included_id):
                     included_added = True
                     new_result_cache.append(included)
 
-                new_result_cache.append(item)
+                if item != included:
+                    new_result_cache.append(item)
 
             self._result_cache = new_result_cache[:count]
 

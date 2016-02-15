@@ -63,3 +63,5 @@ class EnsureCreatedTests(TestCase):
         new_instance.delete()
         self.assertEqual(5, len(ensure_instance_included(qs, 7)))
 
+        new_instance = EnsureCreatedModel.objects.create(pk=8, field1=8)
+        self.assertEqual(1, list(ensure_instance_included(qs, 8)).count(new_instance))
