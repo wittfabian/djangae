@@ -7,10 +7,9 @@ def ensure_instance_included(queryset, created_pk):
         In the common case of having just created an item, this
         inserts the item at the correct place in a subsequent query.
 
-        Currently this ALWAYS inserts the specified item, whether it matches
-        the queryset filters or not! It just guarantees that it will be inserted
+        This guarantees that the object will be inserted
         in the right place as per the queryset ordering. Only takes into account
-        the query.order_by. Patches welcome!
+        the query.order_by and not default ordering. Patches welcome!
     """
 
     class EnsuredQuerySet(queryset.__class__):
