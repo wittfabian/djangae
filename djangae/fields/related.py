@@ -284,8 +284,11 @@ class RelatedIteratorField(ForeignObject):
     def deconstruct(self):
         name, path, args, kwargs = super(RelatedIteratorField, self).deconstruct()
         args = (self.rel.to,)
-        del kwargs["null"]
-        del kwargs["default"]
+
+        # We hardcode a number of arguments for RelatedIteratorField, those arguments need to be removed here
+        for hardcoded_kwarg in ["null", "default", "to_fields", "from_fields", "to", "on_delete"]:
+            del kwargs[hardcoded_kwarg]
+
         return name, path, args, kwargs
 
     def get_attname(self):
