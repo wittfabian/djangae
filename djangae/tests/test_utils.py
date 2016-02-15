@@ -44,6 +44,7 @@ class EnsureCreatedTests(TestCase):
             self.assertEqual(5, len(qs)) # Make sure we don't get the new instance
             self.assertEqual(6, len(ensure_instance_included(qs, new_instance.pk))) # Make sure we do
             self.assertEqual(5, len(ensure_instance_included(qs[:5], new_instance.pk))) # Make sure slicing returns the right number
+            self.assertEqual(3, len(ensure_instance_included(qs[2:5], new_instance.pk))) # Make sure slicing returns the right number
 
             evaled = [ x for x in ensure_instance_included(qs.order_by("field1"), new_instance.pk) ]
             self.assertEqual(new_instance, evaled[4]) # Make sure our instance is correctly positioned
@@ -51,6 +52,14 @@ class EnsureCreatedTests(TestCase):
             evaled = [ x for x in ensure_instance_included(qs.order_by("-field1"), new_instance.pk) ]
             self.assertEqual(new_instance, evaled[1], evaled) # Make sure our instance is correctly positioned
 
+            evaled = [ x for x in ensure_instance_included(qs.order_by("-field1"), new_instance.pk)[:2] ]
+            self.assertEqual(new_instance, evaled[1], evaled) # Make sure our instance is correctly positioned
+
         # Now we're in consistent land!
         self.assertTrue(EnsureCreatedModel.objects.filter(pk=7)[:1])
         self.assertEqual(6, len(ensure_instance_included(qs, new_instance.pk)))
+
+        # Make sure it's not returned if it was deleted
+        new_instance.delete()
+        self.assertEqual(5, len(ensure_instance_included(qs, 7)))
+

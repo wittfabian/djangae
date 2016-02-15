@@ -1,7 +1,7 @@
 from django.db.models.query import QuerySet
 
 
-def ensure_instance_included(queryset, created_pk):
+def ensure_instance_included(queryset, included_id):
     """
         HRD fighting generate for iterating querysets.
         In the common case of having just created an item, this
@@ -10,6 +10,10 @@ def ensure_instance_included(queryset, created_pk):
         This guarantees that the object will be inserted
         in the right place as per the queryset ordering. Only takes into account
         the query.order_by and not default ordering. Patches welcome!
+
+        If the instance specified by the included_id was deleted, and it comes back
+        in the subsequent query, it is removed from the resultset. This might cause an
+        off-by-one number of results if you are slicing the queryset.
     """
 
     class EnsuredQuerySet(queryset.__class__):
@@ -17,9 +21,12 @@ def ensure_instance_included(queryset, created_pk):
             super(EnsuredQuerySet, self)._fetch_all()
 
             try:
-                created = self._clone(klass=queryset.__class__).get(pk=created_pk)
+                new_qs = self._clone(klass=queryset.__class__)
+                new_qs.query.high_mark = None
+                new_qs.query.low_mark = 0
+                included = new_qs.get(pk=included_id)
             except self.model.DoesNotExist:
-                created = None
+                included = None
 
             def is_less(lhs, rhs):
                 for field in queryset.query.order_by:
@@ -39,19 +46,23 @@ def ensure_instance_included(queryset, created_pk):
 
             new_result_cache = []
             count = self.query.high_mark
-            created_added = False
+            included_added = False
             for item in self._result_cache:
                 # It was returned in the queryset but `created` will
                 # be consistent, so replace `item`
-                if created and item.pk == created.pk:
-                    if created_added:
+                if included and item.pk == included.pk:
+                    if included_added:
                         continue
                     else:
-                        item = created
+                        item = included
 
-                if created and is_less(created, item) and not created_added:
-                    created_added = True
-                    new_result_cache.append(created)
+                if not included and item.pk == included_id:
+                    # The specified object was deleted but came back, so just ignore it
+                    continue
+
+                if included and is_less(included, item) and not included_added:
+                    included_added = True
+                    new_result_cache.append(included)
 
                 new_result_cache.append(item)
 
