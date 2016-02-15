@@ -850,6 +850,9 @@ class InsertCommand(object):
                     if value else None
                 )
 
+                if value == 0:
+                    raise IntegrityError("The datastore doesn't support 0 as a key value")
+
                 if not self.model._meta.pk.blank and self.included_keys[-1] is None:
                     raise IntegrityError("You must specify a primary key value for {} instances".format(self.model))
             else:
