@@ -142,11 +142,11 @@ There are various solutions and workarounds for these issues.
     - You need to include the additional filters (in this case `size=large`) in both the inner and outer queries.
     - This technique only avoids the *Stale objects* issue, it does not avoid the *Missing objects* issue.
 
-#### djangae.db.utils.ensure_instance_included
+#### djangae.db.consistency.ensure_instance_included
 
 It's very common to need to create a new object, and then redirect to a listing of all objects. This annoyingly falls foul of the
 datastore's eventual consistency. As a .all() query is eventually consistent, it's quite likely that the object you just created or updated
-either won't be returned, or if it was an update, will show stale data. You can fix this by using djangae.contrib.consistency or if you
+either won't be returned, or if it was an update, will show stale data. You can fix this by using [djangae.contrib.consistency](consistency.md) or if you
 want a more lightweight approach you can use `djangae.db.utils.ensure_instance_included` like this:
 
 ```
@@ -159,7 +159,6 @@ caveats:
  - If no ordering is specified, the instance will be returned first
  - Only ordering on the queryset is respected, if you are relying on model ordering the instance may be returned in the wrong place (patches welcome!)
  - This causes an extra iteration over the returned queryset once it's retrieved
- - If your queryset has additional filters, the object may be returned even if it doesn't match them (again, patches welcome!)
 
 ### Speed
 

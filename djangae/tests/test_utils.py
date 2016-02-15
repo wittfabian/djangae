@@ -2,7 +2,7 @@ from django.db import models
 from djangae.contrib import sleuth
 from djangae.test import TestCase, inconsistent_db
 from djangae.utils import get_next_available_port
-from djangae.db.utils import ensure_instance_included
+from djangae.db.consistency import ensure_instance_included
 
 
 class AvailablePortTests(TestCase):

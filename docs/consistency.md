@@ -2,6 +2,9 @@
 
 A contrib app which helps to mitigate against eventual consistency issues with the App Engine Datastore.
 
+**Note: If all you want to do is make sure that a newly updated/created object is returned as part of a queryset
+take a look at [djangae.db.consistency.ensure_instance_included](db_backend.md#djangae.db.utils.djangae.db.consistency.ensure_instance_included).
+If you want a powerful solution to general consistency issues then this is the app for you!**
 
 ## In A Nutshell
 
