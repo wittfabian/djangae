@@ -56,7 +56,9 @@ class UniqueMarker(db.Model):
 def acquire_identifiers(identifiers, entity_key):
     @db.transactional(propagation=TransactionOptions.INDEPENDENT, xg=True)
     def acquire_marker(identifier):
-        identifier_key = Key.from_path(UniqueMarker.kind(), identifier)
+        # Key.from_path expects None for an empty namespace, but Key.namespace() returns ''
+        namespace = entity_key.namespace() or None
+        identifier_key = Key.from_path(UniqueMarker.kind(), identifier, namespace=namespace)
 
         marker = UniqueMarker.get(identifier_key)
         if marker:
@@ -65,7 +67,11 @@ def acquire_identifiers(identifiers, entity_key):
             if not marker.instance and (datetime.datetime.utcnow() - marker.created).seconds > 5:
                 marker.delete()
             elif marker.instance and marker.instance != entity_key and key_exists(marker.instance):
-                raise IntegrityError("Unable to acquire marker for %s" % identifier)
+                fields_and_values = identifier.split("|")
+                table_name = fields_and_values[0]
+                fields_and_values = fields_and_values[1:]
+                fields = [ x.split(":")[0] for x in fields_and_values ]
+                raise IntegrityError("Unique constraint violation for kind {} on fields: {}".format(table_name, ", ".join(fields)))
             else:
                 # The marker is ours anyway
                 return marker
@@ -151,11 +157,11 @@ def release_markers(markers):
     [delete(x) for x in markers]
 
 
-def release_identifiers(identifiers):
+def release_identifiers(identifiers, namespace):
 
     @db.non_transactional
     def delete():
-        keys = [Key.from_path(UniqueMarker.kind(), x) for x in identifiers]
+        keys = [Key.from_path(UniqueMarker.kind(), x, namespace=namespace) for x in identifiers]
         Delete(keys)
 
     delete()
@@ -164,7 +170,9 @@ def release_identifiers(identifiers):
 
 def release(model, entity):
     identifiers = unique_identifiers_from_entity(model, entity, ignore_pk=True)
-    release_identifiers(identifiers)
+    # Key.from_path expects None for an empty namespace, but Key.namespace() returns ''
+    namespace = entity.key().namespace() or None
+    release_identifiers(identifiers, namespace=namespace)
 
 
 class UniquenessMixin(object):

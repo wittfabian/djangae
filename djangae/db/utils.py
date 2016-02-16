@@ -10,6 +10,7 @@ from django.apps import apps
 from django.conf import settings
 from django.db.backends.utils import format_number
 from django.db import IntegrityError
+from django.db.models.query import QuerySet
 from django.utils import timezone
 from google.appengine.api import datastore
 from google.appengine.api.datastore import Key, Query
@@ -230,7 +231,8 @@ def django_instance_to_entity(connection, model, fields, raw, instance, check_nu
         else:
             raise ValueError("Invalid primary key value")
 
-    entity = datastore.Entity(db_table, **kwargs)
+    namespace = connection.settings_dict.get("NAMESPACE")
+    entity = datastore.Entity(db_table, namespace=namespace, **kwargs)
     entity.update(field_values)
 
     classes = get_concrete_db_tables(model)
@@ -240,12 +242,12 @@ def django_instance_to_entity(connection, model, fields, raw, instance, check_nu
     return entity
 
 
-def get_datastore_key(model, pk):
+def get_datastore_key(model, pk, namespace):
     """ Return a datastore.Key for the given model and primary key.
     """
 
     kind = get_top_concrete_parent(model)._meta.db_table
-    return Key.from_path(kind, pk)
+    return Key.from_path(kind, pk, namespace=namespace)
 
 
 class MockInstance(object):
@@ -276,7 +278,7 @@ class MockInstance(object):
 
 
 def key_exists(key):
-    qry = Query(keys_only=True)
+    qry = Query(keys_only=True, namespace=key.namespace())
     qry.Ancestor(key)
     return qry.Count(limit=1) > 0
 
@@ -381,7 +383,10 @@ def entity_matches_query(entity, query):
                 # The query value can be a list of ANDed values
                 query_attrs = query_attr
 
-            query_attrs = [ getattr(query, x) if x == "_Query__kind" else query.get(x) for x in query_attrs ]
+            query_attrs = (
+                getattr(query, x) if x == "_Query__kind" else query.get(x)
+                for x in query_attrs
+            )
 
             if not isinstance(ent_attr, (list, tuple)):
                 ent_attr = [ ent_attr ]
@@ -389,7 +394,7 @@ def entity_matches_query(entity, query):
             matches = False
             for query_attr in query_attrs:  # [22, 23]
                 #If any of the values don't match then this query doesn't match
-                if not any([op(attr, query_attr) for attr in ent_attr]):
+                if not any(op(attr, query_attr) for attr in ent_attr):
                     matches = False
                     break
             else:

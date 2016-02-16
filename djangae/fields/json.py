@@ -16,7 +16,6 @@ from __future__ import absolute_import
 
 import json
 from collections import OrderedDict
-from decimal import Decimal
 
 from django.db import models
 from django.conf import settings
@@ -33,7 +32,6 @@ def dumps(value):
 def loads(txt, object_pairs_hook=None):
     value = json.loads(
         txt,
-        parse_float=Decimal,
         encoding=settings.DEFAULT_CHARSET,
         object_pairs_hook=object_pairs_hook,
     )

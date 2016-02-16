@@ -36,10 +36,11 @@ class BackendTests(TestCase):
         """
         User = get_user_model()
         self.assertEqual(User.objects.count(), 0)
-        google_user = users.User('1@example.com', _user_id='111111111100000000001')
+        email = 'UpperCasedAddress@example.com'
+        google_user = users.User(email, _user_id='111111111100000000001')
         backend = AppEngineUserAPI()
         user = backend.authenticate(google_user=google_user,)
-        self.assertEqual(user.email, '1@example.com')
+        self.assertEqual(user.email, email.lower())
         self.assertEqual(User.objects.count(), 1)
         # Calling authenticate again with the same credentials should not create another user
         user2 = backend.authenticate(google_user=google_user)
@@ -208,6 +209,26 @@ class MiddlewareTests(TestCase):
         # We expect request.user to be AnonymousUser(), because there was no User object in the DB
         # and so with pre-creation required, authentication should have failed
         self.assertTrue(isinstance(request.user, AnonymousUser))
+
+    def test_middleware_resaves_email(self):
+        # Create user with uppercased email
+        email = 'User@example.com'
+        google_user = users.User(email, _user_id='111111111100000000001')
+        backend = AppEngineUserAPI()
+        user = backend.authenticate(google_user=google_user,)
+        # Normalize_email should save a user with lowercase email
+        self.assertEqual(user.email, email.lower())
+
+        # Run AuthenticationMiddleware, if email are mismatched
+        with sleuth.switch('djangae.contrib.gauth.middleware.users.get_current_user', lambda: google_user):
+            request = HttpRequest()
+            SessionMiddleware().process_request(request)  # Make the damn sessions work
+            middleware = AuthenticationMiddleware()
+            middleware.process_request(request)
+
+        # Middleware should resave to uppercased email, keeping user the same
+        self.assertEqual(request.user.email, email)
+        self.assertEqual(request.user.pk, user.pk)
 
 
 @override_settings(

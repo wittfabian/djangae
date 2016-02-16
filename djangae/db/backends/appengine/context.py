@@ -30,6 +30,28 @@ class CopyDict(collections.MutableMapping):
     def __len__(self):
         return len(self._store)
 
+
+class ContextCache(object):
+    """ Object via which the stack of Context objects and the settings for the context caching are
+        accessed. A separate instance of this should exist per thread.
+    """
+    def __init__(self):
+        self.memcache_enabled = True
+        self.context_enabled = True
+        self.stack = ContextStack()
+
+    def reset(self, keep_disabled_flags=False):
+        if datastore.IsInTransaction():
+            raise RuntimeError(
+                "Clearing the context cache inside a transaction breaks everything, "
+                "we can't let you do that"
+            )
+        self.stack = ContextStack()
+        if not keep_disabled_flags:
+            self.memcache_enabled = True
+            self.context_enabled = True
+
+
 class Context(object):
 
     def __init__(self, stack):
@@ -119,9 +141,14 @@ class ContextStack(object):
         if apply_staged:
             while self.staged:
                 to_apply = self.staged.pop()
-                caching.remove_entities_from_cache_by_key(
-                    to_apply.reverse_cache.keys(), memcache_only=True
-                )
+                keys = to_apply.reverse_cache.keys()
+                if keys:
+                    # This assumes that all keys are in the same namespace, which is almost definitely
+                    # going to be the case, but it feels a bit dirty
+                    namespace = keys[0].namespace() or None
+                    caching.remove_entities_from_cache_by_key(
+                        keys, namespace=namespace, memcache_only=True
+                    )
 
                 self.top.apply(to_apply)
 

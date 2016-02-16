@@ -249,6 +249,7 @@ SANDBOXES = {
 }
 
 _OPTIONS = None
+_CONFIG = None
 
 @contextlib.contextmanager
 def activate(sandbox_name, add_sdk_to_path=False, new_env_vars=None, **overrides):
@@ -354,6 +355,8 @@ def activate(sandbox_name, add_sdk_to_path=False, new_env_vars=None, **overrides
 
     try:
         global _OPTIONS
+        global _CONFIG
+        _CONFIG = configuration
         _OPTIONS = options # Store the options globally so they can be accessed later
         kwargs = dict(
             devappserver2=devappserver2,
@@ -380,7 +383,16 @@ def allow_mode_write():
     new_modes.add('wb')
 
     original_dirs = stubs.FakeFile._allowed_dirs
-    new_dirs = set(stubs.FakeFile._allowed_dirs).union({ tempfile.gettempdir() })
+    new_dirs = set(stubs.FakeFile._allowed_dirs)
+
+    try:
+        # If tempfile is available, then allow writing to the tempdir
+        # which is a useful thing to be able to do from the the shell
+        # etc. e.g. this won't work on dev_appserver but will from tests
+        temp_dir = tempfile.gettempdir()
+        new_dirs.add(temp_dir)
+    except NotImplementedError:
+        pass
 
     stubs.FakeFile.ALLOWED_MODES = frozenset(new_modes)
     stubs.FakeFile._allowed_dirs = frozenset(new_dirs)

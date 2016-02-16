@@ -2,7 +2,7 @@ import django
 from django import forms
 from django.db import router, models
 from django.db.models.query import QuerySet
-from django.db.models.fields.related import RelatedField, ForeignObjectRel
+from django.db.models.fields.related import ForeignObject, ForeignObjectRel
 from django.utils.functional import cached_property
 from django.core.exceptions import ImproperlyConfigured, ValidationError
 from djangae.forms.fields import (
@@ -261,7 +261,7 @@ class ReverseRelatedObjectsDescriptor(object):
 from abc import ABCMeta
 
 
-class RelatedIteratorField(RelatedField):
+class RelatedIteratorField(ForeignObject):
 
     __metaclass__ = ABCMeta
 
@@ -276,17 +276,31 @@ class RelatedIteratorField(RelatedField):
             related_name=related_name,
             limit_choices_to=limit_choices_to
         )
-        super(RelatedIteratorField, self).__init__(**kwargs)
+
+        super(RelatedIteratorField, self).__init__(
+            to=model,
+            from_fields=['self'],
+            to_fields=[None],
+            **kwargs
+        )
 
     def deconstruct(self):
         name, path, args, kwargs = super(RelatedIteratorField, self).deconstruct()
         args = (self.rel.to,)
-        del kwargs["null"]
-        del kwargs["default"]
+
+        # We hardcode a number of arguments for RelatedIteratorField, those arguments need to be removed here
+        for hardcoded_kwarg in ["null", "default", "to_fields", "from_fields", "to", "on_delete"]:
+            del kwargs[hardcoded_kwarg]
+
         return name, path, args, kwargs
 
     def get_attname(self):
         return '%s_ids' % self.name
+
+    def get_attname_column(self):
+        attname = self.get_attname()
+        column = self.db_column or attname
+        return attname, column
 
     def contribute_to_class(self, cls, name):
         # To support multiple relations to self, it's useful to have a non-None

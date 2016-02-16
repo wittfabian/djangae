@@ -1,3 +1,4 @@
+from django.conf import settings
 from mapreduce.mapper_pipeline import MapperPipeline
 from mapreduce import parameters
 from mapreduce import control
@@ -8,6 +9,7 @@ from pipeline.util import for_name
 BASE_PATH = '/_ah/mapreduce'
 PIPELINE_BASE_PATH = BASE_PATH + '/pipeline'
 
+
 class DjangaeMapperPipeline(MapperPipeline):
 
     def run(self, job_name, handler_spec, input_reader_spec, output_writer_spec=None, params=None, shards=None):
@@ -16,7 +18,7 @@ class DjangaeMapperPipeline(MapperPipeline):
             this is the cleanest way that still gives us a working Pipeline that we can chain
         """
         if shards is None:
-          shards = parameters.config.SHARD_COUNT
+            shards = parameters.config.SHARD_COUNT
 
         mapreduce_id = control.start_map(
             job_name,
@@ -81,7 +83,8 @@ class MapReduceTask(object):
     target = 'default'
 
 
-    def __init__(self, model=None):
+    def __init__(self, model=None, db='default'):
+        self.db = db
         if model:
             self.model = model
         if not self.job_name:
@@ -125,10 +128,16 @@ class MapReduceTask(object):
         raise NotImplementedError('You must supply a finish function')
 
     def start(self, *args, **kwargs):
+        # Allow a queue to be specified either as a keyword argument when
+        # starting the task, or as a class-level attribute on the task.
+        queue_name = kwargs.pop('queue_name', self.queue_name)
+
         mapper_parameters = {
             'model': self.get_model_app_(),
             'kwargs': kwargs,
             'args': args,
+            'namespace': settings.DATABASES.get(self.db, {}).get("NAMESPACE"),
+            'db': self.db
         }
         if 'map' not in self.__class__.__dict__:
             raise Exception('No static map method defined on class {cls}'.format(self.__class__))
@@ -136,9 +145,8 @@ class MapReduceTask(object):
         if 'finish' in self.__class__.__dict__:
             mapper_parameters['_finish'] = self.get_relative_path(self.finish)
 
-
         # Calculate a sensible shard count if one isn't specified
-        shard_count = self.shard_count or (self.model.objects.all()[:1000].count() / 100) + 1
+        shard_count = self.shard_count or (self.model.objects.using(self.db).all()[:1000].count() / 100) + 1
 
         pipe = DjangaeMapperPipeline(
             self.job_name,
@@ -148,4 +156,4 @@ class MapReduceTask(object):
             shards=shard_count
         )
         pipe.with_params(target=self.target)
-        pipe.start(base_path=PIPELINE_BASE_PATH)
+        pipe.start(base_path=PIPELINE_BASE_PATH, queue_name=queue_name)
