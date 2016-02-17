@@ -367,9 +367,16 @@ class RelatedIteratorField(ForeignObject):
 
         for value in data:
             if isinstance(value, self.rel.to):
-                getattr(instance, self.name).add(value)
+                field = getattr(instance, self.name)
             else:
-                getattr(instance, self.attname).add(value)
+                field = getattr(instance, self.attname)
+
+            if hasattr(field, "append"):
+                # ListField
+                field.append(value)
+            else:
+                # SetField
+                field.add(value)
 
     def formfield(self, **kwargs):
         db = kwargs.pop('using', None)
