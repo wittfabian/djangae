@@ -11,14 +11,14 @@ from djangae.forms.fields import (
 from django.utils import six
 
 class RelatedIteratorRel(ForeignObjectRel):
-    def __init__(self, field, to, related_name=None, limit_choices_to=None):
+    def __init__(self, field, to, related_name=None, limit_choices_to=None, on_delete=models.DO_NOTHING):
         self.field = field
         self.to = to
         self.related_name = related_name
         self.related_query_name = None
         self.field_name = None
         self.parent_link = None
-        self.on_delete = models.DO_NOTHING
+        self.on_delete = on_delete
         self.symmetrical = False
 
         if limit_choices_to is None:
@@ -266,12 +266,26 @@ class RelatedIteratorField(ForeignObject):
     generate_reverse_relation = True
     empty_strings_allowed = False
 
-    def __init__(self, model, limit_choices_to=None, related_name=None, **kwargs):
+    def __init__(self, model, limit_choices_to=None, related_name=None, on_delete=models.DO_NOTHING, **kwargs):
+        # Make sure that we do nothing on cascade by default
+        if on_delete == models.CASCADE:
+            raise ImproperlyConfigured(
+                "on_delete=CASCADE is disabled for iterable fields as this will "
+                "wipe out the instance when the field still has related objects"
+            )
+
+        if on_delete in (models.SET_NULL, models.SET_DEFAULT):
+            raise ImproperlyConfigured("Using an on_delete value of {} will cause undesirable behavior"
+                             " (e.g. wipeout the entire list) if you really want to do that "
+                             "then use models.SET instead and return an empty list/set")
+
+
         kwargs["rel"] = RelatedIteratorRel(
             self,
             model,
             related_name=related_name,
-            limit_choices_to=limit_choices_to
+            limit_choices_to=limit_choices_to,
+            on_delete=on_delete
         )
 
         super(RelatedIteratorField, self).__init__(
@@ -348,14 +362,6 @@ class RelatedIteratorField(ForeignObject):
         """
         return str(list(self._get_val_from_obj(obj)))
 
-    def save_form_data(self, instance, data):
-        getattr(instance, self.attname).clear() #Wipe out existing things
-
-        for value in data:
-            if isinstance(value, self.rel.to):
-                getattr(instance, self.name).add(value)
-            else:
-                getattr(instance, self.attname).add(value)
 
     def formfield(self, **kwargs):
         db = kwargs.pop('using', None)
@@ -409,6 +415,17 @@ class RelatedSetField(RelatedIteratorField):
 
         return set(value)
 
+    def save_form_data(self, instance, data):
+        setattr(instance, self.name, set()) #Wipe out existing things
+        for value in data:
+            if isinstance(value, self.rel.to):
+                field = getattr(instance, self.name)
+            else:
+                field = getattr(instance, self.attname)
+
+            # SetField
+            field.add(value)
+
 
 class RelatedListField(RelatedIteratorField):
 
@@ -443,6 +460,17 @@ class RelatedListField(RelatedIteratorField):
             return list(self.rel.to._default_manager.db_manager('default').filter(pk__in=ids))
 
         return list(value)
+
+    def save_form_data(self, instance, data):
+        setattr(instance, self.name, []) #Wipe out existing things
+        for value in data:
+            if isinstance(value, self.rel.to):
+                field = getattr(instance, self.name)
+            else:
+                field = getattr(instance, self.attname)
+
+            # SetField
+            field.append(value)
 
 
 class GRCreator(property):

@@ -357,6 +357,28 @@ class IterableFieldTests(TestCase):
         self.assertRaises(TypeError, IterableFieldModel, list_field=1)
         self.assertRaises(TypeError, IterableFieldModel, set_field=1)
 
+
+class RelatedListFieldModelTests(TestCase):
+
+    def test_can_update_related_field_from_form(self):
+        related = ISOther.objects.create()
+        thing = ISModel.objects.create(related_list=[related])
+        before_list = thing.related_list
+        thing.related_list.field.save_form_data(thing, [])
+        self.assertNotEqual(before_list.all(), thing.related_list.all())
+
+
+class RelatedSetFieldModelTests(TestCase):
+
+    def test_can_update_related_field_from_form(self):
+        related = ISOther.objects.create()
+        thing = ISModel.objects.create(related_things={related})
+        before_set = thing.related_things
+        thing.related_list.field.save_form_data(thing, set())
+        thing.save()
+        self.assertNotEqual(before_set.all(), thing.related_things.all())
+
+
 class InstanceListFieldTests(TestCase):
 
     def test_deserialization(self):
@@ -365,6 +387,18 @@ class InstanceListFieldTests(TestCase):
         # Does the to_python need to return ordered list? SetField test only passes because the set
         # happens to order it correctly
         self.assertItemsEqual([i1, i2], ISModel._meta.get_field("related_list").to_python("[1, 2]"))
+
+    def test_default_on_delete_does_nothing(self):
+        child = ISOther.objects.create(pk=1)
+        parent = ISModel.objects.create(related_list=[child])
+
+        child.delete()
+
+        try:
+            parent = ISModel.objects.get(pk=parent.pk)
+            self.assertEqual([1], parent.related_list_ids)
+        except ISModel.DoesNotExist:
+            self.fail("Parent instance was deleted, apparently by on_delete=CASCADE")
 
     def test_save_and_load_empty(self):
         """
