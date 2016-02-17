@@ -366,6 +366,18 @@ class InstanceListFieldTests(TestCase):
         # happens to order it correctly
         self.assertItemsEqual([i1, i2], ISModel._meta.get_field("related_list").to_python("[1, 2]"))
 
+    def test_default_on_delete_does_nothing(self):
+        child = ISOther.objects.create(pk=1)
+        parent = ISModel.objects.create(related_list=[child])
+
+        child.delete()
+
+        try:
+            parent = ISModel.objects.get(pk=parent.pk)
+            self.assertEqual([1], parent.related_list_ids)
+        except ISModel.DoesNotExist:
+            self.fail("Parent instance was deleted, apparently by on_delete=CASCADE")
+
     def test_save_and_load_empty(self):
         """
         Create a main object with no related items,
