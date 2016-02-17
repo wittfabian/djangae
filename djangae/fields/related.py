@@ -362,21 +362,6 @@ class RelatedIteratorField(ForeignObject):
         """
         return str(list(self._get_val_from_obj(obj)))
 
-    def save_form_data(self, instance, data):
-        getattr(instance, self.attname).clear() #Wipe out existing things
-
-        for value in data:
-            if isinstance(value, self.rel.to):
-                field = getattr(instance, self.name)
-            else:
-                field = getattr(instance, self.attname)
-
-            if hasattr(field, "append"):
-                # ListField
-                field.append(value)
-            else:
-                # SetField
-                field.add(value)
 
     def formfield(self, **kwargs):
         db = kwargs.pop('using', None)
@@ -430,6 +415,17 @@ class RelatedSetField(RelatedIteratorField):
 
         return set(value)
 
+    def save_form_data(self, instance, data):
+        setattr(instance, self.name, set()) #Wipe out existing things
+        for value in data:
+            if isinstance(value, self.rel.to):
+                field = getattr(instance, self.name)
+            else:
+                field = getattr(instance, self.attname)
+
+            # SetField
+            field.add(value)
+
 
 class RelatedListField(RelatedIteratorField):
 
@@ -464,6 +460,17 @@ class RelatedListField(RelatedIteratorField):
             return list(self.rel.to._default_manager.db_manager('default').filter(pk__in=ids))
 
         return list(value)
+
+    def save_form_data(self, instance, data):
+        setattr(instance, self.name, []) #Wipe out existing things
+        for value in data:
+            if isinstance(value, self.rel.to):
+                field = getattr(instance, self.name)
+            else:
+                field = getattr(instance, self.attname)
+
+            # SetField
+            field.append(value)
 
 
 class GRCreator(property):

@@ -357,6 +357,28 @@ class IterableFieldTests(TestCase):
         self.assertRaises(TypeError, IterableFieldModel, list_field=1)
         self.assertRaises(TypeError, IterableFieldModel, set_field=1)
 
+
+class RelatedListFieldModelTests(TestCase):
+
+    def test_can_update_related_field_from_form(self):
+        related = ISOther.objects.create()
+        thing = ISModel.objects.create(related_list=[related])
+        before_list = thing.related_list
+        thing.related_list.field.save_form_data(thing, [])
+        self.assertNotEqual(before_list.all(), thing.related_list.all())
+
+
+class RelatedSetFieldModelTests(TestCase):
+
+    def test_can_update_related_field_from_form(self):
+        related = ISOther.objects.create()
+        thing = ISModel.objects.create(related_things={related})
+        before_set = thing.related_things
+        thing.related_list.field.save_form_data(thing, set())
+        thing.save()
+        self.assertNotEqual(before_set.all(), thing.related_things.all())
+
+
 class InstanceListFieldTests(TestCase):
 
     def test_deserialization(self):
