@@ -291,12 +291,17 @@ class RelatedIteratorField(ForeignObject):
             on_delete=on_delete
         )
 
-        super(RelatedIteratorField, self).__init__(
-            to=model,
-            from_fields=['self'],
-            to_fields=[None],
-            **kwargs
-        )
+        kwargs.update({
+            'to': model,
+            'from_fields': ['self'],
+            'to_fields': [None],
+        })
+        if django.VERSION[1] >= 9:  # Django 1.8 doesn't have on_delete as attribute
+            kwargs.update({
+                'on_delete': models.DO_NOTHING,
+            })
+
+        super(RelatedIteratorField, self).__init__(**kwargs)
 
     def deconstruct(self):
         name, path, args, kwargs = super(RelatedIteratorField, self).deconstruct()

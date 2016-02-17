@@ -10,7 +10,13 @@ from django.db.models.fields import FieldDoesNotExist
 from django.db.models.sql.datastructures import EmptyResultSet
 
 from django.db.models import AutoField
-from django.db.models.query import ValuesListQuerySet
+
+try:
+    from django.db.models.query import ValuesListQuerySet
+except ImportError:
+    # Django < 1.9
+    class ValuesListQuerySet(object):
+        pass
 
 from django.db.models.expressions import Star
 
