@@ -1135,8 +1135,15 @@ def _transform_query_18(connection, kind, query):
 
 
 def _transform_query_19(connection, kind, query):
-    from django.db.models.sql.where import NothingNode
-    if isinstance(query.where, NothingNode):
+    from django.db.models.sql.where import NothingNode, WhereNode as DjangoWhereNode
+
+    # It could either be a NothingNode, or a WhereNode(AND NothingNode)
+    if (
+            isinstance(query.where, NothingNode) or (
+            isinstance(query.where, DjangoWhereNode) and
+            len(query.where.children) == 1 and
+            isinstance(query.where.children[0], NothingNode)
+            )):
         # Empty where means return nothing!
         raise EmptyResultSet()
 
