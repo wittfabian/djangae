@@ -598,11 +598,12 @@ class Query(object):
         return json.dumps(result)
 
 
-INVALID_ORDERING_FIELD_MESSAGE = "" \
-    "Ordering on TextField or BinaryField is not supported on the datastore. " \
-    "You might consider using a ComputedCharField which stores the first " \
-    "_MAX_STRING_LENGTH (from google.appengine.api.datastore_types) bytes of the " \
-    "field and instead order on that"
+INVALID_ORDERING_FIELD_MESSAGE = (
+    "Ordering on TextField or BinaryField is not supported on the datastore. "
+    "You might consider using a ComputedCharField which stores the first "
+    "_MAX_STRING_LENGTH (from google.appengine.api.datastore_types) bytes of the "
+    "field and instead order on that."
+)
 
 def _extract_ordering_from_query_17(query):
     from djangae.db.backends.appengine.commands import log_once
