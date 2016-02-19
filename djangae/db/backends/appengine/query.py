@@ -642,9 +642,9 @@ def _extract_ordering_from_query_17(query):
             try:
                 column = col.lstrip("-")
                 field = query.model._meta.get_field_by_name(column)[0]
-                if field.get_internal_type() == u"TextField":
+                if field.get_internal_type()  in (u"TextField", u"BinaryField"):
                     raise NotSupportedError("Ordering on TextField is not supported on the datastore. "
-                        "You might consider using a ComputedCharField which stores the first 500 chars of the "
+                        "You might consider using a ComputedCharField which stores the first MAX_BYTES_LENGTH bytes of the "
                         "TextField and instead ordering on that")
                 column = "__key__" if field.primary_key else field.column
                 final.append("-" + column if col.startswith("-") else column)
@@ -787,9 +787,9 @@ def _extract_ordering_from_query_18(query):
                             column = annotation.col.output_field.column
 
                 field = query.model._meta.get_field_by_name(column)[0]
-                if field.get_internal_type() == u"TextField":
+                if field.get_internal_type() in (u"TextField", u"BinaryField"):
                     raise NotSupportedError("Ordering on TextField is not supported on the datastore. "
-                        "You might consider using a ComputedCharField which stores the first 500 chars of the "
+                        "You might consider using a ComputedCharField which stores the first MAX_BYTES_LENGTH bytes of the "
                         "TextField and instead ordering on that")
                 column = "__key__" if field.primary_key else field.column
                 final.append("-" + column if col.startswith("-") else column)
