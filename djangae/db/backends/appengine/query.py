@@ -598,6 +598,12 @@ class Query(object):
         return json.dumps(result)
 
 
+INVALID_ORDERING_FIELD_MESSAGE = "" \
+    "Ordering on TextField or BinaryField is not supported on the datastore. " \
+    "You might consider using a ComputedCharField which stores the first " \
+    "_MAX_STRING_LENGTH (from google.appengine.api.datastore_types) bytes of the " \
+    "field and instead order on that"
+
 def _extract_ordering_from_query_17(query):
     from djangae.db.backends.appengine.commands import log_once
 
@@ -643,9 +649,7 @@ def _extract_ordering_from_query_17(query):
                 column = col.lstrip("-")
                 field = query.model._meta.get_field_by_name(column)[0]
                 if field.get_internal_type()  in (u"TextField", u"BinaryField"):
-                    raise NotSupportedError("Ordering on TextField is not supported on the datastore. "
-                        "You might consider using a ComputedCharField which stores the first MAX_BYTES_LENGTH bytes of the "
-                        "TextField and instead ordering on that")
+                    raise NotSupportedError(INVALID_ORDERING_FIELD_MESSAGE)
                 column = "__key__" if field.primary_key else field.column
                 final.append("-" + column if col.startswith("-") else column)
             except FieldDoesNotExist:
@@ -788,9 +792,7 @@ def _extract_ordering_from_query_18(query):
 
                 field = query.model._meta.get_field_by_name(column)[0]
                 if field.get_internal_type() in (u"TextField", u"BinaryField"):
-                    raise NotSupportedError("Ordering on TextField is not supported on the datastore. "
-                        "You might consider using a ComputedCharField which stores the first MAX_BYTES_LENGTH bytes of the "
-                        "TextField and instead ordering on that")
+                    raise NotSupportedError(INVALID_ORDERING_FIELD_MESSAGE)
                 column = "__key__" if field.primary_key else field.column
                 final.append("-" + column if col.startswith("-") else column)
             except FieldDoesNotExist:
