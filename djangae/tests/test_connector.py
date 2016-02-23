@@ -110,6 +110,8 @@ class TestFruit(models.Model):
     origin = models.CharField(max_length=32, default="Unknown")
     color = models.CharField(max_length=100)
     is_mouldy = models.BooleanField(default=False)
+    text_field = models.TextField(blank=True, default="")
+    binary_field = models.BinaryField(blank=True)
 
     class Meta:
         ordering = ("color",)
@@ -610,6 +612,10 @@ class BackendTests(TestCase):
         except:
             logging.exception("Error sorting on __scatter__")
             self.fail("Unable to sort on __scatter__ property like we should")
+
+    def test_ordering_on_non_indexed_fields_not_supported(self):
+        self.assertRaises(NotSupportedError, list, TestFruit.objects.order_by("text_field"))
+        self.assertRaises(NotSupportedError, list, TestFruit.objects.order_by("binary_field"))
 
     def test_ordering_on_sparse_field(self):
         """
