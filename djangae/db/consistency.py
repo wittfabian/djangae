@@ -58,7 +58,7 @@ def ensure_instance_included(queryset, included_id):
                     # The specified object was deleted but came back, so just ignore it
                     continue
 
-                if included and is_less(included, item) and not included_added:
+                if included and (is_less(included, item) or included == item) and not included_added:
                     included_added = True
                     new_result_cache.append(included)
 
