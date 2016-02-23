@@ -11,10 +11,19 @@ from django.db.models.sql.datastructures import EmptyResultSet
 
 from django.db.models import AutoField
 
+from django.db.models.query import QuerySet
+
+try:
+    from django.db.models.query import FlatValuesListIterable
+except ImportError:
+    # Django < 1.8
+    class FlatValuesListIterable(object):
+        pass
+
 try:
     from django.db.models.query import ValuesListQuerySet
 except ImportError:
-    # Django < 1.9
+    # Django >= 1.9
     class ValuesListQuerySet(object):
         pass
 
@@ -962,6 +971,21 @@ def _django_17_query_walk_leaf(node, negated, new_parent, connection, model):
 
             node.rhs = [ x for x in node.rhs ] # Evaluate the queryset
             rhs = node.process_rhs(None, connection) # Process the RHS as if it was a list
+
+        elif isinstance(node.rhs, QuerySet):
+            # In Django 1.9, ValuesListQuerySet doesn't exist anymore, and instead
+            # values_list returns a QuerySet
+            if node.rhs._iterable_class == FlatValuesListIterable:
+                # if the queryset has FlatValuesListIterable as iterable class
+                # then it's a flat list, and we just need to evaluate the
+                # queryset converting it into a list
+                node.rhs = [ x for x in node.rhs ]
+            else:
+                # otherwise, we try to get the PK from the queryset
+                node.rhs = [ x.pk for x in node.rhs ]
+
+            rhs = node.process_rhs(None, connection) # Process the RHS as if it was a list
+
         else:
             rhs = node.process_rhs(None, connection)
     except EmptyResultSet:
