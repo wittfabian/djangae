@@ -30,7 +30,7 @@ class BaseAppEngineUserAPIBackend(ModelBackend):
     atomic_kwargs = {}
     supports_anonymous_user = True
 
-    def authenticate(self, google_user):
+    def authenticate(self, google_user=None):
         """
         Handles authentication of a user from the given credentials.
         Credentials must be a 'google_user' as returned by the App Engine
@@ -41,7 +41,7 @@ class BaseAppEngineUserAPIBackend(ModelBackend):
 
         if not issubclass(User, GaeAbstractBaseUser):
             raise ImproperlyConfigured(
-                "djangae.contrib.auth.backends.AppEngineUserAPI requires AUTH_USER_MODEL to be a "
+                "AppEngineUserAPIBackend requires AUTH_USER_MODEL to be a "
                 " subclass of djangae.contrib.auth.base.GaeAbstractBaseUser."
             )
 
@@ -94,7 +94,6 @@ class BaseAppEngineUserAPIBackend(ModelBackend):
                 logging.info(
                     "GAUTH: Creating a new user with an existing email address "
                     "(User(email=%r, pk=%r))", email, existing_user.pk)
-                )
                 with self.atomic(**self.atomic_kwargs):
                     existing_user = User.objects.get(pk=existing_user.pk)
                     existing_user.email = None
