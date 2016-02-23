@@ -3,7 +3,7 @@
 Djangae includes two applications to aid authentication and user management with
 App Engine. Each provides both an abstract class, to extend if you're defining your own custom User model, or a concrete version to use in place of `'django.contrib.auth.models.User'`.  Also provided are custom authentication backends which delegate to the App Engine users API and a middleware to handle the link between the Django's user object and App Engine's (amongst other things).
 
-The only minor difference between Djangae Gauth and Django Auth is that Djangae overrides `normalize_email` to lowercase whole email, not just the domain part like Django does. See rationale behind this decision in [issue #481 on Github](https://github.com/potatolondon/djangae/issues/481). 
+The only minor difference between Djangae Gauth and Django Auth is that Djangae overrides `normalize_email` to lowercase whole email, not just the domain part like Django does. See rationale behind this decision in [issue #481 on Github](https://github.com/potatolondon/djangae/issues/481).
 
 ## Using the Datastore
 
@@ -74,7 +74,7 @@ As well as using Djangae's Google Accounts-based authentication, you can also us
 
 ```python
 AUTHENTICATION_BACKENDS = (
-    'djangae.contrib.gauth.datastore.backends.AppEngineUserAPI',
+    'djangae.contrib.gauth.datastore.backends.AppEngineUserAPIBackend',
     'django.contrib.auth.backends.ModelBackend',
 )
 
