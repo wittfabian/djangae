@@ -1,6 +1,6 @@
 
 AUTHENTICATION_BACKENDS = (
-    'djangae.contrib.gauth.backends.AppEngineUserAPI',
+    'djangae.contrib.gauth.datastore.backends.AppEngineUserAPIBackend',
 )
 
 AUTH_USER_MODEL = 'djangae.GaeDatastoreUser'
