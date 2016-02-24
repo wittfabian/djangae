@@ -140,6 +140,70 @@ class IExactIndexer(Indexer):
         return "_idx_iexact_{0}".format(field_column)
 
 
+class HourIndexer(Indexer):
+    def validate_can_be_indexed(self, value, negated):
+        return isinstance(value, datetime.datetime)
+
+    def prep_value_for_database(self, value, index):
+        if value:
+            return value.hour
+        return None
+
+    def prep_value_for_query(self, value):
+        if isinstance(value, (int, long)):
+            return value
+
+        if isinstance(value, basestring):
+            value = datetime.datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
+        return value.hour
+
+    def indexed_column_name(self, field_column, value, index):
+        return "_idx_hour_{0}".format(field_column)
+
+
+class MinuteIndexer(Indexer):
+    def validate_can_be_indexed(self, value, negated):
+        return isinstance(value, datetime.datetime)
+
+    def prep_value_for_database(self, value, index):
+        if value:
+            return value.minute
+        return None
+
+    def prep_value_for_query(self, value):
+        if isinstance(value, (int, long)):
+            return value
+
+        if isinstance(value, basestring):
+            value = datetime.datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
+        return value.minute
+
+    def indexed_column_name(self, field_column, value, index):
+        return "_idx_minute_{0}".format(field_column)
+        return "_idx_hour_{0}".format(field_column)
+
+
+class SecondIndexer(Indexer):
+    def validate_can_be_indexed(self, value, negated):
+        return isinstance(value, datetime.datetime)
+
+    def prep_value_for_database(self, value, index):
+        if value:
+            return value.second
+        return None
+
+    def prep_value_for_query(self, value):
+        if isinstance(value, (int, long)):
+            return value
+
+        if isinstance(value, basestring):
+            value = datetime.datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
+        return value.second
+
+    def indexed_column_name(self, field_column, value, index):
+        return "_idx_second_{0}".format(field_column)
+
+
 class DayIndexer(Indexer):
     def validate_can_be_indexed(self, value, negated):
         return isinstance(value, (datetime.datetime, datetime.date))
@@ -444,8 +508,11 @@ REQUIRES_SPECIAL_INDEXES = {
     "iexact": IExactIndexer(),
     "contains": ContainsIndexer(),
     "icontains": IContainsIndexer(),
-    "day" : DayIndexer(),
-    "month" : MonthIndexer(),
+    "hour": HourIndexer(),
+    "minute": MinuteIndexer(),
+    "second": SecondIndexer(),
+    "day": DayIndexer(),
+    "month": MonthIndexer(),
     "year": YearIndexer(),
     "week_day": WeekDayIndexer(),
     "endswith": EndsWithIndexer(),

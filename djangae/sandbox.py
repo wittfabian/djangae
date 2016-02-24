@@ -383,7 +383,7 @@ def allow_mode_write():
     new_modes.add('wb')
 
     original_dirs = stubs.FakeFile._allowed_dirs
-    new_dirs = set(stubs.FakeFile._allowed_dirs)
+    new_dirs = set(stubs.FakeFile._allowed_dirs or [])
 
     try:
         # If tempfile is available, then allow writing to the tempdir

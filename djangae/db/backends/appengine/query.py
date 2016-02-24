@@ -943,10 +943,17 @@ def _django_17_query_walk_leaf(node, negated, new_parent, connection, model):
         raise NotSupportedError("Attempted probable subquery, these aren't supported on the datastore")
 
     # Leaf
-    if get_top_concrete_parent(node.lhs.target.model) != get_top_concrete_parent(model):
-        raise NotSupportedError("Cross-join where filters are not supported on the datastore")
+    if hasattr(node.lhs, 'target'):
+        # from Django 1.9, some node.lhs might not have a target attribute
+        # as they might be wrapping date fields
+        field = node.lhs.target
+        operator = node.lookup_name
+    else:
+        field = node.lhs.lhs.target
+        operator = node.lhs.lookup_name
 
-    field = node.lhs.target
+    if get_top_concrete_parent(field.model) != get_top_concrete_parent(model):
+        raise NotSupportedError("Cross-join where filters are not supported on the datastore")
 
     # Make sure we don't let people try to filter on a text field, otherwise they just won't
     # get any results!
@@ -954,7 +961,7 @@ def _django_17_query_walk_leaf(node, negated, new_parent, connection, model):
     if field.db_type(connection) in ("bytes", "text"):
         raise NotSupportedError("You can't filter on text or blob fields on the datastore")
 
-    if node.lookup_name == "isnull" and field.model._meta.parents.values():
+    if operator == "isnull" and field.model._meta.parents.values():
         raise NotSupportedError("isnull lookups on inherited relations aren't supported on the datastore")
 
     lhs = field.column
@@ -989,27 +996,28 @@ def _django_17_query_walk_leaf(node, negated, new_parent, connection, model):
         else:
             rhs = node.process_rhs(None, connection)
     except EmptyResultSet:
-        if node.lookup_name == 'in':
+        if operator == 'in':
             # Deal with this later
             rhs = [ [] ]
         else:
             raise
 
-    if node.lookup_name in ('in', 'range'):
+
+    if operator in ('in', 'range'):
         rhs = rhs[-1]
-    elif node.lookup_name == 'isnull':
+    elif operator == 'isnull':
         rhs = node.rhs
     else:
         rhs = rhs[-1][0]
 
     new_node.set_leaf(
         lhs,
-        node.lookup_name,
+        operator,
         rhs,
         is_pk_field=field==model._meta.pk,
         negated=negated,
         namespace=connection.ops.connection.settings_dict.get("NAMESPACE"),
-        target_field=node.lhs.target,
+        target_field=field,
     )
 
     # For some reason, this test:
