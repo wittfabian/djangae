@@ -93,7 +93,8 @@ class BaseAppEngineUserAPIBackend(ModelBackend):
             else:
                 logging.info(
                     "GAUTH: Creating a new user with an existing email address "
-                    "(User(email=%r, pk=%r))", email, existing_user.pk)
+                    "(User(email=%r, existing pk=%r))", email, existing_user.pk
+                )
                 with self.atomic(**self.atomic_kwargs):
                     existing_user = User.objects.get(pk=existing_user.pk)
                     existing_user.email = None
