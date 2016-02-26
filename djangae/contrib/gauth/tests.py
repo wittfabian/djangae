@@ -249,6 +249,8 @@ class CustomPermissionsUserModelBackendTest(TestCase):
         # Fix Django so that we can use our custom user model.
         # TODO: Submit a fix to Django to allow override_settings(AUTH_USER_MODEL='something') to
         # work, even if the project has already set AUTH_USER_MODEL to a custom user
+        super(CustomPermissionsUserModelBackendTest, self).setUp()
+
         GaeDatastoreUser.objects = GaeDatastoreUser._default_manager
         GaeDatastoreUser._base_manager = GaeDatastoreUser._default_manager
         self.user = GaeDatastoreUser.objects.create(
