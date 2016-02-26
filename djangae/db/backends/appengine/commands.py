@@ -4,19 +4,19 @@ import logging
 import copy
 import decimal
 import json
+
 from functools import partial
 from itertools import chain, groupby
 
 #LIBRARIES
 import django
 from django.db import DatabaseError
-from django.core.cache import cache
 from django.db import IntegrityError
 
 from google.appengine.api import datastore, datastore_errors, memcache
+from google.appengine.datastore import datastore_rpc, datastore_stub_util
 from google.appengine.api.datastore import Query
 from google.appengine.ext import db
-from google.appengine.api import namespace_manager
 
 #DJANGAE
 from djangae.db.backends.appengine.dbapi import NotSupportedError
@@ -990,33 +990,104 @@ class DeleteCommand(object):
         self.model = query.model
         self.select = SelectCommand(connection, query, keys_only=True)
         self.namespace = connection.ops.connection.settings_dict.get("NAMESPACE")
+        self.table_to_delete = query.tables[0]
 
     def execute(self):
+        """
+            Ideally we'd just be able to tell appengine to delete all the entities
+            which match the query, that would be nice wouldn't it?
+
+            Except we can't. Firstly Delete() only accepts keys so we first have to
+            execute a keys_only query to find the entities that match the query, then send
+            those keys to Delete(), except it's not as easy as that either because the
+            query might be eventually consistent and so we might delete entities which
+            were updated in another request and no-longer match the query. Bugger.
+
+            And then there might be constraints... in which case we need to grab the entity
+            in its entirety, release any constraints and then delete the entity.
+
+            And then there are polymodels (model inheritence) which means we might not even be
+            deleting the entity after all, only deleting some of the fields from it.
+
+            What we do then is do a keys_only query, then iterate the entities in batches of
+            25 (well _MAX_EG_PER_TXN), each entity in the batch has its polymodel fields wiped out
+            (if necessary) and then we do either a PutAsync or DeleteAsync all inside a transaction.
+
+            Oh, and we wipe out memcache and delete the constraints in an independent transaction.
+
+            Things to improve:
+
+             - Delete the constraints in a background thread. We don't need to wait for them, and really,
+             we don't want the non-deletion of them to affect the deletion of the entity. Lingering markers
+             are handled automatically they just case a small performance hit on write.
+             - Check the entity matches the query still (there's a fixme there)
+        """
+
         self.select.execute()
 
-        # This is a little bit more inefficient than just doing a keys_only query and
-        # sending it to delete, but I think this is the sacrifice to make for the unique caching layer
-        keys = []
+        constraints_enabled = constraints.constraint_checks_enabled(self.model)
+        keys = [ x.key() for x in self.select.results ]
 
-        def spawn_query(kind, key):
-            qry = Query(kind, namespace=key.namespace() or None) # TODO: is the namespace necessary if we're passing the key?
-            qry["__key__ ="] = key
-            return qry
+        def wipe_polymodel_from_entity(entity, db_table):
+            """
+                Wipes out the fields associated with the specified polymodel table
+            """
+            polymodel_value = entity.get('class', [])
+            if polymodel_value and self.table_to_delete in polymodel_value:
+                # Remove any local fields from this model from the entity
+                model = utils.get_model_from_db_table(self.table_to_delete)
+                for field in model._meta.local_fields:
+                    col = field.column
+                    if col in entity:
+                        del entity[col]
 
-        queries = [spawn_query(x.key().kind(), x.key()) for x in self.select.results]
-        if not queries:
-            return 0
+                # Then remove this model from the polymodel heirarchy
+                polymodel_value.remove(self.table_to_delete)
+                if polymodel_value:
+                    entity['class'] = polymodel_value
 
-        for entity in QueryByKeys(self.model, queries, [], self.namespace).Run():
-            keys.append(entity.key())
-
-            # Delete constraints if that's enabled
-            if constraints.constraint_checks_enabled(self.model):
+        @db.transactional(xg=True, propagation=datastore_rpc.TransactionOptions.INDEPENDENT)
+        def release_constraints(entity):
+            if constraints_enabled:
                 constraints.release(self.model, entity)
 
-        caching.remove_entities_from_cache_by_key(keys, self.namespace)
-        datastore.Delete(keys)
-        return len(keys)
+        @db.transactional(xg=True)
+        def delete_batch(key_slice):
+            entities = datastore.Get(key_slice)
+
+            #FIXME: We need to make sure the entity still matches the query!
+#            entities = (x for x in entities if utils.entity_matches_query(x, self.select.gae_query))
+
+            to_delete = []
+            to_update = []
+            updated_keys = []
+
+            # Go through the entities
+            for entity in entities:
+                wipe_polymodel_from_entity(entity, self.table_to_delete)
+                if not entity.get('class'):
+                    to_delete.append(entity)
+                    release_constraints(entity)
+                else:
+                    to_update.append(entity)
+                updated_keys.append(entity.key())
+
+            datastore.DeleteAsync([x.key() for x in to_delete])
+            datastore.PutAsync(to_update)
+
+            caching.remove_entities_from_cache_by_key(
+                updated_keys, self.namespace
+            )
+
+            return len(updated_keys)
+
+        deleted = 0
+        while keys:
+            deleted += delete_batch(keys[:datastore_stub_util._MAX_EG_PER_TXN])
+            keys = keys[datastore_stub_util._MAX_EG_PER_TXN:]
+
+        return deleted
+
 
     def lower(self):
         """
