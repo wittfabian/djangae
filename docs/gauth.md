@@ -55,7 +55,7 @@ AUTHENTICATION_BACKENDS = (
 If you want to write your own permissions system, but you still want to take advantage of the authentication provided by the Google Users API, then you may want to subclass `djangae.contrib.gauth.common.models.GaeAbstractBaseUser`.
 
 
-## Authentication for Unknown Users
+## Authentication for unknown users
 
 By default Djangae will deny access for unknown users (unless the user is an administrator for the App Engine application).
 
