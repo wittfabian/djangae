@@ -1,4 +1,5 @@
-import logging
+import warnings
+
 from django.db import transaction
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -15,20 +16,35 @@ from djangae.contrib.gauth.common.models import GaeAbstractBaseUser
 # Backwards compatibility, remove before 1.0
 # This is here so that we only log once on import, not on each authentication
 if hasattr(settings, "ALLOW_USER_PRE_CREATION"):
-    logging.warning(
+    warnings.warn(
         "settings.ALLOW_USER_PRE_CREATION is deprecated, "
-        "please use DJANGAE_ALLOW_USER_PRE_CREATION instead"
+        "please use DJANGAE_CREATE_UNKNOWN_USER instead"
+    )
+
+if hasattr(settings, 'DJANGAE_FORCE_USER_PRE_CREATION'):
+    warnings.warn(
+        'settings.DJANGAE_FORCE_USER_PRE_CREATION is deprecated, please use'
+        ' DJANGAE_CREATE_UNKNOWN_USER instead'
+    )
+
+if hasattr(settings, 'DJANGAE_ALLOW_USER_PRE_CREATION'):
+    warnings.warn(
+        'settings.DJANGAE_ALLOW_USER_PRE_CREATION is deprecated, please use'
+        ' DJANGAE_CREATE_UNKNOWN_USER instead'
     )
 
 
 def should_create_unknown_user():
-    """Returns True if we should create a Django user for unknown users."""
+    """Returns True if we should create a Django user for unknown users.
+
+    Default is False.
+    """
     if hasattr(settings, 'DJANGAE_CREATE_UNKNOWN_USER'):
         return settings.DJANGAE_CREATE_UNKNOWN_USER
 
     if hasattr(settings, 'DJANGAE_FORCE_USER_PRE_CREATION'):
-        # N.B. This setting meant that there had to be an existing user, it
-        # would not create a new user (unless it was an admin).
+        # This setting meant that there _had_ to be an existing user, it would
+        # refuse to create a new user (except for admins).
         return not settings.DJANGAE_FORCE_USER_PRE_CREATION
 
     if hasattr(settings, 'DJANGAE_ALLOW_USER_PRE_CREATION'):
