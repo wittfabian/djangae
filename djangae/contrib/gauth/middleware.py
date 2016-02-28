@@ -21,7 +21,7 @@ class AuthenticationMiddleware(DjangoMiddleware):
 
         if django_user.is_anonymous() and google_user:
             # If there is a google user, but we are anonymous, log in!
-            # Note that if DJANGAE_FORCE_USER_PRE_CREATION is True then this may not authenticate
+            # Note that if DJANGAE_CREATE_UNKNOWN_USER=False then this may not authenticate
             django_user = authenticate(google_user=google_user) or AnonymousUser()
             if django_user.is_authenticated():
                 login(request, django_user)
