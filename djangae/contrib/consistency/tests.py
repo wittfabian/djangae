@@ -20,6 +20,7 @@ class TestModel(models.Model):
 class ConsistencyTests(TestCase):
 
     def setUp(self):
+        super(ConsistencyTests, self).setUp()
         # Having post-delete signals registered changes the way that django does its delete queries
         # so to avoid causing django tests to fail (which are run as part of the 'testapp' tests in
         # djangae) we only register the consistency signals during our tests
@@ -27,8 +28,7 @@ class ConsistencyTests(TestCase):
 
     def tearDown(self):
         disconnect_signals()
-
-
+        super(ConsistencyTests, self).tearDown()
 
     def test_newly_created_objects_returned(self):
         existing = TestModel.objects.create(name='existing')

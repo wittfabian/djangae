@@ -36,6 +36,8 @@ class MapperTests(TestCase):
         if self.i4:
             self.i4.delete()
 
+        super(MapperTests, self).tearDown()
+
     def test_check_ok(self):
         # A check should produce no errors.
         UniqueAction.objects.create(action_type="check", model=encode_model(TestModel))
