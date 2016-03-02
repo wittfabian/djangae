@@ -2,6 +2,7 @@
 import urllib
 import mimetypes
 import re
+import threading
 
 try:
     from cStringIO import StringIO
@@ -48,6 +49,43 @@ except ImportError:
 BUCKET_KEY = 'CLOUD_STORAGE_BUCKET'
 DEFAULT_CONTENT_TYPE = 'application/binary'
 
+CACHE_LOCK = threading.Lock()
+KEY_CACHE = {}
+KEY_CACHE_LIST = []
+MAX_KEY_CACHE_SIZE = 500
+
+def _add_to_cache(blob_key_or_info, blob_key, file_info):
+    """
+        This helps remove overhead when serving cloud storage files
+        by caching the results of the RPC calls. We maintain a list of the
+        order in which keys were added so that we remove the first key
+        when we run out of room. This could be improved by limiting based on
+        usage frequency.
+    """
+
+    global KEY_CACHE
+    global KEY_CACHE_LIST
+    global CACHE_LOCK
+
+    with CACHE_LOCK:
+        if blob_key_or_info in KEY_CACHE:
+            return
+
+        KEY_CACHE_LIST.append(blob_key_or_info)
+        KEY_CACHE[blob_key_or_info] = (blob_key, file_info)
+
+        # Truncate the cache size if necessary
+        if len(KEY_CACHE_LIST) == MAX_KEY_CACHE_SIZE:
+            first = KEY_CACHE_LIST[0]
+            KEY_CACHE_LIST = KEY_CACHE_LIST[1:]
+            del KEY_CACHE[first]
+
+
+def _get_from_cache(blob_key_or_info):
+    with CACHE_LOCK:
+        return KEY_CACHE.get(blob_key_or_info)
+
+
 def serve_file(request, blob_key_or_info, as_download=False, content_type=None, filename=None, offset=None, size=None):
     """
         Serves a file from the blobstore, reads most of the data from the blobinfo by default but you can override stuff
@@ -72,9 +110,14 @@ def serve_file(request, blob_key_or_info, as_download=False, content_type=None, 
     if info == None:
         # Lack of blobstore_info means this is a Google Cloud Storage file
         if has_cloudstorage:
-            info = cloudstorage.stat(blob_key_or_info)
-            info.size = info.st_size
-            blob_key = create_gs_key('/gs{0}'.format(blob_key_or_info))
+            cached_value = _get_from_cache(blob_key_or_info)
+            if cached_value:
+                blob_key, info = cached_value
+            else:
+                info = cloudstorage.stat(blob_key_or_info)
+                info.size = info.st_size
+                blob_key = create_gs_key('/gs{0}'.format(blob_key_or_info))
+                _add_to_cache(blob_key_or_info, blob_key, info)
         else:
             raise ImportError("To serve a Cloud Storage file you need to install cloudstorage")
 
