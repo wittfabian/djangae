@@ -1,9 +1,11 @@
+# -*- encoding: utf-8 -*
 from collections import OrderedDict
 
 # LIBRARIES
 from django.db import models
 from django.db.utils import IntegrityError
 from django.contrib.contenttypes.models import ContentType
+from django.core.exceptions import ValidationError
 
 # DJANGAE
 from djangae.db import transaction
@@ -16,6 +18,7 @@ from djangae.fields import (
     RelatedListField,
     ShardedCounterField,
     SetField,
+    CharField,
 )
 from djangae.fields.counting import DEFAULT_SHARD_COUNT
 from djangae.models import CounterShard
@@ -733,3 +736,53 @@ class JSONFieldModelTests(TestCase):
 
         test_instance = JSONFieldModel.objects.get()
         self.assertEqual(test_instance.json_field['test'], 0.1)
+
+
+class ModelWithCharField(models.Model):
+    char_field_with_max = CharField(max_length=10, default='', blank=True)
+    char_field_without_max = CharField(default='', blank=True)
+
+
+class CharFieldModelTests(TestCase):
+
+    def test_char_field_with_max_length_set(self):
+        test_bytestrings = [
+            (u'01234567891', 11),
+            (u'ążźsęćńół', 17),
+        ]
+
+        for test_text, byte_len in test_bytestrings:
+            test_instance = ModelWithCharField(
+                char_field_with_max=test_text,
+            )
+            self.assertRaisesMessage(
+                ValidationError,
+                'Ensure this value has at most 10 bytes (it has %d).' % byte_len,
+                test_instance.full_clean,
+            )
+
+    def test_char_field_with_not_max_length_set(self):
+        longest_valid_value = u'0123456789' * 150
+        too_long_value = longest_valid_value + u'more'
+
+        test_instance = ModelWithCharField(
+            char_field_without_max=longest_valid_value,
+        )
+        test_instance.full_clean()  # max not reached so it's all good
+
+        test_instance.char_field_without_max = too_long_value
+        self.assertRaisesMessage(
+            ValidationError,
+            u'Ensure this value has at most 1500 bytes (it has 1504).',
+            test_instance.full_clean,
+         )
+
+    def test_too_long_max_value_set(self):
+        try:
+            class TestModel(models.Model):
+                test_char_field = CharField(max_length=1501)
+        except AssertionError, e:
+            self.assertEqual(
+                e.message,
+                'CharFields max_length must not be grater than 1500 bytes.',
+            )
