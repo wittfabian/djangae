@@ -52,3 +52,5 @@ EMAIL_BACKEND = 'djangae.mail.AsyncEmailBackend'
 # it needs to be like this because of the syntax of addressing non-default versions
 # (e.g. -dot-)
 ALLOWED_HOSTS = (".appspot.com", )
+
+DJANGAE_RUNSERVER_IGNORED_FILES_REGEXES = ['^.+$(?<!\.py)(?<!\.yaml)']
