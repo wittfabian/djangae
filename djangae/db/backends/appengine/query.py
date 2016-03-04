@@ -7,6 +7,7 @@ import datetime
 from itertools import chain, imap
 from django.core.exceptions import FieldError
 from django.db.models.fields import FieldDoesNotExist
+from django.db.models.fields.related import RelatedField
 from django.db.models.sql.datastructures import EmptyResultSet
 
 from django.db.models import AutoField
@@ -804,6 +805,10 @@ def _extract_ordering_from_query_18(query):
                 field = query.model._meta.get_field_by_name(column)[0]
                 if field.get_internal_type() in (u"TextField", u"BinaryField"):
                     raise NotSupportedError(INVALID_ORDERING_FIELD_MESSAGE)
+
+                if field.related_model and field.related_model._meta.ordering:
+                    raise NotSupportedError("Related ordering is not supported on the datastore")
+
                 column = "__key__" if field.primary_key else field.column
                 final.append("-" + column if col.startswith("-") else column)
             except FieldDoesNotExist:
