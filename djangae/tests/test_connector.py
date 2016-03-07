@@ -293,7 +293,7 @@ class BackendTests(TestCase):
         for i in range(10):
             TestFruit.objects.create(name=str(i), color=str(i))
 
-        to_exclude = [ str(x) for x in range(5) ]
+        to_exclude = [ str(x) for x in range(5) + range(15,20) ]
 
         to_return = TestFruit.objects.exclude(pk__in=set(to_exclude)).values_list("pk", flat=True)[:2]
         self.assertEqual(2, len(to_return))
@@ -303,7 +303,6 @@ class BackendTests(TestCase):
         )
 
         self.assertEqual(2, len(qs))
-
 
     def test_count_on_excluded_pks(self):
         TestFruit.objects.create(name="Apple", color="Red")
