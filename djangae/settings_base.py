@@ -53,4 +53,4 @@ EMAIL_BACKEND = 'djangae.mail.AsyncEmailBackend'
 # (e.g. -dot-)
 ALLOWED_HOSTS = (".appspot.com", )
 
-DJANGAE_RUNSERVER_IGNORED_FILES_REGEXES = ['^.+$(?<!\.py)(?<!\.yaml)']
+DJANGAE_RUNSERVER_IGNORED_FILES_REGEXES = ['^.+$(?<!\.py)(?<!\.yaml)(?<!\.html)']
