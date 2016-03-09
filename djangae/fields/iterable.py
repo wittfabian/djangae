@@ -1,4 +1,5 @@
 import copy
+
 from django import forms
 from django.db import models
 from django.core.exceptions import ValidationError, ImproperlyConfigured
@@ -19,10 +20,11 @@ class _FakeModel(object):
 
 
 class IterableField(models.Field):
-    __metaclass__ = models.SubfieldBase
-
     @property
     def _iterable_type(self): raise NotImplementedError()
+
+    def from_db_value(self, value, expression, connection, context):
+        return self.to_python(value)
 
     def db_type(self, connection):
         return 'list'
@@ -104,11 +106,6 @@ class IterableField(models.Field):
         self.item_field_type.model = cls
         self.item_field_type.name = name
         super(IterableField, self).contribute_to_class(cls, name)
-
-        # If items' field uses SubfieldBase we also need to.
-        item_metaclass = getattr(self.item_field_type, '__metaclass__', None)
-        if item_metaclass and issubclass(item_metaclass, models.SubfieldBase):
-            setattr(cls, self.name, Creator(self))
 
     def _map(self, function, iterable, *args, **kwargs):
         return self._iterable_type(function(element, *args, **kwargs) for element in iterable)

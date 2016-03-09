@@ -21,12 +21,13 @@ class TrueOrNullField(models.NullBooleanField):
     unexpected (like a string) and saving, will silently convert that
     value to either True or None.
     """
-    __metaclass__ = models.SubfieldBase
-
     default_error_messages = {
         'invalid': _("'%s' value must be either True or None."),
     }
     description = _("Boolean (Either True or None)")
+
+    def from_db_value(self, value, expression, connection, context):
+        return self.to_python(value)
 
     def to_python(self, value):
         if value in (None, 'None', False):

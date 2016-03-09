@@ -10,6 +10,7 @@ except ImportError:
     from StringIO import StringIO
 
 from django.conf import settings
+from django.core.exceptions import SuspiciousFileOperation
 from django.core.urlresolvers import reverse
 from django.core.files.base import File
 from django.core.files.storage import Storage
@@ -244,8 +245,11 @@ class BlobstoreStorage(Storage, BlobstoreUploadMixin):
     def get_valid_name(self, name):
         return force_unicode(name).strip().replace('\\', '/')
 
-    def get_available_name(self, name):
-        return name.replace('\\', '/')
+    def get_available_name(self, name, max_length=None):
+        ret = name.replace('\\', '/')
+        if max_length and len(ret) > max_length:
+            raise SuspiciousFileOperation()
+        return ret
 
     def _get_key(self, name):
         return BlobKey(name.split('/', 1)[0])

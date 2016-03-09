@@ -10,7 +10,6 @@ from djangae.fields.related import (
     RelatedIteratorManagerBase,
     ReverseRelatedObjectsDescriptor,
 )
-from djangae.models import CounterShard
 from djangae.db import transaction
 
 
@@ -21,7 +20,7 @@ MAX_ENTITIES_PER_GET = BaseConnection.MAX_GET_KEYS
 DEFAULT_SHARD_COUNT = MAX_SHARDS_PER_TRANSACTION = _MAX_EG_PER_TXN - 1
 
 
-class RelatedShardManager(RelatedIteratorManagerBase, CounterShard._default_manager.__class__):
+class RelatedShardManager(RelatedIteratorManagerBase, models.Manager):
     """ This is what is given to you when you access the field attribute on an instance.  It's a
         model manager with the usual queryset methods (the same as for RelatedSetField) but with
         the additional increment()/decrement()/reset() methods for the counting.
@@ -106,11 +105,13 @@ class RelatedShardManager(RelatedIteratorManagerBase, CounterShard._default_mana
                 models.Model.save(new_instance) # avoid custom save method, which might do DB lookups
         else:
             with transaction.atomic():
+                from djangae.models import CounterShard
                 shard = CounterShard.objects.get(pk=shard_pk)
                 shard.count += step
                 shard.save()
 
     def _create_shard(self, count):
+        from djangae.models import CounterShard
         return CounterShard.objects.create(
             count=count, label="%s.%s" % (self.instance._meta.db_table, self.field.name)
         )
@@ -151,6 +152,7 @@ class ShardedCounterField(RelatedSetField):
                 "fetching in a single Get operation (%d)" % MAX_ENTITIES_PER_GET
             )
         kwargs.setdefault("related_name", "+")
+        from djangae.models import CounterShard
         super(ShardedCounterField, self).__init__(CounterShard, *args, **kwargs)
 
     def contribute_to_class(self, cls, name):

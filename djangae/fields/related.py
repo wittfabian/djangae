@@ -1,3 +1,4 @@
+import django
 from django import forms
 from django.db import router, models
 from django.db.models.query import QuerySet
@@ -13,7 +14,9 @@ from django.utils import six
 class RelatedIteratorRel(ForeignObjectRel):
     def __init__(self, field, to, related_name=None, limit_choices_to=None, on_delete=models.DO_NOTHING):
         self.field = field
-        self.to = to
+        if django.VERSION[1] < 9: # Django 1.8 compatibility
+            self.to = to
+        self.model = to
         self.related_name = related_name
         self.related_query_name = None
         self.field_name = None
@@ -184,11 +187,7 @@ class RelatedIteratorObjectsDescriptor(object):
             model's default manager.
         """
 
-        # Django 1.7 uses self.related.model, but >1.7 it's related.related_model
-        if hasattr(self.related, 'related_model'):
-            manager = self.related.related_model._default_manager.__class__
-        else:
-            manager = self.related.model._default_manager.__class__
+        manager = self.related.related_model._default_manager.__class__
 
         return create_related_iter_manager(
             manager,
@@ -199,11 +198,7 @@ class RelatedIteratorObjectsDescriptor(object):
         if instance is None:
             return self
 
-        # Django 1.7 uses self.related.model, but >1.7 it's related.related_model
-        if hasattr(self.related, 'related_model'):
-            rel_model = self.related.related_model
-        else:
-            rel_model = self.related.model
+        rel_model = self.related.related_model
         rel_field = self.related.field
 
         manager = self.related_manager_cls(
@@ -288,12 +283,17 @@ class RelatedIteratorField(ForeignObject):
             on_delete=on_delete
         )
 
-        super(RelatedIteratorField, self).__init__(
-            to=model,
-            from_fields=['self'],
-            to_fields=[None],
-            **kwargs
-        )
+        kwargs.update({
+            'to': model,
+            'from_fields': ['self'],
+            'to_fields': [None],
+        })
+        if django.VERSION[1] >= 9:  # Django 1.8 doesn't have on_delete as attribute
+            kwargs.update({
+                'on_delete': models.DO_NOTHING,
+            })
+
+        super(RelatedIteratorField, self).__init__(**kwargs)
 
     def deconstruct(self):
         name, path, args, kwargs = super(RelatedIteratorField, self).deconstruct()

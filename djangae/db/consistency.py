@@ -1,6 +1,20 @@
 from django.db.models.query import QuerySet
 
 
+def _clone_queryset(qs, klass):
+    cloned_qs = klass(
+        model=qs.model,
+        query=qs.query.clone(),
+        using=qs._db,
+        hints=qs._hints,
+    )
+    cloned_qs._for_write = qs._for_write
+    cloned_qs._prefetch_related_lookups = qs._prefetch_related_lookups[:]
+    cloned_qs._known_related_objects = qs._known_related_objects
+
+    return cloned_qs
+
+
 def ensure_instance_included(queryset, included_id):
     """
         HRD fighting generate for iterating querysets.
@@ -21,7 +35,7 @@ def ensure_instance_included(queryset, included_id):
             super(EnsuredQuerySet, self)._fetch_all()
 
             try:
-                new_qs = self._clone(klass=queryset.__class__)
+                new_qs = _clone_queryset(qs=self, klass=queryset.__class__)
                 new_qs.query.high_mark = None
                 new_qs.query.low_mark = 0
                 included = new_qs.get(pk=included_id)
@@ -68,6 +82,6 @@ def ensure_instance_included(queryset, included_id):
             self._result_cache = new_result_cache[:count]
 
     if isinstance(queryset, QuerySet):
-        return queryset._clone(klass=EnsuredQuerySet)
+        return _clone_queryset(qs=queryset, klass=EnsuredQuerySet)
     else:
         return queryset

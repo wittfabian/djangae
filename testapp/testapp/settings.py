@@ -92,7 +92,9 @@ if "test" in sys.argv:
         "update",
     ]
 
-    for folder in TO_TEST:
+    ADDITIONAL_INSTALLED_APPS = ["file_uploads"]
+
+    for folder in TO_TEST + ADDITIONAL_INSTALLED_APPS:
         if os.path.exists(os.path.join(tests_dir, folder, "tests.py")):
             INSTALLED_APPS.append(folder)
 
@@ -158,5 +160,13 @@ DJANGAE_SIMULATE_CONTENTTYPES = True
 
 TEST_RUNNER = 'djangae.test_runner.SkipUnsupportedRunner'
 DJANGAE_ADDITIONAL_TEST_APPS = ["djangae"] + TO_TEST
+
+
+# Here because of "You haven't defined a TEMPLATES setting" deprecation message
+TEMPLATES = [
+    {
+        'BACKEND': 'django.template.backends.django.DjangoTemplates',
+    },
+]
 
 from djangae.contrib.gauth.settings import *

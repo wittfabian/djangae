@@ -926,7 +926,7 @@ class ConstraintTests(TestCase):
         self.assertEqual(expected_marker, marker.key().id_or_name())
 
     def test_error_on_insert_doesnt_create_markers(self):
-        initial_count = datastore.Query(UniqueMarker.kind()).Count()
+        initial_count = datastore.Query(UniqueMarker.kind(), namespace=DEFAULT_NAMESPACE).Count()
 
         # TODO: replace this insanity with sleuth.switch
         from djangae.db.backends.appengine.commands import datastore as to_patch
@@ -986,7 +986,7 @@ class ConstraintTests(TestCase):
     @override_settings(DJANGAE_DISABLE_CONSTRAINT_CHECKS=True)
     def test_constraints_can_be_enabled_per_model(self):
 
-        initial_count = datastore.Query(UniqueMarker.kind()).Count()
+        initial_count = datastore.Query(UniqueMarker.kind(), namespace=DEFAULT_NAMESPACE).Count()
         ModelWithUniquesAndOverride.objects.create(name="One")
 
         self.assertEqual(

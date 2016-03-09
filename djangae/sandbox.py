@@ -382,7 +382,7 @@ def allow_mode_write():
     new_modes.add('wb')
 
     original_dirs = stubs.FakeFile._allowed_dirs
-    new_dirs = set(stubs.FakeFile._allowed_dirs)
+    new_dirs = set(stubs.FakeFile._allowed_dirs or [])
 
     # for some reason when we call gettempdir in some scenarios
     # (we experience that in ajax call when we tried to render template
