@@ -816,7 +816,7 @@ def _extract_ordering_from_query_18(query):
                     # If the column is in the extra select we transform to the original
                     # column
                     try:
-                        field = opts.get_field_by_name(query.extra_select[col][0])[0]
+                        field = opts.get_field(query.extra_select[col][0])
                         column = "__key__" if field.primary_key else field.column
                         final.append("-" + column if col.startswith("-") else column)
                         continue

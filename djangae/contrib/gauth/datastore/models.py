@@ -44,7 +44,7 @@ class Group(models.Model):
         """We need to override this to make the choices lazy and prevent import madness"""
         super(Group, self).__init__(*args, **kwargs)
 
-        field = self._meta.get_field_by_name('permissions')[0]
+        field = self._meta.get_field('permissions')
         field._choices = lazy(get_permission_choices, list)()
         field.item_field_type._choices = lazy(get_permission_choices, list)()
 
@@ -79,7 +79,7 @@ class PermissionsMixin(models.Model):
     def __init__(self, *args, **kwargs):
         """We need to override this to make the choices lazy and prevent import madness"""
         super(PermissionsMixin, self).__init__(*args, **kwargs)
-        self._meta.get_field_by_name('user_permissions')[0]._choices = lazy(get_permission_choices, list)()
+        self._meta.get_field('user_permissions')._choices = lazy(get_permission_choices, list)()
 
     def get_group_permissions(self, obj=None):
         """
