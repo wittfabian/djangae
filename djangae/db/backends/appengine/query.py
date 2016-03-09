@@ -7,7 +7,6 @@ import datetime
 from itertools import chain, imap
 from django.core.exceptions import FieldError
 from django.db.models.fields import FieldDoesNotExist
-from django.db.models.fields.related import RelatedField
 from django.db.models.sql.datastructures import EmptyResultSet
 
 from django.db.models import AutoField
@@ -40,7 +39,6 @@ from djangae.db.backends.appengine import POLYMODEL_CLASS_ATTRIBUTE
 from djangae.utils import on_production
 from djangae.db.utils import (
     get_top_concrete_parent,
-    get_model_from_db_table,
     has_concrete_parents,
     get_field_from_column
 )
@@ -618,91 +616,6 @@ INVALID_ORDERING_FIELD_MESSAGE = (
     "field and instead order on that."
 )
 
-def _extract_ordering_from_query_17(query):
-    from djangae.db.backends.appengine.commands import log_once
-
-    # Add any orderings
-    if not query.default_ordering:
-        result = list(query.order_by)
-    else:
-        result = list(query.order_by or query.get_meta().ordering or [])
-
-    if query.extra_order_by:
-        result = list(query.extra_order_by)
-
-    final = []
-
-    opts = query.model._meta
-
-    for col in result:
-        if isinstance(col, (int, long)):
-            # If you do a Dates query, the ordering is set to [1] or [-1]... which is weird
-            # I think it's to select the column number but then there is only 1 column so
-            # unless the ordinal is one-based I have no idea. So basically if it's an integer
-            # subtract 1 from the absolute value and look up in the select for the column (guessing)
-            idx = abs(col) - 1
-            try:
-                field_name = query.select[idx].col.col[-1]
-                field = query.model._meta.get_field(field_name)
-                final.append("-" + field.column if col < 0 else field.column)
-            except IndexError:
-                raise NotSupportedError("Unsupported order_by %s" % col)
-
-        elif col.lstrip("-") == "pk":
-            pk_col = "__key__"
-            final.append("-" + pk_col if col.startswith("-") else pk_col)
-        elif col == "?":
-            raise NotSupportedError("Random ordering is not supported on the datastore")
-        elif col.lstrip("-").startswith("__") and col.endswith("__"):
-            # Allow stuff like __scatter__
-            final.append(col)
-        elif "__" in col:
-            continue
-        else:
-            try:
-                column = col.lstrip("-")
-                field = query.model._meta.get_field(column)
-                if field.get_internal_type()  in (u"TextField", u"BinaryField"):
-                    raise NotSupportedError(INVALID_ORDERING_FIELD_MESSAGE)
-                column = "__key__" if field.primary_key else field.column
-                final.append("-" + column if col.startswith("-") else column)
-            except FieldDoesNotExist:
-                if col in query.extra_select:
-                    # If the column is in the extra select we transform to the original
-                    # column
-                    try:
-                        field = opts.get_field(query.extra_select[col][0])
-                        column = "__key__" if field.primary_key else field.column
-                        final.append("-" + column if col.startswith("-") else column)
-                        continue
-                    except FieldDoesNotExist:
-                        # Just pass through to the exception below
-                        pass
-
-                available = opts.get_all_field_names()
-                raise FieldError("Cannot resolve keyword %r into field. "
-                    "Choices are: %s" % (col, ", ".join(available))
-                )
-
-    # Reverse if not using standard ordering
-    def swap(col):
-        if col.startswith("-"):
-            return col.lstrip("-")
-        else:
-            return "-{}".format(col)
-
-    if not query.standard_ordering:
-        final = [ swap(x) for x in final ]
-
-    if len(final) != len(result):
-        diff = set(result) - set(final)
-        log_once(
-            DJANGAE_LOG.warning if not on_production() else DJANGAE_LOG.debug,
-            "The following orderings were ignored as cross-table and random orderings are not supported on the datastore: %s", diff
-        )
-
-    return final
-
 
 def _extract_ordering_from_query_18(query):
     from djangae.db.backends.appengine.commands import log_once
@@ -851,42 +764,6 @@ def _extract_ordering_from_query_18(query):
     return final
 
 
-def _extract_projected_columns_from_query_17(query):
-    result = []
-
-    if query.select:
-        for x in query.select:
-            if x.field is None:
-                model = get_model_from_db_table(x.col.col[0])
-                if get_top_concrete_parent(model) != get_top_concrete_parent(query.model):
-                    raise NotSupportedError("Attempted a cross-join select which is not supported on the datastore")
-
-                column = x.col.col[1]  # This is the column we are getting
-            else:
-                column = x.field.column
-
-            result.append(column)
-        return result
-    else:
-        # If the query uses defer()/only() then we need to process deferred. We have to get all deferred columns
-        # for all (concrete) inherited models and then only include columns if they appear in that list
-        only_load = query.get_loaded_field_names()
-        if only_load:
-            for field, model in query.model._meta.get_concrete_fields_with_model():
-                model = model or query.model
-                try:
-                    if field.name in only_load[model]:
-                        # Add a field that has been explicitly included
-                        result.append(field.column)
-                except KeyError:
-                    # Model wasn't explicitly listed in the only_load table
-                    # Therefore, we need to load all fields from this model
-                    result.append(field.column)
-            return result
-        else:
-            return []
-
-
 def _extract_projected_columns_from_query_18(query):
     result = []
 
@@ -943,7 +820,7 @@ def _walk_django_where(query, trunk_callback, leaf_callback, **kwargs):
     kwargs.setdefault("negated", False)
     walk_node(query.where, **kwargs)
 
-def _django_17_query_walk_leaf(node, negated, new_parent, connection, model):
+def _django_18_query_walk_leaf(node, negated, new_parent, connection, model):
     new_node = WhereNode()
 
     if not hasattr(node, "lhs"):
@@ -1044,7 +921,7 @@ def _django_17_query_walk_leaf(node, negated, new_parent, connection, model):
 
     new_parent.children.append(new_node)
 
-def _django_17_query_walk_trunk(node, negated, new_parent, **kwargs):
+def _django_18_query_walk_trunk(node, negated, new_parent, **kwargs):
     new_node = WhereNode()
     new_node.connector = node.connector
     new_node.negated = node.negated
@@ -1052,82 +929,6 @@ def _django_17_query_walk_trunk(node, negated, new_parent, **kwargs):
     new_parent.children.append(new_node)
 
     return new_node
-
-def _transform_query_17(connection, kind, query):
-    from django.db.models.sql.datastructures import Date, DateTime
-    from django.db.models.sql.where import EmptyWhere
-
-    if isinstance(query.where, EmptyWhere):
-        # Empty where means return nothing!
-        raise EmptyResultSet()
-
-    # Check for joins, we ignore select related tables as they aren't actually used (the connector marks select
-    # related as unsupported in its features)
-    tables = [ k for k, v in query.alias_refcount.items() if v ]
-    inherited_tables = set([x._meta.db_table for x in query.model._meta.parents ])
-    select_related_tables = set([y[0][0] for y in query.related_select_cols ])
-    tables = set(tables) - inherited_tables - select_related_tables
-
-    if len(tables) > 1:
-        raise NotSupportedError("""
-            The appengine database connector does not support JOINs. The requested join map follows\n
-            %s
-        """ % query.join_map)
-
-    ret = Query(query.model, kind)
-    ret.connection = connection
-
-    # Add the root concrete table as the source table
-    root_table = get_top_concrete_parent(query.model)._meta.db_table
-    ret.add_source_table(root_table)
-
-    # Extract the ordering of the query results
-    for order_col in _extract_ordering_from_query_17(query):
-        ret.add_order_by(order_col)
-
-    # Extract any projected columns (values/values_list/only/defer)
-    for projected_col in _extract_projected_columns_from_query_17(query):
-        ret.add_projected_column(projected_col)
-
-    for potential_annotation in query.select:
-        col = getattr(potential_annotation, "col", None)
-        if not col:
-            continue
-
-        if isinstance(col, (Date, DateTime)):
-            ret.add_annotation(col.col[-1], col)
-
-    # Add any extra selects
-    for col, select in query.extra_select.items():
-        ret.add_extra_select(col, select[0])
-
-    # This must happen after extracting projected cols
-    if query.distinct:
-        ret.set_distinct(list(query.distinct_fields))
-
-    # Extract any query offsets and limits
-    ret.low_mark = query.low_mark
-    ret.high_mark = query.high_mark
-
-    output = WhereNode()
-    output.connector = query.where.connector
-
-    _walk_django_where(
-        query,
-        _django_17_query_walk_trunk,
-        _django_17_query_walk_leaf,
-        new_parent=output,
-        connection=connection,
-        model=query.model
-    )
-
-    # If there no child nodes, just wipe out the where
-    if not output.children:
-        output = None
-
-    ret.where = output
-
-    return ret
 
 
 def _transform_query_18(connection, kind, query):
@@ -1173,8 +974,8 @@ def _transform_query_18(connection, kind, query):
 
     _walk_django_where(
         query,
-        _django_17_query_walk_trunk,
-        _django_17_query_walk_leaf,
+        _django_18_query_walk_trunk,
+        _django_18_query_walk_leaf,
         new_parent=output,
         connection=connection,
         negated=query.where.negated,
@@ -1240,8 +1041,8 @@ def _transform_query_19(connection, kind, query):
 
     _walk_django_where(
         query,
-        _django_17_query_walk_trunk,
-        _django_17_query_walk_leaf,
+        _django_18_query_walk_trunk,
+        _django_18_query_walk_leaf,
         new_parent=output,
         connection=connection,
         negated=query.where.negated,
@@ -1258,20 +1059,9 @@ def _transform_query_19(connection, kind, query):
 
 
 _FACTORY = {
-    (1, 7): _transform_query_17,
     (1, 8): _transform_query_18,
     (1, 9): _transform_query_19
 }
-
-def _determine_query_kind_17(query):
-    from django.db.models.sql.aggregates import Count
-    if query.aggregates:
-        if None in query.aggregates and isinstance(query.aggregates[None], Count):
-            return "COUNT"
-        else:
-            raise NotSupportedError("Unsupported aggregate: {}".format(query.aggregates))
-
-    return "SELECT"
 
 def _determine_query_kind_18(query):
     if query.annotations:
@@ -1291,8 +1081,8 @@ def _determine_query_kind_19(query):
 
     return "SELECT"
 
+
 _KIND_FACTORY = {
-    (1, 7): _determine_query_kind_17,
     (1, 8): _determine_query_kind_18,
     (1, 9): _determine_query_kind_19
 }
@@ -1303,7 +1093,6 @@ def transform_query(connection, query):
     return _FACTORY[version](connection, kind, query)
 
 _ORDERING_FACTORY = {
-    (1, 7): _extract_ordering_from_query_17,
     (1, 8): _extract_ordering_from_query_18,
     (1, 9): _extract_ordering_from_query_18  # Same as 1.8
 }
