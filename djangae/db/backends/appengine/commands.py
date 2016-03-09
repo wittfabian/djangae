@@ -381,6 +381,13 @@ def wrap_result_with_functor(results, func):
         if result is not None:
             yield result
 
+def limit_results_generator(results, limit):
+    for result in results:
+        yield result
+        limit -= 1
+        if not limit:
+            raise StopIteration
+
 
 def can_perform_datastore_get(normalized_query):
     """
@@ -741,6 +748,9 @@ class SelectCommand(object):
                 return dedupe
 
             self.results = wrap_result_with_functor(self.results, deduper_factory())
+
+        if limit:
+            self.results = limit_results_generator(self.results, limit - excluded_pk_count)
 
 
     def execute(self):

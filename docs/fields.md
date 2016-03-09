@@ -96,10 +96,13 @@ This is a replacement for Django's `GenericForeignKey` field, which doesn't use 
 
 This field requires no special kwargs, and should accept all standard Django field kwargs as normal.
 
+## CharField
+
+This is a replacement for Django's `CharField` field. It is using `MaxBytesValidator` validator that makes sure value's lenght doesn't exceed the hard datastore limit of 1500 bytes (see `google.appengine.api.datastore_types _MAX_STRING_LENGTH`). Use this field whenever you're planning to store its values in the datastore as your data may get trimmed otherwise.
 
 ## JSONField
 
-This field is not specific to to the App Engine Datastore (or any non-relational database), but is included in Djangae for convenience, especially as in a non-relational database it's often useful to be able to store structured data in a single table rather than in a complex structure of related tables.
+This field is not specific to the App Engine Datastore (or any non-relational database), but is included in Djangae for convenience, especially as in a non-relational database it's often useful to be able to store structured data in a single table rather than in a complex structure of related tables.
 
 ```JSONField(use_ordered_dict=False, **kwargs)```
 
@@ -108,7 +111,7 @@ This field is not specific to to the App Engine Datastore (or any non-relational
 
 ## TrueOrNullField
 
-This field is not specific to to the App Engine Datastore (or any non-relational database), but is included in Djangae for convenience.
+This field is not specific to the App Engine Datastore (or any non-relational database), but is included in Djangae for convenience.
 
 Its primary use case is for when you want a boolean field which can only be set to true for *one* object.  This is done by making use of the fact that Django (and most databases) ignore `None` values in unique constraints, so by having a field which can only store values of `True` or `None` and by setting the field to unique, you get a field which can only be `True` on one object.
 
