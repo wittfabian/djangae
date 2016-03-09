@@ -45,6 +45,7 @@ MAX_ERRORS = 100
 def encode_model(model):
     return "%s,%s" % (model._meta.app_label, model._meta.model_name)
 
+
 def decode_model(model_str):
     return apps.get_model(*model_str.split(','))
 
@@ -231,6 +232,7 @@ def clean_map(entity, *args, **kwargs):
         if entity.key() not in identifier_keys:
             logging.info("Deleting unique marker {} because the it no longer represents the associated instance state".format(entity.key().id_or_name()))
             datastore.Delete(entity)
+
 
 class NewCleanMapper(pipeline_base.PipelineBase):
 

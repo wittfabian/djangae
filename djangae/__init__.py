@@ -7,5 +7,5 @@ if extra_library_path not in sys.path:
 
 default_app_config = 'djangae.apps.DjangaeConfig'
 
-from patches import json
+from .patches import json
 json.patch()

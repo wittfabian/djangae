@@ -374,7 +374,6 @@ def activate(sandbox_name, add_sdk_to_path=False, new_env_vars=None, **overrides
 
 @contextlib.contextmanager
 def allow_mode_write():
-    import tempfile
     from google.appengine.tools.devappserver2.python import stubs
 
     original_modes = stubs.FakeFile.ALLOWED_MODES
@@ -383,7 +382,15 @@ def allow_mode_write():
     new_modes.add('wb')
 
     original_dirs = stubs.FakeFile._allowed_dirs
-    new_dirs = set(stubs.FakeFile._allowed_dirs).union({ tempfile.gettempdir() })
+    new_dirs = set(stubs.FakeFile._allowed_dirs)
+
+    # for some reason when we call gettempdir in some scenarios
+    # (we experience that in ajax call when we tried to render template
+    # with assets) we might end up with thread.error when Python tries
+    # to release the lock. Since we mess with the tempfile in allow_modules
+    # we could - instead of calling gettempdir - simply add default temp
+    # directories.
+    new_dirs.update(['/tmp', '/var/tmp', '/usr/tmp'])
 
     stubs.FakeFile.ALLOWED_MODES = frozenset(new_modes)
     stubs.FakeFile._allowed_dirs = frozenset(new_dirs)

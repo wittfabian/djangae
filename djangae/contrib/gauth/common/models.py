@@ -32,6 +32,12 @@ class GaeUserManager(UserManager):
         )
         return self.create(**values)
 
+    @classmethod
+    def normalize_email(cls, email):
+        """ Lowercase given email address """
+        email = email or ''
+        return email.lower()
+
 
 @python_2_unicode_compatible
 class GaeAbstractBaseUser(AbstractBaseUser):
@@ -100,4 +106,3 @@ class GaeAbstractBaseUser(AbstractBaseUser):
         if username:
             return "{} ({})".format(six.text_type(self.email), six.text_type(username))
         return six.text_type(self.email)
-

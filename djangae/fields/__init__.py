@@ -1,5 +1,7 @@
 from djangae.forms.fields import TrueOrNullFormField
+from djangae.core import validators
 from django.utils.translation import ugettext_lazy as _
+from google.appengine.api.datastore_types import _MAX_STRING_LENGTH
 
 from .iterable import *
 from .related import *
@@ -46,3 +48,13 @@ class TrueOrNullField(models.NullBooleanField):
         }
         defaults.update(kwargs)
         return super(TrueOrNullField, self).formfield(**defaults)
+
+
+class CharField(models.CharField):
+
+    def __init__(self, max_length=_MAX_STRING_LENGTH, *args, **kwargs):
+        assert max_length <= _MAX_STRING_LENGTH, \
+            "%ss max_length must not be grater than %d bytes." % (self.__class__.__name__, _MAX_STRING_LENGTH)
+
+        super(CharField, self).__init__(max_length=max_length, *args, **kwargs)
+        self.validators = [validators.MaxBytesValidator(limit_value=max_length)]

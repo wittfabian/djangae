@@ -13,7 +13,7 @@ from djangae.db import unique_utils
 from djangae.db import transaction
 from djangae.db.backends.appengine.context import ContextStack
 from djangae.db.backends.appengine import caching
-from djangae.db.caching import disable_cache, clear_context_cache
+from djangae.db.caching import disable_cache
 
 
 DEFAULT_NAMESPACE = default_connection.ops.connection.settings_dict.get("NAMESPACE")
@@ -119,6 +119,14 @@ class MemcacheCachingTests(TestCase):
          - filter/get by anything else does not (eventually consistent)
     """
 
+    def setUp(self, *args, **kwargs):
+        caching._local.memcache.set_sync_mode(True)
+        return super(MemcacheCachingTests, self).setUp(*args, **kwargs)
+
+    def tearDown(self, *args, **kwargs):
+        caching._local.memcache.set_sync_mode(False)
+        return super(MemcacheCachingTests, self).tearDown(*args, **kwargs)
+
     @disable_cache(memcache=False, context=True)
     def test_save_inside_transaction_evicts_cache(self):
         entity_data = {
@@ -133,6 +141,7 @@ class MemcacheCachingTests(TestCase):
         )
 
         instance = CachingTestModel.objects.create(id=222, **entity_data)
+
         for identifier in identifiers:
             self.assertEqual(entity_data, cache.get(identifier))
 
@@ -178,7 +187,6 @@ class MemcacheCachingTests(TestCase):
 
         with transaction.atomic():
             instance = CachingTestModel.objects.create(**entity_data)
-
 
         for identifier in identifiers:
             self.assertIsNone(cache.get(identifier))
@@ -239,6 +247,7 @@ class MemcacheCachingTests(TestCase):
             instance.field1 = "new"
             instance.save()
             non_transactional_read(instance.pk)  # could potentially recache the old object
+
 
         for identifier in identifiers:
             self.assertIsNone(cache.get(identifier))
@@ -329,12 +338,10 @@ class MemcacheCachingTests(TestCase):
             "comb2": "Cherry"
         }
 
-        original = CachingTestModel.objects.create(**entity_data)
-
-        with sleuth.watch("google.appengine.api.datastore.Query.Run") as datastore_query:
-            # Expect no matches
-            num_instances = CachingTestModel.objects.filter(field1="Apple", comb1=0).count()
-            self.assertEqual(num_instances, 0)
+        CachingTestModel.objects.create(**entity_data)
+        # Expect no matches
+        num_instances = CachingTestModel.objects.filter(field1="Apple", comb1=0).count()
+        self.assertEqual(num_instances, 0)
 
     @disable_cache(memcache=False, context=True)
     def test_non_unique_filter_hits_datastore(self):
@@ -361,6 +368,7 @@ class MemcacheCachingTests(TestCase):
         }
 
         original = CachingTestModel.objects.create(**entity_data)
+
 
         with sleuth.watch("google.appengine.api.datastore.Get") as datastore_get:
             instance = CachingTestModel.objects.get(pk=original.pk)
@@ -423,32 +431,33 @@ class MemcacheCachingTests(TestCase):
 
     @disable_cache(memcache=False, context=True)
     def test_bulk_cache(self):
-        with sleuth.watch("django.core.cache.cache.set_many") as set_many_1:
+        with sleuth.watch("djangae.db.backends.appengine.caching.KeyPrefixedClient.set_multi_async") as set_many_1:
             CachingTestModel.objects.create(field1="Apple", comb1=1, comb2="Cherry")
-        self.assertEqual(set_many_1.call_count, 1)
-        self.assertEqual(len(set_many_1.calls[0].args[0]), 3)
 
-        with sleuth.watch("django.core.cache.cache.set_many") as set_many_2:
+        self.assertEqual(set_many_1.call_count, 1)
+        self.assertEqual(len(set_many_1.calls[0].args[1]), 3)
+
+        with sleuth.watch("djangae.db.backends.appengine.caching.KeyPrefixedClient.set_multi_async") as set_many_2:
             CachingTestModel.objects.bulk_create([
                 CachingTestModel(field1="Banana", comb1=2, comb2="Cherry"),
                 CachingTestModel(field1="Orange", comb1=3, comb2="Cherry"),
             ])
         self.assertEqual(set_many_2.call_count, 1)
-        self.assertEqual(len(set_many_2.calls[0].args[0]), 3*2)
+        self.assertEqual(len(set_many_2.calls[0].args[1]), 3*2)
 
         pks = list(CachingTestModel.objects.values_list('pk', flat=True))
-        with sleuth.watch("django.core.cache.cache.set_many") as set_many_3:
+        with sleuth.watch("djangae.db.backends.appengine.caching.KeyPrefixedClient.set_multi_async") as set_many_3:
             list(CachingTestModel.objects.filter(pk__in=pks).all())
         self.assertEqual(set_many_3.call_count, 1)
-        self.assertEqual(len(set_many_3.calls[0].args[0]), 3*len(pks))
+        self.assertEqual(len(set_many_3.calls[0].args[1]), 3*len(pks))
 
-        with sleuth.watch("django.core.cache.cache.get_many") as get_many:
-            with sleuth.watch("django.core.cache.cache.delete_many") as delete_many:
+        with sleuth.watch("djangae.db.backends.appengine.caching.KeyPrefixedClient.get_multi") as get_many:
+            with sleuth.watch("djangae.db.backends.appengine.caching.KeyPrefixedClient.delete_multi_async") as delete_many:
                 CachingTestModel.objects.all().delete()
 
         self.assertEqual(get_many.call_count, 1)
         self.assertEqual(delete_many.call_count, 1)
-        self.assertEqual(len(get_many.calls[0].args[0]), 3)  # Get by pk from cache
+        self.assertEqual(len(get_many.calls[0].args[1]), 3)  # Get by pk from cache
 
 
 class ContextCachingTests(TestCase):
@@ -569,17 +578,17 @@ class ContextCachingTests(TestCase):
             atomic block which isn't marked as independent, the atomic is a no-op. Therefore
             we shouldn't push a context here, and we shouldn't pop it at the end either.
         """
-
-        self.assertEqual(1, caching._context.stack.size)
+        context = caching.get_context()
+        self.assertEqual(1, context.stack.size)
         with transaction.atomic():
-            self.assertEqual(2, caching._context.stack.size)
+            self.assertEqual(2, context.stack.size)
             with transaction.atomic():
-                self.assertEqual(2, caching._context.stack.size)
+                self.assertEqual(2, context.stack.size)
                 with transaction.atomic():
-                    self.assertEqual(2, caching._context.stack.size)
-                self.assertEqual(2, caching._context.stack.size)
-            self.assertEqual(2, caching._context.stack.size)
-        self.assertEqual(1, caching._context.stack.size)
+                    self.assertEqual(2, context.stack.size)
+                self.assertEqual(2, context.stack.size)
+            self.assertEqual(2, context.stack.size)
+        self.assertEqual(1, context.stack.size)
 
     @disable_cache(memcache=True, context=False)
     def test_nested_rollback_doesnt_apply_on_outer_commit(self):
@@ -606,8 +615,10 @@ class ContextCachingTests(TestCase):
         original = CachingTestModel.objects.get(pk=original.pk)
         self.assertEqual("Apple", original.field1) # Shouldn't have changed
 
-    @disable_cache(memcache=True, context=False)
     def test_save_caches(self):
+        """ Test that after saving something, it exists in the context cache and therefore when we
+            fetch it we don't hit memcache or the Datastore.
+        """
         entity_data = {
             "field1": "Apple",
             "comb1": 1,
@@ -617,11 +628,13 @@ class ContextCachingTests(TestCase):
         original = CachingTestModel.objects.create(**entity_data)
 
         with sleuth.watch("google.appengine.api.datastore.Get") as datastore_get:
-            with sleuth.watch("django.core.cache.cache.get") as memcache_get:
-                original = CachingTestModel.objects.get(pk=original.pk)
+            with sleuth.watch("google.appengine.api.memcache.get") as memcache_get:
+                with sleuth.watch("google.appengine.api.memcache.get_multi") as memcache_get_multi:
+                    original = CachingTestModel.objects.get(pk=original.pk)
 
         self.assertFalse(datastore_get.called)
         self.assertFalse(memcache_get.called)
+        self.assertFalse(memcache_get_multi.called)
 
     @disable_cache(memcache=True, context=False)
     def test_consistent_read_updates_cache_outside_transaction(self):
@@ -637,7 +650,7 @@ class ContextCachingTests(TestCase):
 
         original = CachingTestModel.objects.create(**entity_data)
 
-        clear_context_cache()
+        caching.get_context().reset(keep_disabled_flags=True)
 
         CachingTestModel.objects.get(pk=original.pk) # Should update the cache
 
@@ -646,7 +659,7 @@ class ContextCachingTests(TestCase):
 
         self.assertFalse(datastore_get.called)
 
-        clear_context_cache()
+        caching.get_context().reset(keep_disabled_flags=True)
 
         with transaction.atomic():
             with sleuth.watch("google.appengine.api.datastore.Get") as datastore_get:
@@ -668,7 +681,7 @@ class ContextCachingTests(TestCase):
 
         original = CachingTestModel.objects.create(**entity_data)
 
-        clear_context_cache()
+        caching.get_context().reset(keep_disabled_flags=True)
 
         CachingTestModel.objects.all() # Inconsistent
 

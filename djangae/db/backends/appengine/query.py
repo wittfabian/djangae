@@ -326,7 +326,7 @@ class Query(object):
                 (lambda x: process_date(x, annotation.lookup_type), [getattr(annotation, "lookup", column)]))
             )
             # Override the projection so that we only get this column
-            self.columns = [ getattr(annotation, "lookup", column) ]
+            self.columns = set([ getattr(annotation, "lookup", column) ])
 
 
     def add_projected_column(self, column):
@@ -349,9 +349,9 @@ class Query(object):
             return
 
         if not self.columns:
-            self.columns = [ column ]
+            self.columns = set([ column ])
         else:
-            self.columns.append(column)
+            self.columns.add(column)
 
     def add_row(self, data):
         assert self.columns
@@ -517,7 +517,7 @@ class Query(object):
 
         walk(self._where)
 
-        if equality_columns and equality_columns.intersection(set(self.columns)):
+        if equality_columns and equality_columns.intersection(self.columns):
             self.columns = None
             self.projection_possible = False
 
@@ -571,7 +571,7 @@ class Query(object):
         result["kind"] = self.kind
         result["table"] = self.model._meta.db_table
         result["concrete_table"] = self.concrete_model._meta.db_table
-        result["columns"] = self.columns
+        result["columns"] = list(self.columns or []) # set() is not JSONifiable
         result["projection_possible"] = self.projection_possible
         result["init_list"] = self.init_list
         result["distinct"] = self.distinct
@@ -597,6 +597,13 @@ class Query(object):
 
         return json.dumps(result)
 
+
+INVALID_ORDERING_FIELD_MESSAGE = (
+    "Ordering on TextField or BinaryField is not supported on the datastore. "
+    "You might consider using a ComputedCharField which stores the first "
+    "_MAX_STRING_LENGTH (from google.appengine.api.datastore_types) bytes of the "
+    "field and instead order on that."
+)
 
 def _extract_ordering_from_query_17(query):
     from djangae.db.backends.appengine.commands import log_once
@@ -642,6 +649,8 @@ def _extract_ordering_from_query_17(query):
             try:
                 column = col.lstrip("-")
                 field = query.model._meta.get_field_by_name(column)[0]
+                if field.get_internal_type()  in (u"TextField", u"BinaryField"):
+                    raise NotSupportedError(INVALID_ORDERING_FIELD_MESSAGE)
                 column = "__key__" if field.primary_key else field.column
                 final.append("-" + column if col.startswith("-") else column)
             except FieldDoesNotExist:
@@ -783,6 +792,8 @@ def _extract_ordering_from_query_18(query):
                             column = annotation.col.output_field.column
 
                 field = query.model._meta.get_field_by_name(column)[0]
+                if field.get_internal_type() in (u"TextField", u"BinaryField"):
+                    raise NotSupportedError(INVALID_ORDERING_FIELD_MESSAGE)
                 column = "__key__" if field.primary_key else field.column
                 final.append("-" + column if col.startswith("-") else column)
             except FieldDoesNotExist:

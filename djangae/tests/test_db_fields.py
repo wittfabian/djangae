@@ -1,9 +1,11 @@
+# -*- encoding: utf-8 -*
 from collections import OrderedDict
 
 # LIBRARIES
 from django.db import models
 from django.db.utils import IntegrityError
 from django.contrib.contenttypes.models import ContentType
+from django.core.exceptions import ValidationError
 
 # DJANGAE
 from djangae.db import transaction
@@ -16,6 +18,7 @@ from djangae.fields import (
     RelatedListField,
     ShardedCounterField,
     SetField,
+    CharField,
 )
 from djangae.fields.counting import DEFAULT_SHARD_COUNT
 from djangae.models import CounterShard
@@ -357,6 +360,28 @@ class IterableFieldTests(TestCase):
         self.assertRaises(TypeError, IterableFieldModel, list_field=1)
         self.assertRaises(TypeError, IterableFieldModel, set_field=1)
 
+
+class RelatedListFieldModelTests(TestCase):
+
+    def test_can_update_related_field_from_form(self):
+        related = ISOther.objects.create()
+        thing = ISModel.objects.create(related_list=[related])
+        before_list = thing.related_list
+        thing.related_list.field.save_form_data(thing, [])
+        self.assertNotEqual(before_list.all(), thing.related_list.all())
+
+
+class RelatedSetFieldModelTests(TestCase):
+
+    def test_can_update_related_field_from_form(self):
+        related = ISOther.objects.create()
+        thing = ISModel.objects.create(related_things={related})
+        before_set = thing.related_things
+        thing.related_list.field.save_form_data(thing, set())
+        thing.save()
+        self.assertNotEqual(before_set.all(), thing.related_things.all())
+
+
 class InstanceListFieldTests(TestCase):
 
     def test_deserialization(self):
@@ -365,6 +390,18 @@ class InstanceListFieldTests(TestCase):
         # Does the to_python need to return ordered list? SetField test only passes because the set
         # happens to order it correctly
         self.assertItemsEqual([i1, i2], ISModel._meta.get_field("related_list").to_python("[1, 2]"))
+
+    def test_default_on_delete_does_nothing(self):
+        child = ISOther.objects.create(pk=1)
+        parent = ISModel.objects.create(related_list=[child])
+
+        child.delete()
+
+        try:
+            parent = ISModel.objects.get(pk=parent.pk)
+            self.assertEqual([1], parent.related_list_ids)
+        except ISModel.DoesNotExist:
+            self.fail("Parent instance was deleted, apparently by on_delete=CASCADE")
 
     def test_save_and_load_empty(self):
         """
@@ -525,7 +562,8 @@ class InstanceSetFieldTests(TestCase):
         self.assertEqual({other.pk}, main.related_things_ids)
         self.assertEqual(list(ISOther.objects.filter(pk__in=main.related_things_ids)), list(main.related_things.all()))
 
-        self.assertEqual([main], list(other.ismodel_set.all()))
+        self.assertItemsEqual([main], ISModel.objects.filter(related_things=other).all())
+        self.assertItemsEqual([main], list(other.ismodel_set.all()))
 
         main.related_things.remove(other)
         self.assertFalse(main.related_things_ids)
@@ -698,3 +736,53 @@ class JSONFieldModelTests(TestCase):
 
         test_instance = JSONFieldModel.objects.get()
         self.assertEqual(test_instance.json_field['test'], 0.1)
+
+
+class ModelWithCharField(models.Model):
+    char_field_with_max = CharField(max_length=10, default='', blank=True)
+    char_field_without_max = CharField(default='', blank=True)
+
+
+class CharFieldModelTests(TestCase):
+
+    def test_char_field_with_max_length_set(self):
+        test_bytestrings = [
+            (u'01234567891', 11),
+            (u'ążźsęćńół', 17),
+        ]
+
+        for test_text, byte_len in test_bytestrings:
+            test_instance = ModelWithCharField(
+                char_field_with_max=test_text,
+            )
+            self.assertRaisesMessage(
+                ValidationError,
+                'Ensure this value has at most 10 bytes (it has %d).' % byte_len,
+                test_instance.full_clean,
+            )
+
+    def test_char_field_with_not_max_length_set(self):
+        longest_valid_value = u'0123456789' * 150
+        too_long_value = longest_valid_value + u'more'
+
+        test_instance = ModelWithCharField(
+            char_field_without_max=longest_valid_value,
+        )
+        test_instance.full_clean()  # max not reached so it's all good
+
+        test_instance.char_field_without_max = too_long_value
+        self.assertRaisesMessage(
+            ValidationError,
+            u'Ensure this value has at most 1500 bytes (it has 1504).',
+            test_instance.full_clean,
+         )
+
+    def test_too_long_max_value_set(self):
+        try:
+            class TestModel(models.Model):
+                test_char_field = CharField(max_length=1501)
+        except AssertionError, e:
+            self.assertEqual(
+                e.message,
+                'CharFields max_length must not be grater than 1500 bytes.',
+            )

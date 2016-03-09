@@ -110,6 +110,8 @@ class TestFruit(models.Model):
     origin = models.CharField(max_length=32, default="Unknown")
     color = models.CharField(max_length=100)
     is_mouldy = models.BooleanField(default=False)
+    text_field = models.TextField(blank=True, default="")
+    binary_field = models.BinaryField(blank=True)
 
     class Meta:
         ordering = ("color",)
@@ -291,7 +293,7 @@ class BackendTests(TestCase):
         for i in range(10):
             TestFruit.objects.create(name=str(i), color=str(i))
 
-        to_exclude = [ str(x) for x in range(5) ]
+        to_exclude = [ str(x) for x in range(5) + range(15,20) ]
 
         to_return = TestFruit.objects.exclude(pk__in=set(to_exclude)).values_list("pk", flat=True)[:2]
         self.assertEqual(2, len(to_return))
@@ -301,7 +303,6 @@ class BackendTests(TestCase):
         )
 
         self.assertEqual(2, len(qs))
-
 
     def test_count_on_excluded_pks(self):
         TestFruit.objects.create(name="Apple", color="Red")
@@ -610,6 +611,10 @@ class BackendTests(TestCase):
         except:
             logging.exception("Error sorting on __scatter__")
             self.fail("Unable to sort on __scatter__ property like we should")
+
+    def test_ordering_on_non_indexed_fields_not_supported(self):
+        self.assertRaises(NotSupportedError, list, TestFruit.objects.order_by("text_field"))
+        self.assertRaises(NotSupportedError, list, TestFruit.objects.order_by("binary_field"))
 
     def test_ordering_on_sparse_field(self):
         """
@@ -1097,6 +1102,26 @@ class EdgeCaseTests(TestCase):
         self.assertEqual(instance2, ModelWithDates.objects.get(start__gt=datetime.date(2014, 1, 2)))
         self.assertEqual(instance2, ModelWithDates.objects.get(start__gte=datetime.date(2014, 2, 1)))
 
+    def projection_plus_keys_filtering(self):
+        """
+            If you do a query like this:
+
+            MyModel.objects.filter(pk__in=[1, 2]).filter(field1="Bananas").values_list("id", "someotherfield")
+
+            Then a projection query is run. The problem is that the entities returned only include "id" and "someotherfield"
+            but not "field1". Our entity-matches-query code should not run in this situation as we pass
+            all filters to the ancestor queries and so any entities returned should match.
+        """
+
+        user = TestUser.objects.create(username="test", email="test@example.com")
+
+        self.assertItemsEqual(
+            [(user.pk, user.username)],
+            TestUser.objects.filter(
+                pk__in=[user.pk, user.pk+1]).filter(email="test@example.com"
+            ).values_list("id", "username")
+        )
+
     def test_double_starts_with(self):
         qs = TestUser.objects.filter(username__startswith='Hello') |  TestUser.objects.filter(username__startswith='Goodbye')
 
@@ -1519,6 +1544,14 @@ class EdgeCaseTests(TestCase):
         qry = TestFruit.objects.filter(color__icontains='8901')
         self.assertEqual(len(list(qry)), 0)
 
+    def test_values_list_on_distinct(self):
+        TestFruit.objects.create(name="Kiwi", origin="New Zealand", color="Green")
+        TestFruit.objects.create(name="Apple", origin="New Zealand", color="Green")
+        TestFruit.objects.create(name="Grape", origin="New Zealand", color="Red")
+        nz_colours = TestFruit.objects.filter(
+            origin="New Zealand"
+        ).distinct("color").values_list("color", flat=True)
+        self.assertEqual(sorted(nz_colours), ["Green", "Red"])
 
 
 class BlobstoreFileUploadHandlerTest(TestCase):

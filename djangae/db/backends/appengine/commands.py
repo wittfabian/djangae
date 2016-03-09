@@ -13,7 +13,7 @@ from django.db import DatabaseError
 from django.core.cache import cache
 from django.db import IntegrityError
 
-from google.appengine.api import datastore, datastore_errors
+from google.appengine.api import datastore, datastore_errors, memcache
 from google.appengine.api.datastore import Query
 from google.appengine.ext import db
 from google.appengine.api import namespace_manager
@@ -33,7 +33,6 @@ from djangae.db import constraints, utils
 from djangae.db.backends.appengine import caching
 from djangae.db.unique_utils import query_is_unique
 from djangae.db.backends.appengine import transforms
-from djangae.db.caching import clear_context_cache
 
 DATE_TRANSFORMS = {
     "year": transforms.year_transform,
@@ -204,7 +203,7 @@ class QueryByKeys(object):
         opts = self.queries[0]._Query__query_options
         key_count = len(self.queries_by_key)
 
-        cache = True
+        is_projection = False
 
         results = None
         if key_count == 1:
@@ -218,7 +217,7 @@ class QueryByKeys(object):
 
         if results is None:
             if opts.projection:
-                cache = False # Don't cache projection results!
+                is_projection = True # Don't cache projection results!
 
                 # Assumes projection ancestor queries are faster than a datastore Get
                 # due to lower traffic over the RPC. This should be faster for queries with
@@ -265,7 +264,7 @@ class QueryByKeys(object):
             # This is safe, because Django is fetching all results any way :(
             sorted_results = sorted(results, cmp=partial(utils.django_ordering_comparison, self.ordering))
             sorted_results = [result for result in sorted_results if result is not None]
-            if cache and sorted_results:
+            if not is_projection and sorted_results:
                 caching.add_entities_to_cache(
                     self.model,
                     sorted_results,
@@ -274,8 +273,14 @@ class QueryByKeys(object):
                 )
 
             for result in sorted_results:
+                if is_projection:
+                    entity_matches_query = True
+                else:
+                    entity_matches_query = any(
+                        utils.entity_matches_query(result, qry) for qry in self.queries_by_key[result.key()]
+                    )
 
-                if not any([ utils.entity_matches_query(result, qry) for qry in self.queries_by_key[result.key()]]):
+                if not entity_matches_query:
                     continue
 
                 if offset and returned < offset:
@@ -376,6 +381,13 @@ def wrap_result_with_functor(results, func):
         if result is not None:
             yield result
 
+def limit_results_generator(results, limit):
+    for result in results:
+        yield result
+        limit -= 1
+        if not limit:
+            raise StopIteration
+
 
 def can_perform_datastore_get(normalized_query):
     """
@@ -464,7 +476,10 @@ class SelectCommand(object):
             # If we specified we wanted a distinct query, but we didn't specify
             # an ordering, we must set the ordering to the distinct columns, otherwise
             # App Engine shouts at us. Nastily. And without remorse.
-            ordering = self.query.columns[:]
+            # The order of the columns in `ordering` makes a difference, but `distinct` is a set
+            # and therefore unordered, but in  this situation (where the ordering has not been
+            # explicitly defined) any order of the columns will do
+            ordering = list(self.query.columns)
 
         # Deal with the no filters case
         if self.query.where is None:
@@ -734,6 +749,9 @@ class SelectCommand(object):
 
             self.results = wrap_result_with_functor(self.results, deduper_factory())
 
+        if limit:
+            self.results = limit_results_generator(self.results, limit - excluded_pk_count)
+
 
     def execute(self):
         self.gae_query = self._build_query()
@@ -805,8 +823,8 @@ class FlushCommand(object):
 
         # TODO: ideally we would only clear the cached objects for the table that was flushed, but
         # we have no way of doing that
-        cache.clear()
-        clear_context_cache()
+        memcache.flush_all()
+        caching.get_context().reset()
 
 
 @db.non_transactional
@@ -818,7 +836,7 @@ def reserve_id(kind, id_or_name, namespace):
 
 class InsertCommand(object):
     def __init__(self, connection, model, objs, fields, raw):
-        self.has_pk = any([x.primary_key for x in fields])
+        self.has_pk = any(x.primary_key for x in fields)
         self.model = model
         self.objs = objs
         self.connection = connection
@@ -841,6 +859,9 @@ class InsertCommand(object):
                     get_datastore_key(self.model, value, self.namespace)
                     if value else None
                 )
+
+                if value == 0:
+                    raise IntegrityError("The datastore doesn't support 0 as a key value")
 
                 if not self.model._meta.pk.blank and self.included_keys[-1] is None:
                     raise IntegrityError("You must specify a primary key value for {} instances".format(self.model))

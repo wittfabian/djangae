@@ -43,7 +43,6 @@ class AuthenticationMiddleware(DjangoMiddleware):
         if django_user.is_authenticated():
             # Now make sure we update is_superuser and is_staff appropriately
             is_superuser = users.is_current_user_admin()
-            google_email = BaseUserManager.normalize_email(google_user.email())
             resave = False
 
             if is_superuser != django_user.is_superuser:
@@ -51,8 +50,10 @@ class AuthenticationMiddleware(DjangoMiddleware):
                 resave = True
 
             # for users which already exist, we want to verify that their email is still correct
-            if django_user.email != google_email:
-                django_user.email = google_email
+            # users are already authenticated with their user_id, so we can save their real email
+            # not the lowercased version
+            if django_user.email != google_user.email():
+                django_user.email = google_user.email()
                 resave = True
 
             if resave:
