@@ -416,14 +416,13 @@ class RelatedSetField(RelatedIteratorField):
         return set(value)
 
     def save_form_data(self, instance, data):
-        setattr(instance, self.name, set()) #Wipe out existing things
+        setattr(instance, self.attname, set()) #Wipe out existing things
         for value in data:
+            # If this is a model instance then add the pk
             if isinstance(value, self.rel.to):
-                field = getattr(instance, self.name)
-            else:
-                field = getattr(instance, self.attname)
+                value = value.pk
 
-            # SetField
+            field = getattr(instance, self.attname)
             field.add(value)
 
 
@@ -462,14 +461,14 @@ class RelatedListField(RelatedIteratorField):
         return list(value)
 
     def save_form_data(self, instance, data):
-        setattr(instance, self.name, []) #Wipe out existing things
+        setattr(instance, self.attname, []) #Wipe out existing things
         for value in data:
+            # If this is a model instance then grab the PK
             if isinstance(value, self.rel.to):
-                field = getattr(instance, self.name)
-            else:
-                field = getattr(instance, self.attname)
+                value = value.pk
 
-            # SetField
+            # Add to the underlying list
+            field = getattr(instance, self.attname)
             field.append(value)
 
 

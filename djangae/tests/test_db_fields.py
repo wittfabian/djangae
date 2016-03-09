@@ -2,9 +2,9 @@
 from collections import OrderedDict
 
 # LIBRARIES
+from django import forms
 from django.db import models
 from django.db.utils import IntegrityError
-from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
 
 # DJANGAE
@@ -360,6 +360,21 @@ class IterableFieldTests(TestCase):
         self.assertRaises(TypeError, IterableFieldModel, list_field=1)
         self.assertRaises(TypeError, IterableFieldModel, set_field=1)
 
+    def test_saving_forms(self):
+        class TestForm(forms.ModelForm):
+            class Meta:
+                model = IterableFieldModel
+                fields = ("set_field", "list_field")
+
+        post_data = {
+            "set_field": [ "1", "2" ],
+            "list_field": [ "1", "2" ]
+        }
+
+        form = TestForm(post_data)
+        self.assertTrue(form.is_valid())
+        self.assertTrue(form.save())
+
 
 class RelatedListFieldModelTests(TestCase):
 
@@ -369,6 +384,21 @@ class RelatedListFieldModelTests(TestCase):
         before_list = thing.related_list
         thing.related_list.field.save_form_data(thing, [])
         self.assertNotEqual(before_list.all(), thing.related_list.all())
+
+    def test_saving_forms(self):
+        class TestForm(forms.ModelForm):
+            class Meta:
+                model = ISModel
+                fields = ("related_list", )
+
+        related = ISOther.objects.create()
+        post_data = {
+            "related_list": [ str(related.pk) ],
+        }
+
+        form = TestForm(post_data)
+        self.assertTrue(form.is_valid())
+        self.assertTrue(form.save())
 
 
 class RelatedSetFieldModelTests(TestCase):
@@ -380,6 +410,21 @@ class RelatedSetFieldModelTests(TestCase):
         thing.related_list.field.save_form_data(thing, set())
         thing.save()
         self.assertNotEqual(before_set.all(), thing.related_things.all())
+
+    def test_saving_forms(self):
+        class TestForm(forms.ModelForm):
+            class Meta:
+                model = ISModel
+                fields = ("related_things", )
+
+        related = ISOther.objects.create()
+        post_data = {
+            "related_things": [ str(related.pk) ],
+        }
+
+        form = TestForm(post_data)
+        self.assertTrue(form.is_valid())
+        self.assertTrue(form.save())
 
 
 class InstanceListFieldTests(TestCase):
