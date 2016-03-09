@@ -1,6 +1,7 @@
 ## v0.9.4 (in development)
 
 ### New features & improvements:
+- Native MapReduce and Pipeline support
 
 ### Bug fixes:
 

@@ -17,15 +17,8 @@ This will give access to all the appengine-pipelines functionality
 
 1. Add the MapReduce library to your project, e.g. `$ pip install GoogleAppEngineMapReduce` or from
 [https://github.com/GoogleCloudPlatform/appengine-mapreduce](https://github.com/GoogleCloudPlatform/appengine-mapreduce).
-1. Add this handler to your applications root urls
-
-```
-url(r'^mapreduce/', include(djangae.contrib.mapreduce.urls))
-```
 
 Now you can create native MapReduce tasks from inside your Django application, the requests will be handled and forwarded to correct handlers
-
-- Unfortunately overriding the `mapreduce` url is not available yet, but should become available eventually.
 
 Documentation for the MapReduce api functionality
 [https://github.com/GoogleCloudPlatform/appengine-mapreduce/wiki](https://github.com/GoogleCloudPlatform/appengine-mapreduce/wiki)
