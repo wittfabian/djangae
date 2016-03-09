@@ -142,6 +142,23 @@ There are various solutions and workarounds for these issues.
     - You need to include the additional filters (in this case `size=large`) in both the inner and outer queries.
     - This technique only avoids the *Stale objects* issue, it does not avoid the *Missing objects* issue.
 
+#### djangae.db.consistency.ensure_instance_included
+
+It's very common to need to create a new object, and then redirect to a listing of all objects. This annoyingly falls foul of the
+datastore's eventual consistency. As a .all() query is eventually consistent, it's quite likely that the object you just created or updated
+either won't be returned, or if it was an update, will show stale data. You can fix this by using [djangae.contrib.consistency](consistency.md) or if you
+want a more lightweight approach you can use `djangae.db.consistency.ensure_instance_included` like this:
+
+```
+queryset = ensure_instance_included(MyModel.objects.all(), updated_instance_pk)
+```
+
+Be aware though, this will make an additional query for the extra object (although it's very likely to hit the cache). There are also
+caveats:
+
+ - If no ordering is specified, the instance will be returned first
+ - Only ordering on the queryset is respected, if you are relying on model ordering the instance may be returned in the wrong place (patches welcome!)
+ - This causes an extra iteration over the returned queryset once it's retrieved
 
 ### Speed
 
@@ -154,6 +171,7 @@ There are various solutions and workarounds for these issues.
     - The model has got concrete parents.
 * Doing an `.only('foo')` or `.defer('bar')` with a `pk_in=[...]` filter may not be more efficient. This is because we must perform a projection query for each key, and although we send them over the RPC in batches of 30, the RPC costs may outweigh the savings of a plain old datastore.Get. You should profile and check to see whether using only/defer results in a speed improvement for your use case.
 * Due to the way it has to be implemented on the Datastore, an `update()` query is not particularly fast, and other than avoiding calling the `save()` method on each object it doesn't offer much speed advantage over iterating over the objects and modifying them.  However, it does offer significant integrity advantages, see [General behaviours](#general-behaviours) section above.
+* Doing filter(pk__in=Something.objects.values_list('pk', flat=True)) will implicitly evaluate the inner query while preparing to run the outer one. This means two queries, not one like SQL would do!
 
 
 
@@ -243,4 +261,3 @@ However, there are some behaviours of the Datastore which mean that in some case
 * If you remove a model field, the underlying Datastore entities will still contain the value until they are re-saved.  When you re-save each instance of the model the underlying entity will be overwritten, wiping out the removed field, but if you want to immediately destroy some sensitive data or reduce your used storage quota then simplying removing the field from the model will have no effect.
 
 For these reasons there is a legitimate case for implementing some kind of variant of the Django migration system for Datastore-backed models.  See the [migrations ticket on GitHub](https://github.com/potatolondon/djangae/issues/438) for more info.
-

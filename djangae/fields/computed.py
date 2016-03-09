@@ -38,3 +38,7 @@ class ComputedTextField(ComputedFieldMixin, models.TextField):
 
 class ComputedPositiveIntegerField(ComputedFieldMixin, models.PositiveIntegerField):
     pass
+
+
+class ComputedBooleanField(ComputedFieldMixin, models.BooleanField):
+    pass

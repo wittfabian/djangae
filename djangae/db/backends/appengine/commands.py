@@ -4,19 +4,19 @@ import logging
 import copy
 import decimal
 import json
+
 from functools import partial
 from itertools import chain, groupby
 
 #LIBRARIES
 import django
 from django.db import DatabaseError
-from django.core.cache import cache
 from django.db import IntegrityError
 
-from google.appengine.api import datastore, datastore_errors
+from google.appengine.api import datastore, datastore_errors, memcache
+from google.appengine.datastore import datastore_rpc, datastore_stub_util
 from google.appengine.api.datastore import Query
 from google.appengine.ext import db
-from google.appengine.api import namespace_manager
 
 #DJANGAE
 from djangae.db.backends.appengine.dbapi import NotSupportedError
@@ -33,7 +33,6 @@ from djangae.db import constraints, utils
 from djangae.db.backends.appengine import caching
 from djangae.db.unique_utils import query_is_unique
 from djangae.db.backends.appengine import transforms
-from djangae.db.caching import clear_context_cache
 
 DATE_TRANSFORMS = {
     "year": transforms.year_transform,
@@ -204,7 +203,7 @@ class QueryByKeys(object):
         opts = self.queries[0]._Query__query_options
         key_count = len(self.queries_by_key)
 
-        cache = True
+        is_projection = False
 
         results = None
         if key_count == 1:
@@ -218,7 +217,7 @@ class QueryByKeys(object):
 
         if results is None:
             if opts.projection:
-                cache = False # Don't cache projection results!
+                is_projection = True # Don't cache projection results!
 
                 # Assumes projection ancestor queries are faster than a datastore Get
                 # due to lower traffic over the RPC. This should be faster for queries with
@@ -265,7 +264,7 @@ class QueryByKeys(object):
             # This is safe, because Django is fetching all results any way :(
             sorted_results = sorted(results, cmp=partial(utils.django_ordering_comparison, self.ordering))
             sorted_results = [result for result in sorted_results if result is not None]
-            if cache and sorted_results:
+            if not is_projection and sorted_results:
                 caching.add_entities_to_cache(
                     self.model,
                     sorted_results,
@@ -274,8 +273,14 @@ class QueryByKeys(object):
                 )
 
             for result in sorted_results:
+                if is_projection:
+                    entity_matches_query = True
+                else:
+                    entity_matches_query = any(
+                        utils.entity_matches_query(result, qry) for qry in self.queries_by_key[result.key()]
+                    )
 
-                if not any([ utils.entity_matches_query(result, qry) for qry in self.queries_by_key[result.key()]]):
+                if not entity_matches_query:
                     continue
 
                 if offset and returned < offset:
@@ -376,6 +381,13 @@ def wrap_result_with_functor(results, func):
         if result is not None:
             yield result
 
+def limit_results_generator(results, limit):
+    for result in results:
+        yield result
+        limit -= 1
+        if not limit:
+            raise StopIteration
+
 
 def can_perform_datastore_get(normalized_query):
     """
@@ -464,7 +476,10 @@ class SelectCommand(object):
             # If we specified we wanted a distinct query, but we didn't specify
             # an ordering, we must set the ordering to the distinct columns, otherwise
             # App Engine shouts at us. Nastily. And without remorse.
-            ordering = self.query.columns[:]
+            # The order of the columns in `ordering` makes a difference, but `distinct` is a set
+            # and therefore unordered, but in  this situation (where the ordering has not been
+            # explicitly defined) any order of the columns will do
+            ordering = list(self.query.columns)
 
         # Deal with the no filters case
         if self.query.where is None:
@@ -734,6 +749,9 @@ class SelectCommand(object):
 
             self.results = wrap_result_with_functor(self.results, deduper_factory())
 
+        if limit:
+            self.results = limit_results_generator(self.results, limit - excluded_pk_count)
+
 
     def execute(self):
         self.gae_query = self._build_query()
@@ -746,16 +764,16 @@ class SelectCommand(object):
 
             result = u" ".join([
                 qry["kind"],
-                ", ".join(qry["columns"] if qry["projection_possible"] and qry["columns"] else ["*"]),
-                "FROM",
+                u", ".join(qry["columns"] if qry["projection_possible"] and qry["columns"] else ["*"]),
+                u"FROM",
                 qry["concrete_table"]
             ])
 
             if qry["where"]:
-                result += " " + u" ".join([
-                    "WHERE",
-                    " OR ".join([
-                        " AND ".join( [ "{} {}".format(k, v) for k, v in x.iteritems() ])
+                result += u" " + u" ".join([
+                    u"WHERE",
+                    u" OR ".join([
+                        u" AND ".join( [ u"{} {}".format(k, v) for k, v in x.iteritems() ])
                         for x in qry["where"]
                     ])
                 ])
@@ -805,8 +823,8 @@ class FlushCommand(object):
 
         # TODO: ideally we would only clear the cached objects for the table that was flushed, but
         # we have no way of doing that
-        cache.clear()
-        clear_context_cache()
+        memcache.flush_all()
+        caching.get_context().reset()
 
 
 @db.non_transactional
@@ -818,7 +836,7 @@ def reserve_id(kind, id_or_name, namespace):
 
 class InsertCommand(object):
     def __init__(self, connection, model, objs, fields, raw):
-        self.has_pk = any([x.primary_key for x in fields])
+        self.has_pk = any(x.primary_key for x in fields)
         self.model = model
         self.objs = objs
         self.connection = connection
@@ -842,11 +860,23 @@ class InsertCommand(object):
                     if value else None
                 )
 
+                if value == 0:
+                    raise IntegrityError("The datastore doesn't support 0 as a key value")
+
                 if not self.model._meta.pk.blank and self.included_keys[-1] is None:
                     raise IntegrityError("You must specify a primary key value for {} instances".format(self.model))
             else:
                 # We zip() self.entities and self.included_keys in execute(), so they should be the same length
                 self.included_keys.append(None)
+
+            # We don't use the values returned, but this does make sure we're
+            # doing the same validation as Django. See issue #493 for an
+            # example of how not doing this can mess things up
+            for field in fields:
+                field.get_db_prep_save(
+                    getattr(obj, field.attname) if raw else field.pre_save(obj, True),
+                    connection=connection,
+                )
 
             self.entities.append(
                 django_instance_to_entity(self.connection, self.model, self.fields, self.raw, obj)
@@ -970,33 +1000,104 @@ class DeleteCommand(object):
         self.model = query.model
         self.select = SelectCommand(connection, query, keys_only=True)
         self.namespace = connection.ops.connection.settings_dict.get("NAMESPACE")
+        self.table_to_delete = query.tables[0]
 
     def execute(self):
+        """
+            Ideally we'd just be able to tell appengine to delete all the entities
+            which match the query, that would be nice wouldn't it?
+
+            Except we can't. Firstly Delete() only accepts keys so we first have to
+            execute a keys_only query to find the entities that match the query, then send
+            those keys to Delete(), except it's not as easy as that either because the
+            query might be eventually consistent and so we might delete entities which
+            were updated in another request and no-longer match the query. Bugger.
+
+            And then there might be constraints... in which case we need to grab the entity
+            in its entirety, release any constraints and then delete the entity.
+
+            And then there are polymodels (model inheritence) which means we might not even be
+            deleting the entity after all, only deleting some of the fields from it.
+
+            What we do then is do a keys_only query, then iterate the entities in batches of
+            25 (well _MAX_EG_PER_TXN), each entity in the batch has its polymodel fields wiped out
+            (if necessary) and then we do either a PutAsync or DeleteAsync all inside a transaction.
+
+            Oh, and we wipe out memcache and delete the constraints in an independent transaction.
+
+            Things to improve:
+
+             - Delete the constraints in a background thread. We don't need to wait for them, and really,
+             we don't want the non-deletion of them to affect the deletion of the entity. Lingering markers
+             are handled automatically they just case a small performance hit on write.
+             - Check the entity matches the query still (there's a fixme there)
+        """
+
         self.select.execute()
 
-        # This is a little bit more inefficient than just doing a keys_only query and
-        # sending it to delete, but I think this is the sacrifice to make for the unique caching layer
-        keys = []
+        constraints_enabled = constraints.constraint_checks_enabled(self.model)
+        keys = [ x.key() for x in self.select.results ]
 
-        def spawn_query(kind, key):
-            qry = Query(kind, namespace=key.namespace() or None) # TODO: is the namespace necessary if we're passing the key?
-            qry["__key__ ="] = key
-            return qry
+        def wipe_polymodel_from_entity(entity, db_table):
+            """
+                Wipes out the fields associated with the specified polymodel table
+            """
+            polymodel_value = entity.get('class', [])
+            if polymodel_value and self.table_to_delete in polymodel_value:
+                # Remove any local fields from this model from the entity
+                model = utils.get_model_from_db_table(self.table_to_delete)
+                for field in model._meta.local_fields:
+                    col = field.column
+                    if col in entity:
+                        del entity[col]
 
-        queries = [spawn_query(x.key().kind(), x.key()) for x in self.select.results]
-        if not queries:
-            return 0
+                # Then remove this model from the polymodel heirarchy
+                polymodel_value.remove(self.table_to_delete)
+                if polymodel_value:
+                    entity['class'] = polymodel_value
 
-        for entity in QueryByKeys(self.model, queries, [], self.namespace).Run():
-            keys.append(entity.key())
-
-            # Delete constraints if that's enabled
-            if constraints.constraint_checks_enabled(self.model):
+        @db.transactional(xg=True, propagation=datastore_rpc.TransactionOptions.INDEPENDENT)
+        def release_constraints(entity):
+            if constraints_enabled:
                 constraints.release(self.model, entity)
 
-        caching.remove_entities_from_cache_by_key(keys, self.namespace)
-        datastore.Delete(keys)
-        return len(keys)
+        @db.transactional(xg=True)
+        def delete_batch(key_slice):
+            entities = datastore.Get(key_slice)
+
+            #FIXME: We need to make sure the entity still matches the query!
+#            entities = (x for x in entities if utils.entity_matches_query(x, self.select.gae_query))
+
+            to_delete = []
+            to_update = []
+            updated_keys = []
+
+            # Go through the entities
+            for entity in entities:
+                wipe_polymodel_from_entity(entity, self.table_to_delete)
+                if not entity.get('class'):
+                    to_delete.append(entity)
+                    release_constraints(entity)
+                else:
+                    to_update.append(entity)
+                updated_keys.append(entity.key())
+
+            datastore.DeleteAsync([x.key() for x in to_delete])
+            datastore.PutAsync(to_update)
+
+            caching.remove_entities_from_cache_by_key(
+                updated_keys, self.namespace
+            )
+
+            return len(updated_keys)
+
+        deleted = 0
+        while keys:
+            deleted += delete_batch(keys[:datastore_stub_util._MAX_EG_PER_TXN])
+            keys = keys[datastore_stub_util._MAX_EG_PER_TXN:]
+
+        return deleted
+
 
     def lower(self):
         """

@@ -43,6 +43,7 @@ from djangae.db.utils import (
     get_datastore_key,
 )
 from djangae.db import caching
+from djangae.db.backends.appengine.caching import get_context
 from djangae.db.backends.appengine.indexing import load_special_indexes
 from .commands import (
     SelectCommand,
@@ -531,11 +532,11 @@ class DatabaseCreation(BaseDatabaseCreation):
         self.testbed.activate()
         self.testbed.init_datastore_v3_stub(**kwargs)
         self.testbed.init_memcache_stub()
-        caching.clear_context_cache()
+        get_context().reset()
 
     def _destroy_test_db(self, name, verbosity):
         if self.testbed:
-            caching.clear_context_cache()
+            get_context().reset()
             self.testbed.deactivate()
             self.testbed = None
 

@@ -2,7 +2,7 @@ import django
 from django import forms
 from django.db import router, models
 from django.db.models.query import QuerySet
-from django.db.models.fields.related import RelatedField, ForeignObjectRel
+from django.db.models.fields.related import ForeignObject, ForeignObjectRel
 from django.utils.functional import cached_property
 from django.core.exceptions import ImproperlyConfigured, ValidationError
 from djangae.forms.fields import (
@@ -12,7 +12,7 @@ from djangae.forms.fields import (
 from django.utils import six
 
 class RelatedIteratorRel(ForeignObjectRel):
-    def __init__(self, field, to, related_name=None, limit_choices_to=None):
+    def __init__(self, field, to, related_name=None, limit_choices_to=None, on_delete=models.DO_NOTHING):
         self.field = field
         if django.VERSION[1] < 9: # Django 1.7 and 1.8 compatibility
             self.to = to
@@ -21,7 +21,7 @@ class RelatedIteratorRel(ForeignObjectRel):
         self.related_query_name = None
         self.field_name = None
         self.parent_link = None
-        self.on_delete = models.DO_NOTHING
+        self.on_delete = on_delete
         self.symmetrical = False
 
         if limit_choices_to is None:
@@ -261,7 +261,7 @@ class ReverseRelatedObjectsDescriptor(object):
 from abc import ABCMeta
 
 
-class RelatedIteratorField(RelatedField):
+class RelatedIteratorField(ForeignObject):
 
     __metaclass__ = ABCMeta
 
@@ -269,24 +269,57 @@ class RelatedIteratorField(RelatedField):
     generate_reverse_relation = True
     empty_strings_allowed = False
 
-    def __init__(self, model, limit_choices_to=None, related_name=None, **kwargs):
+    def __init__(self, model, limit_choices_to=None, related_name=None, on_delete=models.DO_NOTHING, **kwargs):
+        # Make sure that we do nothing on cascade by default
+        if on_delete == models.CASCADE:
+            raise ImproperlyConfigured(
+                "on_delete=CASCADE is disabled for iterable fields as this will "
+                "wipe out the instance when the field still has related objects"
+            )
+
+        if on_delete in (models.SET_NULL, models.SET_DEFAULT):
+            raise ImproperlyConfigured("Using an on_delete value of {} will cause undesirable behavior"
+                             " (e.g. wipeout the entire list) if you really want to do that "
+                             "then use models.SET instead and return an empty list/set")
+
+
         kwargs["rel"] = RelatedIteratorRel(
             self,
             model,
             related_name=related_name,
-            limit_choices_to=limit_choices_to
+            limit_choices_to=limit_choices_to,
+            on_delete=on_delete
         )
+
+        kwargs.update({
+            'to': model,
+            'from_fields': ['self'],
+            'to_fields': [None],
+        })
+        if django.VERSION[1] >= 9:  # Django 1.8 doesn't have on_delete as attribute
+            kwargs.update({
+                'on_delete': models.DO_NOTHING,
+            })
+
         super(RelatedIteratorField, self).__init__(**kwargs)
 
     def deconstruct(self):
         name, path, args, kwargs = super(RelatedIteratorField, self).deconstruct()
         args = (self.rel.to,)
-        del kwargs["null"]
-        del kwargs["default"]
+
+        # We hardcode a number of arguments for RelatedIteratorField, those arguments need to be removed here
+        for hardcoded_kwarg in ["null", "default", "to_fields", "from_fields", "to", "on_delete"]:
+            del kwargs[hardcoded_kwarg]
+
         return name, path, args, kwargs
 
     def get_attname(self):
         return '%s_ids' % self.name
+
+    def get_attname_column(self):
+        attname = self.get_attname()
+        column = self.db_column or attname
+        return attname, column
 
     def contribute_to_class(self, cls, name):
         # To support multiple relations to self, it's useful to have a non-None
@@ -337,14 +370,6 @@ class RelatedIteratorField(RelatedField):
         """
         return str(list(self._get_val_from_obj(obj)))
 
-    def save_form_data(self, instance, data):
-        getattr(instance, self.attname).clear() #Wipe out existing things
-
-        for value in data:
-            if isinstance(value, self.rel.to):
-                getattr(instance, self.name).add(value)
-            else:
-                getattr(instance, self.attname).add(value)
 
     def formfield(self, **kwargs):
         db = kwargs.pop('using', None)
@@ -398,6 +423,16 @@ class RelatedSetField(RelatedIteratorField):
 
         return set(value)
 
+    def save_form_data(self, instance, data):
+        setattr(instance, self.attname, set()) #Wipe out existing things
+        for value in data:
+            # If this is a model instance then add the pk
+            if isinstance(value, self.rel.to):
+                value = value.pk
+
+            field = getattr(instance, self.attname)
+            field.add(value)
+
 
 class RelatedListField(RelatedIteratorField):
 
@@ -432,6 +467,17 @@ class RelatedListField(RelatedIteratorField):
             return list(self.rel.to._default_manager.db_manager('default').filter(pk__in=ids))
 
         return list(value)
+
+    def save_form_data(self, instance, data):
+        setattr(instance, self.attname, []) #Wipe out existing things
+        for value in data:
+            # If this is a model instance then grab the PK
+            if isinstance(value, self.rel.to):
+                value = value.pk
+
+            # Add to the underlying list
+            field = getattr(instance, self.attname)
+            field.append(value)
 
 
 class GRCreator(property):

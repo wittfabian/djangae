@@ -13,7 +13,7 @@ from google.appengine.api import users
 
 # DJANGAE
 from djangae.contrib.gauth.datastore.models import GaeDatastoreUser, Group, get_permission_choices
-from djangae.contrib.gauth.backends import AppEngineUserAPI
+from djangae.contrib.gauth.datastore.backends import AppEngineUserAPIBackend
 from djangae.contrib.gauth.middleware import AuthenticationMiddleware
 from djangae.contrib.gauth.settings import AUTHENTICATION_BACKENDS
 from djangae.contrib.gauth.utils import get_switch_accounts_url
@@ -21,13 +21,13 @@ from djangae.contrib import sleuth
 
 
 class BackendTests(TestCase):
-    """ Tests for the AppEngineUserAPI auth backend. """
+    """ Tests for the AppEngineUserAPIBackend auth backend. """
 
     def test_invalid_credentials_cause_typeerror(self):
         """ If the `authenticate` method is passed credentials which it doesn't understand then
             Django expects it to raise a TypeError.
         """
-        backend = AppEngineUserAPI()
+        backend = AppEngineUserAPIBackend()
         credentials = {'username': 'ted', 'password': 'secret'}
         self.assertRaises(TypeError, backend.authenticate, **credentials)
 
@@ -36,10 +36,11 @@ class BackendTests(TestCase):
         """
         User = get_user_model()
         self.assertEqual(User.objects.count(), 0)
-        google_user = users.User('1@example.com', _user_id='111111111100000000001')
-        backend = AppEngineUserAPI()
+        email = 'UpperCasedAddress@example.com'
+        google_user = users.User(email, _user_id='111111111100000000001')
+        backend = AppEngineUserAPIBackend()
         user = backend.authenticate(google_user=google_user,)
-        self.assertEqual(user.email, '1@example.com')
+        self.assertEqual(user.email, email.lower())
         self.assertEqual(User.objects.count(), 1)
         # Calling authenticate again with the same credentials should not create another user
         user2 = backend.authenticate(google_user=google_user)
@@ -51,7 +52,7 @@ class BackendTests(TestCase):
             then matched by email address when they log in.
         """
         User = get_user_model()
-        backend = AppEngineUserAPI()
+        backend = AppEngineUserAPIBackend()
         email = '1@example.com'
         # Pre-create our user
         User.objects.pre_create_google_user(email)
@@ -72,7 +73,7 @@ class BackendTests(TestCase):
         old_user = users.User(email=email, _user_id='111111111100000000001')
         new_user = users.User(email=email, _user_id='111111111100000000002')
         User = get_user_model()
-        backend = AppEngineUserAPI()
+        backend = AppEngineUserAPIBackend()
         # Authenticate 1st time, creating the user
         user1 = backend.authenticate(google_user=old_user)
         self.assertEqual(user1.email, email)
@@ -94,7 +95,7 @@ class BackendTests(TestCase):
         User = get_user_model()
         self.assertEqual(User.objects.count(), 0)
         google_user = users.User('1@example.com', _user_id='111111111100000000001')
-        backend = AppEngineUserAPI()
+        backend = AppEngineUserAPIBackend()
 
         self.assertIsNone(backend.authenticate(google_user=google_user,))
         self.assertEqual(User.objects.count(), 0)
@@ -118,7 +119,7 @@ class MiddlewareTests(TestCase):
 
         request = HttpRequest()
         SessionMiddleware().process_request(request) # Make the damn sessions work
-        request.session[BACKEND_SESSION_KEY] = 'djangae.contrib.gauth.backends.AppEngineUserAPI'
+        request.session[BACKEND_SESSION_KEY] = 'djangae.contrib.gauth.datastore.backends.AppEngineUserAPIBackend'
         middleware = AuthenticationMiddleware()
         # Check that we're not logged in already
         user = get_user(request)
@@ -149,7 +150,7 @@ class MiddlewareTests(TestCase):
 
         request = HttpRequest()
         SessionMiddleware().process_request(request)  # Make the damn sessions work
-        request.session[BACKEND_SESSION_KEY] = 'djangae.contrib.gauth.backends.AppEngineUserAPI'
+        request.session[BACKEND_SESSION_KEY] = 'djangae.contrib.gauth.datastore.backends.AppEngineUserAPIBackend'
         middleware = AuthenticationMiddleware()
 
         with sleuth.switch('djangae.contrib.gauth.middleware.users.get_current_user', lambda: user1):
@@ -173,7 +174,7 @@ class MiddlewareTests(TestCase):
         User = get_user_model()
         request = HttpRequest()
         SessionMiddleware().process_request(request)  # Make the damn sessions work
-        request.session[BACKEND_SESSION_KEY] = 'djangae.contrib.gauth.backends.AppEngineUserAPI'
+        request.session[BACKEND_SESSION_KEY] = 'djangae.contrib.gauth.datastore.backends.AppEngineUserAPIBackend'
         middleware = AuthenticationMiddleware()
 
         with sleuth.switch('djangae.contrib.gauth.middleware.users.get_current_user', lambda: user1):
@@ -209,10 +210,30 @@ class MiddlewareTests(TestCase):
         # and so with pre-creation required, authentication should have failed
         self.assertTrue(isinstance(request.user, AnonymousUser))
 
+    def test_middleware_resaves_email(self):
+        # Create user with uppercased email
+        email = 'User@example.com'
+        google_user = users.User(email, _user_id='111111111100000000001')
+        backend = AppEngineUserAPIBackend()
+        user = backend.authenticate(google_user=google_user,)
+        # Normalize_email should save a user with lowercase email
+        self.assertEqual(user.email, email.lower())
+
+        # Run AuthenticationMiddleware, if email are mismatched
+        with sleuth.switch('djangae.contrib.gauth.middleware.users.get_current_user', lambda: google_user):
+            request = HttpRequest()
+            SessionMiddleware().process_request(request)  # Make the damn sessions work
+            middleware = AuthenticationMiddleware()
+            middleware.process_request(request)
+
+        # Middleware should resave to uppercased email, keeping user the same
+        self.assertEqual(request.user.email, email)
+        self.assertEqual(request.user.pk, user.pk)
+
 
 @override_settings(
     AUTH_USER_MODEL='djangae.GaeDatastoreUser',
-    AUTHENTICATION_BACKENDS=('djangae.contrib.gauth.backends.AppEngineUserAPI',)
+    AUTHENTICATION_BACKENDS=('djangae.contrib.gauth.datastore.backends.AppEngineUserAPIBackend',)
 )
 class CustomPermissionsUserModelBackendTest(TestCase):
     """
@@ -228,6 +249,8 @@ class CustomPermissionsUserModelBackendTest(TestCase):
         # Fix Django so that we can use our custom user model.
         # TODO: Submit a fix to Django to allow override_settings(AUTH_USER_MODEL='something') to
         # work, even if the project has already set AUTH_USER_MODEL to a custom user
+        super(CustomPermissionsUserModelBackendTest, self).setUp()
+
         GaeDatastoreUser.objects = GaeDatastoreUser._default_manager
         GaeDatastoreUser._base_manager = GaeDatastoreUser._default_manager
         self.user = GaeDatastoreUser.objects.create(
@@ -321,7 +344,7 @@ class CustomPermissionsUserModelBackendTest(TestCase):
 
 @override_settings(
     AUTH_USER_MODEL='djangae.GaeDatastoreUser',
-    AUTHENTICATION_BACKENDS=('djangae.contrib.gauth.backends.AppEngineUserAPI',)
+    AUTHENTICATION_BACKENDS=('djangae.contrib.gauth.datastore.backends.AppEngineUserAPIBackend',)
 )
 class SwitchAccountsTests(TestCase):
     """ Tests for the switch accounts functionality. """

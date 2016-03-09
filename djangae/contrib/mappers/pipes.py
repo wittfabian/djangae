@@ -128,12 +128,16 @@ class MapReduceTask(object):
         raise NotImplementedError('You must supply a finish function')
 
     def start(self, *args, **kwargs):
-        kwargs['db'] = self.db
+        # Allow a queue to be specified either as a keyword argument when
+        # starting the task, or as a class-level attribute on the task.
+        queue_name = kwargs.pop('queue_name', self.queue_name)
+
         mapper_parameters = {
             'model': self.get_model_app_(),
             'kwargs': kwargs,
             'args': args,
             'namespace': settings.DATABASES.get(self.db, {}).get("NAMESPACE"),
+            'db': self.db
         }
         if 'map' not in self.__class__.__dict__:
             raise Exception('No static map method defined on class {cls}'.format(self.__class__))
@@ -152,4 +156,4 @@ class MapReduceTask(object):
             shards=shard_count
         )
         pipe.with_params(target=self.target)
-        pipe.start(base_path=PIPELINE_BASE_PATH)
+        pipe.start(base_path=PIPELINE_BASE_PATH, queue_name=queue_name)

@@ -24,10 +24,12 @@ djangae_specialindexesmodel:
 djangae_testfruit:
   color: [icontains, contains, iexact, iendswith, endswith, istartswith, startswith]
 djangae_testuser:
-  username: [iexact, contains, startswith]
   last_login: [year]
+  username: [iexact, contains, startswith]
 djangae_user:
   username: [iexact]
+lookup_alarm:
+  time: [hour, minute, second]
 lookup_article:
   headline: [contains, endswith, startswith, regex__666f2a, regex__62282e292e2a625c31,
     iregex__666f2a, regex__666f2b, regex__666f6f6f3f, regex__5e62, iregex__5e61, regex__7a24,
@@ -35,7 +37,7 @@ lookup_article:
     regex__6f6f28667c6229, iregex__6f6f28667c6229, regex__5e666f6f28667c6229, regex__622e2a617a,
     iregex__622e2a6172]
   id: [iexact]
-  pub_date: [startswith]
+  pub_date: [startswith, month]
 lookup_player:
   name: [regex__e299a0]
 lookup_season:
