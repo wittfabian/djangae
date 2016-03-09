@@ -90,9 +90,10 @@ def process_task_queues(queue_name=None):
             #The map reduce may have added more tasks, so refresh the list
             tasks = _get_queued_tasks(stub, queue_name)
 
-class TestCase(test.TestCase):
-    def setUp(self):
-        super(TestCase, self).setUp()
+
+class TestCaseMixin(object):
+    def _pre_setup(self):
+        super(TestCaseMixin, self)._pre_setup()
         self.taskqueue_stub = apiproxy_stub_map.apiproxy.GetStub("taskqueue")
         if self.taskqueue_stub:
             _flush_tasks(self.taskqueue_stub) # Make sure we clear the queue before every test
@@ -102,3 +103,11 @@ class TestCase(test.TestCase):
 
     def process_task_queues(self, queue_name=None):
         process_task_queues(queue_name)
+
+
+class TestCase(TestCaseMixin, test.TestCase):
+    pass
+
+
+class TransactionTestCase(TestCaseMixin, test.TransactionTestCase):
+    pass
