@@ -111,7 +111,12 @@ class Indexer(object):
     def prep_value_for_database(self, value, index): raise NotImplementedError()
     def prep_value_for_query(self, value): raise NotImplementedError()
     def indexed_column_name(self, field_column, value, index): raise NotImplementedError()
-    def prep_query_operator(self, op): return "exact"
+    def prep_query_operator(self, op):
+        if "__" in op:
+            return op.split("__")[-1]
+        else:
+            return "exact" # By default do an exact operation
+
     def prepare_index_type(self, index_type, value): return index_type
 
     def unescape(self, value):

@@ -157,17 +157,19 @@ class WhereNode(object):
             column = "__key__"
 
         # Do any special index conversions necessary to perform this lookup
-        if operator in REQUIRES_SPECIAL_INDEXES:
+        primary_operation = operator.split("__")[0]
+        special_indexer = REQUIRES_SPECIAL_INDEXES.get(primary_operation)
+
+        if special_indexer:
             if is_pk_field:
                 column = model._meta.pk.column
                 value = unicode(value.id_or_name())
 
-            add_special_index(target_field.model, column, operator, value)
-            indexer = REQUIRES_SPECIAL_INDEXES[operator]
-            index_type = indexer.prepare_index_type(operator, value)
-            value = indexer.prep_value_for_query(value)
-            column = indexer.indexed_column_name(column, value, index_type)
-            operator = indexer.prep_query_operator(operator)
+            add_special_index(target_field.model, column, primary_operation, value)
+            index_type = special_indexer.prepare_index_type(operator, value)
+            value = special_indexer.prep_value_for_query(value)
+            column = special_indexer.indexed_column_name(column, value, index_type)
+            operator = special_indexer.prep_query_operator(operator)
 
         self.column = column
         self.operator = convert_operator(operator)
@@ -956,6 +958,12 @@ def _django_17_query_walk_leaf(node, negated, new_parent, connection, model):
     else:
         field = node.lhs.lhs.target
         operator = node.lhs.lookup_name
+
+        # This deals with things like datefield__month__gt=X which means from this point
+        # on, operator will have two parts in that particular case and will probably need to
+        # be dealt with by a special indexer
+        if node.lookup_name != operator:
+            operator = "{}__{}".format(operator, node.lookup_name)
 
     if get_top_concrete_parent(field.model) != get_top_concrete_parent(model):
         raise NotSupportedError("Cross-join where filters are not supported on the datastore")
