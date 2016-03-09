@@ -71,7 +71,7 @@ class JSONOrderedDict(OrderedDict):
         return dumps(self)
 
 
-class JSONField(six.with_metaclass(models.SubfieldBase, models.TextField)):
+class JSONField(models.TextField):
     """JSONField is a generic textfield that neatly serializes/unserializes
     JSON objects seamlessly.  Main thingy must be a dict object."""
 
@@ -87,7 +87,7 @@ class JSONField(six.with_metaclass(models.SubfieldBase, models.TextField)):
 
         models.TextField.__init__(self, *args, **kwargs)
 
-    def to_python(self, value):
+    def from_db_value(self, value, expression, connection, context):
         """Convert our string value to JSON after we load it from the DB"""
         if value is None or value == '':
             return {}

@@ -309,13 +309,6 @@ class IterableFieldTests(TestCase):
         instance = IterableFieldModel.objects.get(pk=instance.pk)
         self.assertEqual(["One"], instance.list_field)
 
-        instance.list_field = None
-
-        # Or anything else for that matter!
-        with self.assertRaises(ValueError):
-            instance.list_field = "Bananas"
-            instance.save()
-
         results = IterableFieldModel.objects.filter(list_field="One")
         self.assertEqual([instance], list(results))
 
@@ -333,13 +326,6 @@ class IterableFieldTests(TestCase):
         instance = IterableFieldModel.objects.get(pk=instance.pk)
         self.assertEqual(set(["One"]), instance.set_field)
 
-        instance.set_field = None
-
-        # Or anything else for that matter!
-        with self.assertRaises(ValueError):
-            instance.set_field = "Bananas"
-            instance.save()
-
         self.assertEqual({1, 2}, SetField(models.IntegerField).to_python("{1, 2}"))
 
     def test_empty_list_queryable_with_is_null(self):
@@ -355,10 +341,6 @@ class IterableFieldTests(TestCase):
 
         self.assertFalse(IterableFieldModel.objects.exclude(set_field__isnull=False).exists())
         self.assertTrue(IterableFieldModel.objects.exclude(set_field__isnull=True).exists())
-
-    def test_assign_integer_throws_typeerror(self):
-        self.assertRaises(TypeError, IterableFieldModel, list_field=1)
-        self.assertRaises(TypeError, IterableFieldModel, set_field=1)
 
     def test_saving_forms(self):
         class TestForm(forms.ModelForm):
