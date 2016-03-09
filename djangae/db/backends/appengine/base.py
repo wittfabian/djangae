@@ -5,33 +5,19 @@ import warnings
 import logging
 
 #LIBRARIES
-import django
 from django.conf import settings
-
-try:
-    from django.db.backends.base.operations import BaseDatabaseOperations
-    from django.db.backends.base.client import BaseDatabaseClient
-    from django.db.backends.base.introspection import BaseDatabaseIntrospection
-    from django.db.backends.base.base import BaseDatabaseWrapper
-    from django.db.backends.base.features import BaseDatabaseFeatures
-    from django.db.backends.base.validation import BaseDatabaseValidation
-    from django.db.backends.base.creation import BaseDatabaseCreation
-    from django.db.backends.base.schema import BaseDatabaseSchemaEditor
-except ImportError:
-    # Django 1.7
-    from django.db.backends import (
-        BaseDatabaseOperations,
-        BaseDatabaseClient,
-        BaseDatabaseIntrospection,
-        BaseDatabaseWrapper,
-        BaseDatabaseFeatures,
-        BaseDatabaseValidation
-    )
-    from django.db.backends.creation import BaseDatabaseCreation
-    from django.db.backends.schema import BaseDatabaseSchemaEditor
-
-
 from django.utils import timezone
+
+from django.db.backends.base.operations import BaseDatabaseOperations
+from django.db.backends.base.client import BaseDatabaseClient
+from django.db.backends.base.introspection import BaseDatabaseIntrospection
+from django.db.backends.base.introspection import TableInfo
+from django.db.backends.base.base import BaseDatabaseWrapper
+from django.db.backends.base.features import BaseDatabaseFeatures
+from django.db.backends.base.validation import BaseDatabaseValidation
+from django.db.backends.base.creation import BaseDatabaseCreation
+from django.db.backends.base.schema import BaseDatabaseSchemaEditor
+
 from google.appengine.api.datastore_types import Blob, Text
 from google.appengine.datastore import datastore_stub_util
 from google.appengine.api import datastore, datastore_errors
@@ -42,7 +28,7 @@ from djangae.db.utils import (
     make_timezone_naive,
     get_datastore_key,
 )
-from djangae.db import caching
+
 from djangae.db.backends.appengine.caching import get_context
 from djangae.db.backends.appengine.indexing import load_special_indexes
 from .commands import (
@@ -51,8 +37,7 @@ from .commands import (
     FlushCommand,
     UpdateCommand,
     DeleteCommand,
-    coerce_unicode,
-    get_field_from_column
+    coerce_unicode
 )
 
 from djangae.db.backends.appengine import dbapi as Database
@@ -110,15 +95,6 @@ class Cursor(object):
         return row
 
     def fetchone(self, delete_flag=False):
-        def convert_values(value, field):
-            """ For 1.7 support """
-            ops = self.connection.ops
-
-            if django.VERSION[1] < 8:
-                return ops.convert_values(value, field)
-            else:
-                return value
-
         try:
             result = self.last_select_command.results.next()
 
@@ -134,8 +110,7 @@ class Cursor(object):
                 row.append(result.get(col))
 
             for col in self.last_select_command.query.init_list:
-                field = get_field_from_column(query.model, col)
-                row.append(convert_values(result.get(col), field))
+                row.append(result.get(col))
 
             self.returned_ids.append(result.key().id_or_name())
             return row
@@ -248,33 +223,6 @@ class DatabaseOperations(BaseDatabaseOperations):
             value = set()
         else:
             value = set(value)
-        return value
-
-
-    def convert_values(self, value, field):
-        """ Called when returning values from the datastore ONLY USED ON DJANGO <= 1.7"""
-        value = super(DatabaseOperations, self).convert_values(value, field)
-
-        db_type = field.db_type(self.connection)
-        if db_type == 'string' and isinstance(value, str):
-            value = self.convert_textfield_value(value, field, self.connection)
-        elif db_type == "datetime":
-            value = self.connection.ops.value_from_db_datetime(value)
-        elif db_type == "date":
-            value = self.connection.ops.value_from_db_date(value)
-        elif db_type == "time":
-            value = self.connection.ops.value_from_db_time(value)
-        elif db_type == "decimal":
-            value = self.connection.ops.value_from_db_decimal(value)
-        elif db_type == 'list':
-            if not value:
-                value = [] # Convert None back to an empty list
-        elif db_type == 'set':
-            if not value:
-                value = set()
-            else:
-                value = set(value)
-
         return value
 
     def sql_flush(self, style, tables, seqs, allow_cascade=False):
@@ -546,11 +494,7 @@ class DatabaseIntrospection(BaseDatabaseIntrospection):
     def get_table_list(self, cursor):
         namespace = self.connection.settings_dict.get("NAMESPACE")
         kinds = [kind.key().id_or_name() for kind in datastore.Query('__kind__', namespace=namespace).Run()]
-        try:
-            from django.db.backends.base.introspection import TableInfo
-            return [TableInfo(x, "t") for x in kinds]
-        except ImportError:
-            return kinds # Django <= 1.7
+        return [TableInfo(x, "t") for x in kinds]
 
 
 class DatabaseSchemaEditor(BaseDatabaseSchemaEditor):
@@ -579,7 +523,6 @@ class DatabaseFeatures(BaseDatabaseFeatures):
     autocommits_when_autocommit_is_off = True
     uses_savepoints = False
     allows_auto_pk_0 = False
-    needs_datetime_string_cast = False  # Django 1.7 compatibility
 
 
 class DatabaseWrapper(BaseDatabaseWrapper):

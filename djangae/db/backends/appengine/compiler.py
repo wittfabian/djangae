@@ -2,14 +2,7 @@
 import django
 
 from django.db.models.sql import compiler
-
-try:
-    # This is only necessary for 1.8+
-    from django.db.models.expressions import Value, OrderBy
-except ImportError:
-    # Ignore on 1.7
-    pass
-
+from django.db.models.expressions import Value, OrderBy
 from django.db.models.sql.query import get_order_dir
 
 #DJANGAE
@@ -25,8 +18,7 @@ class SQLCompiler(compiler.SQLCompiler):
 
     def find_ordering_name(self, name, opts, alias=None, default_order='ASC', already_seen=None):
         """
-            Seems not to be called on 1.7 when processing orderings (for some reason?),
-            overridden for __scatter__ on 1.8+
+            Overridden just for the __scatter__ property ordering
         """
 
         # This allow special appengine properties (e.g. __scatter__) to be supplied as an ordering
