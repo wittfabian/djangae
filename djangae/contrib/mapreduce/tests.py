@@ -1,8 +1,10 @@
+from mapreduce.mapreduce_pipeline import MapreducePipeline
+
 from django.db import models
 from djangae.test import TestCase
 from djangae.test import process_task_queues
 from djangae.contrib.mapreduce.input_readers import DjangoInputReader
-from mapreduce.mapreduce_pipeline import MapreducePipeline
+from djangae.contrib.mapreduce.pipelines import MapPipeline
 
 
 class TestNode(models.Model):
@@ -21,7 +23,6 @@ class MapPipelineTestCase(TestCase):
         super(MapPipelineTestCase, self).setUp()
 
     def test_map_works(self):
-        from djangae.contrib.mapreduce.pipelines import MapPipeline
         pipe = MapPipeline(
             "increment",
             "djangae.contrib.mapreduce.tests.model_counter_increment",

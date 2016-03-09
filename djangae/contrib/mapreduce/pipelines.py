@@ -1,3 +1,8 @@
+import mapreduce
+mapreduce.parameters.config.BASE_PATH = '/_ah/mapreduce'
+mapreduce.parameters._DEFAULT_PIPELINE_BASE_PATH = "/_ah/mapreduce/pipeline"
+
+
 from mapreduce import mapper_pipeline
 from mapreduce import pipeline_base
 from mapreduce import shuffler
