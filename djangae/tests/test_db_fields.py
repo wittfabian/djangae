@@ -398,7 +398,8 @@ class RelatedListFieldModelTests(TestCase):
 
         form = TestForm(post_data)
         self.assertTrue(form.is_valid())
-        self.assertTrue(form.save())
+        instance = form.save()
+        self.assertEqual([related.pk], instance.related_list_ids)
 
 
 class RelatedSetFieldModelTests(TestCase):
@@ -424,7 +425,8 @@ class RelatedSetFieldModelTests(TestCase):
 
         form = TestForm(post_data)
         self.assertTrue(form.is_valid())
-        self.assertTrue(form.save())
+        instance = form.save()
+        self.assertEqual({related.pk}, instance.related_things_ids)
 
 
 class InstanceListFieldTests(TestCase):
