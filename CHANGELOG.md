@@ -4,6 +4,8 @@
 
 ### Bug fixes:
 
+ - Fixed a bug when saving forms with a RelatedListField or RelatedSetField (#607)
+
 ### Documentation:
 
 
