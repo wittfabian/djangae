@@ -25,7 +25,6 @@ urlpatterns = patterns('',
     url(r'^_ah/', include(djangae.urls)),
     url(r'^admin/', include(admin.site.urls)),
     url(r'^auth/', include('djangae.contrib.gauth.urls')),
-    url(r'^mapreduce/', include(djangae.contrib.mapreduce.urls)),
     url(r'^$', view_that_defers),
 )
 
