@@ -92,8 +92,8 @@ def process_task_queues(queue_name=None):
 
 
 class TestCaseMixin(object):
-    def _pre_setup(self):
-        super(TestCaseMixin, self)._pre_setup()
+    def setUp(self):
+        super(TestCaseMixin, self).setUp()
         self.taskqueue_stub = apiproxy_stub_map.apiproxy.GetStub("taskqueue")
         if self.taskqueue_stub:
             _flush_tasks(self.taskqueue_stub) # Make sure we clear the queue before every test
