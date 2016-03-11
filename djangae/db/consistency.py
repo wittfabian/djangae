@@ -63,17 +63,29 @@ def ensure_instances_consistent(queryset, instance_pks):
 
             new_result_cache = []
             count = self.query.high_mark
+
+            # We sort by the is_less function and use a deque so we can pop from the
+            # front
             consistently_got = deque(sorted(consistently_got, cmp=is_less))
 
+            # Go through each item in the result set and peek at the first item in the
+            # deque. If the item is the same, or the item in the deque should appear before
+            # 'item' then add the consistent item. If the consistent item is == item then
+            # continue so we don't add a duplicate
             for item in self._result_cache:
                 try:
                     consistent_item = consistently_got[0]
+
+                    # Should the consistent item be added?
                     if item == consistent_item or is_less(consistent_item, item):
                         new_result_cache.append(consistent_item)
                         consistently_got.popleft()
                         if item == consistent_item:
+                            # Prevent adding a stale duplicate
                             continue
                 except IndexError:
+                    # No consistent items left, so just append all the things
+                    # remaining in the original result set
                     pass
 
                 # Item was deleted, otherwise we would have seen it in consistent_item
@@ -82,8 +94,11 @@ def ensure_instances_consistent(queryset, instance_pks):
 
                 new_result_cache.append(item)
             else:
+                # Finally, if we've been through the entire result set, and we still
+                # have consistent things remaining, they must be new and at the end of the
+                # ordering so just add them to the end of the result set
                 if consistently_got:
-                    self._result_cache.extend(consistently_got)
+                    new_result_cache.extend(list(consistently_got))
 
             self._result_cache = new_result_cache[:count]
 
