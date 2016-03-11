@@ -80,14 +80,14 @@ class JSONField(models.TextField):
         if default is None:
             kwargs['default'] = {}
         elif isinstance(default, (list, dict)):
-            kwargs['default'] = dumps(default)
+            kwargs['default'] = default
 
         # use `collections.OrderedDict` rather than built-in `dict`
         self.use_ordered_dict = use_ordered_dict
 
         models.TextField.__init__(self, *args, **kwargs)
 
-    def from_db_value(self, value, expression, connection, context):
+    def parse_json(self, value):
         """Convert our string value to JSON after we load it from the DB"""
         if value is None or value == '':
             return {}
@@ -107,6 +107,12 @@ class JSONField(models.TextField):
             return res
         else:
             return value
+
+    def to_python(self, value):
+        return self.parse_json(value)
+
+    def from_db_value(self, value, expression, connection, context):
+        return self.parse_json(value)
 
     def get_db_prep_save(self, value, connection, **kwargs):
         """Convert our JSON object to a string before we save"""
