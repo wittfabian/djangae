@@ -27,6 +27,7 @@
 - Renamed `AppEngineUserAPI` to `AppEngineUserAPIBackend`
 
 ### Bug fixes:
+- JSONField fixes after removing SubfieldBase dependency - to_python added and default value not converted to string anymore
 - Special indexing now works on fields that are primary keys too
 - Fixed a bug with special indexing of datetime fields, that now allows for `__year` or `__month` lookups
 - Allow serializing queries containing non-ascii characters
