@@ -124,6 +124,10 @@ class JSONFieldModel(models.Model):
     json_field = JSONField(use_ordered_dict=True)
 
 
+class JSONFieldWithDefaultModel(models.Model):
+    json_field = JSONField(use_ordered_dict=True, default={})
+
+
 class ShardedCounterTest(TestCase):
     def test_basic_usage(self):
         instance = ModelWithCounter.objects.create()
@@ -765,6 +769,24 @@ class JSONFieldModelTests(TestCase):
 
         test_instance = JSONFieldModel.objects.get()
         self.assertEqual(test_instance.json_field['test'], 0.1)
+
+    def test_defaults_are_handled_as_pythonic_data_structures(self):
+        """ Tests that default values are handled as python data structures and
+            not as strings. This seems to be a regression after changes were
+            made to remove Subfield from the JSONField and simply use TextField
+            instead.
+        """
+        thing = JSONFieldModel()
+        self.assertEqual(thing.json_field, {})
+
+    def test_default_value_correctly_handled_as_data_structure(self):
+        """ Test that default value - if provided is not transformed into
+            string anymore. Previously we needed string, since we used
+            SubfieldBase in JSONField. Since it is now deprecated we need
+            to change handling of default value.
+        """
+        thing = JSONFieldWithDefaultModel()
+        self.assertEqual(thing.json_field, {})
 
 
 class ModelWithCharField(models.Model):
