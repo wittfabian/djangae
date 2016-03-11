@@ -78,7 +78,7 @@ class JSONField(models.TextField):
     def __init__(self, use_ordered_dict=False, *args, **kwargs):
         default = kwargs.get('default', None)
         if default is None:
-            kwargs['default'] = '{}'
+            kwargs['default'] = {}
         elif isinstance(default, (list, dict)):
             kwargs['default'] = dumps(default)
 
@@ -125,6 +125,6 @@ class JSONField(models.TextField):
 
     def deconstruct(self):
         name, path, args, kwargs = super(JSONField, self).deconstruct()
-        if self.default == '{}':
+        if self.default == {}:
             del kwargs['default']
         return name, path, args, kwargs

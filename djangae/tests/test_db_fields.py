@@ -766,6 +766,15 @@ class JSONFieldModelTests(TestCase):
         test_instance = JSONFieldModel.objects.get()
         self.assertEqual(test_instance.json_field['test'], 0.1)
 
+    def test_defaults_are_handled_as_pythonic_data_structures(self):
+        """ Tests that default values are handled as python data structures and
+            not as strings. This seems to be a regression after changes were
+            made to remove Subfield from the JSONField and simply use TextField
+            instead.
+        """
+        thing = JSONFieldModel()
+        self.assertEqual(thing.json_field, {})
+
 
 class ModelWithCharField(models.Model):
     char_field_with_max = CharField(max_length=10, default='', blank=True)
