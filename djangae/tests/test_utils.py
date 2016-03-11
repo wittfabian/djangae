@@ -2,7 +2,7 @@ from django.db import models
 from djangae.contrib import sleuth
 from djangae.test import TestCase, inconsistent_db
 from djangae.utils import get_next_available_port
-from djangae.db.consistency import ensure_instance_included
+from djangae.db.consistency import ensure_instance_consistent, ensure_instances_consistent
 
 
 class AvailablePortTests(TestCase):
@@ -42,26 +42,39 @@ class EnsureCreatedTests(TestCase):
 
             qs = EnsureCreatedModel.objects.all()
             self.assertEqual(5, len(qs)) # Make sure we don't get the new instance
-            self.assertEqual(6, len(ensure_instance_included(qs, new_instance.pk))) # Make sure we do
-            self.assertEqual(5, len(ensure_instance_included(qs[:5], new_instance.pk))) # Make sure slicing returns the right number
-            self.assertEqual(3, len(ensure_instance_included(qs[2:5], new_instance.pk))) # Make sure slicing returns the right number
+            self.assertEqual(6, len(ensure_instance_consistent(qs, new_instance.pk))) # Make sure we do
+            self.assertEqual(5, len(ensure_instance_consistent(qs[:5], new_instance.pk))) # Make sure slicing returns the right number
+            self.assertEqual(3, len(ensure_instance_consistent(qs[2:5], new_instance.pk))) # Make sure slicing returns the right number
 
-            evaled = [ x for x in ensure_instance_included(qs.order_by("field1"), new_instance.pk) ]
+            evaled = [ x for x in ensure_instance_consistent(qs.order_by("field1"), new_instance.pk) ]
             self.assertEqual(new_instance, evaled[4]) # Make sure our instance is correctly positioned
 
-            evaled = [ x for x in ensure_instance_included(qs.order_by("-field1"), new_instance.pk) ]
+            evaled = [ x for x in ensure_instance_consistent(qs.order_by("-field1"), new_instance.pk) ]
             self.assertEqual(new_instance, evaled[1], evaled) # Make sure our instance is correctly positioned
 
-            evaled = [ x for x in ensure_instance_included(qs.order_by("-field1"), new_instance.pk)[:2] ]
+            evaled = [ x for x in ensure_instance_consistent(qs.order_by("-field1"), new_instance.pk)[:2] ]
             self.assertEqual(new_instance, evaled[1], evaled) # Make sure our instance is correctly positioned
+
+            another_instance = EnsureCreatedModel.objects.create(
+                pk=8,
+                field1=3
+            )
+
+            self.assertEqual(5, len(qs)) # Make sure we don't get the new instance
+            self.assertEqual(7, len(ensure_instances_consistent(qs, [new_instance.pk, another_instance.pk]))) # Make sure we do
+
+            instance_id = another_instance.pk
+            another_instance.delete()
+
+            self.assertEqual(6, len(ensure_instances_consistent(qs, [new_instance.pk, instance_id]))) # Make sure we do
 
         # Now we're in consistent land!
         self.assertTrue(EnsureCreatedModel.objects.filter(pk=7)[:1])
-        self.assertEqual(6, len(ensure_instance_included(qs, new_instance.pk)))
+        self.assertEqual(6, len(ensure_instance_consistent(qs, new_instance.pk)))
 
         # Make sure it's not returned if it was deleted
         new_instance.delete()
-        self.assertEqual(5, len(ensure_instance_included(qs, 7)))
+        self.assertEqual(5, len(ensure_instance_consistent(qs, 7)))
 
         new_instance = EnsureCreatedModel.objects.create(pk=8, field1=8)
-        self.assertEqual(1, list(ensure_instance_included(qs, 8)).count(new_instance))
+        self.assertEqual(1, list(ensure_instance_consistent(qs, 8)).count(new_instance))
