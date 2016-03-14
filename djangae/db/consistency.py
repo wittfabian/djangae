@@ -37,13 +37,10 @@ def ensure_instances_consistent(queryset, instance_pks):
         def _fetch_all(self):
             super(EnsuredQuerySet, self)._fetch_all()
 
-            try:
-                new_qs = _clone_queryset(qs=self, klass=queryset.__class__)
-                new_qs.query.high_mark = None
-                new_qs.query.low_mark = 0
-                consistently_got = list(new_qs.filter(pk__in=instance_pks))
-            except self.model.DoesNotExist:
-                consistently_got = []
+            new_qs = _clone_queryset(qs=self, klass=queryset.__class__)
+            new_qs.query.high_mark = None
+            new_qs.query.low_mark = 0
+            consistently_got = list(new_qs.filter(pk__in=instance_pks))
 
             def is_less(lhs, rhs):
                 for field in queryset.query.order_by:
