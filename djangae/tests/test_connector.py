@@ -65,12 +65,14 @@ class TestUser(models.Model):
     class Meta:
         app_label = "djangae"
 
+
 class ModelWithNullableCharField(models.Model):
     field1 = models.CharField(max_length=500, null=True)
     some_id = models.IntegerField(default=0)
 
     class Meta:
         app_label = "djangae"
+
 
 class UniqueModel(models.Model):
     unique_field = models.CharField(max_length=100, unique=True)
@@ -890,26 +892,15 @@ class ConstraintTests(TestCase):
 
         instance.name = "Two"
 
-        # TODO: replace this insanity with sleuth.switch
-        from djangae.db.backends.appengine.commands import datastore as to_patch
-
-        try:
-            original = to_patch.Put
-
-            def func(*args, **kwargs):
-                kind = args[0][0].kind() if isinstance(args[0], list) else args[0].kind()
-
-                if kind == UniqueMarker.kind():
-                    return original(*args, **kwargs)
-
+        def wrapped_put(*args, **kwargs):
+            kind = args[0][0].kind() if isinstance(args[0], list) else args[0].kind()
+            if kind != UniqueMarker.kind():
                 raise AssertionError()
+            return datastore.Put(*args, **kwargs)
 
-            to_patch.Put = func
-
+        with sleuth.switch("djangae.db.backends.appengine.commands.datastore.Put", wrapped_put) as put_mock:
             with self.assertRaises(Exception):
                 instance.save()
-        finally:
-            to_patch.Put = original
 
         self.assertEqual(
             1,
@@ -928,25 +919,15 @@ class ConstraintTests(TestCase):
     def test_error_on_insert_doesnt_create_markers(self):
         initial_count = datastore.Query(UniqueMarker.kind(), namespace=DEFAULT_NAMESPACE).Count()
 
-        # TODO: replace this insanity with sleuth.switch
-        from djangae.db.backends.appengine.commands import datastore as to_patch
-        try:
-            original = to_patch.Put
-
-            def func(*args, **kwargs):
-                kind = args[0][0].kind() if isinstance(args[0], list) else args[0].kind()
-
-                if kind == UniqueMarker.kind():
-                    return original(*args, **kwargs)
-
+        def wrapped_put(*args, **kwargs):
+            kind = args[0][0].kind() if isinstance(args[0], list) else args[0].kind()
+            if kind != UniqueMarker.kind():
                 raise AssertionError()
+            return datastore.Put(*args, **kwargs)
 
-            to_patch.Put = func
-
-            with self.assertRaises(AssertionError):
+        with sleuth.switch("djangae.db.backends.appengine.commands.datastore.Put", wrapped_put) as put_mock:
+            with self.assertRaises(Exception):
                 ModelWithUniques.objects.create(name="One")
-        finally:
-            to_patch.Put = original
 
         self.assertEqual(
             0,
