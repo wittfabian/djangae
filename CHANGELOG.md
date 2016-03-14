@@ -2,6 +2,9 @@
 
 ### New features & improvements:
 
+ - Replaced `ensure_instance_included` with `ensure_instance_consistent`
+ - Added `ensure_instances_consistent` for the multiple object case
+
 ### Bug fixes:
 
  - Fixed a bug when saving forms with a RelatedListField or RelatedSetField (#607)
