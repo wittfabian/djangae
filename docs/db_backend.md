@@ -160,7 +160,7 @@ caveats:
  - Only ordering on the queryset is respected, if you are relying on model ordering the instance may be returned in the wrong place (patches welcome!)
  - This causes an extra iteration over the returned queryset once it's retrieved
 
-There is also an equivalent function for ensuring the consistency of multiple items called `ensure_instances_included`.
+There is also an equivalent function for ensuring the consistency of multiple items called `ensure_instances_consistent`.
 
 ### Speed
 
