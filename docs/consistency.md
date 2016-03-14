@@ -61,7 +61,7 @@ CONSISTENCY_CONFIG = {
 
     # The settings can be overridden for each individual model
     "models": {
-        "app_name.ModelName": {
+        "app_name.modelname": {
             "cache_on_creation": True,
             "cache_on_modification": True,
             "caches": ["session", "django"],
@@ -74,7 +74,7 @@ CONSISTENCY_CONFIG = {
                 lambda obj: obj.method(),
             ]
         },
-        "app_name.UnimportantModel": {
+        "app_name.unimportantmodel": {
             "cache_on_creation": False,
             "cache_on_modification": False,
             # Any settings which you don't override inherit from "defaults".
