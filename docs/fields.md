@@ -40,7 +40,7 @@ It works by storing a list of primary keys of the related objects.  Think of it 
 ```RelatedSetField(related_model, **kwargs)```
 
 * `model`: the model of the related items.
-* `limit_choices_to`: a ditionary of query kwargs for limiting the possible related items.
+* `limit_choices_to`: a dictionary of query kwargs for limiting the possible related items.
 * `related_name` - the name of the reverse lookup attribute which is added to the model class of the related items.
 
 
@@ -54,7 +54,7 @@ RelatedListField shares the same behavior as RelatedSetField but has the qualiti
 ```RelatedListField(related_model, **kwargs)```
 
 * `model`: the model of the related items.
-* `limit_choices_to`: a ditionary of query kwargs for limiting the possible related items.
+* `limit_choices_to`: a dictionary of query kwargs for limiting the possible related items.
 * `related_name` - the name of the reverse lookup attribute which is added to the model class of the related items.
 
 
@@ -98,7 +98,7 @@ This field requires no special kwargs, and should accept all standard Django fie
 
 ## CharField
 
-This is a replacement for Django's `CharField` field. It is using `MaxBytesValidator` validator that makes sure value's lenght doesn't exceed the hard datastore limit of 1500 bytes (see `google.appengine.api.datastore_types _MAX_STRING_LENGTH`). Use this field whenever you're planning to store its values in the datastore as your data may get trimmed otherwise.
+This is a replacement for Django's `CharField` field. It uses the `MaxBytesValidator` validator that makes sure the value does not exceed the hard datastore limit of 1500 bytes (see `google.appengine.api.datastore_types _MAX_STRING_LENGTH`). Use this field whenever you're planning to store large char values in the datastore, else your data may get silently trimmed.
 
 ## JSONField
 
