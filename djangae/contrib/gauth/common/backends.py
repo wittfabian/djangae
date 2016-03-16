@@ -95,6 +95,16 @@ class BaseAppEngineUserAPIBackend(ModelBackend):
 
         # OK. We will grant access. We may need to update an existing user, or
         # create a new one, or both.
+
+        # Those 3 scenarios are:
+        # 1. A User object has been created for this user, but that they have not logged in yet.
+        # In this case wefetch the User object by email, and then update it with the Google User ID
+        # 2. A User object exists for this email address but belonging to a different Google account.
+        # This generally only happens when the email address of a Google Apps account has been
+        # signed up as a Google account and then the apps account itself has actually become a
+        # Google account. This is possible but very unlikely.
+        # 3. There is no User object realting to this user whatsoever.
+
         try:
             existing_user = User.objects.get(email=email)
         except User.DoesNotExist:
