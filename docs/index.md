@@ -30,7 +30,7 @@ GitHub: [https://github.com/potatolondon/djangae](https://github.com/potatolondo
 
 The intention is always to support the last two versions of Django, although older versions may work.
 
-**Currently Django 1.7 and 1.8 are supported. Django 1.9 (master) support is under development.**
+**Currently Django 1.8 and 1.9 are supported.**
 
 
 ## Contrib Applications

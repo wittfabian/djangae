@@ -46,6 +46,9 @@ behaviour so that it only caches particular models, only caches objects that mat
 criteria, and/or caches objects that were recently *modified* as well as recently *created*.
 
 ```python
+
+# settings.py
+
 CONSISTENCY_CONFIG = {
 
     # These defaults apply to every model, unless otherwise overriden.
