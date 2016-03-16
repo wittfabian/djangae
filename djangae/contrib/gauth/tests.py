@@ -31,6 +31,7 @@ class BackendTests(TestCase):
         credentials = {'username': 'ted', 'password': 'secret'}
         self.assertRaises(TypeError, backend.authenticate, **credentials)
 
+    @override_settings(DJANGAE_CREATE_UNKNOWN_USER=True)
     def test_authenticate_creates_user_object(self):
         """ If `authenticate` is called with valid credentials then a User object should be created
         """
@@ -46,7 +47,7 @@ class BackendTests(TestCase):
         user2 = backend.authenticate(google_user=google_user)
         self.assertEqual(user.pk, user2.pk)
 
-    @override_settings(ALLOW_USER_PRE_CREATION=True)
+    @override_settings(DJANGAE_CREATE_UNKNOWN_USER=True)
     def test_user_pre_creation(self):
         """ User objects for Google-Accounts-based users should be able to be pre-created in DB and
             then matched by email address when they log in.
@@ -64,7 +65,7 @@ class BackendTests(TestCase):
         self.assertIsNotNone(user.last_login)
         self.assertFalse(user.has_usable_password())
 
-    @override_settings(ALLOW_USER_PRE_CREATION=True)
+    @override_settings(DJANGAE_CREATE_UNKNOWN_USER=True)
     def test_user_id_switch(self):
         """ Users sometimes login with the same email, but a different google user id. We handle those cases by
             blanking out the email on the old user object and creating a new one with the new user id.
@@ -112,6 +113,7 @@ class BackendTests(TestCase):
 class MiddlewareTests(TestCase):
     """ Tests for the AuthenticationMiddleware. """
 
+    @override_settings(DJANGAE_CREATE_UNKNOWN_USER=True)
     def test_login(self):
 
         def _get_current_user():
@@ -144,6 +146,7 @@ class MiddlewareTests(TestCase):
         self.assertEqual(user.email, '1@example.com')
         self.assertEqual(user.username, '111111111100000000001')
 
+    @override_settings(DJANGAE_CREATE_UNKNOWN_USER=True)
     def test_account_switch(self):
         user1 = users.User('1@example.com', _user_id='111111111100000000001')
         user2 = users.User('2@example.com', _user_id='222222222200000000002')
@@ -163,6 +166,7 @@ class MiddlewareTests(TestCase):
 
         self.assertEqual(user2.user_id(), request.user.username)
 
+    @override_settings(DJANGAE_CREATE_UNKNOWN_USER=True)
     def test_user_id_switch(self):
         """ Users sometimes login with the same email, but a different google user id. We handle those cases by
             blanking out the email on the old user object and creating a new one with the new user id.
@@ -210,6 +214,7 @@ class MiddlewareTests(TestCase):
         # and so with pre-creation required, authentication should have failed
         self.assertTrue(isinstance(request.user, AnonymousUser))
 
+    @override_settings(DJANGAE_CREATE_UNKNOWN_USER=True)
     def test_middleware_resaves_email(self):
         # Create user with uppercased email
         email = 'User@example.com'
@@ -349,6 +354,7 @@ class CustomPermissionsUserModelBackendTest(TestCase):
 class SwitchAccountsTests(TestCase):
     """ Tests for the switch accounts functionality. """
 
+    @override_settings(DJANGAE_CREATE_UNKNOWN_USER=True)
     def test_switch_accounts(self):
         gcu = 'djangae.contrib.gauth.middleware.users.get_current_user'
         final_destination = '/death/' # there's no escaping it
