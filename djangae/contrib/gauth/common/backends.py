@@ -1,5 +1,6 @@
 import warnings
 
+from django.db.utils import IntegrityError
 from django.db import transaction
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -128,4 +129,9 @@ class BaseAppEngineUserAPIBackend(ModelBackend):
 
                     return User.objects.create_user(user_id, email=email)
         else:
-            return User.objects.create_user(user_id, email=email)
+            # Create a new user, but account for another thread having created it already in a race
+            # condition scenario. Our logic cannot be in a transaction, so we have to just catch this.
+            try:
+                return User.objects.create_user(user_id, email=email)
+            except IntegrityError:
+                return User.objects.get(username=user_id)

@@ -108,6 +108,34 @@ class BackendTests(TestCase):
         self.assertEqual(User.objects.count(), 1)
         self.assertEquals(User.objects.get(), user)
 
+    @override_settings(DJANGAE_CREATE_UNKNOWN_USER=True)
+    def test_user_creation_race_condition(self):
+        """ If a user double clicks a 'login' button or something, causing 2 threads to be
+            authenticating the same user at the same time, ensure it doesn't die.
+        """
+        email = "test@example.com"
+        user_id = "111111111100000000001"
+        original_user_get = get_user_model().objects.get
+
+        def crazy_user_get_patch(**kwargs):
+            """ Patch for User.objects.get which simulates another thread creating the same user
+                immedidately after this is called (by doing it as part of this function). """
+            User = get_user_model()
+            try:
+                return original_user_get(**kwargs) # We patched .get()
+            except User.DoesNotExist:
+                # This is horrible, but... the backend first tries get() by username and then tries
+                # get() by email, and we only want to create our user after that second call
+                if kwargs.keys() == ['email']:
+                    User.objects.create_user(username=user_id, email=email)
+                raise
+
+        backend = AppEngineUserAPIBackend()
+        google_user = users.User(email, _user_id=user_id)
+        user_class_path = "djangae.contrib.gauth.datastore.models.GaeDatastoreUser.objects.get"
+        with sleuth.switch(user_class_path, crazy_user_get_patch):
+            backend.authenticate(google_user)
+
 
 @override_settings(AUTHENTICATION_BACKENDS=AUTHENTICATION_BACKENDS)
 class MiddlewareTests(TestCase):
