@@ -16,10 +16,16 @@ from django.conf import settings
 DJANGAE_LOG = logging.getLogger("djangae")
 
 
-def constraint_checks_enabled(model_or_instance):
+def has_active_unique_constraints(model_or_instance):
     """
         Returns true if constraint checking is enabled on the model
     """
+
+    django_opts = getattr(model_or_instance, "_meta", None)
+
+    # If there are no unique fields on the model, return false
+    if not django_opts.unique_together and not any(x.unique for x in django_opts.fields):
+        return False
 
     opts = getattr(model_or_instance, "Djangae", None)
     if opts:
@@ -257,7 +263,7 @@ class UniquenessMixin(object):
 
 @contextlib.contextmanager
 def enforce_integrity(model, entity):
-    if constraint_checks_enabled(model):
+    if has_active_unique_constraints(model):
         markers = []
         try:
             markers = acquire(model, entity)

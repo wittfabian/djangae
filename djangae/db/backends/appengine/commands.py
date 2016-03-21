@@ -885,7 +885,7 @@ class InsertCommand(object):
     def execute(self):
         check_existence = self.has_pk and not has_concrete_parents(self.model)
 
-        if not constraints.constraint_checks_enabled(self.model) and not check_existence:
+        if not constraints.has_active_unique_constraints(self.model) and not check_existence:
             # Fast path, no constraint checks and no keys mean we can just do a normal datastore.Put
             results = datastore.Put(self.entities)
             caching.add_entities_to_cache(
@@ -1000,7 +1000,7 @@ class DeleteCommand(object):
 
         self.select.execute()
 
-        constraints_enabled = constraints.constraint_checks_enabled(self.model)
+        constraints_enabled = constraints.has_active_unique_constraints(self.model)
         keys = [ x.key() for x in self.select.results ]
 
         def wipe_polymodel_from_entity(entity, db_table):
@@ -1141,7 +1141,7 @@ class UpdateCommand(object):
         if POLYMODEL_CLASS_ATTRIBUTE in result:
             result[POLYMODEL_CLASS_ATTRIBUTE] = list(set(result[POLYMODEL_CLASS_ATTRIBUTE]))
 
-        if not constraints.constraint_checks_enabled(self.model):
+        if not constraints.has_active_unique_constraints(self.model):
             # The fast path, no constraint checking
             datastore.Put(result)
             caching.add_entities_to_cache(
