@@ -1,5 +1,6 @@
 import datetime
 import logging
+import contextlib
 
 from django.core.exceptions import NON_FIELD_ERRORS
 
@@ -54,7 +55,6 @@ class UniqueMarker(db.Model):
 
 
 def acquire_identifiers(identifiers, entity_key):
-    @db.transactional(propagation=TransactionOptions.INDEPENDENT, xg=True)
     def acquire_marker(identifier):
         # Key.from_path expects None for an empty namespace, but Key.namespace() returns ''
         namespace = entity_key.namespace() or None
@@ -84,16 +84,15 @@ def acquire_identifiers(identifiers, entity_key):
         marker.put()
         return marker
 
-    markers = []
-    try:
+    @db.transactional(propagation=TransactionOptions.INDEPENDENT, xg=True)
+    def acquire_all():
+        markers = []
         for identifier in identifiers:
             markers.append(acquire_marker(identifier))
             DJANGAE_LOG.debug("Acquired unique marker for %s", identifier)
-    except:
-        release_markers(markers)
-        DJANGAE_LOG.debug("Due to an error, deleted markers %s", markers)
-        raise
-    return markers
+        return markers
+
+    return acquire_all()
 
 
 def get_markers_for_update(model, old_entity, new_entity):
@@ -111,8 +110,6 @@ def get_markers_for_update(model, old_entity, new_entity):
 
 
 def update_instance_on_markers(entity, markers):
-
-    @db.transactional(propagation=TransactionOptions.INDEPENDENT)
     def update(marker, instance):
         marker = UniqueMarker.get(marker.key())
         if not marker:
@@ -121,9 +118,12 @@ def update_instance_on_markers(entity, markers):
         marker.instance = instance
         marker.put()
 
-    instance = entity.key()
-    for marker in markers:
-        update(marker, instance)
+    @db.transactional(propagation=TransactionOptions.INDEPENDENT, xg=True)
+    def update_all():
+        instance = entity.key()
+        for marker in markers:
+            update(marker, instance)
+    update_all()
 
 
 def acquire_bulk(model, entities):
@@ -253,3 +253,19 @@ class UniquenessMixin(object):
                     errors.setdefault(key, []).append(self.unique_error_message(model_class, unique_check))
                     break
         return errors
+
+
+@contextlib.contextmanager
+def enforce_integrity(model, entity):
+    if constraint_checks_enabled(model):
+        markers = []
+        try:
+            markers = acquire(model, entity)
+            yield
+        except:
+            release_markers(markers)
+            raise
+        else:
+            update_instance_on_markers(entity, markers)
+    else:
+        yield

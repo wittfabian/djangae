@@ -442,8 +442,9 @@ class MemcacheCachingTests(TestCase):
                 CachingTestModel(field1="Banana", comb1=2, comb2="Cherry"),
                 CachingTestModel(field1="Orange", comb1=3, comb2="Cherry"),
             ])
-        self.assertEqual(set_many_2.call_count, 1)
-        self.assertEqual(len(set_many_2.calls[0].args[1]), 3*2)
+        self.assertEqual(set_many_2.call_count, 2)
+        self.assertEqual(len(set_many_2.calls[0].args[1]), 3)
+        self.assertEqual(len(set_many_2.calls[1].args[1]), 3)
 
         pks = list(CachingTestModel.objects.values_list('pk', flat=True))
         with sleuth.watch("djangae.db.backends.appengine.caching.KeyPrefixedClient.set_multi_async") as set_many_3:

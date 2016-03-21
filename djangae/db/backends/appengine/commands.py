@@ -883,88 +883,53 @@ class InsertCommand(object):
             )
 
     def execute(self):
-        if self.has_pk and not has_concrete_parents(self.model):
-            results = []
+        check_existence = self.has_pk and not has_concrete_parents(self.model)
+
+        if not constraints.constraint_checks_enabled(self.model) and not check_existence:
+            # Fast path, no constraint checks and no keys mean we can just do a normal datastore.Put
+            results = datastore.Put(self.entities)
+            caching.add_entities_to_cache(
+                self.model,
+                self.entities,
+                caching.CachingSituation.DATASTORE_GET_PUT,
+                self.namespace
+            )
+            return results
+
+        results = []
+        for i, ent in enumerate(self.entities):
+            key = self.included_keys[i]
+
             # We are inserting, but we specified an ID, we need to check for existence before we Put()
             # We do it in a loop so each check/put is transactional - because it's an ancestor query it shouldn't
             # cost any entity groups
-
-            was_in_transaction = datastore.IsInTransaction()
-
-            for key, ent in zip(self.included_keys, self.entities):
-                @db.transactional
-                def txn():
-                    if key is not None:
-                        if utils.key_exists(key):
-                            raise IntegrityError("Tried to INSERT with existing key")
+            @db.transactional
+            def txn():
+                if check_existence and key is not None:
+                    if utils.key_exists(key):
+                        raise IntegrityError("Tried to INSERT with existing key")
 
                     id_or_name = key.id_or_name()
                     if isinstance(id_or_name, basestring) and id_or_name.startswith("__"):
                         raise NotSupportedError("Datastore ids cannot start with __. Id was %s" % id_or_name)
 
-                    if not constraints.constraint_checks_enabled(self.model):
-                        # Fast path, just insert
-                        results.append(datastore.Put(ent))
-                    else:
-                        markers = constraints.acquire(self.model, ent)
-                        try:
-                            results.append(datastore.Put(ent))
-                            if not was_in_transaction:
-                                # We can cache if we weren't in a transaction before this little nested one
-                                caching.add_entities_to_cache(
-                                    self.model,
-                                    [ent],
-                                    caching.CachingSituation.DATASTORE_GET_PUT,
-                                    self.namespace,
-                                )
-                        except:
-                            # Make sure we delete any created markers before we re-raise
-                            constraints.release_markers(markers)
-                            raise
-
-                # Make sure we notify app engine that we are using this ID
-                # FIXME: Copy ancestor across to the template key
-                reserve_id(key.kind(), key.id_or_name(), self.namespace)
-
-                txn()
-
-            return results
-        else:
-            if not constraints.constraint_checks_enabled(self.model):
-                # Fast path, just bulk insert
-                results = datastore.Put(self.entities)
-                caching.add_entities_to_cache(
-                    self.model,
-                    self.entities,
-                    caching.CachingSituation.DATASTORE_PUT,
-                    self.namespace
-                )
-                return results
-            else:
-                markers = []
-                try:
-                    #FIXME: We should rearrange this so that each entity is handled individually like above. We'll
-                    # lose insert performance, but gain consistency on errors which is more important
-                    markers = constraints.acquire_bulk(self.model, self.entities)
-                    results = datastore.Put(self.entities)
+                with constraints.enforce_integrity(self.model, ent):
+                    results.append(datastore.Put(ent))
 
                     caching.add_entities_to_cache(
                         self.model,
-                        self.entities,
-                        caching.CachingSituation.DATASTORE_PUT,
-                        self.namespace,
+                        [ent],
+                        caching.CachingSituation.DATASTORE_GET_PUT,
+                        self.namespace
                     )
 
-                except:
-                    to_delete = chain(*markers)
-                    constraints.release_markers(to_delete)
-                    raise
+            if key:
+                # Make sure we notify app engine that we are using this ID
+                # FIXME: Copy ancestor across to the template key
+                reserve_id(key.kind(), key.id_or_name(), self.namespace)
+            txn()
 
-                for ent, k, m in zip(self.entities, results, markers):
-                    ent.__key = k
-                    constraints.update_instance_on_markers(ent, m)
-
-                return results
+        return results
 
     def lower(self):
         """

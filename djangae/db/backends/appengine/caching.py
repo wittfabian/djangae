@@ -3,13 +3,14 @@ import threading
 import itertools
 
 from google.appengine.api import datastore
-from google.appengine.api import namespace_manager
 from google.appengine.api import memcache
 from google.appengine.api.memcache import Client
-from django.core.cache.backends.base import default_key_func
-
 
 from django.conf import settings
+from django.core.exceptions import ImproperlyConfigured
+from django.core.cache.backends.base import default_key_func
+from django.utils.functional import lazy
+
 from djangae.db import utils
 from djangae.db.unique_utils import unique_identifiers_from_entity, _format_value_for_identifier
 from djangae.db.backends.appengine.context import ContextCache
@@ -150,12 +151,24 @@ def _add_entity_to_memcache(model, mc_key_entity_map, namespace):
 
 
 def _get_cache_key_and_model_from_datastore_key(key):
-    model = utils.get_model_from_db_table(key.kind())
+    from django.db.migrations.recorder import MigrationRecorder
+
+    # The django migration model isn't registered with the app registry so this
+    # is special cased here
+    MODELS_WHICH_ARENT_REGISTERED_WITH_DJANGO = {
+        MigrationRecorder.Migration._meta.db_table: MigrationRecorder.Migration
+    }
+
+    kind = key.kind()
+    model = utils.get_model_from_db_table(kind)
 
     if not model:
-        # This should never happen.. if it does then we can edit get_model_from_db_table to pass
-        # include_deferred=True/included_swapped=True to get_models, whichever makes it better
-        raise AssertionError("Unable to locate model for db_table '{}' - item won't be evicted from the cache".format(key.kind()))
+        if kind in MODELS_WHICH_ARENT_REGISTERED_WITH_DJANGO:
+            model = MODELS_WHICH_ARENT_REGISTERED_WITH_DJANGO[kind]
+        else:
+            # This should never happen.. if it does then we can edit get_model_from_db_table to pass
+            # include_deferred=True/included_swapped=True to get_models, whichever makes it better
+            raise ImproperlyConfigured("Unable to locate model for db_table '{}' - are you missing an INSTALLED_APP?".format(key.kind()))
 
     # We build the cache key for the ID of the instance
     cache_key = "|".join(
