@@ -18,7 +18,8 @@ DJANGAE_LOG = logging.getLogger("djangae")
 
 def has_active_unique_constraints(model_or_instance):
     """
-        Returns true if constraint checking is enabled on the model
+        Returns true if the model/instance has unique fields or unique_together fields and unique
+        constraint checking is enabled on the model
     """
 
     django_opts = getattr(model_or_instance, "_meta", None)
@@ -168,6 +169,9 @@ def release_markers(markers):
     while to_delete:
         delete_markers(to_delete[:25])
         to_delete = to_delete[25:]
+    """ Delete the given UniqueMarker objects. """
+    # Note that these should all be from the same Django model instance, and therefore there should
+    # be a maximum of 25 of them (because everything blows up if you have more than that - limitation)
 
 
 def release_identifiers(identifiers, namespace):
@@ -182,6 +186,7 @@ def release_identifiers(identifiers, namespace):
 
 
 def release(model, entity):
+    """ Delete the UniqueMarker objects for the given entity. """
     identifiers = unique_identifiers_from_entity(model, entity, ignore_pk=True)
     # Key.from_path expects None for an empty namespace, but Key.namespace() returns ''
     namespace = entity.key().namespace() or None
