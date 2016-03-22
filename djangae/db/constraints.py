@@ -137,19 +137,6 @@ def update_instance_on_markers(entity, markers):
     update_all()
 
 
-def acquire_bulk(model, entities):
-    markers = []
-    try:
-        for entity in entities:
-            markers.append(acquire(model, entity))
-
-    except:
-        for m in markers:
-            release_markers(m)
-        raise
-    return markers
-
-
 def acquire(model, entity):
     """
         Given a model and entity, this tries to acquire unique marker locks for the instance. If the locks already exist
