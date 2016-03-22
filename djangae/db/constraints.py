@@ -147,28 +147,18 @@ def acquire(model, entity):
     return acquire_identifiers(identifiers, entity.key())
 
 
+@db.transactional(propagation=TransactionOptions.INDEPENDENT, xg=True)
 def release_markers(markers):
-    @db.transactional(propagation=TransactionOptions.INDEPENDENT, xg=True)
-    def delete_markers(markers):
-        Delete([marker.key() for marker in markers])
-
-    to_delete = markers[:]
-    while to_delete:
-        delete_markers(to_delete[:25])
-        to_delete = to_delete[25:]
     """ Delete the given UniqueMarker objects. """
     # Note that these should all be from the same Django model instance, and therefore there should
     # be a maximum of 25 of them (because everything blows up if you have more than that - limitation)
+    Delete([marker.key() for marker in markers])
 
 
+@db.non_transactional
 def release_identifiers(identifiers, namespace):
-
-    @db.non_transactional
-    def delete():
-        keys = [Key.from_path(UniqueMarker.kind(), x, namespace=namespace) for x in identifiers]
-        Delete(keys)
-
-    delete()
+    keys = [Key.from_path(UniqueMarker.kind(), x, namespace=namespace) for x in identifiers]
+    Delete(keys)
     DJANGAE_LOG.debug("Deleted markers with identifiers: %s", identifiers)
 
 
