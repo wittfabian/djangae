@@ -156,11 +156,14 @@ def acquire(model, entity):
 
 
 def release_markers(markers):
-    @db.transactional(propagation=TransactionOptions.INDEPENDENT)
-    def delete(marker):
-        Delete(marker.key())
+    @db.transactional(propagation=TransactionOptions.INDEPENDENT, xg=True)
+    def delete_markers(markers):
+        Delete([marker.key() for marker in markers])
 
-    [delete(x) for x in markers]
+    to_delete = markers[:]
+    while to_delete:
+        delete_markers(to_delete[:25])
+        to_delete = to_delete[25:]
 
 
 def release_identifiers(identifiers, namespace):

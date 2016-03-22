@@ -908,7 +908,7 @@ class InsertCommand(object):
             @db.transactional(xg=len(entities) > 1)
             def txn():
                 results = []
-                for key, ent in zip(keys, entities):
+                for key in keys:
                     if check_existence and key is not None:
                         if utils.key_exists(key):
                             raise IntegrityError("Tried to INSERT with existing key")
