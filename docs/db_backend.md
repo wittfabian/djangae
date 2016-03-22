@@ -49,6 +49,7 @@ Here is a brief list of hard limitations you may encounter when using the Djanga
  - `ManyToManyField` will not work reliably/efficiently - use `RelatedSetField` or `RelatedListField` instead
  - Transactions.  The Datastore has transactions, but they are not "normal" transactions in the SQL sense. [Transactions
   should be done using djangae.db.transactional.atomic](db_backend.md#transactions).
+- If unique constraints are enabled, then you are limited to a maximum of 25 unique or unique_together constraints per model (see [Unique Constraint Checking](#unique-constraint-checking)).
 
 There are probably more but the list changes regularly as we improve the datastore backend. If you find another limitation not
 mentioned above please consider sending a documentation PR.
@@ -199,9 +200,10 @@ Unique constraint checks have the following caveats...
  - Unique constraints drastically increase your datastore writes. Djangae needs to create a marker for each unique constraint on each model, for each instance. This means if you have
    one unique field on your model, and you save() Djangae must do two datastore writes (one for the entity, one for the marker)
  - Unique constraints increase your datastore reads. Each time you save an object, Djangae needs to check for the existence of unique markers.
- - Unique constraints slow down your saves(). See above, each time you write a bunch of stuff needs to happen.
+ - Unique constraints slow down your saves(). See above, each time you save, a bunch of stuff needs to happen.
  - Updating instances via the datastore API (NDB, DB, or datastore.Put and friends) will break your unique constraints. Don't do that!
- - Updating instances via the datastore admin will do the same thing, you'll be bypassing the unique marker creation
+ - Updating instances via the datastore admin will do the same thing, you'll be bypassing the unique marker creation.
+ - There is a limit of 25 unique or unique_together constraints per model.
 
 However, unique markers are very powerful when you need to enforce uniqueness. **They are enabled by default** simply because that's the behaviour that Django expects. If you don't want to
 use this functionality, you have the following options:
