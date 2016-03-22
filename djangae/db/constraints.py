@@ -60,6 +60,10 @@ class UniqueMarker(db.Model):
         return "_djangae_unique_marker"
 
 
+# If a marker doesn't have an instance for longer than this time period then
+# it is ignored by uniqueness checks
+UNOWNED_MARKER_TIMEOUT_IN_SECONDS = 5
+
 def acquire_identifiers(identifiers, entity_key):
     def acquire_marker(identifier):
         # Key.from_path expects None for an empty namespace, but Key.namespace() returns ''
@@ -70,7 +74,7 @@ def acquire_identifiers(identifiers, entity_key):
         if marker:
             # If the marker instance is None, and the marker is older then 5 seconds then we wipe it out
             # and assume that it's stale.
-            if not marker.instance and (datetime.datetime.utcnow() - marker.created).seconds > 5:
+            if not marker.instance and (datetime.datetime.utcnow() - marker.created).seconds > UNOWNED_MARKER_TIMEOUT_IN_SECONDS:
                 marker.delete()
             elif marker.instance and marker.instance != entity_key and key_exists(marker.instance):
                 fields_and_values = identifier.split("|")

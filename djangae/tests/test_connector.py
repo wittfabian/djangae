@@ -34,6 +34,7 @@ from djangae.contrib import sleuth
 from djangae.test import inconsistent_db, TestCase
 from django.db import IntegrityError, NotSupportedError
 from djangae.db.backends.appengine.commands import FlushCommand
+from djangae.db import constraints
 from djangae.db.constraints import UniqueMarker, UniquenessMixin
 from djangae.db.unique_utils import _unique_combinations, unique_identifiers_from_entity
 from djangae.db.backends.appengine.indexing import add_special_index
@@ -806,10 +807,39 @@ class ConstraintTests(TestCase):
         self.assertEqual(expected_marker, marker.key().id_or_name())
 
     def test_conflicting_insert_throws_integrity_error(self):
-        ModelWithUniques.objects.create(name="One")
-
-        with self.assertRaises(IntegrityError):
+        try:
+            constraints.UNOWNED_MARKER_TIMEOUT_IN_SECONDS = 0
             ModelWithUniques.objects.create(name="One")
+
+            with self.assertRaises(IntegrityError):
+                ModelWithUniques.objects.create(name="One")
+
+            # An insert with a specified ID enters a different code path
+            # so we need to ensure it works
+            ModelWithUniques.objects.create(id=555, name="Two")
+
+            with self.assertRaises(IntegrityError):
+                ModelWithUniques.objects.create(name="Two")
+
+            # Make sure that bulk create works properly
+            ModelWithUniques.objects.bulk_create([
+                ModelWithUniques(name="Three"),
+                ModelWithUniques(name="Four"),
+                ModelWithUniques(name="Five"),
+            ])
+
+            with self.assertRaises(IntegrityError):
+                ModelWithUniques.objects.create(name="Four")
+
+            with self.assertRaises(NotSupportedError):
+                # Make sure bulk creates are limited when there are unique constraints
+                # involved
+                ModelWithUniques.objects.bulk_create(
+                    [ ModelWithUniques(name=str(x)) for x in xrange(26) ]
+                )
+
+        finally:
+            constraints.UNOWNED_MARKER_TIMEOUT_IN_SECONDS = 5
 
     def test_table_flush_clears_markers_for_that_table(self):
         ModelWithUniques.objects.create(name="One")
