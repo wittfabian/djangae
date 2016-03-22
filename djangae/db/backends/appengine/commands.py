@@ -4,6 +4,7 @@ import logging
 import copy
 import decimal
 import json
+import contextlib
 
 from functools import partial
 from itertools import chain, groupby
@@ -834,6 +835,10 @@ def reserve_id(kind, id_or_name, namespace):
     _GetConnection()._async_reserve_keys(None, [key])
 
 
+class BulkInsertError(IntegrityError, NotSupportedError):
+    pass
+
+
 class InsertCommand(object):
     def __init__(self, connection, model, objs, fields, raw):
         self.has_pk = any(x.primary_key for x in fields)
@@ -887,49 +892,56 @@ class InsertCommand(object):
 
         if not constraints.has_active_unique_constraints(self.model) and not check_existence:
             # Fast path, no constraint checks and no keys mean we can just do a normal datastore.Put
+            # which isn't limited to 25
             results = datastore.Put(self.entities)
             caching.add_entities_to_cache(
                 self.model,
                 self.entities,
                 caching.CachingSituation.DATASTORE_GET_PUT,
-                self.namespace
+                self.namespace,
+                skip_memcache=True
             )
             return results
 
-        results = []
-        for i, ent in enumerate(self.entities):
-            key = self.included_keys[i]
-
-            # We are inserting, but we specified an ID, we need to check for existence before we Put()
-            # We do it in a loop so each check/put is transactional - because it's an ancestor query it shouldn't
-            # cost any entity groups
-            @db.transactional
+        def insert_chunk(keys, entities):
+            # Notify App Engine of any keys we're specifying intentionally
+            @db.transactional(xg=len(entities) > 1)
             def txn():
-                if check_existence and key is not None:
-                    if utils.key_exists(key):
-                        raise IntegrityError("Tried to INSERT with existing key")
+                results = []
+                for key, ent in zip(keys, entities):
+                    if check_existence and key is not None:
+                        if utils.key_exists(key):
+                            raise IntegrityError("Tried to INSERT with existing key")
 
-                    id_or_name = key.id_or_name()
-                    if isinstance(id_or_name, basestring) and id_or_name.startswith("__"):
-                        raise NotSupportedError("Datastore ids cannot start with __. Id was %s" % id_or_name)
+                        id_or_name = key.id_or_name()
+                        if isinstance(id_or_name, basestring) and id_or_name.startswith("__"):
+                            raise NotSupportedError("Datastore ids cannot start with __. Id was %s" % id_or_name)
 
-                with constraints.enforce_integrity(self.model, ent):
-                    results.append(datastore.Put(ent))
+                        # Notify App Engine of any keys we're specifying intentionally
+                        reserve_id(key.kind(), key.id_or_name(), self.namespace)
+
+                with contextlib.nested(*[ constraints.enforce_integrity(self.model, x) for x in entities]):
+                    results.extend(datastore.Put(entities))
 
                     caching.add_entities_to_cache(
                         self.model,
-                        [ent],
+                        entities,
                         caching.CachingSituation.DATASTORE_GET_PUT,
-                        self.namespace
+                        self.namespace,
+                        skip_memcache=True
                     )
+                return results
+            return txn()
 
-            if key:
-                # Make sure we notify app engine that we are using this ID
-                # FIXME: Copy ancestor across to the template key
-                reserve_id(key.kind(), key.id_or_name(), self.namespace)
-            txn()
+        # We can't really support this and maintain expected behaviour. If we chunked the insert and one of the
+        # chunks fails it will mean some of the data would be saved and rather than trying to communicate that back
+        # to the user it's better that they chunk the data themselves as they can deal with the failure better
+        if len(self.entities) > datastore_stub_util._MAX_EG_PER_TXN:
+            raise BulkInsertError("Bulk inserts with unique constraints, or pre-defined keys are limited to {} instances on the datastore".format(
+                datastore_stub_util._MAX_EG_PER_TXN
+            ))
 
-        return results
+        return insert_chunk(self.included_keys, self.entities)
 
     def lower(self):
         """
