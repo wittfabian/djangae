@@ -50,6 +50,7 @@ Here is a brief list of hard limitations you may encounter when using the Djanga
  - Transactions.  The Datastore has transactions, but they are not "normal" transactions in the SQL sense. [Transactions
   should be done using djangae.db.transactional.atomic](db_backend.md#transactions).
 - If unique constraints are enabled, then you are limited to a maximum of 25 unique or unique_together constraints per model (see [Unique Constraint Checking](#unique-constraint-checking)).
+- You are also restricted to altering 12 unique field values on an instance in a single save
 
 There are probably more but the list changes regularly as we improve the datastore backend. If you find another limitation not
 mentioned above please consider sending a documentation PR.
