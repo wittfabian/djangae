@@ -29,20 +29,31 @@ Here's the full list of magic:
 
 Due to the limitations of the App Engine Datastore (it being a non-relational database for a start), there are some
 things which you still can't do with the Django ORM when using the djangae backend.  The easiest way to find these out
-is to just build your app and look out for the `NotSupportedError` exceptions.  But if you don't like surprises, here's
-a quick list:
+is to just build your app and look out for the `NotSupportedError` exceptions.
 
-* `ManyToManyField` - a non-relational database simply can't do these (or not efficiently).  However, you can probably
-  solve these kind of problems using djangae's `ListField`.  We may even create a many-to-many replacement based on
-  that in the future.
-* Use `F` objects when filtering, e.g. `qs.filter(this=F('that'))`. This is a limitation of the Datastore. Additionally,
-  you cannot use `F` objects when updating a model - but this will change soon.
-* `__in` queries with more than 30 values.  This is a limitation of the Datastore.  You can filter for up to 500 values
-  on the primary key field though.
-* More than one inequality filter, i.e. you can't do `.exclude(a=1, b=2)`.  This is a limitation of the Datastore.
-* Transactions.  The Datastore has transactions, but they are not "normal" transactions in the SQL sense. [Transactions
+### Notable Limitations
+
+Here is a brief list of hard limitations you may encounter when using the Djangae datastore backend:
+
+ - `bulk_create()` is limited to 25 instances if the model has active unique constraints, or the instances being inserted have
+   the primary key specified. In other cases the limit is 1000.
+ - `filter(field__in=[...])` queries are limited to 30 entries in the list if `field` is not the primary key
+ - `filter(pk__in=[...])` queries are limited to 1000 entries
+ - You are limited to a single inequality filter per query, although excluding by primary key is not included in this count
+ - Queries without primary key equality filters are not allowed within an `atomic` block
+ - Queries with an inequality filter on a field must be ordered first by that field
+ - Only 25 individual instances can be retrieved or saved within an `atomic` block, although you can get/save the same entity
+   multiple times without increasing the allowed count
+ - Primary key values of zero are not allowed
+ - Primary key string values must not start with a leading double underscore (`__`)
+ - `ManyToManyField` will not work reliably/efficiently - use `RelatedSetField` or `RelatedListField` instead
+ - Transactions.  The Datastore has transactions, but they are not "normal" transactions in the SQL sense. [Transactions
   should be done using djangae.db.transactional.atomic](db_backend.md#transactions).
+- If unique constraints are enabled, then you are limited to a maximum of 25 unique or unique_together constraints per model (see [Unique Constraint Checking](#unique-constraint-checking)).
+- You are also restricted to altering 12 unique field values on an instance in a single save
 
+There are probably more but the list changes regularly as we improve the datastore backend. If you find another limitation not
+mentioned above please consider sending a documentation PR.
 
 ## Other Considerations
 
@@ -190,9 +201,10 @@ Unique constraint checks have the following caveats...
  - Unique constraints drastically increase your datastore writes. Djangae needs to create a marker for each unique constraint on each model, for each instance. This means if you have
    one unique field on your model, and you save() Djangae must do two datastore writes (one for the entity, one for the marker)
  - Unique constraints increase your datastore reads. Each time you save an object, Djangae needs to check for the existence of unique markers.
- - Unique constraints slow down your saves(). See above, each time you write a bunch of stuff needs to happen.
+ - Unique constraints slow down your saves(). See above, each time you save, a bunch of stuff needs to happen.
  - Updating instances via the datastore API (NDB, DB, or datastore.Put and friends) will break your unique constraints. Don't do that!
- - Updating instances via the datastore admin will do the same thing, you'll be bypassing the unique marker creation
+ - Updating instances via the datastore admin will do the same thing, you'll be bypassing the unique marker creation.
+ - There is a limit of 25 unique or unique_together constraints per model.
 
 However, unique markers are very powerful when you need to enforce uniqueness. **They are enabled by default** simply because that's the behaviour that Django expects. If you don't want to
 use this functionality, you have the following options:

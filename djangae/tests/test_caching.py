@@ -141,6 +141,7 @@ class MemcacheCachingTests(TestCase):
         )
 
         instance = CachingTestModel.objects.create(id=222, **entity_data)
+        instance.refresh_from_db() # Adds to memcache (consistent Get)
 
         for identifier in identifiers:
             self.assertEqual(entity_data, cache.get(identifier))
@@ -176,6 +177,7 @@ class MemcacheCachingTests(TestCase):
             self.assertIsNone(cache.get(identifier))
 
         instance = CachingTestModel.objects.create(id=222, **entity_data)
+        instance.refresh_from_db()
 
         for identifier in identifiers:
             self.assertEqual(entity_data, cache.get(identifier))
@@ -208,6 +210,7 @@ class MemcacheCachingTests(TestCase):
             self.assertIsNone(cache.get(identifier))
 
         instance = CachingTestModel.objects.create(id=222, **entity_data)
+        instance.refresh_from_db() # Add to memcache (consistent Get)
 
         for identifier in identifiers:
             self.assertEqual(entity_data, cache.get(identifier))
@@ -235,6 +238,7 @@ class MemcacheCachingTests(TestCase):
             self.assertIsNone(cache.get(identifier))
 
         instance = CachingTestModel.objects.create(id=222, **entity_data)
+        instance.refresh_from_db() # Add to memcache (consistent Get)
 
         for identifier in identifiers:
             self.assertEqual("old", cache.get(identifier)["field1"])
@@ -268,7 +272,8 @@ class MemcacheCachingTests(TestCase):
         for identifier in identifiers:
             self.assertIsNone(cache.get(identifier))
 
-        CachingTestModel.objects.create(id=222, **entity_data)
+        instance = CachingTestModel.objects.create(id=222, **entity_data)
+        instance.refresh_from_db() # Add to memcache (consistent Get)
 
         for identifier in identifiers:
             self.assertEqual(entity_data, cache.get(identifier))
@@ -299,7 +304,8 @@ class MemcacheCachingTests(TestCase):
         for identifier in identifiers:
             self.assertIsNone(cache.get(identifier))
 
-        CachingTestModel.objects.create(id=222, **entity_data)
+        instance = CachingTestModel.objects.create(id=222, **entity_data)
+        instance.refresh_from_db() # Add to memcache (consistent Get)
 
         for identifier in identifiers:
             self.assertEqual(entity_data, cache.get(identifier))
@@ -323,6 +329,7 @@ class MemcacheCachingTests(TestCase):
         }
 
         original = CachingTestModel.objects.create(**entity_data)
+        original.refresh_from_db()
 
         with sleuth.watch("google.appengine.api.datastore.Query.Run") as datastore_query:
             instance = CachingTestModel.objects.filter(field1="Apple").all()[0]
@@ -368,7 +375,7 @@ class MemcacheCachingTests(TestCase):
         }
 
         original = CachingTestModel.objects.create(**entity_data)
-
+        original.refresh_from_db() # Add to memcache (consistent Get)
 
         with sleuth.watch("google.appengine.api.datastore.Get") as datastore_get:
             instance = CachingTestModel.objects.get(pk=original.pk)
@@ -402,6 +409,7 @@ class MemcacheCachingTests(TestCase):
         }
 
         original = CachingTestModel.objects.create(**entity_data)
+        original.refresh_from_db()
 
         with sleuth.watch("google.appengine.api.datastore.Get") as datastore_get:
             instance = CachingTestModel.objects.get(field1="Apple")
@@ -432,18 +440,17 @@ class MemcacheCachingTests(TestCase):
     @disable_cache(memcache=False, context=True)
     def test_bulk_cache(self):
         with sleuth.watch("djangae.db.backends.appengine.caching.KeyPrefixedClient.set_multi_async") as set_many_1:
-            CachingTestModel.objects.create(field1="Apple", comb1=1, comb2="Cherry")
+            instance = CachingTestModel.objects.create(field1="Apple", comb1=1, comb2="Cherry")
+            instance.refresh_from_db()
 
         self.assertEqual(set_many_1.call_count, 1)
         self.assertEqual(len(set_many_1.calls[0].args[1]), 3)
 
-        with sleuth.watch("djangae.db.backends.appengine.caching.KeyPrefixedClient.set_multi_async") as set_many_2:
-            CachingTestModel.objects.bulk_create([
-                CachingTestModel(field1="Banana", comb1=2, comb2="Cherry"),
-                CachingTestModel(field1="Orange", comb1=3, comb2="Cherry"),
-            ])
-        self.assertEqual(set_many_2.call_count, 1)
-        self.assertEqual(len(set_many_2.calls[0].args[1]), 3*2)
+        CachingTestModel.objects.bulk_create([
+            CachingTestModel(field1="Banana", comb1=2, comb2="Cherry"),
+            CachingTestModel(field1="Orange", comb1=3, comb2="Cherry"),
+        ])
+
 
         pks = list(CachingTestModel.objects.values_list('pk', flat=True))
         with sleuth.watch("djangae.db.backends.appengine.caching.KeyPrefixedClient.set_multi_async") as set_many_3:

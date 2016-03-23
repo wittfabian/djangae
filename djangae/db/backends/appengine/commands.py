@@ -4,6 +4,7 @@ import logging
 import copy
 import decimal
 import json
+import contextlib
 
 from functools import partial
 from itertools import chain, groupby
@@ -834,6 +835,10 @@ def reserve_id(kind, id_or_name, namespace):
     _GetConnection()._async_reserve_keys(None, [key])
 
 
+class BulkInsertError(IntegrityError, NotSupportedError):
+    pass
+
+
 class InsertCommand(object):
     def __init__(self, connection, model, objs, fields, raw):
         self.has_pk = any(x.primary_key for x in fields)
@@ -883,88 +888,76 @@ class InsertCommand(object):
             )
 
     def execute(self):
-        if self.has_pk and not has_concrete_parents(self.model):
-            results = []
-            # We are inserting, but we specified an ID, we need to check for existence before we Put()
-            # We do it in a loop so each check/put is transactional - because it's an ancestor query it shouldn't
-            # cost any entity groups
+        check_existence = self.has_pk and not has_concrete_parents(self.model)
 
-            was_in_transaction = datastore.IsInTransaction()
+        if not constraints.has_active_unique_constraints(self.model) and not check_existence:
+            # Fast path, no constraint checks and no keys mean we can just do a normal datastore.Put
+            # which isn't limited to 25
+            results = datastore.Put(self.entities) # This modifies self.entities and sets their keys
+            caching.add_entities_to_cache(
+                self.model,
+                self.entities,
+                caching.CachingSituation.DATASTORE_GET_PUT,
+                self.namespace,
+                skip_memcache=True
+            )
+            return results
 
-            for key, ent in zip(self.included_keys, self.entities):
-                @db.transactional
-                def txn():
-                    if key is not None:
+        def insert_chunk(keys, entities):
+            # Note that this is limited to a maximum of 25 entities.
+            markers = []
+            @db.transactional(xg=len(entities) > 1)
+            def txn():
+                for key in keys:
+                    if check_existence and key is not None:
                         if utils.key_exists(key):
                             raise IntegrityError("Tried to INSERT with existing key")
 
-                    id_or_name = key.id_or_name()
-                    if isinstance(id_or_name, basestring) and id_or_name.startswith("__"):
-                        raise NotSupportedError("Datastore ids cannot start with __. Id was %s" % id_or_name)
+                        id_or_name = key.id_or_name()
+                        if isinstance(id_or_name, basestring) and id_or_name.startswith("__"):
+                            raise NotSupportedError("Datastore ids cannot start with __. Id was %s" % id_or_name)
 
-                    if not constraints.constraint_checks_enabled(self.model):
-                        # Fast path, just insert
-                        results.append(datastore.Put(ent))
-                    else:
-                        markers = constraints.acquire(self.model, ent)
-                        try:
-                            results.append(datastore.Put(ent))
-                            if not was_in_transaction:
-                                # We can cache if we weren't in a transaction before this little nested one
-                                caching.add_entities_to_cache(
-                                    self.model,
-                                    [ent],
-                                    caching.CachingSituation.DATASTORE_GET_PUT,
-                                    self.namespace,
-                                )
-                        except:
-                            # Make sure we delete any created markers before we re-raise
-                            constraints.release_markers(markers)
-                            raise
+                        # Notify App Engine of any keys we're specifying intentionally
+                        reserve_id(key.kind(), key.id_or_name(), self.namespace)
 
-                # Make sure we notify app engine that we are using this ID
-                # FIXME: Copy ancestor across to the template key
-                reserve_id(key.kind(), key.id_or_name(), self.namespace)
+                results = datastore.Put(entities)
+                for entity in entities:
+                    markers.extend(constraints.acquire(self.model, entity))
 
-                txn()
-
-            return results
-        else:
-            if not constraints.constraint_checks_enabled(self.model):
-                # Fast path, just bulk insert
-                results = datastore.Put(self.entities)
                 caching.add_entities_to_cache(
                     self.model,
-                    self.entities,
-                    caching.CachingSituation.DATASTORE_PUT,
-                    self.namespace
+                    entities,
+                    caching.CachingSituation.DATASTORE_GET_PUT,
+                    self.namespace,
+                    skip_memcache=True
                 )
-                return results
-            else:
-                markers = []
-                try:
-                    #FIXME: We should rearrange this so that each entity is handled individually like above. We'll
-                    # lose insert performance, but gain consistency on errors which is more important
-                    markers = constraints.acquire_bulk(self.model, self.entities)
-                    results = datastore.Put(self.entities)
-
-                    caching.add_entities_to_cache(
-                        self.model,
-                        self.entities,
-                        caching.CachingSituation.DATASTORE_PUT,
-                        self.namespace,
-                    )
-
-                except:
-                    to_delete = chain(*markers)
-                    constraints.release_markers(to_delete)
-                    raise
-
-                for ent, k, m in zip(self.entities, results, markers):
-                    ent.__key = k
-                    constraints.update_instance_on_markers(ent, m)
 
                 return results
+
+            try:
+                return txn()
+            except:
+                # There are 3 possible reasons why we've ended up here:
+                # 1. The datastore.Put() failed, but note that because it's a transaction, the
+                #    exception isn't raised until the END of the transaction block.
+                # 2. Some of the markers were acquired, but then we hit a unique constraint
+                #    conflict and so the outer transaction was rolled back.
+                # 3. Something else went wrong after we'd acquired markers, e.g. the
+                #    caching.add_entities_to_cache call got hit by a metaphorical bus.
+                # In any of these cases, we (may) have acquired markers via (a) nested, independent
+                # transaction(s), and so we need to release them again.
+                constraints.release_markers(markers)
+                raise
+
+        # We can't really support this and maintain expected behaviour. If we chunked the insert and one of the
+        # chunks fails it will mean some of the data would be saved and rather than trying to communicate that back
+        # to the user it's better that they chunk the data themselves as they can deal with the failure better
+        if len(self.entities) > datastore_stub_util._MAX_EG_PER_TXN:
+            raise BulkInsertError("Bulk inserts with unique constraints, or pre-defined keys are limited to {} instances on the datastore".format(
+                datastore_stub_util._MAX_EG_PER_TXN
+            ))
+
+        return insert_chunk(self.included_keys, self.entities)
 
     def lower(self):
         """
@@ -1035,7 +1028,7 @@ class DeleteCommand(object):
 
         self.select.execute()
 
-        constraints_enabled = constraints.constraint_checks_enabled(self.model)
+        constraints_enabled = constraints.has_active_unique_constraints(self.model)
         keys = [ x.key() for x in self.select.results ]
 
         def wipe_polymodel_from_entity(entity, db_table):
@@ -1056,11 +1049,6 @@ class DeleteCommand(object):
                 if polymodel_value:
                     entity['class'] = polymodel_value
 
-        @db.transactional(xg=True, propagation=datastore_rpc.TransactionOptions.INDEPENDENT)
-        def release_constraints(entity):
-            if constraints_enabled:
-                constraints.release(self.model, entity)
-
         @db.transactional(xg=True)
         def delete_batch(key_slice):
             entities = datastore.Get(key_slice)
@@ -1077,7 +1065,7 @@ class DeleteCommand(object):
                 wipe_polymodel_from_entity(entity, self.table_to_delete)
                 if not entity.get('class'):
                     to_delete.append(entity)
-                    release_constraints(entity)
+                    constraints.release(self.model, entity)
                 else:
                     to_update.append(entity)
                 updated_keys.append(entity.key())
@@ -1120,93 +1108,117 @@ class UpdateCommand(object):
         """
         return str(self).lower()
 
-    @db.transactional
     def _update_entity(self, key):
-        caching.remove_entities_from_cache_by_key([key], self.namespace)
 
-        try:
-            result = datastore.Get(key)
-        except datastore_errors.EntityNotFoundError:
-            # Return false to indicate update failure
-            return False
+        markers_to_acquire = []
+        markers_to_release = []
+        rollback_markers = False
 
-        if (
-            isinstance(self.select.gae_query, (Query, UniqueQuery)) # ignore QueryByKeys and NoOpQuery
-            and not utils.entity_matches_query(result, self.select.gae_query)
-        ):
-            # Due to eventual consistency they query may have returned an entity which no longer
-            # matches the query
-            return False
+        @db.transactional
+        def txn():
+            caching.remove_entities_from_cache_by_key([key], self.namespace)
 
-        original = copy.deepcopy(result)
-
-        instance_kwargs = {field.attname:value for field, param, value in self.values}
-
-        # Note: If you replace MockInstance with self.model, you'll find that some delete
-        # tests fail in the test app. This is because any unspecified fields would then call
-        # get_default (even though we aren't going to use them) which may run a query which
-        # fails inside this transaction. Given as we are just using MockInstance so that we can
-        # call django_instance_to_entity it on it with the subset of fields we pass in,
-        # what we have is fine.
-        meta = self.model._meta
-        instance = MockInstance(
-            _original=MockInstance(_meta=meta, **result),
-            _meta=meta,
-            **instance_kwargs
-        )
-
-        # We need to add to the class attribute, rather than replace it!
-        original_class = result.get(POLYMODEL_CLASS_ATTRIBUTE, [])
-
-        # Update the entity we read above with the new values
-        result.update(django_instance_to_entity(
-            self.connection, self.model,
-            [ x[0] for x in self.values],  # Pass in the fields that were updated
-            True, instance)
-        )
-
-        # Make sure we keep all classes in the inheritence tree!
-        if original_class:
-            if result[POLYMODEL_CLASS_ATTRIBUTE] is not None:
-                result[POLYMODEL_CLASS_ATTRIBUTE].extend(original_class)
-                # Make sure we don't add duplicates
-            else:
-                result[POLYMODEL_CLASS_ATTRIBUTE] = original_class
-
-        if POLYMODEL_CLASS_ATTRIBUTE in result:
-            result[POLYMODEL_CLASS_ATTRIBUTE] = list(set(result[POLYMODEL_CLASS_ATTRIBUTE]))
-
-        if not constraints.constraint_checks_enabled(self.model):
-            # The fast path, no constraint checking
-            datastore.Put(result)
-            caching.add_entities_to_cache(
-                self.model,
-                [result],
-                caching.CachingSituation.DATASTORE_PUT,
-                self.namespace,
-            )
-        else:
-            to_acquire, to_release = constraints.get_markers_for_update(self.model, original, result)
-
-            # Acquire first, because if that fails then we don't want to alter what's already there
-            constraints.acquire_identifiers(to_acquire, result.key())
             try:
+                result = datastore.Get(key)
+            except datastore_errors.EntityNotFoundError:
+                # Return false to indicate update failure
+                return False
+
+            if (
+                isinstance(self.select.gae_query, (Query, UniqueQuery)) # ignore QueryByKeys and NoOpQuery
+                and not utils.entity_matches_query(result, self.select.gae_query)
+            ):
+                # Due to eventual consistency they query may have returned an entity which no longer
+                # matches the query
+                return False
+
+            original = copy.deepcopy(result)
+
+            instance_kwargs = {field.attname:value for field, param, value in self.values}
+
+            # Note: If you replace MockInstance with self.model, you'll find that some delete
+            # tests fail in the test app. This is because any unspecified fields would then call
+            # get_default (even though we aren't going to use them) which may run a query which
+            # fails inside this transaction. Given as we are just using MockInstance so that we can
+            # call django_instance_to_entity it on it with the subset of fields we pass in,
+            # what we have is fine.
+            meta = self.model._meta
+            instance = MockInstance(
+                _original=MockInstance(_meta=meta, **result),
+                _meta=meta,
+                **instance_kwargs
+            )
+
+            # We need to add to the class attribute, rather than replace it!
+            original_class = result.get(POLYMODEL_CLASS_ATTRIBUTE, [])
+
+            # Update the entity we read above with the new values
+            result.update(django_instance_to_entity(
+                self.connection, self.model,
+                [ x[0] for x in self.values],  # Pass in the fields that were updated
+                True, instance)
+            )
+
+            # Make sure we keep all classes in the inheritence tree!
+            if original_class:
+                if result[POLYMODEL_CLASS_ATTRIBUTE] is not None:
+                    result[POLYMODEL_CLASS_ATTRIBUTE].extend(original_class)
+                    # Make sure we don't add duplicates
+                else:
+                    result[POLYMODEL_CLASS_ATTRIBUTE] = original_class
+
+            if POLYMODEL_CLASS_ATTRIBUTE in result:
+                result[POLYMODEL_CLASS_ATTRIBUTE] = list(set(result[POLYMODEL_CLASS_ATTRIBUTE]))
+
+            if not constraints.has_active_unique_constraints(self.model):
+                # The fast path, no constraint checking
                 datastore.Put(result)
                 caching.add_entities_to_cache(
                     self.model,
                     [result],
                     caching.CachingSituation.DATASTORE_PUT,
                     self.namespace,
+                    skip_memcache=True,
                 )
-            except:
-                constraints.release_identifiers(to_acquire, namespace=self.namespace)
-                raise
             else:
-                # Now we release the ones we don't want anymore
-                constraints.release_identifiers(to_release, self.namespace)
+                markers_to_acquire, markers_to_release = constraints.get_markers_for_update(
+                    self.model, original, result
+                )
+                datastore.Put(result)
 
-        # Return true to indicate update success
-        return True
+                constraints.update_identifiers(markers_to_acquire, markers_to_release, result.key())
+                # If the datastore.Put() fails then the exception will only be raised when the
+                # transaction applies, which means that we will still get to here and will still have
+                # applied the marker changes (because they're in a nested, independent transaction).
+                # Hence we set this flag to tell us that we got this far and that we should roll them back.
+                rollback_markers = True
+                # If something dies between here and the `return` statement then we'll have stale unique markers
+
+                try:
+                    # Update the cache before dealing with unique markers, as CachingSituation.DATASTORE_PUT
+                    # will only update the context cache
+                    caching.add_entities_to_cache(
+                        self.model,
+                        [result],
+                        caching.CachingSituation.DATASTORE_PUT,
+                        self.namespace,
+                        skip_memcache=True,
+                    )
+                except:
+                    # We ignore the exception because raising will rollback the transaction causing
+                    # an inconsistent state
+                    logging.exception("Unable to update the context cache")
+                    pass
+
+            # Return true to indicate update success
+            return True
+
+        try:
+            return txn()
+        except:
+            if rollback_markers:
+                constraints.update_identifiers(markers_to_release, markers_to_acquire, key)
+            raise
 
     def execute(self):
         self.select.execute()

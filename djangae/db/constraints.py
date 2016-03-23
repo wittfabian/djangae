@@ -1,5 +1,6 @@
 import datetime
 import logging
+import contextlib
 
 from django.core.exceptions import NON_FIELD_ERRORS
 
@@ -15,10 +16,17 @@ from django.conf import settings
 DJANGAE_LOG = logging.getLogger("djangae")
 
 
-def constraint_checks_enabled(model_or_instance):
+def has_active_unique_constraints(model_or_instance):
     """
-        Returns true if constraint checking is enabled on the model
+        Returns true if the model/instance has unique fields or unique_together fields and unique
+        constraint checking is enabled on the model
     """
+
+    django_opts = getattr(model_or_instance, "_meta", None)
+
+    # If there are no unique fields on the model, return false
+    if not django_opts.unique_together and not any(x.unique for x in django_opts.fields):
+        return False
 
     opts = getattr(model_or_instance, "Djangae", None)
     if opts:
@@ -53,47 +61,49 @@ class UniqueMarker(db.Model):
         return "_djangae_unique_marker"
 
 
+@db.transactional(propagation=TransactionOptions.INDEPENDENT, xg=True)
 def acquire_identifiers(identifiers, entity_key):
-    @db.transactional(propagation=TransactionOptions.INDEPENDENT, xg=True)
-    def acquire_marker(identifier):
-        # Key.from_path expects None for an empty namespace, but Key.namespace() returns ''
-        namespace = entity_key.namespace() or None
-        identifier_key = Key.from_path(UniqueMarker.kind(), identifier, namespace=namespace)
+    return _acquire_identifiers(identifiers, entity_key)
 
-        marker = UniqueMarker.get(identifier_key)
-        if marker:
-            # If the marker instance is None, and the marker is older then 5 seconds then we wipe it out
-            # and assume that it's stale.
-            if not marker.instance and (datetime.datetime.utcnow() - marker.created).seconds > 5:
-                marker.delete()
-            elif marker.instance and marker.instance != entity_key and key_exists(marker.instance):
+
+def _acquire_identifiers(identifiers, entity_key):
+    # This must always be in a cross-group transaction, because even if there's only 1 identifider,
+    # in the case where that identifier already exists, we then check if its `instance` exists
+    assert entity_key
+    namespace = entity_key.namespace() or None
+    identifier_keys = [
+        Key.from_path(UniqueMarker.kind(), identifier, namespace=namespace) for identifier in identifiers
+    ]
+    existing_markers = UniqueMarker.get(identifier_keys)
+    markers_to_create = []
+    markers = []
+
+    for identifier_key, existing_marker in zip(identifier_keys, existing_markers):
+
+        # Backwards compatability: we used to create the markers first in an independent transaction
+        # and then create the entity and update the `instance` on the markers.  This meant that it
+        # was possible that the independent marker creation transaction finished first and the outer
+        # transaction failed, causing stale markers to be left behind.  We no longer do it this way
+        # but we still want to ignore any old stale markers, hence if instance is None we overwrite.
+
+        if not existing_marker or existing_marker.instance is None:
+            markers_to_create.append(UniqueMarker(
+                key=identifier_key,
+                instance=entity_key,
+                created=datetime.datetime.utcnow()
+            ))
+        elif existing_marker.instance != entity_key and key_exists(existing_marker.instance):
                 fields_and_values = identifier.split("|")
                 table_name = fields_and_values[0]
                 fields_and_values = fields_and_values[1:]
                 fields = [ x.split(":")[0] for x in fields_and_values ]
                 raise IntegrityError("Unique constraint violation for kind {} on fields: {}".format(table_name, ", ".join(fields)))
-            else:
-                # The marker is ours anyway
-                return marker
+        else:
+            # The marker is ours anyway
+            markers.append(existing_marker)
 
-        marker = UniqueMarker(
-            key=identifier_key,
-            instance=entity_key if entity_key.id_or_name() else None,  # May be None if unsaved
-            created=datetime.datetime.utcnow()
-        )
-        marker.put()
-        return marker
-
-    markers = []
-    try:
-        for identifier in identifiers:
-            markers.append(acquire_marker(identifier))
-            DJANGAE_LOG.debug("Acquired unique marker for %s", identifier)
-    except:
-        release_markers(markers)
-        DJANGAE_LOG.debug("Due to an error, deleted markers %s", markers)
-        raise
-    return markers
+    db.put(markers_to_create)
+    return markers + markers_to_create
 
 
 def get_markers_for_update(model, old_entity, new_entity):
@@ -111,8 +121,7 @@ def get_markers_for_update(model, old_entity, new_entity):
 
 
 def update_instance_on_markers(entity, markers):
-
-    @db.transactional(propagation=TransactionOptions.INDEPENDENT)
+    # TODO: fix me!
     def update(marker, instance):
         marker = UniqueMarker.get(marker.key())
         if not marker:
@@ -121,58 +130,62 @@ def update_instance_on_markers(entity, markers):
         marker.instance = instance
         marker.put()
 
-    instance = entity.key()
-    for marker in markers:
-        update(marker, instance)
-
-
-def acquire_bulk(model, entities):
-    markers = []
-    try:
-        for entity in entities:
-            markers.append(acquire(model, entity))
-
-    except:
-        for m in markers:
-            release_markers(m)
-        raise
-    return markers
+    @db.transactional(propagation=TransactionOptions.INDEPENDENT, xg=True)
+    def update_all():
+        instance = entity.key()
+        for marker in markers:
+            update(marker, instance)
+    update_all()
 
 
 def acquire(model, entity):
     """
-        Given a model and entity, this tries to acquire unique marker locks for the instance. If the locks already exist
-        then an IntegrityError will be thrown.
+        Given a model and entity, this tries to acquire unique marker locks for the instance. If
+        the locks already exist then an IntegrityError will be thrown.
     """
-
     identifiers = unique_identifiers_from_entity(model, entity, ignore_pk=True)
     return acquire_identifiers(identifiers, entity.key())
 
 
 def release_markers(markers):
-    @db.transactional(propagation=TransactionOptions.INDEPENDENT)
-    def delete(marker):
-        Delete(marker.key())
+    """ Delete the given UniqueMarker objects. """
+    # Note that these should all be from the same Django model instance, and therefore there should
+    # be a maximum of 25 of them (because everything blows up if you have more than that - limitation)
 
-    [delete(x) for x in markers]
+    @db.transactional(propagation=TransactionOptions.INDEPENDENT, xg=len(markers) > 1)
+    def txn():
+        Delete([marker.key() for marker in markers])
+    txn()
 
 
 def release_identifiers(identifiers, namespace):
 
-    @db.non_transactional
-    def delete():
-        keys = [Key.from_path(UniqueMarker.kind(), x, namespace=namespace) for x in identifiers]
-        Delete(keys)
+    @db.transactional(propagation=TransactionOptions.INDEPENDENT, xg=len(identifiers) > 1)
+    def txn():
+        _release_identifiers(identifiers, namespace)
+    txn()
 
-    delete()
-    DJANGAE_LOG.debug("Deleted markers with identifiers: %s", identifiers)
+
+def _release_identifiers(identifiers, namespace):
+    keys = [Key.from_path(UniqueMarker.kind(), x, namespace=namespace) for x in identifiers]
+    Delete(keys)
 
 
 def release(model, entity):
+    """ Delete the UniqueMarker objects for the given entity. """
+    if not has_active_unique_constraints(model):
+        return
     identifiers = unique_identifiers_from_entity(model, entity, ignore_pk=True)
     # Key.from_path expects None for an empty namespace, but Key.namespace() returns ''
     namespace = entity.key().namespace() or None
     release_identifiers(identifiers, namespace=namespace)
+
+
+@db.transactional(propagation=TransactionOptions.INDEPENDENT, xg=True)
+def update_identifiers(to_acquire, to_release, key):
+    """ A combination of acquire_identifiers and release_identifiers in a combined transaction. """
+    _acquire_identifiers(to_acquire, key)
+    _release_identifiers(to_release, key.namespace() or None)
 
 
 class UniquenessMixin(object):

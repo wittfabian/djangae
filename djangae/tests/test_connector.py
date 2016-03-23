@@ -21,7 +21,8 @@ from django.forms import ModelForm
 from django.test import RequestFactory
 from django.utils.safestring import SafeText
 from django.forms.models import modelformset_factory
-from google.appengine.api.datastore_errors import EntityNotFoundError, BadValueError
+from google.appengine.api.datastore_errors import EntityNotFoundError, BadValueError, TransactionFailedError
+from google.appengine.datastore import datastore_rpc
 from google.appengine.api import datastore
 from google.appengine.ext import deferred
 from google.appengine.api import taskqueue
@@ -34,6 +35,7 @@ from djangae.contrib import sleuth
 from djangae.test import inconsistent_db, TestCase
 from django.db import IntegrityError, NotSupportedError
 from djangae.db.backends.appengine.commands import FlushCommand
+from djangae.db import constraints
 from djangae.db.constraints import UniqueMarker, UniquenessMixin
 from djangae.db.unique_utils import _unique_combinations, unique_identifiers_from_entity
 from djangae.db.backends.appengine.indexing import add_special_index
@@ -65,12 +67,14 @@ class TestUser(models.Model):
     class Meta:
         app_label = "djangae"
 
+
 class ModelWithNullableCharField(models.Model):
     field1 = models.CharField(max_length=500, null=True)
     some_id = models.IntegerField(default=0)
 
     class Meta:
         app_label = "djangae"
+
 
 class UniqueModel(models.Model):
     unique_field = models.CharField(max_length=100, unique=True)
@@ -757,10 +761,94 @@ class CacheTests(TestCase):
         self.assertEqual(cache.get('test?'), None)
 
 
+def compare_markers(list1, list2):
+    return (
+        sorted([(x.key(), x.instance) for x in list1]) == sorted([(x.key(), x.instance) for x in list2])
+    )
+
+
 class ConstraintTests(TestCase):
     """
         Tests for unique constraint handling
     """
+
+    def test_transaction_failure_to_apply(self):
+        """
+            This test simulates a failure to apply a transaction when saving an
+            entity. The mocked function allows independent transactions to work
+            normally so that we are testing what happens when markers can be created
+            (which use independent transactions) but the outer transaction fails
+        """
+        original_commit = datastore_rpc.TransactionalConnection.commit
+
+        def fake_commit(self, *args, **kwargs):
+            config = self._BaseConnection__config
+
+            # Do the normal thing on the constraint's independent transaction, but
+            # fail otherwise
+            if config.propagation == datastore_rpc.TransactionOptions.INDEPENDENT:
+                return original_commit(self, *args, **kwargs)
+            return False
+
+        initial_constraints = list(UniqueMarker.all())
+        with sleuth.switch('google.appengine.datastore.datastore_rpc.TransactionalConnection.commit', fake_commit) as commit:
+            self.assertRaises(TransactionFailedError, ModelWithUniques.objects.create, name="One")
+            self.assertTrue(commit.called)
+
+        # Constraints should be the same
+        self.assertTrue(compare_markers(initial_constraints, UniqueMarker.all()))
+
+        instance = ModelWithUniques.objects.create(name="One")
+        initial_constraints = list(UniqueMarker.all())
+
+        with sleuth.switch('google.appengine.datastore.datastore_rpc.TransactionalConnection.commit', fake_commit) as commit:
+            instance.name = "Two"
+            self.assertRaises(TransactionFailedError, instance.save)
+            self.assertTrue(commit.called)
+
+        # Constraints should be the same
+        self.assertTrue(compare_markers(initial_constraints, UniqueMarker.all()))
+
+    def test_marker_creation_transaction_failure(self):
+        """
+            This test simulates a failure to apply a transaction when saving an
+            entity. The mocked function prevents independent transactions from working
+            meaning that markers can't be acquired or released. This should force
+            any outer transaction to rollback
+        """
+
+        original_commit = datastore_rpc.TransactionalConnection.commit
+
+        def fake_commit(self, *args, **kwargs):
+            config = self._BaseConnection__config
+
+            # Blow up on independent transactions
+            if config.propagation != datastore_rpc.TransactionOptions.INDEPENDENT:
+                return original_commit(self, *args, **kwargs)
+            return False
+
+        initial_constraints = list(UniqueMarker.all())
+        with sleuth.switch('google.appengine.datastore.datastore_rpc.TransactionalConnection.commit', fake_commit) as commit:
+            self.assertRaises(TransactionFailedError, ModelWithUniques.objects.create, name="One")
+            self.assertTrue(commit.called)
+
+        # Constraints should be the same
+        self.assertTrue(compare_markers(initial_constraints, UniqueMarker.all()))
+        self.assertRaises(ModelWithUniques.DoesNotExist, ModelWithUniques.objects.get, name="One")
+
+        instance = ModelWithUniques.objects.create(name="One")
+        initial_constraints = list(UniqueMarker.all())
+
+        with sleuth.switch('google.appengine.datastore.datastore_rpc.TransactionalConnection.commit', fake_commit) as commit:
+            instance.name = "Two"
+            self.assertRaises(TransactionFailedError, instance.save)
+            self.assertTrue(commit.called)
+
+        # Constraints should be the same
+        self.assertTrue(compare_markers(initial_constraints, UniqueMarker.all()))
+        self.assertRaises(ModelWithUniques.DoesNotExist, ModelWithUniques.objects.get, name="Two")
+        self.assertEqual(instance, ModelWithUniques.objects.get(name="One"))
+
 
     def test_update_updates_markers(self):
         initial_count = datastore.Query(UniqueMarker.kind(), namespace=DEFAULT_NAMESPACE).Count()
@@ -804,10 +892,39 @@ class ConstraintTests(TestCase):
         self.assertEqual(expected_marker, marker.key().id_or_name())
 
     def test_conflicting_insert_throws_integrity_error(self):
-        ModelWithUniques.objects.create(name="One")
-
-        with self.assertRaises(IntegrityError):
+        try:
+            constraints.UNOWNED_MARKER_TIMEOUT_IN_SECONDS = 0
             ModelWithUniques.objects.create(name="One")
+
+            with self.assertRaises(IntegrityError):
+                ModelWithUniques.objects.create(name="One")
+
+            # An insert with a specified ID enters a different code path
+            # so we need to ensure it works
+            ModelWithUniques.objects.create(id=555, name="Two")
+
+            with self.assertRaises(IntegrityError):
+                ModelWithUniques.objects.create(name="Two")
+
+            # Make sure that bulk create works properly
+            ModelWithUniques.objects.bulk_create([
+                ModelWithUniques(name="Three"),
+                ModelWithUniques(name="Four"),
+                ModelWithUniques(name="Five"),
+            ])
+
+            with self.assertRaises(IntegrityError):
+                ModelWithUniques.objects.create(name="Four")
+
+            with self.assertRaises(NotSupportedError):
+                # Make sure bulk creates are limited when there are unique constraints
+                # involved
+                ModelWithUniques.objects.bulk_create(
+                    [ ModelWithUniques(name=str(x)) for x in xrange(26) ]
+                )
+
+        finally:
+            constraints.UNOWNED_MARKER_TIMEOUT_IN_SECONDS = 5
 
     def test_table_flush_clears_markers_for_that_table(self):
         ModelWithUniques.objects.create(name="One")
@@ -890,26 +1007,15 @@ class ConstraintTests(TestCase):
 
         instance.name = "Two"
 
-        # TODO: replace this insanity with sleuth.switch
-        from djangae.db.backends.appengine.commands import datastore as to_patch
-
-        try:
-            original = to_patch.Put
-
-            def func(*args, **kwargs):
-                kind = args[0][0].kind() if isinstance(args[0], list) else args[0].kind()
-
-                if kind == UniqueMarker.kind():
-                    return original(*args, **kwargs)
-
+        def wrapped_put(*args, **kwargs):
+            kind = args[0][0].kind() if isinstance(args[0], list) else args[0].kind()
+            if kind != UniqueMarker.kind():
                 raise AssertionError()
+            return datastore.Put(*args, **kwargs)
 
-            to_patch.Put = func
-
+        with sleuth.switch("djangae.db.backends.appengine.commands.datastore.Put", wrapped_put) as put_mock:
             with self.assertRaises(Exception):
                 instance.save()
-        finally:
-            to_patch.Put = original
 
         self.assertEqual(
             1,
@@ -928,25 +1034,15 @@ class ConstraintTests(TestCase):
     def test_error_on_insert_doesnt_create_markers(self):
         initial_count = datastore.Query(UniqueMarker.kind(), namespace=DEFAULT_NAMESPACE).Count()
 
-        # TODO: replace this insanity with sleuth.switch
-        from djangae.db.backends.appengine.commands import datastore as to_patch
-        try:
-            original = to_patch.Put
-
-            def func(*args, **kwargs):
-                kind = args[0][0].kind() if isinstance(args[0], list) else args[0].kind()
-
-                if kind == UniqueMarker.kind():
-                    return original(*args, **kwargs)
-
+        def wrapped_put(*args, **kwargs):
+            kind = args[0][0].kind() if isinstance(args[0], list) else args[0].kind()
+            if kind != UniqueMarker.kind():
                 raise AssertionError()
+            return datastore.Put(*args, **kwargs)
 
-            to_patch.Put = func
-
-            with self.assertRaises(AssertionError):
+        with sleuth.switch("djangae.db.backends.appengine.commands.datastore.Put", wrapped_put) as put_mock:
+            with self.assertRaises(Exception):
                 ModelWithUniques.objects.create(name="One")
-        finally:
-            to_patch.Put = original
 
         self.assertEqual(
             0,
