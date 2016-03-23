@@ -100,7 +100,7 @@ def _acquire_identifiers(identifiers, entity_key):
                 raise IntegrityError("Unique constraint violation for kind {} on fields: {}".format(table_name, ", ".join(fields)))
         else:
             # The marker is ours anyway
-            markers.append(marker)
+            markers.append(existing_marker)
 
     db.put(markers_to_create)
     return markers + markers_to_create

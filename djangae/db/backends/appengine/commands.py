@@ -1186,18 +1186,6 @@ class UpdateCommand(object):
                 )
                 datastore.Put(result)
 
-                # Update the cache before dealing with unique markers, as CachingSituation.DATASTORE_PUT
-                # will only update the context cache, and that will be rolled back if the transaction
-                # ultimately fails, whereas the unique constraints are updated in a nested, independent
-                # transaction, meaning that even if the outer transaction fails those changes will still
-                # be applied, hence the unique constraints are the LAST thing we do.
-                caching.add_entities_to_cache(
-                    self.model,
-                    [result],
-                    caching.CachingSituation.DATASTORE_PUT,
-                    self.namespace,
-                    skip_memcache=True,
-                )
                 constraints.update_identifiers(markers_to_acquire, markers_to_release, result.key())
                 # If the datastore.Put() fails then the exception will only be raised when the
                 # transaction applies, which means that we will still get to here and will still have
@@ -1206,6 +1194,22 @@ class UpdateCommand(object):
                 rollback_markers = True
                 # If something dies between here and the `return` statement then we'll have stale unique markers
 
+                try:
+                    # Update the cache before dealing with unique markers, as CachingSituation.DATASTORE_PUT
+                    # will only update the context cache
+                    caching.add_entities_to_cache(
+                        self.model,
+                        [result],
+                        caching.CachingSituation.DATASTORE_PUT,
+                        self.namespace,
+                        skip_memcache=True,
+                    )
+                except:
+                    # We ignore the exception because raising will rollback the transaction causing
+                    # an inconsistent state
+                    logging.exception("Unable to update the context cache")
+                    pass
+
             # Return true to indicate update success
             return True
 
@@ -1213,7 +1217,7 @@ class UpdateCommand(object):
             return txn()
         except:
             if rollback_markers:
-                constraints.update_identifiers(markers_to_release, markers_to_acquire, result.key())
+                constraints.update_identifiers(markers_to_release, markers_to_acquire, key)
             raise
 
     def execute(self):
