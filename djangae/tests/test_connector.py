@@ -762,7 +762,9 @@ class CacheTests(TestCase):
 
 
 def compare_markers(list1, list2):
-    return sorted([x.key() for x in list1]) == sorted([x.key() for x in list2])
+    return (
+        sorted([(x.key(), x.instance) for x in list1]) == sorted([(x.key(), x.instance) for x in list2])
+    )
 
 
 class ConstraintTests(TestCase):
