@@ -78,7 +78,7 @@ class JSONField(models.TextField):
     def __init__(self, use_ordered_dict=False, *args, **kwargs):
         default = kwargs.get('default', None)
         if default is None:
-            kwargs['default'] = {}
+            kwargs['default'] = dict
         elif isinstance(default, (list, dict)):
             kwargs['default'] = default
 
