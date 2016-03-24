@@ -722,7 +722,10 @@ def _extract_ordering_from_query_18(query):
                 if field.get_internal_type() in (u"TextField", u"BinaryField"):
                     raise NotSupportedError(INVALID_ORDERING_FIELD_MESSAGE)
 
-                if field.related_model and field.related_model._meta.ordering:
+                # If someone orders by 'fk' rather than 'fk_id' this complains as that should take
+                # into account the related model ordering. Note the difference between field.name == column
+                # and field.attname (X_id)
+                if field.related_model and field.name == column and field.related_model._meta.ordering:
                     raise NotSupportedError("Related ordering is not supported on the datastore")
 
                 column = "__key__" if field.primary_key else field.column
