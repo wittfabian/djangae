@@ -76,11 +76,11 @@ class JSONField(models.TextField):
     JSON objects seamlessly.  Main thingy must be a dict object."""
 
     def __init__(self, use_ordered_dict=False, *args, **kwargs):
-        default = kwargs.get('default', None)
-        if default is None:
+        if 'default' in kwargs:
+            if not callable(kwargs['default']):
+                raise TypeError("'default' must be a callable (e.g. 'dict' or 'list')")
+        else:
             kwargs['default'] = dict
-        elif isinstance(default, (list, dict)):
-            kwargs['default'] = default
 
         # use `collections.OrderedDict` rather than built-in `dict`
         self.use_ordered_dict = use_ordered_dict

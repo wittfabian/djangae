@@ -125,7 +125,7 @@ class JSONFieldModel(models.Model):
 
 
 class JSONFieldWithDefaultModel(models.Model):
-    json_field = JSONField(use_ordered_dict=True, default={})
+    json_field = JSONField(use_ordered_dict=True)
 
 
 class ShardedCounterTest(TestCase):
