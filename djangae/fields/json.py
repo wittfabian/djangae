@@ -19,7 +19,6 @@ from collections import OrderedDict
 
 from django.db import models
 from django.conf import settings
-from django.core.exceptions import ImproperlyConfigured
 from django.utils import six
 from django.core.serializers.json import DjangoJSONEncoder
 
@@ -82,7 +81,7 @@ class JSONField(models.TextField):
         if default is None:
             kwargs['default'] = dict
         elif not callable(default):
-            raise ImproperlyConfigured("default must be None or a callable (e.g. 'dict' or 'list')")
+            raise TypeError("default must be None or a callable (e.g. 'dict' or 'list')")
 
         # use `collections.OrderedDict` rather than built-in `dict`
         self.use_ordered_dict = use_ordered_dict
