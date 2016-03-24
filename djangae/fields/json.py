@@ -81,7 +81,7 @@ class JSONField(models.TextField):
 
         if default is None:
             kwargs['default'] = dict
-        elif isinstance(default, (list, dict)):
+        elif not callable(default):
             raise ImproperlyConfigured("You want to specify 'list' or 'dict' as a callable not [] or {}")
 
         # use `collections.OrderedDict` rather than built-in `dict`
