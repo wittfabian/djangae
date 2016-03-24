@@ -19,6 +19,7 @@ from collections import OrderedDict
 
 from django.db import models
 from django.conf import settings
+from django.core.exceptions import ImproperlyConfigured
 from django.utils import six
 from django.core.serializers.json import DjangoJSONEncoder
 
@@ -77,10 +78,11 @@ class JSONField(models.TextField):
 
     def __init__(self, use_ordered_dict=False, *args, **kwargs):
         default = kwargs.get('default', None)
+
         if default is None:
             kwargs['default'] = dict
         elif isinstance(default, (list, dict)):
-            kwargs['default'] = default
+            raise ImproperlyConfigured("You want to specify 'list' or 'dict' as a callable not [] or {}")
 
         # use `collections.OrderedDict` rather than built-in `dict`
         self.use_ordered_dict = use_ordered_dict
