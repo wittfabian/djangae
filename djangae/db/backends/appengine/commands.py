@@ -1109,10 +1109,13 @@ class UpdateCommand(object):
         return str(self).lower()
 
     def _update_entity(self, key):
-
         markers_to_acquire = []
         markers_to_release = []
-        rollback_markers = False
+
+        # This is a list rather than a straight bool, because we need to pass
+        # by reference so we can set it in the nested function. 'global' doesnt
+        # work on nested functions
+        rollback_markers = [False]
 
         @db.transactional
         def txn():
@@ -1181,17 +1184,18 @@ class UpdateCommand(object):
                     skip_memcache=True,
                 )
             else:
-                markers_to_acquire, markers_to_release = constraints.get_markers_for_update(
+                markers_to_acquire[:], markers_to_release[:] = constraints.get_markers_for_update(
                     self.model, original, result
                 )
                 datastore.Put(result)
 
                 constraints.update_identifiers(markers_to_acquire, markers_to_release, result.key())
+
                 # If the datastore.Put() fails then the exception will only be raised when the
                 # transaction applies, which means that we will still get to here and will still have
                 # applied the marker changes (because they're in a nested, independent transaction).
                 # Hence we set this flag to tell us that we got this far and that we should roll them back.
-                rollback_markers = True
+                rollback_markers[0] = True
                 # If something dies between here and the `return` statement then we'll have stale unique markers
 
                 try:
@@ -1216,7 +1220,7 @@ class UpdateCommand(object):
         try:
             return txn()
         except:
-            if rollback_markers:
+            if rollback_markers[0]:
                 constraints.update_identifiers(markers_to_release, markers_to_acquire, key)
             raise
 
