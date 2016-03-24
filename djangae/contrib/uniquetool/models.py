@@ -225,7 +225,7 @@ class CleanMapper(RawMapperMixin, MapReduceTask):
         """ The Clean mapper maps over all UniqueMarker instances. """
 
         alias = kwargs.get("db", "default")
-        namespace = settings.DATABASES.get(alias, {}).get("NAMESPACE")
+        namespace = settings.DATABASES.get(alias, {}).get("NAMESPACE", "")
 
         model = decode_model(model)
         if not entity.key().id_or_name().startswith(model._meta.db_table + "|"):
