@@ -36,7 +36,7 @@ GitHub: https://github.com/potatolondon/djangae
 
 ## Documentation
 
-http://djangae.readthedocs.org/
+https://djangae.readthedocs.org/
 
 ## Supported Django Versions
 
@@ -74,4 +74,4 @@ Contributions are accepted via pull request and will be reviewed as soon as poss
 Code style should follow PEP-8 with a loose line length of 100 characters (don't make the code ugly).
 
 [build-status-image]: https://secure.travis-ci.org/potatolondon/djangae.png?branch=master
-[travis]: http://travis-ci.org/potatolondon/djangae?branch=master
+[travis]: https://travis-ci.org/potatolondon/djangae?branch=master
