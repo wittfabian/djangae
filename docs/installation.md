@@ -82,10 +82,6 @@ Then run:
 
     $ appcfg.py update ./
 
-If you have two-factor authentication enabled in your Google account, run:
-
-    $ appcfg.py --oauth2 update ./
-
 ## Modules
 
 If you are using multiple modules in your app. Just set the following setting in your Django settings:
