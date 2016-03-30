@@ -1449,6 +1449,13 @@ class EdgeCaseTests(TestCase):
         count = TestUser.objects.count()
         self.assertFalse(count)
 
+    def test_double_delete(self):
+        u1 = TestUser.objects.get(username="A")
+        u2 = TestUser.objects.get(username="A")
+
+        u1.delete()
+        u2.delete()
+
     def test_insert_with_existing_key(self):
         user = TestUser.objects.create(id=999, username="test1", last_login=datetime.datetime.now().date())
         self.assertEqual(999, user.pk)

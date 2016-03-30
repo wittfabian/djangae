@@ -1062,6 +1062,9 @@ class DeleteCommand(object):
 
             # Go through the entities
             for entity in entities:
+                if entity is None:
+                    continue
+
                 wipe_polymodel_from_entity(entity, self.table_to_delete)
                 if not entity.get('class'):
                     to_delete.append(entity)
