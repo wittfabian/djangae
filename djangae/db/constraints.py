@@ -85,12 +85,12 @@ def _acquire_identifiers(identifiers, entity_key):
         # was possible that the independent marker creation transaction finished first and the outer
         # transaction failed, causing stale markers to be left behind.  We no longer do it this way
         # but we still want to ignore any old stale markers, hence if instance is None we overwrite.
-
+        now = datetime.datetime.utcnow()
         if not existing_marker or existing_marker.instance is None:
             markers_to_create.append(UniqueMarker(
                 key=identifier_key,
                 instance=entity_key,
-                created=datetime.datetime.utcnow()
+                created=now
             ))
         elif existing_marker.instance != entity_key and key_exists(existing_marker.instance):
                 fields_and_values = identifier.split("|")
@@ -98,6 +98,12 @@ def _acquire_identifiers(identifiers, entity_key):
                 fields_and_values = fields_and_values[1:]
                 fields = [ x.split(":")[0] for x in fields_and_values ]
                 raise IntegrityError("Unique constraint violation for kind {} on fields: {}".format(table_name, ", ".join(fields)))
+        elif existing_marker.instance != entity_key:
+            markers_to_create.append(UniqueMarker(
+                key=identifier_key,
+                instance=entity_key,
+                created=now
+            ))
         else:
             # The marker is ours anyway
             markers.append(existing_marker)

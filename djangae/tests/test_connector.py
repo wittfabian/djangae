@@ -954,6 +954,17 @@ class ConstraintTests(TestCase):
             instance.name = "One"
             instance.save()
 
+    def test_existing_marker_replaced_if_nonexistent_instance(self):
+        stale_instance = ModelWithUniques.objects.create(name="One")
+
+        # Delete the entity without updating the markers
+        key = datastore.Key.from_path(ModelWithUniques._meta.db_table, stale_instance.pk, namespace=DEFAULT_NAMESPACE)
+        datastore.Delete(key)
+
+        ModelWithUniques.objects.create(name="One") # Should be fine
+        with self.assertRaises(IntegrityError):
+            ModelWithUniques.objects.create(name="One")
+
     def test_unique_combinations_are_returned_correctly(self):
         combos_one = _unique_combinations(ModelWithUniquesOnForeignKey, ignore_pk=True)
         combos_two = _unique_combinations(ModelWithUniquesOnForeignKey, ignore_pk=False)
