@@ -837,3 +837,40 @@ class CharFieldModelTests(TestCase):
                 e.message,
                 'CharFields max_length must not be grater than 1500 bytes.',
             )
+
+
+class ISStringReferenceModel(models.Model):
+    related_things = RelatedSetField('ISOther')
+    related_list = RelatedListField('ISOther', related_name="ismodel_list")
+    limted_related = RelatedSetField('RelationWithoutReverse', limit_choices_to={'name': 'banana'}, related_name="+")
+    children = RelatedSetField("self", related_name="+")
+
+    class Meta:
+        app_label = "djangae"
+
+
+class StringReferenceRelatedSetFieldModelTests(TestCase):
+
+    def test_can_update_related_field_from_form(self):
+        related = ISOther.objects.create()
+        thing = ISStringReferenceModel.objects.create(related_things={related})
+        before_set = thing.related_things
+        thing.related_list.field.save_form_data(thing, set())
+        thing.save()
+        self.assertNotEqual(before_set.all(), thing.related_things.all())
+
+    def test_saving_forms(self):
+        class TestForm(forms.ModelForm):
+            class Meta:
+                model = ISStringReferenceModel
+                fields = ("related_things", )
+
+        related = ISOther.objects.create()
+        post_data = {
+            "related_things": [ str(related.pk) ],
+        }
+
+        form = TestForm(post_data)
+        self.assertTrue(form.is_valid())
+        instance = form.save()
+        self.assertEqual({related.pk}, instance.related_things_ids)
