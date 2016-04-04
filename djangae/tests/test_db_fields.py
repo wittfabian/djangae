@@ -841,7 +841,7 @@ class CharFieldModelTests(TestCase):
 
 class ISStringReferenceModel(models.Model):
     related_things = RelatedSetField('ISOther')
-    related_list = RelatedListField('ISOther', related_name="ismodel_list")
+    related_list = RelatedListField('ISOther', related_name="ismodel_list_string")
     limted_related = RelatedSetField('RelationWithoutReverse', limit_choices_to={'name': 'banana'}, related_name="+")
     children = RelatedSetField("self", related_name="+")
 
