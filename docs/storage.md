@@ -7,6 +7,8 @@ Djangae provides two storage backends. `djangae.storage.CloudStorage` and `djang
 `djangae.storage.CloudStorage` is a  django storage backend that works with Google Cloud Storage, you can treat it just as
 as you would with other storage backends. Google Cloud storage is a general purpose storage backend.
 
+To use this you need to [install the `GoogleAppEngineCloudStorageClient` library](https://cloud.google.com/appengine/docs/python/googlecloudstorageclient/using-cloud-storage#downloading_the_client_library).
+
 * Cloud storage will use the default bucket name `CLOUD_STORAGE_BUCKET` unless specified with `BUCKET_KEY` in your settings.py
 
 You can serve files directly from cloudstorage with the key or you can use the included `djangae.storage.serve_file`
