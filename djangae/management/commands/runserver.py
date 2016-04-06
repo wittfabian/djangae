@@ -14,11 +14,17 @@ from google.appengine.tools.sdk_update_checker import (
 )
 
 DJANGAE_RUNSERVER_IGNORED_FILES_REGEXES = getattr(settings, "DJANGAE_RUNSERVER_IGNORED_FILES_REGEXES", [])
+DJANGAE_RUNSERVER_IGNORED_DIR_REGEXES = getattr(settings, "DJANGAE_RUNSERVER_IGNORED_DIR_REGEXES", [])
 if DJANGAE_RUNSERVER_IGNORED_FILES_REGEXES:
     DJANGAE_RUNSERVER_IGNORED_FILES_REGEXES = [re.compile(regex) for regex in DJANGAE_RUNSERVER_IGNORED_FILES_REGEXES]
+if DJANGAE_RUNSERVER_IGNORED_DIR_REGEXES:
+    DJANGAE_RUNSERVER_IGNORED_DIR_REGEXES = [re.compile(regex) for regex in DJANGAE_RUNSERVER_IGNORED_DIR_REGEXES]
+
 
 def ignore_file(filename):
-    """Report whether a file should not be watched."""
+    """ Replacement for devappserver2.watchter_common.ignore_file
+        - to be monkeypatched into place.
+    """
     from google.appengine.tools.devappserver2 import watcher_common
     filename = os.path.basename(filename)
     return(
@@ -28,6 +34,21 @@ def ignore_file(filename):
         any(regex.match(filename) for regex in DJANGAE_RUNSERVER_IGNORED_FILES_REGEXES)
     )
 
+
+def skip_ignored_dirs(dirs):
+    """ Replacement for devappserver2.watchter_common.skip_ignored_dirs
+    - to be monkeypatched into place.
+    """
+    # Note that this function modifies the `dirs` list in place, it doesn't return anything.
+    # Also note that `dirs` is a list of dir *names* not dir *paths*, which means that we can't
+    # differentiate between /foo/bar and /moo/bar because we just get 'bar'. But allowing that
+    # would require a whole load more monkey patching.
+    from google.appengine.tools.devappserver2 import watcher_common
+    watcher_common._remove_pred(dirs, lambda d: d.startswith(watcher_common._IGNORED_PREFIX))
+    watcher_common._remove_pred(
+        dirs,
+        lambda d: any(regex.search(d) for regex in DJANGAE_RUNSERVER_IGNORED_DIR_REGEXES)
+    )
 
 
 class Command(BaseRunserverCommand):
@@ -243,9 +264,11 @@ class Command(BaseRunserverCommand):
         from google.appengine.tools.devappserver2 import module
 
         def fix_watcher_files(regex):
+            """ Monkeypatch dev_appserver's file watcher to ignore any unwanted dirs or files. """
             from google.appengine.tools.devappserver2 import watcher_common
             watcher_common._IGNORED_REGEX = regex
             watcher_common.ignore_file = ignore_file
+            # watcher_common.skip_ignored_dirs = skip_ignored_dirs
 
         regex = sandbox._CONFIG.modules[0].skip_files
         if regex:
