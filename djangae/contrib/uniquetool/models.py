@@ -1,7 +1,7 @@
 import datetime
 import pipeline
 import logging
-from mapreduce import operation as op, context
+from mapreduce import operation as context
 from mapreduce import pipeline_base
 
 from django.conf import settings
@@ -104,10 +104,9 @@ def start_action(sender, instance, created, raw, **kwargs):
 
     if instance.action_type == "clean":
         kwargs.update(model=instance.model)
-        # CleanMapper(db=instance.db).start(**kwargs)
-        pipe = NewCleanMapper(model=instance.model, db=instance.db, action_pk=instance.pk)
+        pipe = CleanMapper(model=instance.model, db=instance.db, action_pk=instance.pk)
     else:
-        pipe = NewCheckRepairMapper(model=instance.model, db=instance.db, action_pk=instance.pk, repair=instance.action_type=="repair")
+        pipe = CheckRepairMapper(model=instance.model, db=instance.db, action_pk=instance.pk, repair=instance.action_type=="repair")
     pipe.start()
 
 
@@ -182,7 +181,7 @@ class CallbackPipeline(pipeline_base.PipelineBase):
         _finish(*args, **kwargs)
 
 
-class NewCheckRepairMapper(pipeline_base.PipelineBase):
+class CheckRepairMapper(pipeline_base.PipelineBase):
 
     def run(self, *args, **kwargs):
         mapper_params = {}
@@ -234,7 +233,7 @@ def clean_map(entity, *args, **kwargs):
             datastore.Delete(entity)
 
 
-class NewCleanMapper(pipeline_base.PipelineBase):
+class CleanMapper(pipeline_base.PipelineBase):
 
     def run(self, *args, **kwargs):
         mapper_params = {}
@@ -243,7 +242,7 @@ class NewCleanMapper(pipeline_base.PipelineBase):
             'keys_only': False,
             'kwargs': kwargs,
             'args': args,
-            'namespace': settings.DATABASES.get(kwargs['db'], {}).get('NAMESPACE'),
+            'namespace': settings.DATABASES.get(kwargs['db'], {}).get('NAMESPACE', ''),
         }
         mapper_params['action_pk'] = kwargs['action_pk']
         mapper_params['namespace'] = kwargs['db']
