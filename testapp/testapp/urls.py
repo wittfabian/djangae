@@ -5,6 +5,7 @@ from django.contrib import admin
 admin.autodiscover()
 
 import djangae.urls
+import djangae.contrib.mapreduce.urls
 
 
 def do_something():

@@ -1,6 +1,7 @@
 ## v0.9.4 (in development)
 
 ### New features & improvements:
+- Native MapReduce and Pipeline support
 
  - Replaced `ensure_instance_included` with `ensure_instance_consistent`
  - Added `ensure_instances_consistent` for the multiple object case
