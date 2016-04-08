@@ -3,8 +3,8 @@ from mapreduce.mapreduce_pipeline import MapreducePipeline
 from django.db import models
 from djangae.test import TestCase
 from djangae.test import process_task_queues
-from djangae.contrib.mapreduce.input_readers import DjangoInputReader
-from djangae.contrib.mapreduce.pipelines import MapPipeline
+from djangae.contrib.processing.mapreduce.input_readers import DjangoInputReader
+from djangae.contrib.processing.mapreduce.pipelines import MapPipeline
 
 
 class TestNode(models.Model):
@@ -25,8 +25,8 @@ class MapPipelineTestCase(TestCase):
     def test_map_works(self):
         pipe = MapPipeline(
             "increment",
-            "djangae.contrib.mapreduce.tests.model_counter_increment",
-            "djangae.contrib.mapreduce.input_readers.DjangoInputReader",
+            "djangae.contrib.processing.mapreduce.tests.model_counter_increment",
+            "djangae.contrib.processing.mapreduce.input_readers.DjangoInputReader",
             mapper_params={'input_reader': {'model': 'mapreduce.TestNode'}},
             shards=10
         )
@@ -86,8 +86,8 @@ class MapreduceTestCase(TestCase):
         """
         pipe = MapreducePipeline(
             "word_count",
-            "djangae.contrib.mapreduce.tests.letter_count_map",
-            "djangae.contrib.mapreduce.tests.word_count_reduce",
+            "djangae.contrib.processing.mapreduce.tests.letter_count_map",
+            "djangae.contrib.processing.mapreduce.tests.word_count_reduce",
             "mapreduce.input_readers.RandomStringInputReader",
             "mapreduce.output_writers.GoogleCloudStorageOutputWriter",
             mapper_params={'count': 10},
@@ -107,9 +107,9 @@ class MapreduceTestCase(TestCase):
             self.assertEqual(node.counter, 1)
         pipe = MapreducePipeline(
             "word_count",
-            "djangae.contrib.mapreduce.tests.model_counter_increment",
-            "djangae.contrib.mapreduce.tests.word_count_reduce",
-            "djangae.contrib.mapreduce.input_readers.DjangoInputReader",
+            "djangae.contrib.processing.mapreduce.tests.model_counter_increment",
+            "djangae.contrib.processing.mapreduce.tests.word_count_reduce",
+            "djangae.contrib.processing.mapreduce.input_readers.DjangoInputReader",
             "mapreduce.output_writers.GoogleCloudStorageOutputWriter",
             mapper_params={'count': 10, 'input_reader': {'model': 'mapreduce.TestNode'}},
             reducer_params={"mime_type": "text/plain", 'output_writer': {'bucket_name': 'test'}},

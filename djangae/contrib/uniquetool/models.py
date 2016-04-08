@@ -19,7 +19,7 @@ from djangae.db.utils import django_instance_to_entity
 from djangae.db.unique_utils import unique_identifiers_from_entity
 from djangae.db.constraints import UniqueMarker
 from djangae.db.caching import disable_cache
-from djangae.contrib.mapreduce.pipelines import MapPipeline
+from djangae.contrib.processing.mapreduce.pipelines import MapPipeline
 
 ACTION_TYPES = [
     ('check', 'Check'),  # Verify all models unique contraint markers exist and are assigned to it.
@@ -193,7 +193,7 @@ class NewCheckRepairMapper(pipeline_base.PipelineBase):
         map_pipeline = yield MapPipeline(
             "check-repair",
             "djangae.contrib.uniquetool.models.check_repair_map",
-            "djangae.contrib.mapreduce.input_readers.DjangoInputReader",
+            "djangae.contrib.processing.mapreduce.input_readers.DjangoInputReader",
             mapper_params=mapper_params,
             shards=10
         )

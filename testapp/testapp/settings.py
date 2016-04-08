@@ -44,8 +44,8 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'django.contrib.humanize',
-    'djangae.contrib.pipelines',
-    'djangae.contrib.mapreduce',
+    'djangae.contrib.processing.pipelines',
+    'djangae.contrib.processing.mapreduce',
     'djangae.contrib.pagination',
     'djangae.contrib.uniquetool',
     'testapp'
