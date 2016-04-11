@@ -60,7 +60,6 @@ def map_queryset(
 
         Returns the pipeline ID.
     """
-
     handler_spec = qualname(unpacker)
     handler_params = {
         "func": qualname(processor_func),
@@ -69,10 +68,10 @@ def map_queryset(
     }
 
     handler_params.update({
-        'input_reader': {'model': '{}.{}'.format(
-            queryset.model._meta.app_label,
-            queryset.model.__name__
-        )}
+        'input_reader': {
+            'model': '{}.{}'.format(queryset.model._meta.app_label, queryset.model.__name__),
+            'query': cPickle.dumps(queryset.query)
+        }
     })
 
     pipelines = []
