@@ -29,8 +29,10 @@ TEMPLATE_DEBUG = True
 
 ALLOWED_HOSTS = []
 
-# Application definition
+# Otherwise this can obscure the cause of some exceptions
+DEBUG_PROPAGATE_EXCEPTIONS = True
 
+# Application definition
 INSTALLED_APPS = [
     'djangae',
     'django.contrib.admin',
