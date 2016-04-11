@@ -2,21 +2,16 @@
 
 Djangae now contains functionality to run Google's native Pipelines and MapReduce
 
-## Pipelines
-
-1. Add the pipelines library to your project, e.g. `$ pip install GoogleAppEnginePipeline` or from
-[https://github.com/GoogleCloudPlatform/appengine-pipelines](https://github.com/GoogleCloudPlatform/appengine-pipelines)
-2. Ensure that you have included `djangae.urls` in your URL config.
-
-This will give access to all the appengine-pipelines functionality
-
-[https://github.com/GoogleCloudPlatform/appengine-pipelines/wiki](https://github.com/GoogleCloudPlatform/appengine-pipelines/wiki)
-
-
 ## MapReduce
 
 1. Add the MapReduce library to your project, e.g. `$ pip install GoogleAppEngineMapReduce` or from
 [https://github.com/GoogleCloudPlatform/appengine-mapreduce](https://github.com/GoogleCloudPlatform/appengine-mapreduce).
+2. Add `djangae.contrib.processing.mapreduce` to INSTALLED_APPS
+3. Add the following rule to the top of your url patterns:
+
+```
+    url(r'^_ah/mapreduce/', include(djangae.contrib.processing.mapreduce.urls)),
+```
 
 Now you can create native MapReduce tasks from inside your Django application, the requests will be handled and forwarded to correct handlers
 

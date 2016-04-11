@@ -24,6 +24,7 @@ urlpatterns = [
     # Examples:
     # url(r'^$', 'testapp.views.home', name='home'),
     # url(r'^blog/', include('blog.urls')),
+    url(r'^_ah/mapreduce/', include(djangae.contrib.processing.mapreduce.urls)),
     url(r'^_ah/', include(djangae.urls)),
     url(r'^admin/', include(admin.site.urls)),
     url(r'^auth/', include('djangae.contrib.gauth.urls')),

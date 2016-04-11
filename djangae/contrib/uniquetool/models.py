@@ -1,7 +1,7 @@
 import datetime
 import pipeline
 import logging
-from mapreduce import operation as context
+from mapreduce import context
 from mapreduce import pipeline_base
 
 from django.conf import settings

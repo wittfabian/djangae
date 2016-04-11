@@ -1,9 +1,12 @@
+from __future__ import absolute_import
+
 import logging
 
 from django.db import models
 from djangae.test import TestCase
 from djangae.test import process_task_queues
-import pipeline
+
+from mapreduce import pipeline_base
 
 # from mapreduce import mapreduce_pipeline
 
@@ -12,21 +15,24 @@ class TestNode(models.Model):
     data = models.CharField(max_length=32)
     counter = models.IntegerField()
 
+    class Meta:
+        app_label = "mapreduce"
 
-class LogResult(pipeline.Pipeline):
+
+class LogResult(pipeline_base.PipelineBase):
 
     def run(self, number):
         logging.info('All done! Value is %s', number)
 
 
-class IncrementPipeline(pipeline.Pipeline):
+class IncrementPipeline(pipeline_base.PipelineBase):
     def run(self, *args, **kwargs):
         node = TestNode.objects.get()
         node.counter += 1
         node.save()
 
 
-class SquareOutputPipeline(pipeline.Pipeline):
+class SquareOutputPipeline(pipeline_base.PipelineBase):
 
     output_names = ['square']
 
@@ -37,14 +43,14 @@ class SquareOutputPipeline(pipeline.Pipeline):
         logging.info('All done! Square is %s', self.outputs.square.value)
 
 
-class SquarePipeline(pipeline.Pipeline):
+class SquarePipeline(pipeline_base.PipelineBase):
 
     def run(self, number):
         logging.info('Squaring: %s' % number)
         return number * number
 
 
-class Sum(pipeline.Pipeline):
+class Sum(pipeline_base.PipelineBase):
 
     def run(self, *args):
         value = sum(list(args))
@@ -52,7 +58,7 @@ class Sum(pipeline.Pipeline):
         return value
 
 
-class FanOutFanInPipeline(pipeline.Pipeline):
+class FanOutFanInPipeline(pipeline_base.PipelineBase):
 
     def run(self, count):
         results = []

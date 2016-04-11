@@ -1,4 +1,6 @@
 
+default_app_config = 'djangae.contrib.processing.mapreduce.apps.MapreduceConfig'
+
 
 def map_queryset(queryset, processor_func, finalize_func=None, shard_count=None, output_writer=None, output_writer_kwargs=None, job_name=None):
     """
