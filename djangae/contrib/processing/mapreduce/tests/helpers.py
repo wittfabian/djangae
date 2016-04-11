@@ -8,6 +8,8 @@ class TestModel(models.Model):
     class Meta:
         app_label = "mapreduce"
 
+    is_true = models.BooleanField(default=False)
+
 
 class Counter(models.Model):
     count = models.PositiveIntegerField(default=0)
@@ -27,6 +29,20 @@ class MapQuerysetTests(TestCase):
     def setUp(self):
         for i in xrange(5):
             TestModel.objects.create(id=i+1)
+
+    def test_filtering(self):
+        counter = Counter.objects.create()
+        map_queryset(
+            TestModel.objects.filter(is_true=True),
+            count,
+            finalize_func=delete,
+            counter_id=counter.pk
+        )
+        counter = Counter.objects.create()
+        self.process_task_queues()
+        counter.refresh_from_db()
+        self.assertEqual(0, counter.count)
+
 
     def test_mapping_over_queryset(self):
         counter = Counter.objects.create()
