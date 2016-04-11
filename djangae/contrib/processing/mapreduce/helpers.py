@@ -68,10 +68,7 @@ def map_queryset(
     }
 
     handler_params.update({
-        'input_reader': {
-            'model': '{}.{}'.format(queryset.model._meta.app_label, queryset.model.__name__),
-            'query': cPickle.dumps(queryset.query)
-        }
+        'input_reader': DjangoInputReader.params_from_queryset(queryset)
     })
 
     pipelines = []

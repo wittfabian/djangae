@@ -108,3 +108,14 @@ class DjangoInputReader(input_readers.InputReader):
         assert len(sorted_keys) >= shard_count
         index_stride = len(sorted_keys) / float(shard_count)
         return [sorted_keys[int(round(index_stride * i))] for i in range(1, shard_count)]
+
+    @staticmethod
+    def params_from_queryset(queryset):
+        """
+        Returns a formated dictionary for use in the handler dict
+        """
+        return {
+            'model': '{}.{}'.format(queryset.model._meta.app_label, queryset.model.__name__),
+            'query': cPickle.dumps(queryset.query)
+        }
+#

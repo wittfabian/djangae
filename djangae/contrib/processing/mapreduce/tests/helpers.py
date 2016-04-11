@@ -43,7 +43,6 @@ class MapQuerysetTests(TestCase):
         counter.refresh_from_db()
         self.assertEqual(0, counter.count)
 
-
     def test_mapping_over_queryset(self):
         counter = Counter.objects.create()
 
