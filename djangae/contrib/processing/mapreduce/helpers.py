@@ -36,6 +36,19 @@ def qualname(func):
 
 
 class DynamicPipeline(pipeline_base.PipelineBase):
+    """
+        Horrific class which uses pickle to store pipelines for
+        yielding via run(). This wouldn't be necessary if the pipeline
+        library wasn't built for Java and had a sensible interface that
+        didn't require inheritence.
+    """
+    def __init__(self, pipelines, *args, **kwargs):
+        # This gets reinstantiated somewhere with the already-pickled pipelines argument
+        # so we prevent double pickling by checking it's not a string
+        if not isinstance(pipelines, basestring):
+            pipelines = str(cPickle.dumps(pipelines))
+        super(DynamicPipeline, self).__init__(pipelines, *args, **kwargs)
+
     def run(self, pipelines):
         with pipeline.InOrder():
             pipelines = cPickle.loads(str(pipelines))
@@ -44,6 +57,9 @@ class DynamicPipeline(pipeline_base.PipelineBase):
 
 
 class CallbackPipeline(pipeline_base.PipelineBase):
+    """
+        Simply calls the specified function. Takes a dotted-path to the callback
+    """
     def run(self, func):
         func = import_string(func)
         func()
@@ -96,7 +112,7 @@ def map_queryset(
     if finalize_func:
         pipelines.append(CallbackPipeline(qualname(finalize_func)))
 
-    new_pipeline = DynamicPipeline(str(cPickle.dumps(pipelines)))
+    new_pipeline = DynamicPipeline(pipelines)
     new_pipeline.start()
 
 
