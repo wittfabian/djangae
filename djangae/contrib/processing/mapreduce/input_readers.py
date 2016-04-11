@@ -30,7 +30,8 @@ class DjangoInputReader(input_readers.InputReader):
         else:
             qs = self.model.objects
         qs = qs.all()
-        qs.query = self.query
+        if self.query is not None:
+            qs.query = self.query
         qs = qs.filter(**pk_filters).order_by('pk')
         for model in qs:
             yield model
@@ -67,7 +68,7 @@ class DjangoInputReader(input_readers.InputReader):
             app, model = params['model'].split(',')
         model = apps.get_model(app, model)
         query = params.get('query', None)
-        if query:
+        if query is not None:
             # FIXME why we have to cast to a str here? comes back as unicode
             query = cPickle.loads(str(query))
 
@@ -78,7 +79,8 @@ class DjangoInputReader(input_readers.InputReader):
             scatter_query = model.objects
 
         scatter_query = scatter_query.all()
-        scatter_query.query = query
+        if query is not None:
+            scatter_query.query = query
         scatter_query = scatter_query.values_list('pk').order_by('__scatter__')
         oversampling_factor = 32
         # FIXME values
