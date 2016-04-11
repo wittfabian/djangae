@@ -26,7 +26,7 @@ def delete():
 class MapQuerysetTests(TestCase):
     def setUp(self):
         for i in xrange(5):
-            TestModel.objects.create()
+            TestModel.objects.create(id=i+1)
 
     def test_mapping_over_queryset(self):
         counter = Counter.objects.create()
@@ -45,4 +45,17 @@ class MapQuerysetTests(TestCase):
         self.assertFalse(TestModel.objects.count())
 
     def test_filters_apply(self):
-        pass
+        counter = Counter.objects.create()
+
+        map_queryset(
+            TestModel.objects.filter(pk__gt=2),
+            count,
+            finalize_func=delete,
+            counter_id=counter.pk
+        )
+
+        self.process_task_queues()
+        counter.refresh_from_db()
+
+        self.assertEqual(3, counter.count)
+        self.assertFalse(TestModel.objects.count())
