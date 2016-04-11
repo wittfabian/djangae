@@ -12,6 +12,11 @@ class MapreduceConfig(AppConfig):
     def ready(self):
         try:
             import mapreduce
+
+            # This is awful, but necessary unless we want to get people to start fiddling
+            # with appengine_config.py :/
+            mapreduce.parameters.config.BASE_PATH = '/_ah/mapreduce'
+            mapreduce.parameters._DEFAULT_PIPELINE_BASE_PATH = "/_ah/mapreduce/pipeline"
         except ImportError:
             raise ImproperlyConfigured(
                 "To use djangae.contrib.processing.mapreduce you must have the "

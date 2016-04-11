@@ -19,7 +19,7 @@ from djangae.db.utils import django_instance_to_entity
 from djangae.db.unique_utils import unique_identifiers_from_entity
 from djangae.db.constraints import UniqueMarker
 from djangae.db.caching import disable_cache
-from djangae.contrib.processing.mapreduce.pipelines import MapPipeline
+from mapreduce.mapper_pipeline import MapperPipeline
 
 ACTION_TYPES = [
     ('check', 'Check'),  # Verify all models unique contraint markers exist and are assigned to it.
@@ -189,15 +189,15 @@ class CheckRepairMapper(pipeline_base.PipelineBase):
         mapper_params['action_pk'] = kwargs['action_pk']
         mapper_params['db'] = kwargs['db']
         mapper_params['repair'] = kwargs['repair']
-        map_pipeline = yield MapPipeline(
+        yield MapperPipeline(
             "check-repair",
             "djangae.contrib.uniquetool.models.check_repair_map",
             "djangae.contrib.processing.mapreduce.input_readers.DjangoInputReader",
-            mapper_params=mapper_params,
+            params=mapper_params,
             shards=10
         )
-        with pipeline.After(map_pipeline):
-            yield CallbackPipeline(kwargs['action_pk'])
+
+        yield CallbackPipeline(kwargs['action_pk'])
 
 
 def clean_map(entity, *args, **kwargs):
@@ -247,12 +247,13 @@ class CleanMapper(pipeline_base.PipelineBase):
         mapper_params['action_pk'] = kwargs['action_pk']
         mapper_params['namespace'] = kwargs['db']
         mapper_params['model'] = kwargs['model']
-        map_pipeline = yield MapPipeline(
-            "check-repair",
-            "djangae.contrib.uniquetool.models.clean_map",
-            "mapreduce.input_readers.RawDatastoreInputReader",
-            mapper_params=mapper_params,
+
+        yield MapperPipeline(
+            "Repair unique markers on {}".format(kwargs["model"]),
+            handler_spec="djangae.contrib.uniquetool.models.clean_map",
+            input_reader_spec="mapreduce.input_readers.RawDatastoreInputReader",
+            params=mapper_params,
             shards=10
         )
-        with pipeline.After(map_pipeline):
-            yield CallbackPipeline(kwargs['action_pk'])
+
+        yield CallbackPipeline(kwargs['action_pk'])
