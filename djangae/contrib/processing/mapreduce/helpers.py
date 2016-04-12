@@ -3,6 +3,7 @@ import pipeline
 from mapreduce import context
 from mapreduce.mapper_pipeline import MapperPipeline
 from mapreduce import pipeline_base
+from mapreduce import input_readers
 
 from django.utils.module_loading import import_string
 from djangae.contrib.processing.mapreduce.input_readers import DjangoInputReader
@@ -46,20 +47,7 @@ def unpacker(obj):
     yield handler(obj, *params["args"], **params["kwargs"])
 
 
-def map_queryset(
-    queryset, processor_func, finalize_func=None, _shards=None,
-    _output_writer=None, _output_writer_kwargs=None, _job_name=None,
-    *processor_args, **processor_kwargs
-):
-    """
-        Iterates over a queryset with mapreduce calling process_func for each Django instance.
-        Calls finalize_func when the iteration completes.
-
-        output_writer is optional, but should be a mapreduce OutputWriter subclass. Any additional
-        args or kwargs are passed down to the handling function.
-
-        Returns the pipeline ID.
-    """
+def _do_map(input_reader, processor_func, finalize_func, params, _shards, _output_writer, _output_writer_kwargs, _job_name, *processor_args, **processor_kwargs):
     handler_spec = qualname(unpacker)
     handler_params = {
         "func": qualname(processor_func),
@@ -67,15 +55,14 @@ def map_queryset(
         "kwargs": processor_kwargs
     }
 
-    handler_params.update({
-        'input_reader': DjangoInputReader.params_from_queryset(queryset)
-    })
+    handler_params.update(params)
 
     pipelines = []
     pipelines.append(MapperPipeline(
-        "Map task over {}".format(queryset.model),
+        _job_name,
         handler_spec=handler_spec,
-        input_reader_spec=qualname(DjangoInputReader),
+        input_reader_spec=qualname(input_reader),
+        output_writer_spec=qualname(_output_writer) if _output_writer else None,
         params=handler_params,
         shards=_shards
     ))
@@ -87,7 +74,36 @@ def map_queryset(
     new_pipeline.start()
 
 
-def map_entities(kind_name, processor_func, finalize_func=None, shard_count=None, output_writer=None, output_writer_kwargs=None, job_name=None):
+def map_queryset(
+    queryset, processor_func, finalize_func=None, _shards=None,
+    _output_writer=None, _output_writer_kwargs=None, _job_name=None, *processor_args, **processor_kwargs
+):
+    """
+        Iterates over a queryset with mapreduce calling process_func for each Django instance.
+        Calls finalize_func when the iteration completes.
+
+        output_writer is optional, but should be a mapreduce OutputWriter subclass. Any additional
+        args or kwargs are passed down to the handling function.
+
+        Returns the pipeline ID.
+    """
+    params = {
+        'input_reader': DjangoInputReader.params_from_queryset(queryset),
+        'output_writer': _output_writer_kwargs or {}
+    }
+
+    _do_map(
+        DjangoInputReader,
+        processor_func, finalize_func, params, _shards, _output_writer,
+        _output_writer_kwargs,
+        _job_name or "Map task over {}".format(queryset.model),
+        *processor_args, **processor_kwargs
+    )
+
+
+def map_entities(kind_name, processor_func, finalize_func=None, _shards=None,
+    _output_writer=None, _output_writer_kwargs=None, _job_name=None, *processor_args, **processor_kwargs
+):
     """
         Iterates over all entities of a particular kind, calling processor_func on each one.
         Calls finalize_func when the iteration completes.
@@ -96,7 +112,18 @@ def map_entities(kind_name, processor_func, finalize_func=None, shard_count=None
 
         Returns the pipeline ID.
     """
-    pass
+    params = {
+        'input_reader': { input_readers.RawDatastoreInputReader.ENTITY_KIND_PARAM : kind_name },
+        'output_writer': _output_writer_kwargs or {}
+    }
+
+    _do_map(
+        input_readers.RawDatastoreInputReader,
+        processor_func, finalize_func, params, _shards, _output_writer,
+        _output_writer_kwargs,
+        _job_name or "Map task over {}".format(kind_name),
+        *processor_args, **processor_kwargs
+    )
 
 
 def map_files(bucket_name, process_func, finalize_func=None, shard_count=None, output_writer=None, output_writer_kwargs=None, prefixes=None, job_name=None):

@@ -1,8 +1,12 @@
 from django.db import models
 from djangae.test import TestCase
 
-from djangae.contrib.processing.mapreduce import map_queryset
+from djangae.contrib.processing.mapreduce import (
+    map_queryset,
+    map_entities
+)
 
+from google.appengine.api import datastore
 
 class TestModel(models.Model):
     class Meta:
@@ -73,4 +77,34 @@ class MapQuerysetTests(TestCase):
         counter.refresh_from_db()
 
         self.assertEqual(3, counter.count)
+        self.assertFalse(TestModel.objects.count())
+
+
+def count_entity(entity, counter_id):
+    assert isinstance(entity, datastore.Entity)
+
+    counter = Counter.objects.get(pk=counter_id)
+    counter.count = models.F('count') + 1
+    counter.save()
+
+
+class MapEntitiesTests(TestCase):
+    def setUp(self):
+        for i in xrange(5):
+            TestModel.objects.create(id=i+1)
+
+    def test_mapping_over_entities(self):
+        counter = Counter.objects.create()
+
+        map_entities(
+            TestModel._meta.db_table,
+            count_entity,
+            finalize_func=delete,
+            counter_id=counter.pk
+        )
+
+        self.process_task_queues()
+        counter.refresh_from_db()
+
+        self.assertEqual(5, counter.count)
         self.assertFalse(TestModel.objects.count())
