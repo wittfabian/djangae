@@ -79,8 +79,6 @@ class DjangoInputReader(input_readers.InputReader):
             scatter_query = model.objects
 
         scatter_query = scatter_query.all()
-        if query is not None:
-            scatter_query.query = query
         scatter_query = scatter_query.values_list('pk').order_by('__scatter__')
         oversampling_factor = 32
         # FIXME values
