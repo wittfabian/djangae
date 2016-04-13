@@ -268,7 +268,7 @@ class Command(BaseRunserverCommand):
             from google.appengine.tools.devappserver2 import watcher_common
             watcher_common._IGNORED_REGEX = regex
             watcher_common.ignore_file = ignore_file
-            # watcher_common.skip_ignored_dirs = skip_ignored_dirs
+            watcher_common.skip_ignored_dirs = skip_ignored_dirs
 
         regex = sandbox._CONFIG.modules[0].skip_files
         if regex:
