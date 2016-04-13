@@ -231,7 +231,7 @@ class Command(BaseRunserverCommand):
                 env_vars = self._dispatcher._configuration.modules[0]._app_info_external.env_variables or EnvironmentVariables()
                 for module in configuration.modules:
                     module_name = module._module_name
-                    if module_name == 'default':
+                    if module_name == 'default' or module_name is None:
                         module_settings = 'DJANGO_SETTINGS_MODULE'
                     else:
                         module_settings = '%s_DJANGO_SETTINGS_MODULE' % module_name
