@@ -2,6 +2,7 @@ import cPickle
 import pipeline
 from mapreduce import context
 from mapreduce.mapper_pipeline import MapperPipeline
+from mapreduce.mapreduce_pipeline import MapreducePipeline
 from mapreduce import pipeline_base
 from mapreduce import input_readers
 
@@ -145,7 +146,23 @@ def map_reduce_queryset(queryset, map_func, reduce_func, output_writer, finalize
 
         Returns the pipeline ID.
     """
-    pass
+    map_func = qualname(map_func)
+    reduce_func = qualname(reduce_func)
+    output_writer = qualname(output_writer)
+    pipeline = MapreducePipeline(
+            job_name or "Map task over {}".format(queryset.model),
+            map_func,
+            reduce_func,
+            qualname(DjangoInputReader),
+            output_writer,
+            mapper_params={
+                "input_reader": DjangoInputReader.params_from_queryset(queryset),
+            },
+            reducer_params={
+                "output_writer": output_writer_kwargs
+            },
+            shards=shard_count)
+    pipeline.start()
 
 
 def map_reduce_entities(kind_name, map_func, reduce_func, output_writer, finalize_func=None, shard_count=None, output_writer_kwargs=None, job_name=None):

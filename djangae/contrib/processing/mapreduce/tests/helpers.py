@@ -1,9 +1,11 @@
+from mapreduce import output_writers
 from django.db import models
 from djangae.test import TestCase
 
 from djangae.contrib.processing.mapreduce import (
     map_queryset,
-    map_entities
+    map_entities,
+    map_reduce_queryset
 )
 
 from google.appengine.api import datastore
@@ -13,6 +15,7 @@ class TestModel(models.Model):
         app_label = "mapreduce"
 
     is_true = models.BooleanField(default=False)
+    text = models.CharField(null=True)
 
 
 class Counter(models.Model):
@@ -25,8 +28,40 @@ def count(instance, counter_id):
     counter.save()
 
 
+def yield_letters(instance):
+    for letter in instance.text:
+        yield (letter, "")
+
+
+def reduce_count(key, values):
+    yield (key, len(values))
+
+
 def delete():
     TestModel.objects.all().delete()
+
+
+class MapReduceQuerysetTests(TestCase):
+
+    def setUp(self):
+        for i in xrange(5):
+            TestModel.objects.create(
+                id=i+1,
+                text="abcc"
+            )
+
+    def test_mapreduce_over_queryset(self):
+        map_reduce_queryset(
+            TestModel.objects.all(),
+            yield_letters,
+            reduce_count,
+            output_writers.GoogleCloudStorageKeyValueOutputWriter,
+            output_writer_kwargs={
+                'bucket_name': 'test-bucket'
+            }
+        )
+
+        self.process_task_queues()
 
 
 class MapQuerysetTests(TestCase):
