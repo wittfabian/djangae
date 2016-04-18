@@ -46,7 +46,7 @@ def load_special_indexes():
     _special_indexes = data
     _last_loaded_time = mtime
 
-    logging.debug("Loaded special indexes for {0} models".format(len(_special_indexes)))
+    logging.debug("Loaded special indexes for %d models", len(_special_indexes))
 
 
 def special_index_exists(model_class, field_name, index_type):
