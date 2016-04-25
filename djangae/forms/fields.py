@@ -50,7 +50,7 @@ class ListFormField(forms.Field):
                 self._check_values_against_delimiter(value)
                 return value
             return [v.strip() for v in value.split(',') if v.strip()]
-        return None
+        return []
 
     def _check_values_against_delimiter(self, values):
         delimiter = self.delimiter  # faster
