@@ -1,8 +1,10 @@
 # LIBRARIES
 from bs4 import BeautifulSoup
 from django import forms
+from django.db import models
 
 # DJANGAE
+from djangae.fields import ListField
 from djangae.test import TestCase
 from djangae.tests.test_db_fields import JSONFieldModel
 
@@ -11,6 +13,16 @@ class JSONModelForm(forms.ModelForm):
     class Meta:
         model = JSONFieldModel
         fields = ['json_field']
+
+
+class BlankableListFieldModel(models.Model):
+    list_field = ListField(models.CharField(max_length=1), blank=True)
+
+
+class ListFieldForm(forms.ModelForm):
+    class Meta:
+        model = BlankableListFieldModel
+        fields = ['list_field']
 
 
 class JSONFieldFormsTest(TestCase):
@@ -37,3 +49,14 @@ class JSONFieldFormsTest(TestCase):
         # So the key 123 should have been converted to a string key of "123"
         textarea = soup.find("textarea").text
         self.assertTrue('"123"' in textarea)
+
+
+class ListFieldFormsTest(TestCase):
+
+    def test_save_empty_value_from_form(self):
+        """ Submitting an empty value in the form should save an empty list. """
+        data = dict(list_field="")
+        form = ListFieldForm(data)
+        self.assertTrue(form.is_valid())
+        obj = form.save()
+        self.assertEqual(obj.list_field, [])
