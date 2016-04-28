@@ -6,11 +6,12 @@
 
 ### Bug fixes:
 
--
+- Fix JSONField behaviour in forms: it's properly validating JSON string before saving
+it and returns json object, not string when accessed through cleaned_data. 
 
 ### Documentation:
 
-- 
+-
 
 ## v0.9.4 (release date: 4th April 2016)
 
