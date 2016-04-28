@@ -7,7 +7,8 @@
 ### Bug fixes:
 
 - Fix JSONField behaviour in forms: it's properly validating JSON string before saving
-it and returns json object, not string when accessed through cleaned_data. 
+it and returns json object, not string when accessed through cleaned_data.
+- Fixing ListFormField.clean to return [] instead of None for empty values.
 
 ### Documentation:
 
