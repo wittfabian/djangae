@@ -423,7 +423,7 @@ class BlobstoreFileUploadHandler(FileUploadHandler):
                 continue
 
             # OK, we have a blob key, but is it the one for the field?
-            match = re.search('\sname="?(?P<field_name>[^\'"]+)', part)
+            match = re.search('\sname="?(?P<field_name>[^"]+)', part)
             name = match.groupdict().get('field_name') if match else None
             if name != field_name:
                 # Nope, not for this field
