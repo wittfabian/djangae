@@ -3,6 +3,7 @@ import new
 import logging
 from itertools import chain
 
+import django
 from django.contrib.contenttypes.models import ContentType
 from django.db import DEFAULT_DB_ALIAS, router, connections
 from django.db.models import signals, Manager
@@ -139,6 +140,8 @@ class SimulatedContentTypeManager(Manager):
         if dic["id"] in self._store.constructed_instances:
             return self._store.constructed_instances[dic["id"]]
         else:
+            if django.VERSION[1] > 9:
+                del dic['name']
             result = ContentType(**dic)
             result.save = new.instancemethod(disable_save, ContentType, result)
             self._store.constructed_instances[dic["id"]] = result
