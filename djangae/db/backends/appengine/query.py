@@ -1064,7 +1064,8 @@ def _transform_query_19(connection, kind, query):
 
 _FACTORY = {
     (1, 8): _transform_query_18,
-    (1, 9): _transform_query_19
+    (1, 9): _transform_query_19,
+    (1, 10): _transform_query_19, # Same as 1.9
 }
 
 
@@ -1090,7 +1091,8 @@ def _determine_query_kind_19(query):
 
 _KIND_FACTORY = {
     (1, 8): _determine_query_kind_18,
-    (1, 9): _determine_query_kind_19
+    (1, 9): _determine_query_kind_19,
+    (1, 10): _determine_query_kind_19  # Same as 1.9
 }
 
 
@@ -1102,7 +1104,8 @@ def transform_query(connection, query):
 
 _ORDERING_FACTORY = {
     (1, 8): _extract_ordering_from_query_18,
-    (1, 9): _extract_ordering_from_query_18  # Same as 1.8
+    (1, 9): _extract_ordering_from_query_18,  # Same as 1.8
+    (1, 10): _extract_ordering_from_query_18  # Same as 1.8
 }
 
 
