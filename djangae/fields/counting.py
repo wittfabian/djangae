@@ -164,6 +164,9 @@ class ShardedCounterField(RelatedSetField):
 
         args = tuple() # We don't take any non-kwargs (we override "model" in __ini__)
 
+        if "to" in kwargs:
+            del kwargs["to"]
+
         # Add the shard count if necessary
         if self.shard_count != DEFAULT_SHARD_COUNT:
             kwargs["shard_count"] = self.shard_count
@@ -173,4 +176,3 @@ class ShardedCounterField(RelatedSetField):
             del kwargs["default"]
 
         return name, path, args, kwargs
-
