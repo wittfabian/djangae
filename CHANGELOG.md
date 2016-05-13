@@ -2,7 +2,8 @@
 
 ### New features & improvements:
 
--
+- Added `djangae.contrib.locking`, for preventing simultaneous executing of functions or blocks of code.
+
 
 ### Bug fixes:
 
