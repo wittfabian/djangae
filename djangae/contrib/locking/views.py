@@ -8,7 +8,7 @@ from django.utils import timezone
 
 # DJANGAE
 from djangae.contrib.mappers import defer_iteration
-from djangae.contrib.lock.models import DatastoreLock
+from .models import DatastoreLock
 
 # GAE background tasks and crons can run for a maximum of 10 minutes, so in theory you shouldn't
 # be locking a block of code which takes longer than that, and even if you're using backends which

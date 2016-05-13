@@ -3,9 +3,9 @@ from django.utils import timezone
 
 # DJANGAE
 from djangae.test import TestCase
-from djangae.contrib.lock import Lock, lock, LockAcquisitionError
-from djangae.contrib.lock.models import DatastoreLock
-from djangae.contrib.lock.views import cleanup_locks
+from .lock import Lock, lock, LockAcquisitionError
+from .models import DatastoreLock
+from .views import cleanup_locks
 
 
 class DatastoreLocksTestCase(TestCase):

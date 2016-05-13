@@ -2,7 +2,7 @@
 from django.conf.urls import patterns, url
 
 # DJANGAE
-from djangae.contrib.lock.views import cleanup_locks
+from .views import cleanup_locks
 
 
 urlpatterns = patterns('',
