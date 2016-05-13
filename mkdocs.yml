@@ -14,5 +14,6 @@ pages:
   - Unique constraint tool: uniquetool.md
   - Security: security.md
   - Datastore eventual consistency: consistency.md
+  - Thread locking: locking.md
 - Contributing & Testing: contributing.md
 theme: readthedocs
