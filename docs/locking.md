@@ -19,7 +19,7 @@ INSTALLED_APPS = (
 )
 
 # Your ROOT_URLCONF file
-from djangae.contrib.locking.urls import urlpatters as locking_urls
+from djangae.contrib.locking.urls import urlpatterns as locking_urls
 urlpatterns += locking_urls
 
 # Your cron.yaml file
