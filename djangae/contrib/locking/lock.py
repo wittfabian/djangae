@@ -1,6 +1,5 @@
 from .kinds import LOCK_KINDS
 from .memcache import MemcacheLock
-from .models import DatastoreLock
 
 
 class LockAcquisitionError(Exception):
@@ -19,6 +18,7 @@ class Lock(object):
     @classmethod
     def acquire(cls, identifier, wait=True, steal_after_ms=None, kind=LOCK_KINDS.STRONG):
         if kind == LOCK_KINDS.STRONG:
+            from .models import DatastoreLock  # Avoid importing models before they're ready
             lock = DatastoreLock.objects.acquire(
                 identifier, wait=wait, steal_after_ms=steal_after_ms
             )
