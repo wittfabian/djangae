@@ -53,6 +53,11 @@ def is_in_task():
     return bool(task_name())
 
 
+def is_in_cron():
+    "Returns True if the request is in a cron, False otherwise"
+    return bool(os.environ.get("HTTP_X_APPENGINE_CRON"))
+
+
 def task_name():
     "Returns the name of the current task if any, else None"
     return os.environ.get("HTTP_X_APPENGINE_TASKNAME")
