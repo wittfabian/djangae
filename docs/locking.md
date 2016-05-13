@@ -94,4 +94,25 @@ except LockAcquisitionError:
     pass
 ```
 
+## Lower Level Interface
 
+If you want to be able to acquire and release the locks manually, then you can use the lower-level
+`Lock` class directly.
+
+* `Lock.acquire(identifier, wait=True, steal_after_ms=None, kind=LOCK_KINDS.STRONG)`
+    - Class method which returns a `Lock` object or if `wait=False` and another thread has the
+      lock, returns `None`.
+    - Keyword arguments are the same as for `lock`.
+* `Lock().release()`
+    - Instance method which releases the lock.
+
+
+### Usage example
+
+```
+from djangae.contrib.locking import Lock
+
+lock = Lock.acquire('my_lock')
+do_something_which_should_not_be_run_many_times_at_once()
+lock.release()
+```
