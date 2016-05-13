@@ -2,7 +2,8 @@
 
 ### New features & improvements:
 
--
+- Moved and renamed several functions from djangae.utils to djangae.environment
+- Added new task utility functions: `is_in_task()`, `task_name()`, `task_queue_name()`, `task_retry_count()`
 
 ### Bug fixes:
 
