@@ -41,3 +41,4 @@ The intention is always to support the last two versions of Django, although old
  - [Pagination with djangae.contrib.pagination](pagination.md)
  - [Unique constraint repairs with djangae.contrib.uniquetool](uniquetool.md)
  - [Help with Datastore eventual consistency with djangae.contrib.consistency](consistency.md)
+ - [Concurrent thread locking with djangae.contrib.locking](locking.md)
