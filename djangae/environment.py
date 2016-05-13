@@ -37,7 +37,7 @@ def is_production_environment():
 
 
 def is_development_environment():
-    return 'SERVER_SOFTWARE' in os.environ and os.environ['SERVER_SOFTWARE'].startswith("Development")
+    return 'SERVER_SOFTWARE' not in os.environ or os.environ['SERVER_SOFTWARE'].startswith("Development")
 
 
 def datastore_is_available():
