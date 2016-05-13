@@ -1,8 +1,42 @@
-from .models import Lock
+from .kinds import LOCK_KINDS
+from .memcache import MemcacheLock
+from .models import DatastoreLock
 
 
 class LockAcquisitionError(Exception):
     pass
+
+
+class Lock(object):
+    """ Common interface for acquiring and releasing a lock of the given kind.
+        This is a lower-level interface than the `lock` decorator/context manager for cases where
+        you need to acquire and release the lock(s) manually.
+    """
+
+    def __repr__(self):
+        return u"<Lock (%s) '%s'>" % (self._kind, self._identifier)
+
+    @classmethod
+    def acquire(cls, identifier, wait=True, steal_after_ms=None, kind=LOCK_KINDS.STRONG):
+        if kind == LOCK_KINDS.STRONG:
+            lock = DatastoreLock.objects.acquire(
+                identifier, wait=wait, steal_after_ms=steal_after_ms
+            )
+        else:
+            lock = MemcacheLock.acquire()
+
+        if lock is None:
+            return None
+
+        instance = cls()
+        instance._lock = lock
+        # These two attributes are stored only for the benefit of the __repr__ method
+        instance._identifier = identifier
+        instance._kind = kind
+        return instance
+
+    def release(self):
+        self._lock.release()
 
 
 class LocknessMonster(object):
@@ -17,10 +51,11 @@ class LocknessMonster(object):
         than this value will be ignored.
     """
 
-    def __init__(self, identifier, wait=True, steal_after_ms=None):
+    def __init__(self, identifier, wait=True, steal_after_ms=None, kind=LOCK_KINDS.STRONG):
         self.identifier = identifier
         self.wait = wait
         self.steal_after_ms = steal_after_ms
+        self.kind = kind
 
     def __call__(self, function):
         self.decorated_function = function
@@ -36,7 +71,7 @@ class LocknessMonster(object):
             return  # Do not run the function
 
     def __enter__(self):
-        self.lock = Lock.objects.acquire(self.identifier, self.wait, self.steal_after_ms)
+        self.lock = Lock.acquire(self.identifier, self.wait, self.steal_after_ms, self.kind)
         if self.lock is None:
             raise LockAcquisitionError("Failed to acquire lock for '%s'" % self.identifier)
 

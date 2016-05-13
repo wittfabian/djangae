@@ -37,7 +37,7 @@ class LockQuerySet(models.query.QuerySet):
                     lock.save()
                     return lock
             else:
-                return Lock.objects.create(identifier=identifier)
+                return DatastoreLock.objects.create(identifier=identifier)
 
         lock = trans()
         while wait and lock is None:
@@ -46,7 +46,7 @@ class LockQuerySet(models.query.QuerySet):
         return lock
 
 
-class Lock(models.Model):
+class DatastoreLock(models.Model):
     """ A marker for locking a block of code. """
 
     objects = LockQuerySet.as_manager()

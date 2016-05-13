@@ -8,7 +8,7 @@ from django.utils import timezone
 
 # DJANGAE
 from djangae.contrib.mappers import defer_iteration
-from djangae.contrib.lock.models import Lock
+from djangae.contrib.lock.models import DatastoreLock
 
 # GAE background tasks and crons can run for a maximum of 10 minutes, so in theory you shouldn't
 # be locking a block of code which takes longer than that, and even if you're using backends which
@@ -21,7 +21,7 @@ def cleanup_locks(request):
     """ Delete all Lock objects that are older than 10 minutes. """
     logging.info("Starting djangae.contrib.lock cleanup task")
     cut_off = timezone.now() - timezone.timedelta(seconds=DELETE_LOCKS_OLDER_THAN_SECONDS)
-    queryset = Lock.objects.filter(timestamp__lt=cut_off)
+    queryset = DatastoreLock.objects.filter(timestamp__lt=cut_off)
     defer_iteration(queryset, _delete_lock, _queue=QUEUE)
     return HttpResponse("Cleanup locks task is running")
 
