@@ -48,6 +48,32 @@ def datastore_is_available():
     return bool(apiproxy_stub_map.apiproxy.GetStub('datastore_v3'))
 
 
+def is_in_task():
+    "Returns True if the request is a task, False otherwise"
+    return bool(task_name())
+
+
+def task_name():
+    "Returns the name of the current task if any, else None"
+    return os.environ.get("HTTP_X_APPENGINE_TASKNAME")
+
+
+def task_retry_count():
+    "Returns the task retry count, or zero if this isn't a task"
+    try:
+        return int(os.environ.get("HTTP_X_APPENGINE_TASKRETRYCOUNT"))
+    except (TypeError, ValueError):
+        return 0
+
+
+def task_queue_name():
+    "Returns the name of the current task queue (if this is a task) else None"
+    if "HTTP_X_APPENGINE_QUEUENAME" in os.environ:
+        return os.environ["HTTP_X_APPENGINE_QUEUENAME"]
+    else:
+        return None
+
+
 @memoized
 def get_application_root():
     """Traverse the filesystem upwards and return the directory containing app.yaml"""
