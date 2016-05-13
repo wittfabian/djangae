@@ -1,3 +1,7 @@
+# STANDARD LIB
+from functools import wraps
+
+# DJANGAE
 from .kinds import LOCK_KINDS
 from .memcache import MemcacheLock
 
@@ -58,17 +62,16 @@ class LocknessMonster(object):
         self.kind = kind
 
     def __call__(self, function):
-        self.decorated_function = function
-        return self._replacement_function
-
-    def _replacement_function(self, *args, **kwargs):
-        try:
-            with self:
-                return self.decorated_function(*args, **kwargs)
-        except LockAcquisitionError:
-            # In the case where self.wait is False and the Lock is already in use self.__enter__
-            # will raise this exception
-            return  # Do not run the function
+        @wraps(function)
+        def replacement_function(*args, **kwargs):
+            try:
+                with self:
+                    return function(*args, **kwargs)
+            except LockAcquisitionError:
+                # In the case where self.wait is False and the Lock is already in use self.__enter__
+                # will raise this exception
+                return  # Do not run the function
+        return replacement_function
 
     def __enter__(self):
         self.lock = Lock.acquire(self.identifier, self.wait, self.steal_after_ms, self.kind)
