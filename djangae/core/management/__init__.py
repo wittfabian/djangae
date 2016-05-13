@@ -4,11 +4,11 @@ import sys
 import argparse
 
 import djangae.sandbox as sandbox
-from djangae.utils import find_project_root
+from djangae import environment
 
 # Set some Django-y defaults
 DJANGO_DEFAULTS = {
-    "storage_path": os.path.join(find_project_root(), ".storage"),
+    "storage_path": os.path.join(environment.get_application_root(), ".storage"),
     "port": 8000,
     "admin_port": 8001,
     "api_port": 8002,

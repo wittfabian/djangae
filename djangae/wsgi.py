@@ -1,4 +1,4 @@
-from djangae.utils import on_production
+from djangae import environment
 
 
 def fix_c_whitelist():
@@ -12,7 +12,7 @@ def fix_c_whitelist():
 
 
 # We do this globally for the local environment outside of dev_appserver
-if not on_production():
+if environment.is_development_environment():
     fix_c_whitelist()
 
 
@@ -31,7 +31,7 @@ def fix_sandbox():
         changes are only made if they haven't been made already.
     """
 
-    if on_production():
+    if environment.is_production_environment():
         return
 
     from google.appengine.tools.devappserver2.python import sandbox
@@ -53,7 +53,6 @@ class DjangaeApplication(object):
     def __init__(self, application):
         from django.conf import settings
         from django.core.exceptions import ImproperlyConfigured
-        from django import VERSION
 
         for app in settings.INSTALLED_APPS:
             if app.startswith("django."):
