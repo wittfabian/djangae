@@ -1,5 +1,6 @@
 # STANDARD LIB
 from datetime import timedelta
+import hashlib
 import time
 
 # THRID PARTY
@@ -23,9 +24,11 @@ class LockQuerySet(models.query.QuerySet):
             E.g. if you know that the section of code you're locking should never take more than
             3 seconds, then set this to 3000.
         """
+        identifier_hash = hashlib.md5(identifier).hexdigest()
+
         @transaction.atomic()
         def trans():
-            lock = self.filter(identifier=identifier).first()
+            lock = self.filter(identifier_hash=identifier_hash).first()
             if lock:
                 # Lock already exists, so check if it's old enough to ignore/steal
                 if (
@@ -37,7 +40,10 @@ class LockQuerySet(models.query.QuerySet):
                     lock.save()
                     return lock
             else:
-                return DatastoreLock.objects.create(identifier=identifier)
+                return DatastoreLock.objects.create(
+                    identifier_hash=identifier_hash,
+                    identifier=identifier
+                )
 
         lock = trans()
         while wait and lock is None:
@@ -51,8 +57,14 @@ class DatastoreLock(models.Model):
 
     objects = LockQuerySet.as_manager()
 
-    identifier = CharField(primary_key=True)
+    # To ensure that different locks are distributed evenly across the Datastore key space, we use
+    # a hash of the identifier as the primary key
+    identifier_hash = CharField(primary_key=True)
+    identifier = CharField()
     timestamp = models.DateTimeField(default=timezone.now)
+
+    def __str__(self):
+        return self.identifier
 
     def release(self):
         self.delete()

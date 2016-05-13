@@ -1,3 +1,6 @@
+# STANDARD LIB
+import hashlib
+
 # THIRD PARTY
 from django.utils import timezone
 
@@ -10,6 +13,11 @@ from .views import cleanup_locks
 
 class DatastoreLocksTestCase(TestCase):
     """ Tests for the implementation of the STRONG kind of lock (DatastoreLock). """
+
+    def _make_lock(self, identifier, **kwargs):
+        """ Shorcut for when we need to manually create DatastoreLock objects for tests. """
+        identifier_hash = hashlib.md5(identifier).hexdigest()
+        return DatastoreLock.objects.create(identifier_hash=identifier_hash, **kwargs)
 
     def test_acquire_and_release(self):
         # If we try to acquire the same lock twice then the second one should fail
@@ -46,9 +54,7 @@ class DatastoreLocksTestCase(TestCase):
             with lock('x', wait=True, steal_after_ms=10):
                 return True
 
-        DatastoreLock.objects.create(
-            identifier='x', timestamp=timezone.now() - timezone.timedelta(microseconds=2000)
-        )
+        self._make_lock('x', timestamp=timezone.now() - timezone.timedelta(microseconds=2000))
         self.assertTrue(do_context())
 
     def test_decorator_no_wait(self):
@@ -74,15 +80,13 @@ class DatastoreLocksTestCase(TestCase):
         def do_something():
                 return True
 
-        DatastoreLock.objects.create(
-            identifier='x', timestamp=timezone.now() - timezone.timedelta(microseconds=2000)
-        )
+        self._make_lock('x', timestamp=timezone.now() - timezone.timedelta(microseconds=2000))
         self.assertTrue(do_something())
 
     def test_cleanup_view(self):
         ages_ago = timezone.now() - timezone.timedelta(minutes=15)
-        DatastoreLock.objects.create(identifier="old_lock", timestamp=ages_ago)
-        recent_lock = DatastoreLock.objects.create(identifier="recent_lock")
+        self._make_lock("old_lock", timestamp=ages_ago)
+        recent_lock = self._make_lock("recent_lock")
         cleanup_locks(None)
         self.process_task_queues()
         # The old lock should have been deleted but the new one should not
