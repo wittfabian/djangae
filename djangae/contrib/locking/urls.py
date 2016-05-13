@@ -6,5 +6,5 @@ from .views import cleanup_locks
 
 
 urlpatterns = patterns('',
-    url(r'^cleanup-locks/$', cleanup_locks, name="cleanup_locks"),
+    url(r'^djangae-cleanup-locks/$', cleanup_locks, name="cleanup_locks"),
 )
