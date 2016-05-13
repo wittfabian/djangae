@@ -4,6 +4,7 @@ import os
 import datetime
 import re
 
+from djangae import environment
 from djangae.sandbox import allow_mode_write
 from django.conf import settings
 
@@ -14,9 +15,7 @@ MAX_COLUMNS_PER_SPECIAL_INDEX = getattr(settings, "DJANGAE_MAX_COLUMNS_PER_SPECI
 CHARACTERS_PER_COLUMN = [31, 44, 54, 63, 71, 79, 85, 91, 97, 103]
 
 def _get_index_file():
-    from djangae.utils import find_project_root
-    index_file = os.path.join(find_project_root(), "djangaeidx.yaml")
-
+    index_file = os.path.join(environment.get_application_root(), "djangaeidx.yaml")
     return index_file
 
 
@@ -76,7 +75,7 @@ def write_special_indexes():
 
 
 def add_special_index(model_class, field_name, index_type, value=None):
-    from djangae.utils import on_production, in_testing
+    from djangae.utils import in_testing
     from django.conf import settings
 
     indexer = REQUIRES_SPECIAL_INDEXES[index_type]
@@ -89,7 +88,7 @@ def add_special_index(model_class, field_name, index_type, value=None):
     if special_index_exists(model_class, field_name, index_type):
         return
 
-    if on_production() or (in_testing() and not getattr(settings, "GENERATE_SPECIAL_INDEXES_DURING_TESTING", False)):
+    if environment.is_production_environment() or (in_testing() and not getattr(settings, "GENERATE_SPECIAL_INDEXES_DURING_TESTING", False)):
         raise RuntimeError(
             "There is a missing index in your djangaeidx.yaml - \n\n{0}:\n\t{1}: [{2}]".format(
                 _get_table_from_model(model_class), field_name, index_type

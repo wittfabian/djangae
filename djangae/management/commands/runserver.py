@@ -139,7 +139,7 @@ class Command(BaseRunserverCommand):
 
         quit_command = 'CTRL-BREAK' if sys.platform == 'win32' else 'CONTROL-C'
 
-        from djangae.utils import find_project_root
+        from djangae.environment import get_application_root
         from djangae.sandbox import _find_sdk_from_python_path
         from djangae.blobstore_service import stop_blobstore_service
 
@@ -149,7 +149,7 @@ class Command(BaseRunserverCommand):
         stop_blobstore_service()
 
         # Check for app.yaml
-        expected_path = os.path.join(find_project_root(), "app.yaml")
+        expected_path = os.path.join(get_application_root(), "app.yaml")
         if not os.path.exists(expected_path):
             sys.stderr.write("Unable to find app.yaml at '%s'\n" % expected_path)
             sys.exit(1)

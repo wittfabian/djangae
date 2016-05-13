@@ -1,109 +1,75 @@
-import os
+from __future__ import absolute_import
+
+import collections
 import sys
 import time
 import logging
+import functools
+import warnings
+
 from socket import socket, SHUT_RDWR
 
+class DjangaeDeprecation(DeprecationWarning):
+    pass
 
+
+def deprecated(replacement):
+    warnings.simplefilter("default", DjangaeDeprecation)
+
+    def wrapper(func):
+        @functools.wraps(func)
+        def new_func(*args, **kwargs):
+            warnings.warn(
+                "{} is deprecated. Use {} instead.".format(func.__name__, replacement),
+                DjangaeDeprecation, 2
+            )
+            return func(*args, **kwargs)
+        return new_func
+    return wrapper
+
+
+@deprecated(replacement="djangae.environment.application_id")
 def application_id():
-    from google.appengine.api import app_identity
-
-    try:
-        result = app_identity.get_application_id()
-    except AttributeError:
-        result = None
-
-    if not result:
-        # Apparently we aren't running live, probably inside a management command
-        from google.appengine.api import appinfo
-
-        info = appinfo.LoadSingleAppInfo(open(os.path.join(find_project_root(), "app.yaml")))
-
-        result = "dev~" + info.application
-        os.environ['APPLICATION_ID'] = result
-        result = app_identity.get_application_id()
-
-    return result
+    from . import environment
+    return environment.application_id()
 
 
+@deprecated(replacement="djangae.environment.sdk_is_available")
 def appengine_on_path():
-    try:
-        from google.appengine.api import apiproxy_stub_map
-        apiproxy_stub_map  # Silence pylint
-        return True
-    except ImportError:
-        return False
+    from . import environment
+    return environment.sdk_is_available()
 
 
+@deprecated(replacement="djangae.environment.is_production_environment")
 def on_production():
-    return 'SERVER_SOFTWARE' in os.environ and not os.environ['SERVER_SOFTWARE'].startswith("Development")
+    from . import environment
+    return environment.is_production_environment()
 
 
+@deprecated(replacement="djangae.environment.datastore_is_available")
 def datastore_available():
-    from google.appengine.api import apiproxy_stub_map
-    return bool(apiproxy_stub_map.apiproxy.GetStub('datastore_v3'))
+    from . import environment
+    return environment.datastore_is_available()
+
+
+@deprecated(replacement="djangae.environment.get_application_root")
+def find_project_root():
+    from . import environment
+    return environment.get_application_root()
 
 
 def in_testing():
+    """
+        FIXME! This is in the wrong place, and implemented wrongly!
+
+        What should happen is in djangae.core.management.execute_from_command_line
+        we should activate the "test" sandbox if we are running the "test" management command.
+        This sandbox should (for now) call through to the local sandbox.
+
+        We then need to add a get_active_sandbox() function to sandbox.py, and then
+        deprecate this function in favour of "djangae.sandbox.get_active_sandbox"
+    """
     return "test" in sys.argv
-
-
-import collections
-import functools
-
-class memoized(object):
-    def __init__(self, func, *args):
-        self.func = func
-        self.cache = {}
-        self.args = args
-
-    def __call__(self, *args):
-        args = self.args or args
-        if not isinstance(args, collections.Hashable):
-         # uncacheable. a list, for instance.
-         # better to not cache than blow up.
-         return self.func(*args)
-
-        if args in self.cache:
-            return self.cache[args]
-        else:
-            value = self.func(*args)
-            self.cache[args] = value
-            return value
-
-    def __repr__(self):
-        '''Return the function's docstring.'''
-        return self.func.__doc__
-
-    def __get__(self, obj, objtype):
-        '''Support instance methods.'''
-        return functools.partial(self.__call__, obj)
-
-@memoized
-def find_project_root():
-    """Traverse the filesystem upwards and return the directory containing app.yaml"""
-    path = os.path.dirname(os.path.abspath(__file__))
-    app_yaml_path = os.environ.get('DJANGAE_APP_YAML_LOCATION', None)
-
-    # If the DJANGAE_APP_YAML_LOCATION variable is setup, will try to locate
-    # it from there.
-    if (app_yaml_path is not None and
-            os.path.exists(os.path.join(app_yaml_path, "app.yaml"))):
-        return app_yaml_path
-
-    # Failing that, iterates over the parent folders until it finds it,
-    # failing when it gets to the root
-    while True:
-        if os.path.exists(os.path.join(path, "app.yaml")):
-            return path
-        else:
-            parent = os.path.dirname(path)
-            if parent == path:  # Filesystem root
-                break
-            else:
-                path = parent
-
-    raise RuntimeError("Unable to locate app.yaml. Did you add it to skip_files?")
 
 
 def get_in_batches(queryset, batch_size=10):
@@ -197,3 +163,32 @@ def get_next_available_port(url, port):
             port = port + offset
             break
     return port
+
+
+class memoized(object):
+    def __init__(self, func, *args):
+        self.func = func
+        self.cache = {}
+        self.args = args
+
+    def __call__(self, *args):
+        args = self.args or args
+        if not isinstance(args, collections.Hashable):
+         # uncacheable. a list, for instance.
+         # better to not cache than blow up.
+         return self.func(*args)
+
+        if args in self.cache:
+            return self.cache[args]
+        else:
+            value = self.func(*args)
+            self.cache[args] = value
+            return value
+
+    def __repr__(self):
+        '''Return the function's docstring.'''
+        return self.func.__doc__
+
+    def __get__(self, obj, objtype):
+        '''Support instance methods.'''
+        return functools.partial(self.__call__, obj)
