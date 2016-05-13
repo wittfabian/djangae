@@ -64,11 +64,11 @@ def task_name():
 
 
 def task_retry_count():
-    "Returns the task retry count, or zero if this isn't a task"
+    "Returns the task retry count, or None if this isn't a task"
     try:
         return int(os.environ.get("HTTP_X_APPENGINE_TASKRETRYCOUNT"))
     except (TypeError, ValueError):
-        return 0
+        return None
 
 
 def task_queue_name():
