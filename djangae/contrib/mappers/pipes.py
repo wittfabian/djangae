@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.db import router
 from mapreduce.mapper_pipeline import MapperPipeline
 from mapreduce import parameters
 from mapreduce import control
@@ -83,10 +84,13 @@ class MapReduceTask(object):
     target = 'default'
 
 
-    def __init__(self, model=None, db='default'):
-        self.db = db
+    def __init__(self, model=None, db=None):
         if model:
             self.model = model
+            self.db = db or router.db_for_read(self.model)
+        else:
+            self.db = db or 'default'
+
         if not self.job_name:
             # No job name then we will just use the class
             self.job_name = self.get_class_path()

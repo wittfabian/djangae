@@ -3,9 +3,9 @@ import os
 from unittest import TextTestResult
 
 from django.test.runner import DiscoverRunner
-
 from django.db import NotSupportedError
-from djangae.utils import find_project_root
+
+from djangae import environment
 
 from google.appengine.ext import testbed
 
@@ -69,7 +69,7 @@ def init_testbed():
 
     stub_kwargs = {
         "init_taskqueue_stub": {
-            "root_path": find_project_root()
+            "root_path": environment.get_application_root()
         }
     }
     bed = testbed.Testbed()

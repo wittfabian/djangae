@@ -3,7 +3,6 @@ import copy
 from django import forms
 from django.db import models
 from django.core.exceptions import ValidationError, ImproperlyConfigured
-from django.db.models.fields.subclassing import Creator
 from djangae.forms.fields import ListFormField
 from django.utils.text import capfirst
 

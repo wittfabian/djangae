@@ -7,8 +7,9 @@ import subprocess
 import getpass
 import logging
 import urllib
-import djangae.utils as utils
-from .utils import port_is_open, get_next_available_port
+
+from . import environment
+from .utils import get_next_available_port
 
 _SCRIPT_NAME = 'dev_appserver.py'
 
@@ -281,7 +282,7 @@ def activate(sandbox_name, add_sdk_to_path=False, new_env_vars=None, **overrides
     if sandbox_name not in SANDBOXES:
         raise RuntimeError('Unknown sandbox "{}"'.format(sandbox_name))
 
-    project_root = utils.find_project_root()
+    project_root = environment.get_application_root()
 
    # Store our original sys.path before we do anything, this must be tacked
     # onto the end of the other paths so we can access globally installed things (e.g. ipdb etc.)

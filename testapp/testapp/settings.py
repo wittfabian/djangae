@@ -47,6 +47,8 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'django.contrib.humanize',
     'djangae.contrib.processing.mapreduce',
+    'djangae.contrib.locking',
+    'djangae.contrib.mappers',
     'djangae.contrib.pagination',
     'djangae.contrib.uniquetool',
     'testapp'

@@ -43,7 +43,7 @@ https://djangae.readthedocs.org/
 The intention is always to support the last two versions of Django, although older versions may work. Currently
 Django 1.8 and 1.9 are supported.
 
-** 1.6 and 1.7 are no longer supported by Djangae, as their not supported by Django either! **
+** 1.6 and 1.7 are no longer supported by Djangae, as they're not supported by Django either! **
 
 # Installation
 

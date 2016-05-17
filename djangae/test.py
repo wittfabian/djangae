@@ -84,7 +84,7 @@ def process_task_queues(queue_name=None):
             response = client.get(task['url'], **headers)
 
         if response.status_code != 200:
-            logging.info("Unexpected status ({}) while simulating task with url: {}".format(response.status_code, task['url']))
+            logging.info("Unexpected status (%r) while simulating task with url: %r", response.status_code, task['url'])
 
         if not tasks:
             #The map reduce may have added more tasks, so refresh the list

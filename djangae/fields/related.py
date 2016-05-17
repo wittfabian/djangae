@@ -261,7 +261,7 @@ class RelatedIteratorField(ForeignObject):
     generate_reverse_relation = True
     empty_strings_allowed = False
 
-    def __init__(self, model, limit_choices_to=None, related_name=None, on_delete=models.DO_NOTHING, **kwargs):
+    def __init__(self, to, limit_choices_to=None, related_name=None, on_delete=models.DO_NOTHING, **kwargs):
         # Make sure that we do nothing on cascade by default
         if on_delete == models.CASCADE:
             raise ImproperlyConfigured(
@@ -274,33 +274,28 @@ class RelatedIteratorField(ForeignObject):
                              " (e.g. wipeout the entire list) if you really want to do that "
                              "then use models.SET instead and return an empty list/set")
 
-
         kwargs["rel"] = RelatedIteratorRel(
             self,
-            model,
+            to,
             related_name=related_name,
             limit_choices_to=limit_choices_to,
             on_delete=on_delete
         )
 
-        kwargs.update({
-            'to': model,
-            'from_fields': ['self'],
-            'to_fields': [None],
-        })
         if django.VERSION[1] >= 9:  # Django 1.8 doesn't have on_delete as attribute
             kwargs.update({
                 'on_delete': models.DO_NOTHING,
             })
 
-        super(RelatedIteratorField, self).__init__(**kwargs)
+        from_fields = ['self']
+        to_fields = [None]
+
+        super(RelatedIteratorField, self).__init__(to, from_fields=from_fields, to_fields=to_fields, **kwargs)
 
     def deconstruct(self):
         name, path, args, kwargs = super(RelatedIteratorField, self).deconstruct()
-        args = (self.rel.to,)
-
         # We hardcode a number of arguments for RelatedIteratorField, those arguments need to be removed here
-        for hardcoded_kwarg in ["null", "default", "to_fields", "from_fields", "to", "on_delete"]:
+        for hardcoded_kwarg in ["to_fields", "from_fields", "on_delete"]:
             del kwargs[hardcoded_kwarg]
 
         return name, path, args, kwargs
@@ -331,7 +326,7 @@ class RelatedIteratorField(ForeignObject):
     def contribute_to_related_class(self, cls, related):
         # Internal M2Ms (i.e., those with a related name ending with '+')
         # and swapped models don't get a related descriptor.
-        if not self.rel.is_hidden() and not related.model._meta.swapped:
+        if not self.rel.is_hidden() and not related.to._meta.swapped:
             setattr(cls, related.get_accessor_name(), RelatedIteratorObjectsDescriptor(related))
 
 
@@ -392,6 +387,14 @@ class RelatedSetField(RelatedIteratorField):
 
         super(RelatedSetField, self).__init__(*args, **kwargs)
 
+    def deconstruct(self):
+        name, path, args, kwargs = super(RelatedSetField, self).deconstruct()
+        # We hardcode a number of arguments for RelatedIteratorField, those arguments need to be removed here
+        for hardcoded_kwarg in ["default", "null"]:
+            del kwargs[hardcoded_kwarg]
+
+        return name, path, args, kwargs
+
     def to_python(self, value):
         if value is None:
             return set()
@@ -437,6 +440,14 @@ class RelatedListField(RelatedIteratorField):
         kwargs["null"] = True
 
         super(RelatedListField, self).__init__(*args, **kwargs)
+
+    def deconstruct(self):
+        name, path, args, kwargs = super(RelatedSetField, self).deconstruct()
+        # We hardcode a number of arguments for RelatedIteratorField, those arguments need to be removed here
+        for hardcoded_kwarg in ["default", "null"]:
+            del kwargs[hardcoded_kwarg]
+
+        return name, path, args, kwargs
 
     def to_python(self, value):
         if value is None:

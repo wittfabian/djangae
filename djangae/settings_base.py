@@ -54,3 +54,5 @@ EMAIL_BACKEND = 'djangae.mail.AsyncEmailBackend'
 ALLOWED_HOSTS = (".appspot.com", )
 
 DJANGAE_RUNSERVER_IGNORED_FILES_REGEXES = ['^.+$(?<!\.py)(?<!\.yaml)(?<!\.html)']
+# Note that these should match a directory name, not directory path:
+DJANGAE_RUNSERVER_IGNORED_DIR_REGEXES = [r"^google_appengine$"]

@@ -255,5 +255,5 @@ class CleanMapper(pipeline_base.PipelineBase):
             params=mapper_params,
             shards=10
         )
-
+        
         yield CallbackPipeline(kwargs['action_pk'])

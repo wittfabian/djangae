@@ -22,6 +22,8 @@ from django.conf import settings
 from django.utils import six
 from django.core.serializers.json import DjangoJSONEncoder
 
+from djangae.forms.fields import JSONFormField, JSONWidget
+
 __all__ = ( 'JSONField',)
 
 
@@ -134,3 +136,11 @@ class JSONField(models.TextField):
         if self.default == {}:
             del kwargs['default']
         return name, path, args, kwargs
+
+    def formfield(self, **kwargs):
+        defaults = {
+            'form_class': JSONFormField,
+            'widget': JSONWidget,
+        }
+        defaults.update(kwargs)
+        return super(JSONField, self).formfield(**defaults)
