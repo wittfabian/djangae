@@ -102,9 +102,7 @@ def map_queryset(
     )
 
 
-def map_entities(kind_name, processor_func, finalize_func=None, _shards=None,
-    _output_writer=None, _output_writer_kwargs=None, _job_name=None, *processor_args, **processor_kwargs
-):
+def map_entities(kind_name, processor_func, finalize_func=None, _shards=None, _output_writer=None, _output_writer_kwargs=None, _job_name=None, *processor_args, **processor_kwargs):
     """
         Iterates over all entities of a particular kind, calling processor_func on each one.
         Calls finalize_func when the iteration completes.
@@ -173,7 +171,24 @@ def map_reduce_entities(kind_name, map_func, reduce_func, output_writer, finaliz
 
         Returns the pipeline ID.
     """
-    pass
+    map_func = qualname(map_func)
+    reduce_func = qualname(reduce_func)
+    output_writer = qualname(output_writer)
+    pipeline = MapreducePipeline(
+        job_name or "Map task over {}".format(kind_name),
+        map_func,
+        reduce_func,
+        qualname(input_readers.RawDatastoreInputReader),
+        output_writer,
+        mapper_params={
+            'input_reader': {input_readers.RawDatastoreInputReader.ENTITY_KIND_PARAM : kind_name},
+        },
+        reducer_params={
+            "output_writer": output_writer_kwargs or {}
+        },
+        shards=shard_count
+    )
+    pipeline.start()
 
 
 def pipeline_has_finished(pipeline_id):

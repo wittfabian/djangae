@@ -5,7 +5,8 @@ from djangae.test import TestCase
 from djangae.contrib.processing.mapreduce import (
     map_queryset,
     map_entities,
-    map_reduce_queryset
+    map_reduce_queryset,
+    map_reduce_entities,
 )
 
 from google.appengine.api import datastore
@@ -29,7 +30,11 @@ def count(instance, counter_id):
 
 
 def yield_letters(instance):
-    for letter in instance.text:
+    if hasattr(instance, 'text'):
+        text = instance.text
+    else:
+        text = instance.get('text', '')
+    for letter in text:
         yield (letter, "")
 
 
@@ -39,6 +44,29 @@ def reduce_count(key, values):
 
 def delete():
     TestModel.objects.all().delete()
+
+
+class MapReduceEntityTests(TestCase):
+
+    def setUp(self):
+        for i in xrange(5):
+            TestModel.objects.create(
+                id=i+1,
+                text="abcc"
+            )
+
+    def test_mapreduce_over_entities(self):
+        map_reduce_entities(
+            TestModel._meta.db_table,
+            yield_letters,
+            reduce_count,
+            output_writers.GoogleCloudStorageKeyValueOutputWriter,
+            output_writer_kwargs={
+                'bucket_name': 'test-bucket'
+            }
+        )
+        import ipdb; ipdb.set_trace()
+        self.process_task_queues()
 
 
 class MapReduceQuerysetTests(TestCase):
@@ -60,7 +88,6 @@ class MapReduceQuerysetTests(TestCase):
                 'bucket_name': 'test-bucket'
             }
         )
-
         self.process_task_queues()
 
 
