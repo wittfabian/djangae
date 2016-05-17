@@ -21,6 +21,8 @@ class ComputedFieldMixin(object):
         return name, path, args, kwargs
 
     def from_db_value(self, value, expression, connection, context):
+        if value is None:
+            return value
         return self.to_python(value)
 
 
