@@ -65,7 +65,6 @@ class MapReduceEntityTests(TestCase):
                 'bucket_name': 'test-bucket'
             }
         )
-        import ipdb; ipdb.set_trace()
         self.process_task_queues()
 
 
