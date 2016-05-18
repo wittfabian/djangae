@@ -21,7 +21,12 @@ def in_atomic_block():
     return IsInTransaction()
 
 
+# Because decorators are only instantiated once per function, we need to make sure any state
+# stored on them is both thread-local (to prevent function calls in different threads
+# interacting with each other) and safe to use recursively (by using a stack of state)
+
 class ContextState(object):
+    "Stores state per-call of the ContextDecorator"
     pass
 
 
