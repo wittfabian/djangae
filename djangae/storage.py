@@ -407,7 +407,9 @@ class BlobstoreFileUploadHandler(FileUploadHandler):
         self.blobkey = None
 
     def new_file(self, field_name, file_name, content_type, content_length, charset=None, content_type_extra=None):
-        self.blobkey = content_type_extra.get('blob-key')
+        if content_type_extra:
+            self.blobkey = content_type_extra.get('blob-key')
+
         if self.blobkey:
             self.blobkey = BlobKey(self.blobkey)
             raise StopFutureHandlers()
