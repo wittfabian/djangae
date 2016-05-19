@@ -407,31 +407,7 @@ class BlobstoreFileUploadHandler(FileUploadHandler):
         self.blobkey = None
 
     def new_file(self, field_name, file_name, content_type, content_length, charset=None, content_type_extra=None):
-        """
-            We can kill a lot of this hackery in Django 1.7 when content_type_extra is actually passed in!
-        """
-        self.data.seek(0)  # Rewind
-        data = self.data.read()
-
-        parts = data.split(self.boundary)
-
-        for part in parts:
-            match = re.search('blob-key="?(?P<blob_key>[:a-zA-Z0-9_=-]+)', part)
-            blob_key = match.groupdict().get('blob_key') if match else None
-
-            if not blob_key:
-                continue
-
-            # OK, we have a blob key, but is it the one for the field?
-            match = re.search('\sname="?(?P<field_name>[^"]+)', part)
-            name = match.groupdict().get('field_name') if match else None
-            if name != field_name:
-                # Nope, not for this field
-                continue
-
-            self.blobkey = blob_key
-            break
-
+        self.blobkey = content_type_extra.get('blob-key')
         if self.blobkey:
             self.blobkey = BlobKey(self.blobkey)
             raise StopFutureHandlers()
