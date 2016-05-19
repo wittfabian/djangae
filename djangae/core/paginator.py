@@ -68,6 +68,9 @@ class DatastorePaginator(object):
     page_range = property(_get_page_range)
 
 
+Paginator = DatastorePaginator
+
+
 class DatastorePage(collections.Sequence):
 
     def __init__(self, fetched_objects, object_list, number, paginator):
@@ -124,3 +127,6 @@ class DatastorePage(collections.Sequence):
         relative to total objects found (hits).
         """
         return (self.paginator.per_page * (self.number - 1)) + len(self.object_list)
+
+
+Page = DatastorePage
