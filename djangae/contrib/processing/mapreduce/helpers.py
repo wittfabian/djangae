@@ -4,7 +4,7 @@ from mapreduce import context
 from mapreduce.mapper_pipeline import MapperPipeline
 from mapreduce.mapreduce_pipeline import MapreducePipeline
 from mapreduce import pipeline_base
-from mapreduce import input_readers
+from mapreduce.input_readers import RawDatastoreInputReader
 
 from django.utils.module_loading import import_string
 from djangae.contrib.processing.mapreduce.input_readers import DjangoInputReader
@@ -35,7 +35,8 @@ class DynamicPipeline(pipeline_base.PipelineBase):
 
 class CallbackPipeline(pipeline_base.PipelineBase):
     """
-        Simply calls the specified function. Takes a dotted-path to the callback
+        Simply calls the specified function.
+        Takes a dotted-path to the callback
     """
     def run(self, func):
         func = import_string(func)
@@ -73,27 +74,30 @@ def _do_map(input_reader, processor_func, finalize_func, params, _shards, _outpu
 
     new_pipeline = DynamicPipeline(pipelines)
     new_pipeline.start()
+    return new_pipeline
 
 
 def map_queryset(
     queryset, processor_func, finalize_func=None, _shards=None,
-    _output_writer=None, _output_writer_kwargs=None, _job_name=None, *processor_args, **processor_kwargs
+    _output_writer=None, _output_writer_kwargs=None, _job_name=None,
+    *processor_args, **processor_kwargs
 ):
     """
-        Iterates over a queryset with mapreduce calling process_func for each Django instance.
-        Calls finalize_func when the iteration completes.
+        Iterates over a queryset with mapreduce calling process_func for
+        each Django instance. Calls finalize_func when the iteration completes.
 
-        output_writer is optional, but should be a mapreduce OutputWriter subclass. Any additional
-        args or kwargs are passed down to the handling function.
+        output_writer is optional, but should be a mapreduce OutputWriter
+        subclass. Any additional args or kwargs are passed down to the
+        handling function.
 
-        Returns the pipeline ID.
+        Returns the pipeline
     """
     params = {
         'input_reader': DjangoInputReader.params_from_queryset(queryset),
         'output_writer': _output_writer_kwargs or {}
     }
 
-    _do_map(
+    return _do_map(
         DjangoInputReader,
         processor_func, finalize_func, params, _shards, _output_writer,
         _output_writer_kwargs,
@@ -104,20 +108,22 @@ def map_queryset(
 
 def map_entities(kind_name, processor_func, finalize_func=None, _shards=None, _output_writer=None, _output_writer_kwargs=None, _job_name=None, *processor_args, **processor_kwargs):
     """
-        Iterates over all entities of a particular kind, calling processor_func on each one.
+        Iterates over all entities of a particular kind, calling processor_func
+        on each one.
         Calls finalize_func when the iteration completes.
 
-        output_writer is optional, but should be a mapreduce OutputWriter subclass
+        output_writer is optional, but should be a mapreduce
+        OutputWriter subclass
 
-        Returns the pipeline ID.
+        Returns the pipeline
     """
     params = {
-        'input_reader': { input_readers.RawDatastoreInputReader.ENTITY_KIND_PARAM : kind_name },
+        'input_reader': {RawDatastoreInputReader.ENTITY_KIND_PARAM: kind_name},
         'output_writer': _output_writer_kwargs or {}
     }
 
-    _do_map(
-        input_readers.RawDatastoreInputReader,
+    return _do_map(
+        RawDatastoreInputReader,
         processor_func, finalize_func, params, _shards, _output_writer,
         _output_writer_kwargs,
         _job_name or "Map task over {}".format(kind_name),
@@ -131,7 +137,7 @@ def map_files(bucket_name, process_func, finalize_func=None, shard_count=None, o
 
         prefixes should be a list of glob patterns for filename matching
 
-        Returns the pipeline ID.
+        Returns the pipeline
     """
     pass
 
@@ -142,25 +148,26 @@ def map_reduce_queryset(queryset, map_func, reduce_func, output_writer, finalize
 
         output_writer should be a mapreduce OutputWriter subclass
 
-        Returns the pipeline ID.
+        Returns the pipeline
     """
     map_func = qualname(map_func)
     reduce_func = qualname(reduce_func)
     output_writer = qualname(output_writer)
     pipeline = MapreducePipeline(
-            job_name or "Map task over {}".format(queryset.model),
-            map_func,
-            reduce_func,
-            qualname(DjangoInputReader),
-            output_writer,
-            mapper_params={
-                "input_reader": DjangoInputReader.params_from_queryset(queryset),
-            },
-            reducer_params={
-                "output_writer": output_writer_kwargs
-            },
-            shards=shard_count)
+        job_name or "Map task over {}".format(queryset.model),
+        map_func,
+        reduce_func,
+        qualname(DjangoInputReader),
+        output_writer,
+        mapper_params={
+            "input_reader": DjangoInputReader.params_from_queryset(queryset),
+        },
+        reducer_params={
+            "output_writer": output_writer_kwargs
+        },
+        shards=shard_count)
     pipeline.start()
+    return pipeline
 
 
 def map_reduce_entities(kind_name, map_func, reduce_func, output_writer, finalize_func=None, shard_count=None, output_writer_kwargs=None, job_name=None):
@@ -169,7 +176,7 @@ def map_reduce_entities(kind_name, map_func, reduce_func, output_writer, finaliz
 
         output_writer should be a mapreduce OutputWriter subclass
 
-        Returns the pipeline ID.
+        Returns the pipeline
     """
     map_func = qualname(map_func)
     reduce_func = qualname(reduce_func)
@@ -178,10 +185,12 @@ def map_reduce_entities(kind_name, map_func, reduce_func, output_writer, finaliz
         job_name or "Map task over {}".format(kind_name),
         map_func,
         reduce_func,
-        qualname(input_readers.RawDatastoreInputReader),
+        qualname(RawDatastoreInputReader),
         output_writer,
         mapper_params={
-            'input_reader': {input_readers.RawDatastoreInputReader.ENTITY_KIND_PARAM : kind_name},
+            'input_reader': {
+                RawDatastoreInputReader.ENTITY_KIND_PARAM: kind_name
+            },
         },
         reducer_params={
             "output_writer": output_writer_kwargs or {}
@@ -189,20 +198,22 @@ def map_reduce_entities(kind_name, map_func, reduce_func, output_writer, finaliz
         shards=shard_count
     )
     pipeline.start()
+    return pipeline
 
 
 def pipeline_has_finished(pipeline_id):
     """
         Returns True if the specified pipeline has finished
     """
-    pass
+    pipe = get_pipeline_by_id(pipeline_id)
+    return pipe.has_finalized
 
 
 def pipeline_in_progress(pipeline_id):
     """
         Returns True if the specified pipeline is in progress
     """
-    pass
+    return not pipeline_has_finished(pipeline_id)
 
 def get_pipeline_by_id(pipeline_id):
-    pass
+    return pipeline.Pipeline.from_id(pipeline_id)

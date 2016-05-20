@@ -7,6 +7,7 @@ from djangae.contrib.processing.mapreduce import (
     map_entities,
     map_reduce_queryset,
     map_reduce_entities,
+    get_pipeline_by_id,
 )
 
 from google.appengine.api import datastore
@@ -56,7 +57,7 @@ class MapReduceEntityTests(TestCase):
             )
 
     def test_mapreduce_over_entities(self):
-        map_reduce_entities(
+        pipeline = map_reduce_entities(
             TestModel._meta.db_table,
             yield_letters,
             reduce_count,
@@ -66,6 +67,9 @@ class MapReduceEntityTests(TestCase):
             }
         )
         self.process_task_queues()
+        # Refetch the pipeline record
+        pipeline = get_pipeline_by_id(pipeline.pipeline_id)
+        self.assertTrue(pipeline.has_finalized)
 
 
 class MapReduceQuerysetTests(TestCase):
@@ -78,7 +82,7 @@ class MapReduceQuerysetTests(TestCase):
             )
 
     def test_mapreduce_over_queryset(self):
-        map_reduce_queryset(
+        pipeline = map_reduce_queryset(
             TestModel.objects.all(),
             yield_letters,
             reduce_count,
@@ -88,6 +92,8 @@ class MapReduceQuerysetTests(TestCase):
             }
         )
         self.process_task_queues()
+        pipeline = get_pipeline_by_id(pipeline.pipeline_id)
+        self.assertTrue(pipeline.has_finalized)
 
 
 class MapQuerysetTests(TestCase):
@@ -97,7 +103,7 @@ class MapQuerysetTests(TestCase):
 
     def test_filtering(self):
         counter = Counter.objects.create()
-        map_queryset(
+        pipeline = map_queryset(
             TestModel.objects.filter(is_true=True),
             count,
             finalize_func=delete,
@@ -105,13 +111,15 @@ class MapQuerysetTests(TestCase):
         )
         counter = Counter.objects.create()
         self.process_task_queues()
+        pipeline = get_pipeline_by_id(pipeline.pipeline_id)
+        self.assertTrue(pipeline.has_finalized)
         counter.refresh_from_db()
         self.assertEqual(0, counter.count)
 
     def test_mapping_over_queryset(self):
         counter = Counter.objects.create()
 
-        map_queryset(
+        pipeline = map_queryset(
             TestModel.objects.all(),
             count,
             finalize_func=delete,
@@ -119,6 +127,8 @@ class MapQuerysetTests(TestCase):
         )
 
         self.process_task_queues()
+        pipeline = get_pipeline_by_id(pipeline.pipeline_id)
+        self.assertTrue(pipeline.has_finalized)
         counter.refresh_from_db()
 
         self.assertEqual(5, counter.count)
@@ -127,7 +137,7 @@ class MapQuerysetTests(TestCase):
     def test_filters_apply(self):
         counter = Counter.objects.create()
 
-        map_queryset(
+        pipeline = map_queryset(
             TestModel.objects.filter(pk__gt=2),
             count,
             finalize_func=delete,
@@ -135,6 +145,8 @@ class MapQuerysetTests(TestCase):
         )
 
         self.process_task_queues()
+        pipeline = get_pipeline_by_id(pipeline.pipeline_id)
+        self.assertTrue(pipeline.has_finalized)
         counter.refresh_from_db()
 
         self.assertEqual(3, counter.count)
@@ -157,7 +169,7 @@ class MapEntitiesTests(TestCase):
     def test_mapping_over_entities(self):
         counter = Counter.objects.create()
 
-        map_entities(
+        pipeline = map_entities(
             TestModel._meta.db_table,
             count_entity,
             finalize_func=delete,
@@ -165,6 +177,8 @@ class MapEntitiesTests(TestCase):
         )
 
         self.process_task_queues()
+        pipeline = get_pipeline_by_id(pipeline.pipeline_id)
+        self.assertTrue(pipeline.has_finalized)
         counter.refresh_from_db()
 
         self.assertEqual(5, counter.count)
