@@ -2,6 +2,7 @@
 
 ### New features & improvements:
 
+- Improved ordering of `sys.path` so that libraries in the application folder take precedence over libraries that are bundled with the SDK (with some hard-to-avoid exceptions).
 - Added `djangae.contrib.locking`, for preventing simultaneous executing of functions or blocks of code.
 - Moved and renamed several functions from `djangae.utils` to `djangae.environment`.
 - Added new task utility functions: `is_in_task()`, `task_name()`, `task_queue_name()`, `task_retry_count()`.
