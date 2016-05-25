@@ -2,7 +2,7 @@
 
 ### New features & improvements:
 
--
+- Added new `assert_login_required` and `assert_login_admin` methods to `djangae.test.TestCase`.
 
 ### Bug fixes:
 
@@ -10,7 +10,7 @@
 
 ### Documentation:
 
-- 
+-
 
 ## v0.9.4 (release date: 4th April 2016)
 
