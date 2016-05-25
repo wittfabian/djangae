@@ -9,10 +9,8 @@ from djangae.utils import find_project_root
 
 from google.appengine.api import apiproxy_stub_map, appinfo
 from google.appengine.datastore import datastore_stub_util
-from google.appengine.tools.devappserver2 import url_handler
 from google.appengine.tools.devappserver2.application_configuration import ModuleConfiguration
-from google.appengine.tools.devappserver2.python import request_handler
-from google.appengine.tools.devappserver2.module import Module, _ScriptHandler
+from google.appengine.tools.devappserver2.module import _ScriptHandler
 
 
 @contextlib.contextmanager
