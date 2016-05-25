@@ -16,18 +16,6 @@ class TransactionTests(TestCase):
         with transaction.atomic(xg=True):
             TestUser.objects.get(pk=pk)
 
-    def test_recursive_atomic(self):
-        l = []
-
-        @transaction.atomic
-        def txn():
-            l.append(True)
-            if len(l) == 3:
-                return
-            else:
-                txn()
-
-        txn()
 
     def test_atomic_decorator(self):
         from .test_connector import TestUser

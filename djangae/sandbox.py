@@ -305,8 +305,14 @@ def activate(sandbox_name, add_sdk_to_path=False, new_env_vars=None, **overrides
     sdk_path = _find_sdk_from_python_path()
     _PATHS = wrapper_util.Paths(sdk_path)
 
-    # Set the path to just the app engine SDK
-    sys.path[:] = _PATHS.script_paths(_SCRIPT_NAME) + _PATHS.scrub_path(_SCRIPT_NAME, original_path) + _PATHS.oauth_client_extra_paths
+    # Set the path to just the app engine SDK, making sure that all appengine
+    # libs are placed at the end of the PATH so locally installed packages
+    # take precedence
+    sys.path = (
+        _PATHS.scrub_path(_SCRIPT_NAME, original_path) +
+        _PATHS.script_paths(_SCRIPT_NAME) +
+        _PATHS.oauth_client_extra_paths
+    )
 
     # Gotta set the runtime properly otherwise it changes appengine imports, like wepapp
     # when you are not running dev_appserver
