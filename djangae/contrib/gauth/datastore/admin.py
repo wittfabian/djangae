@@ -21,6 +21,6 @@ class UserAdmin(admin.ModelAdmin):
     def save_model(self, request, user, form, change):
         if not user.password:
             user.set_password(None)
-            user.save()
+        user.save()
 
 admin.site.register(Group)
