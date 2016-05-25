@@ -26,11 +26,7 @@ filenames properly.
 
 ### Documentation:
 
-<<<<<<< HEAD
--
-=======
 - Added a note about `dumpurls` command in documentation
->>>>>>> master
 
 ## v0.9.4 (release date: 4th April 2016)
 
