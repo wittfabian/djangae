@@ -29,6 +29,19 @@ class TransactionTests(TestCase):
 
         txn()
 
+    def test_recursive_non_atomic(self):
+        l = []
+
+        @transaction.non_atomic
+        def txn():
+            l.append(True)
+            if len(l) == 3:
+                return
+            else:
+                txn()
+
+        txn()
+
     def test_atomic_decorator(self):
         from .test_connector import TestUser
 
