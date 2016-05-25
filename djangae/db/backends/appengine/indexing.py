@@ -138,6 +138,7 @@ class IExactIndexer(Indexer):
         return value.lower()
 
     def prep_value_for_query(self, value):
+        value = self.unescape(value)
         return value.lower()
 
     def indexed_column_name(self, field_column, value, index):
