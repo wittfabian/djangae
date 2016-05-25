@@ -1535,6 +1535,12 @@ class EdgeCaseTests(TestCase):
         user = TestUser.objects.get(id__iexact=str(self.u1.id))
         self.assertEqual("A", user.username)
 
+    def test_iexact_containing_underscores(self):
+        add_special_index(TestUser, "username", "iexact")
+        user = TestUser.objects.create(username="A_B", email="test@example.com")
+        results = TestUser.objects.filter(username__iexact=user.username.lower())
+        self.assertEqual(list(results), [user])
+
     def test_year(self):
         user = TestUser.objects.create(username="Z", email="z@example.com")
         user.last_login = datetime.datetime(2000,1,1,0,0,0)
