@@ -3,14 +3,34 @@
 ### New features & improvements:
 
 - Added new `assert_login_required` and `assert_login_admin` methods to `djangae.test.TestCase`.
+- Improved ordering of `sys.path` so that libraries in the application folder take precedence over libraries that are bundled with the SDK (with some hard-to-avoid exceptions).
+- Added `djangae.contrib.locking`, for preventing simultaneous executing of functions or blocks of code.
+- Moved and renamed several functions from `djangae.utils` to `djangae.environment`.
+- Added new task utility functions: `is_in_task()`, `task_name()`, `task_queue_name()`, `task_retry_count()`.
+- Extended runserver's file watcher patching to allow ignoring of directories.
+- Add tasks utility functions to djangae.environment.
+- Alias DatastorePaginator -> Paginator, and DatastorePage -> Page to be more like Django
 
 ### Bug fixes:
 
--
+- Fix `JSONField` behaviour in forms: it's properly validating JSON string before saving
+it and returns json object, not string when accessed through `cleaned_data`.
+- Fixing `ListFormField.clean` to return `[]` instead of `None` for empty values.
+- Fix computed field `None` values.
+- Made retrieving `blob-key` in `BlobstoreFileUploadHandler` easier by using `content_type_extra`. This removes
+ugly hacks from before Django 1.7, and fixes issue with regex in `BlobstoreFileUploadHandler` not recognizing
+filenames properly.
+- Making auth backend catch race condition when creating a new user.
+- Fix for `RelatedIterator` that fails when related iterated fields model is set as string.
+- Ensure `MapReduceTask `uses the db returned by the application router(s) unless explicitly passed.
 
 ### Documentation:
 
+<<<<<<< HEAD
 -
+=======
+- Added a note about `dumpurls` command in documentation
+>>>>>>> master
 
 ## v0.9.4 (release date: 4th April 2016)
 

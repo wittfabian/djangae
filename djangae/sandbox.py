@@ -7,8 +7,9 @@ import subprocess
 import getpass
 import logging
 import urllib
-import djangae.utils as utils
-from .utils import port_is_open, get_next_available_port
+
+from . import environment
+from .utils import get_next_available_port
 
 _SCRIPT_NAME = 'dev_appserver.py'
 
@@ -281,7 +282,7 @@ def activate(sandbox_name, add_sdk_to_path=False, new_env_vars=None, **overrides
     if sandbox_name not in SANDBOXES:
         raise RuntimeError('Unknown sandbox "{}"'.format(sandbox_name))
 
-    project_root = utils.find_project_root()
+    project_root = environment.get_application_root()
 
    # Store our original sys.path before we do anything, this must be tacked
     # onto the end of the other paths so we can access globally installed things (e.g. ipdb etc.)
@@ -304,8 +305,14 @@ def activate(sandbox_name, add_sdk_to_path=False, new_env_vars=None, **overrides
     sdk_path = _find_sdk_from_python_path()
     _PATHS = wrapper_util.Paths(sdk_path)
 
-    # Set the path to just the app engine SDK
-    sys.path[:] = _PATHS.script_paths(_SCRIPT_NAME) + _PATHS.scrub_path(_SCRIPT_NAME, original_path) + _PATHS.oauth_client_extra_paths
+    # Set the path to just the app engine SDK, making sure that all appengine
+    # libs are placed at the end of the PATH so locally installed packages
+    # take precedence
+    sys.path = (
+        _PATHS.scrub_path(_SCRIPT_NAME, original_path) +
+        _PATHS.script_paths(_SCRIPT_NAME) +
+        _PATHS.oauth_client_extra_paths
+    )
 
     # Gotta set the runtime properly otherwise it changes appengine imports, like wepapp
     # when you are not running dev_appserver

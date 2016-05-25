@@ -1680,6 +1680,7 @@ class BlobstoreFileUploadHandlerTest(TestCase):
             'content-type': 'message/external-body; blob-key="PLOF0qOie14jzHWJXEa9HA=="; access-type="X-AppEngine-BlobKey"'
         }
         self.uploader = BlobstoreFileUploadHandler(self.request)
+        self.extra_content_type = {'blob-key': 'PLOF0qOie14jzHWJXEa9HA==', 'access-type': 'X-AppEngine-BlobKey'}
 
     def _create_wsgi_input(self):
         return StringIO('--===============7417945581544019063==\r\nContent-Type:'
@@ -1707,7 +1708,8 @@ class BlobstoreFileUploadHandlerTest(TestCase):
         file_field_name = 'field-file'
         length = len(self._create_wsgi_input().read())
         self.uploader.handle_raw_input(self.request.META['wsgi.input'], self.request.META, length, self.boundary, "utf-8")
-        self.assertRaises(StopFutureHandlers, self.uploader.new_file, file_field_name, 'file_name', None, None)
+        self.assertRaises(StopFutureHandlers, self.uploader.new_file, file_field_name,
+            'file_name', None, None, None, self.extra_content_type)
         self.assertRaises(EntityNotFoundError, self.uploader.file_complete, None)
 
     def test_blob_key_creation(self):
@@ -1716,7 +1718,7 @@ class BlobstoreFileUploadHandlerTest(TestCase):
         self.uploader.handle_raw_input(self.request.META['wsgi.input'], self.request.META, length, self.boundary, "utf-8")
         self.assertRaises(
             StopFutureHandlers,
-            self.uploader.new_file, file_field_name, 'file_name', None, None
+            self.uploader.new_file, file_field_name, 'file_name', None, None, None, self.extra_content_type
         )
         self.assertIsNotNone(self.uploader.blobkey)
 
