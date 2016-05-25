@@ -2,6 +2,7 @@
 
 ### New features & improvements:
 
+- Fixed bug with `__iexact` indexer where values containing underscores would not be correctly indexed.  (Existing objects will need to be re-saved to be correctly indexed.)
 - Improved ordering of `sys.path` so that libraries in the application folder take precedence over libraries that are bundled with the SDK (with some hard-to-avoid exceptions).
 - Added `djangae.contrib.locking`, for preventing simultaneous executing of functions or blocks of code.
 - Moved and renamed several functions from `djangae.utils` to `djangae.environment`.
