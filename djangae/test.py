@@ -5,7 +5,7 @@ import os
 from django import test
 from django.test import Client
 
-from djangae.utils import find_project_root
+from djangae.environment import get_application_root
 
 from google.appengine.api import apiproxy_stub_map, appinfo
 from google.appengine.datastore import datastore_stub_util
@@ -149,7 +149,7 @@ class HandlerAssertionsMixin(object):
         Load script handler configurations from app.yaml and try to match
         the provided url path to a url_maps regex.
         """
-        app_yaml_path = os.path.join(find_project_root(), "app.yaml")
+        app_yaml_path = os.path.join(get_application_root(), "app.yaml")
         config = ModuleConfiguration(app_yaml_path)
 
         url_maps = config.handlers
