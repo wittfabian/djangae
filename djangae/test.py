@@ -1,11 +1,16 @@
 import contextlib
 import logging
+import os
 
 from django import test
 from django.test import Client
 
-from google.appengine.api import apiproxy_stub_map
+from djangae.utils import find_project_root
+
+from google.appengine.api import apiproxy_stub_map, appinfo
 from google.appengine.datastore import datastore_stub_util
+from google.appengine.tools.devappserver2.application_configuration import ModuleConfiguration
+from google.appengine.tools.devappserver2.module import _ScriptHandler
 
 
 @contextlib.contextmanager
@@ -105,9 +110,65 @@ class TestCaseMixin(object):
         process_task_queues(queue_name)
 
 
-class TestCase(TestCaseMixin, test.TestCase):
+class HandlerAssertionsMixin(object):
+    """
+    Custom assert methods which verifies a range of handler configuration
+    setting specified in app.yaml.
+    """
+
+    msg_prefix = 'Handler configuration for {url} is not protected by {perm}.'
+
+    def assert_login_admin(self, url):
+        """
+        Test that the handler defined in app.yaml which matches the url provided
+        has `login: admin` in the configuration.
+        """
+        handler = self._match_handler(url)
+        self.assertEqual(
+            handler.url_map.login, appinfo.LOGIN_ADMIN, self.msg_prefix.format(
+                url=url, perm='`login: admin`'
+            )
+        )
+
+    def assert_login_required(self, url):
+        """
+        Test that the handler defined in app.yaml which matches the url provided
+        has `login: required` or `login: admin` in the configruation.
+        """
+        handler = self._match_handler(url)
+        login_admin = handler.url_map.login == appinfo.LOGIN_ADMIN
+        login_required = handler.url_map.login == appinfo.LOGIN_REQUIRED or login_admin
+
+        self.assertTrue(login_required, self.msg_prefix.format(
+                url=url, perm='`login: admin` or `login: required`'
+            )
+        )
+
+    def _match_handler(self, url):
+        """
+        Load script handler configurations from app.yaml and try to match
+        the provided url path to a url_maps regex.
+        """
+        app_yaml_path = os.path.join(find_project_root(), "app.yaml")
+        config = ModuleConfiguration(app_yaml_path)
+
+        url_maps = config.handlers
+        script_handlers = [
+            _ScriptHandler(maps) for
+            maps in url_maps if
+            maps.GetHandlerType() == appinfo.HANDLER_SCRIPT
+        ]
+
+        for handler in script_handlers:
+            if handler.match(url):
+                return handler
+
+        raise AssertionError('No handler found for {url}'.format(url=url))
+
+
+class TestCase(HandlerAssertionsMixin, TestCaseMixin, test.TestCase):
     pass
 
 
-class TransactionTestCase(TestCaseMixin, test.TransactionTestCase):
+class TransactionTestCase(HandlerAssertionsMixin, TestCaseMixin, test.TransactionTestCase):
     pass

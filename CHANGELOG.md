@@ -2,6 +2,7 @@
 
 ### New features & improvements:
 
+- Added new `assert_login_required` and `assert_login_admin` methods to `djangae.test.TestCase`.
 - Improved ordering of `sys.path` so that libraries in the application folder take precedence over libraries that are bundled with the SDK (with some hard-to-avoid exceptions).
 - Added `djangae.contrib.locking`, for preventing simultaneous executing of functions or blocks of code.
 - Moved and renamed several functions from `djangae.utils` to `djangae.environment`.
@@ -25,7 +26,11 @@ filenames properly.
 
 ### Documentation:
 
+<<<<<<< HEAD
+-
+=======
 - Added a note about `dumpurls` command in documentation
+>>>>>>> master
 
 ## v0.9.4 (release date: 4th April 2016)
 
