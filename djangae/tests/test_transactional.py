@@ -1,7 +1,10 @@
-from djangae.test import TestCase
+# STANDARD LIB
+import threading
 
+# DJANGAE
 from djangae.db import transaction
 from djangae.contrib import sleuth
+from djangae.test import TestCase
 
 
 class TransactionTests(TestCase):
@@ -41,6 +44,32 @@ class TransactionTests(TestCase):
                 txn()
 
         txn()
+
+    def test_atomic_in_separate_thread(self):
+        """ Regression test.  See #668. """
+        @transaction.atomic
+        def txn():
+            return
+
+        def target():
+            txn()
+
+        thread = threading.Thread(target=target)
+        thread.start()
+        thread.join()
+
+    def test_non_atomic_in_separate_thread(self):
+        """ Regression test.  See #668. """
+        @transaction.non_atomic
+        def txn():
+            return
+
+        def target():
+            txn()
+
+        thread = threading.Thread(target=target)
+        thread.start()
+        thread.join()
 
     def test_atomic_decorator(self):
         from .test_connector import TestUser
