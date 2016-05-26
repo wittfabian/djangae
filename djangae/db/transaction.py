@@ -91,6 +91,12 @@ class ContextDecorator(object):
 
     def _push_state(self):
         "We need a stack for state in case a decorator is called recursively"
+        # self.state is a threading.local() object, so if the current thread is not the one in
+        # which ContextDecorator.__init__ was called (e.g. is not the thread in which the function
+        # was decorated), then the 'stack' attribute may not exist
+        if not hasattr(self.state, 'stack'):
+            self.state.stack = []
+
         self.state.stack.append(ContextState())
         return self.state.stack[-1]
 
