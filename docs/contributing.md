@@ -35,21 +35,15 @@ For pull request to be merged, following requirements should be met:
 
 ## Running tests
 
-For running the tests, (the first time only) you just need to run:
+For running the tests, you just need to run:
 
     $ ./runtests.sh
 
-This will download the App Engine SDK, pip install a bunch of stuff locally, download the Django tests and run them. If you want to run the
-tests on a specific Django version (1.8 and 1.9 are supported), simply do:
+On the first run this will download the App Engine SDK, pip install a bunch of stuff locally (into a folder, no virtualenv needed), download the Django tests and run them.  Subsequent runs will just run the tests. If you want to run the tests on a specific Django version, simply do:
 
     $ DJANGO_VERSION=1.8 ./runtests.sh
 
-After you have run the tests once, you can do:
-
-    $ cd testapp
-    ./runtests.sh
-
-This will avoid the re-downloading of the SDK and libraries. Note that if you want to switch Django version then you need to use the `runtests.sh` command in the parent directory again.
+Currently the default is 1.8. TravisCI runs on 1.8 and 1.9 currently.
 
 You can run specific tests in the usual way by doing:
 
