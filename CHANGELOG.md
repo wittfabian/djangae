@@ -2,7 +2,7 @@
 
 ### New features & improvements:
 
-- Fixed bug with `__iexact` indexer where values containing underscores would not be correctly indexed.  (Existing objects will need to be re-saved to be correctly indexed.)
+- Added new `assert_login_required` and `assert_login_admin` methods to `djangae.test.TestCase`.
 - Improved ordering of `sys.path` so that libraries in the application folder take precedence over libraries that are bundled with the SDK (with some hard-to-avoid exceptions).
 - Added `djangae.contrib.locking`, for preventing simultaneous executing of functions or blocks of code.
 - Moved and renamed several functions from `djangae.utils` to `djangae.environment`.
@@ -23,6 +23,7 @@ filenames properly.
 - Making auth backend catch race condition when creating a new user.
 - Fix for `RelatedIterator` that fails when related iterated fields model is set as string.
 - Ensure `MapReduceTask `uses the db returned by the application router(s) unless explicitly passed.
+- Fixed bug with `__iexact` indexer where values containing underscores would not be correctly indexed.  (Existing objects will need to be re-saved to be correctly indexed.)
 
 ### Documentation:
 
