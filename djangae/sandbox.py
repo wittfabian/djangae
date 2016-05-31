@@ -8,6 +8,8 @@ import getpass
 import logging
 import urllib
 
+from os.path import commonprefix
+
 from . import environment
 from .utils import get_next_available_port
 
@@ -305,13 +307,33 @@ def activate(sandbox_name, add_sdk_to_path=False, new_env_vars=None, **overrides
     sdk_path = _find_sdk_from_python_path()
     _PATHS = wrapper_util.Paths(sdk_path)
 
-    # Set the path to just the app engine SDK, making sure that all appengine
-    # libs are placed at the end of the PATH so locally installed packages
-    # take precedence
+    project_paths = [] # Paths under the application root
+    system_paths = [] # All other paths
+    app_root = environment.get_application_root()
+
+    # We need to look at the original path, and make sure that any paths
+    # which are under the project root are first, then any other paths
+    # are added after the SDK ones
+    for path in _PATHS.scrub_path(_SCRIPT_NAME, original_path):
+        if commonprefix([app_root, path]) == app_root:
+            project_paths.append(path)
+        else:
+            system_paths.append(path)
+
+    # We build a list of SDK paths, and add any additional ones required for
+    # the oauth client
+    appengine_paths = _PATHS.script_paths(_SCRIPT_NAME)
+    for path in _PATHS.oauth_client_extra_paths:
+        if path not in appengine_paths:
+            appengine_paths.append(path)
+
+    # Now, we make sure that paths within the project take precedence, followed
+    # by the SDK, then finally any paths from the system Python (for stuff like
+    # ipdb etc.)
     sys.path = (
-        _PATHS.scrub_path(_SCRIPT_NAME, original_path) +
-        _PATHS.script_paths(_SCRIPT_NAME) +
-        _PATHS.oauth_client_extra_paths
+        project_paths +
+        appengine_paths +
+        system_paths
     )
 
     # Gotta set the runtime properly otherwise it changes appengine imports, like wepapp
