@@ -1535,6 +1535,12 @@ class EdgeCaseTests(TestCase):
         user = TestUser.objects.get(id__iexact=str(self.u1.id))
         self.assertEqual("A", user.username)
 
+    def test_iexact_containing_underscores(self):
+        add_special_index(TestUser, "username", "iexact")
+        user = TestUser.objects.create(username="A_B", email="test@example.com")
+        results = TestUser.objects.filter(username__iexact=user.username.lower())
+        self.assertEqual(list(results), [user])
+
     def test_year(self):
         user = TestUser.objects.create(username="Z", email="z@example.com")
         user.last_login = datetime.datetime(2000,1,1,0,0,0)
@@ -1680,6 +1686,7 @@ class BlobstoreFileUploadHandlerTest(TestCase):
             'content-type': 'message/external-body; blob-key="PLOF0qOie14jzHWJXEa9HA=="; access-type="X-AppEngine-BlobKey"'
         }
         self.uploader = BlobstoreFileUploadHandler(self.request)
+        self.extra_content_type = {'blob-key': 'PLOF0qOie14jzHWJXEa9HA==', 'access-type': 'X-AppEngine-BlobKey'}
 
     def _create_wsgi_input(self):
         return StringIO('--===============7417945581544019063==\r\nContent-Type:'
@@ -1707,7 +1714,8 @@ class BlobstoreFileUploadHandlerTest(TestCase):
         file_field_name = 'field-file'
         length = len(self._create_wsgi_input().read())
         self.uploader.handle_raw_input(self.request.META['wsgi.input'], self.request.META, length, self.boundary, "utf-8")
-        self.assertRaises(StopFutureHandlers, self.uploader.new_file, file_field_name, 'file_name', None, None)
+        self.assertRaises(StopFutureHandlers, self.uploader.new_file, file_field_name,
+            'file_name', None, None, None, self.extra_content_type)
         self.assertRaises(EntityNotFoundError, self.uploader.file_complete, None)
 
     def test_blob_key_creation(self):
@@ -1716,7 +1724,7 @@ class BlobstoreFileUploadHandlerTest(TestCase):
         self.uploader.handle_raw_input(self.request.META['wsgi.input'], self.request.META, length, self.boundary, "utf-8")
         self.assertRaises(
             StopFutureHandlers,
-            self.uploader.new_file, file_field_name, 'file_name', None, None
+            self.uploader.new_file, file_field_name, 'file_name', None, None, None, self.extra_content_type
         )
         self.assertIsNotNone(self.uploader.blobkey)
 

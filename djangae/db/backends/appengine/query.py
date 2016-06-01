@@ -35,8 +35,8 @@ from djangae.db.backends.appengine.indexing import (
     add_special_index,
 )
 
+from djangae import environment
 from djangae.db.backends.appengine import POLYMODEL_CLASS_ATTRIBUTE
-from djangae.utils import on_production
 from djangae.db.utils import (
     get_top_concrete_parent,
     has_concrete_parents,
@@ -647,7 +647,7 @@ def _extract_ordering_from_query_18(query):
 
         if len(cross_table_ordering):
             log_once(
-                DJANGAE_LOG.warning if not on_production() else DJANGAE_LOG.debug,
+                DJANGAE_LOG.warning if environment.is_development_environment() else DJANGAE_LOG.debug,
                 "The following orderings were ignored as cross-table orderings are not supported on the datastore: %s", cross_table_ordering
             )
 
@@ -761,7 +761,7 @@ def _extract_ordering_from_query_18(query):
     if len(final) != len(result):
         diff = set(result) - set(final)
         log_once(
-            DJANGAE_LOG.warning if not on_production() else DJANGAE_LOG.debug,
+            DJANGAE_LOG.warning if environment.is_development_environment() else DJANGAE_LOG.debug,
             "The following orderings were ignored as cross-table and random orderings are not supported on the datastore: %s", diff
         )
 
