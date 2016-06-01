@@ -1062,6 +1062,13 @@ def _transform_query_19(connection, kind, query):
     return ret
 
 
+def get_factory_for_version(factory, version):
+    try:
+        return factory[version]
+    except KeyError:
+        return factory[max(factory.keys())]
+
+
 _FACTORY = {
     (1, 8): _transform_query_18,
     (1, 9): _transform_query_19,
@@ -1098,8 +1105,8 @@ _KIND_FACTORY = {
 
 def transform_query(connection, query):
     version = django.VERSION[:2]
-    kind = _KIND_FACTORY[version](query)
-    return _FACTORY[version](connection, kind, query)
+    kind = get_factory_for_version(_KIND_FACTORY, version)(query)
+    return get_factory_for_version(_FACTORY, version)(connection, kind, query)
 
 
 _ORDERING_FACTORY = {
@@ -1111,4 +1118,4 @@ _ORDERING_FACTORY = {
 
 def extract_ordering(query):
     version = django.VERSION[:2]
-    return _ORDERING_FACTORY[version](query)
+    return get_factory_for_version(_ORDERING_FACTORY, version)(query)
