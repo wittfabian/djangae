@@ -155,8 +155,7 @@ class ShardedCounterField(RelatedSetField):
                 "fetching in a single Get operation (%d)" % MAX_ENTITIES_PER_GET
             )
         kwargs.setdefault("related_name", "+")
-        from djangae.models import CounterShard
-        super(ShardedCounterField, self).__init__(CounterShard, **kwargs)
+        super(ShardedCounterField, self).__init__('djangae.CounterShard', **kwargs)
 
     def contribute_to_class(self, cls, name):
         super(ShardedCounterField, self).contribute_to_class(cls, name)
