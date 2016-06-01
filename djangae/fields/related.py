@@ -442,7 +442,7 @@ class RelatedListField(RelatedIteratorField):
         super(RelatedListField, self).__init__(*args, **kwargs)
 
     def deconstruct(self):
-        name, path, args, kwargs = super(RelatedSetField, self).deconstruct()
+        name, path, args, kwargs = super(RelatedListField, self).deconstruct()
         # We hardcode a number of arguments for RelatedIteratorField, those arguments need to be removed here
         for hardcoded_kwarg in ["default", "null"]:
             del kwargs[hardcoded_kwarg]

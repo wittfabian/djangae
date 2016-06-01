@@ -60,7 +60,9 @@ if "test" in sys.argv:
 
     tests_dir = os.path.join(BASE_DIR, "libs", "django-stable-{}.{}.x/tests".format(*django.VERSION[:2]))
     if not os.path.exists(tests_dir):
-        tests_dir = os.path.join(BASE_DIR, "libs", "django-master/tests")
+        tests_dir = os.path.join(BASE_DIR, "libs", "django-{}/tests".format(django.get_version()))
+        if not os.path.exists(tests_dir):
+            tests_dir = os.path.join(BASE_DIR, "libs", "django-master/tests")
 
     sys.path.insert(0, tests_dir)
 

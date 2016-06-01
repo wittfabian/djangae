@@ -3,6 +3,7 @@ import new
 import logging
 from itertools import chain
 
+import django
 from django.contrib.contenttypes.models import ContentType
 from django.db import DEFAULT_DB_ALIAS, router, connections
 from django.db.models import signals, Manager
@@ -70,8 +71,9 @@ class SimulatedContentTypeManager(Manager):
                     "id": content_type_id,
                     "app_label": app_label,
                     "model": model_name,
-                    "name": smart_text(model._meta.verbose_name_raw)
                 }
+                if django.VERSION < (1, 9):
+                    content_types[content_type_id]["name"] = smart_text(model._meta.verbose_name_raw)
 
             self._store.content_types = content_types
 
@@ -225,12 +227,14 @@ def update_contenttypes(sender, verbosity=2, db=DEFAULT_DB_ALIAS, **kwargs):
 
     for (model_name, model) in six.iteritems(app_models):
         # Go through get_or_create any models that we want to keep
+        defaults = {}
+        if django.VERSION < (1, 9):
+            defaults['name'] = smart_text(model._meta.verbose_name_raw)
+
         ct, created = ContentType.objects.get_or_create(
             app_label=app_label,
             model=model_name,
-            defaults = {
-                "name": smart_text(model._meta.verbose_name_raw)
-            }
+            defaults=defaults,
         )
 
         if verbosity >= 2 and created:
