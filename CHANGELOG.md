@@ -24,6 +24,7 @@ filenames properly.
 - Fix for `RelatedIterator` that fails when related iterated fields model is set as string.
 - Ensure `MapReduceTask `uses the db returned by the application router(s) unless explicitly passed.
 - Fixed bug with `__iexact` indexer where values containing underscores would not be correctly indexed.  (Existing objects will need to be re-saved to be correctly indexed.)
+- Fixed a regression that prevented precreated users from logging in when `DJANGAE_CREATE_UNKNOWN_USER` is False
 
 ### Documentation:
 
