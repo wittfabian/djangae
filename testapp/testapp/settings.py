@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     'djangae.contrib.security',
     'djangae.contrib.consistency',
     'django.contrib.contenttypes',
+    'djangae.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.sites',
     'django.contrib.messages',
@@ -159,7 +160,6 @@ AUTH_USER_MODEL = 'djangae.GaeDatastoreUser'
 GENERATE_SPECIAL_INDEXES_DURING_TESTING = True
 COMPLETE_FLUSH_WHILE_TESTING = True
 DJANGAE_SEQUENTIAL_IDS_IN_TESTS = True
-DJANGAE_SIMULATE_CONTENTTYPES = True
 
 TEST_RUNNER = 'djangae.test_runner.SkipUnsupportedRunner'
 DJANGAE_ADDITIONAL_TEST_APPS = ["djangae"] + TO_TEST
