@@ -11,3 +11,14 @@ class DjangaeConfig(AppConfig):
 
         request_finished.connect(reset_context, dispatch_uid="request_finished_context_reset")
         request_started.connect(reset_context, dispatch_uid="request_started_context_reset")
+
+        from django.conf import settings
+        if getattr(settings, 'DJANGAE_SIMULATE_CONTENTTYPES', False):
+            import warnings
+            warnings.warn(
+                "settings.DJANGAE_SIMULATE_CONTENTTYPES is deprecated, please "
+                "add djangae.contrib.contenttypes to INSTALLED_APPS instead. "
+                "It needs to be after django.contrib.contenttypes in the list."
+            )
+            from djangae.contrib.contenttypes import apps
+            apps.patch_contenttypes()
