@@ -15,10 +15,18 @@ class DjangaeConfig(AppConfig):
         request_started.connect(reset_context, dispatch_uid="request_started_context_reset")
 
         from django.conf import settings
-        if 'django.contrib.contenttypes' in settings.INSTALLED_APPS and (
-                not 'djangae.contrib.contenttypes' in settings.INSTALLED_APPS):
-            raise ImproperlyConfigured(
-                "If you're using django.contrib.contenttypes, then you need "
-                "to add djangae.contrib.contenttypes to INSTALLED_APPS after "
-                "django.contrib.contenttypes."
-            )
+        contenttype_configuration_error = ImproperlyConfigured(
+            "If you're using django.contrib.contenttypes, then you need "
+            "to add djangae.contrib.contenttypes to INSTALLED_APPS after "
+            "django.contrib.contenttypes."
+        )
+        if 'django.contrib.contenttypes' in settings.INSTALLED_APPS:
+            if not 'djangae.contrib.contenttypes' in settings.INSTALLED_APPS:
+                # Raise error if User is using Django CT, but not Djangae
+                raise contenttype_configuration_error
+            else:
+                if settings.INSTALLED_APPS.index('django.contrib.contenttypes') > \
+                        settings.INSTALLED_APPS.index('djangae.contrib.contenttypes'):
+                    # Raise error if User is using both Django and Djangae CT, but
+                    # Django CT comes after Djangae CT
+                    raise contenttype_configuration_error
