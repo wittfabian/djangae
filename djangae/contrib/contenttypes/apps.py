@@ -7,17 +7,14 @@ from .management import update_contenttypes
 from .models import SimulatedContentTypeManager
 
 
-def patch_contenttypes():
-    if django_update_contenttypes != update_contenttypes:
-        post_migrate.disconnect(django_update_contenttypes)
-        from django.contrib.contenttypes import models as django_models
-        if not isinstance(django_models.ContentType.objects, SimulatedContentTypeManager):
-            django_models.ContentType.objects = SimulatedContentTypeManager()
-
 class ContentTypesConfig(AppConfig):
     name = 'djangae.contrib.contenttypes'
     verbose_name = _("Djangae Content Types")
     label = "djangae_contenttypes"
 
     def ready(self):
-        patch_contenttypes()
+        if django_update_contenttypes != update_contenttypes:
+            post_migrate.disconnect(django_update_contenttypes)
+            from django.contrib.contenttypes import models as django_models
+            if not isinstance(django_models.ContentType.objects, SimulatedContentTypeManager):
+                django_models.ContentType.objects = SimulatedContentTypeManager()

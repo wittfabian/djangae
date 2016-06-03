@@ -1,5 +1,7 @@
 from django.apps import AppConfig
 from django.utils.translation import ugettext_lazy as _
+from django.core.exceptions import ImproperlyConfigured
+
 
 class DjangaeConfig(AppConfig):
     name = 'djangae'
@@ -13,12 +15,10 @@ class DjangaeConfig(AppConfig):
         request_started.connect(reset_context, dispatch_uid="request_started_context_reset")
 
         from django.conf import settings
-        if getattr(settings, 'DJANGAE_SIMULATE_CONTENTTYPES', False):
-            import warnings
-            warnings.warn(
-                "settings.DJANGAE_SIMULATE_CONTENTTYPES is deprecated, please "
-                "add djangae.contrib.contenttypes to INSTALLED_APPS instead. "
-                "It needs to be after django.contrib.contenttypes in the list."
+        if 'django.contrib.contenttypes' in settings.INSTALLED_APPS and (
+                not 'djangae.contrib.contenttypes' in settings.INSTALLED_APPS):
+            raise ImproperlyConfigured(
+                "If you're using django.contrib.contenttypes, then you need "
+                "to add djangae.contrib.contenttypes to INSTALLED_APPS after "
+                "django.contrib.contenttypes."
             )
-            from djangae.contrib.contenttypes import apps
-            apps.patch_contenttypes()
