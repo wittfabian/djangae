@@ -10,7 +10,7 @@
 - Extended runserver's file watcher patching to allow ignoring of directories.
 - Add tasks utility functions to djangae.environment.
 - Alias DatastorePaginator -> Paginator, and DatastorePage -> Page to be more like Django
-- Moved `ContentType` patching to `djangae.contrib.contenttypes`. `DJANGAE_SIMULATE_CONTENTTYPES` setting has been deprecated, add `djangae.contrib.contenttypes` to `INSTALLED_APPS` instead. `djangae.contrib.contenttypes` needs to be after `django.contrib.contenttypes` in the `INSTALLED_APPS` order.
+- Moved `ContentType` patching to `djangae.contrib.contenttypes`. `DJANGAE_SIMULATE_CONTENTTYPES` setting has been removed, add `djangae.contrib.contenttypes` to `INSTALLED_APPS` instead. `djangae.contrib.contenttypes` needs to be after `django.contrib.contenttypes` in the `INSTALLED_APPS` order.
 
 ### Bug fixes:
 
