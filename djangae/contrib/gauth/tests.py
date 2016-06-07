@@ -48,9 +48,27 @@ class BackendTests(TestCase):
         self.assertEqual(user.pk, user2.pk)
 
     @override_settings(DJANGAE_CREATE_UNKNOWN_USER=True)
-    def test_user_pre_creation(self):
+    def test_user_pre_creation_create_unknown(self):
         """ User objects for Google-Accounts-based users should be able to be pre-created in DB and
-            then matched by email address when they log in.
+            then matched by email address when they log in - even if unknown users are allowed.
+        """
+        User = get_user_model()
+        backend = AppEngineUserAPIBackend()
+        email = '1@example.com'
+        # Pre-create our user
+        User.objects.pre_create_google_user(email)
+        # Now authenticate this user via the Google Accounts API
+        google_user = users.User(email=email, _user_id='111111111100000000001')
+        user = backend.authenticate(google_user=google_user)
+        # Check things
+        self.assertEqual(user.email, email)
+        self.assertIsNotNone(user.last_login)
+        self.assertFalse(user.has_usable_password())
+
+    @override_settings(DJANGAE_CREATE_UNKNOWN_USER=False)
+    def test_user_pre_creation_no_create_unknown(self):
+        """ User objects for Google-Accounts-based users should be able to be pre-created in DB and
+            then matched by email address when they log in - even if unknown users are not allowed.
         """
         User = get_user_model()
         backend = AppEngineUserAPIBackend()
