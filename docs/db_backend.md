@@ -244,9 +244,8 @@ The following functions are available to manage transactions:
   
 
 
-## Multiple Namespaces (Experimental)
+## Multiple Namespaces
 
-**Namespace support is new and experimental, please make sure your code is well tested and report any bugs**
 
 It's possible to create separate "databases" on the datastore via "namespaces". This is supported in Djangae through the normal Django
 multiple database support. To configure multiple datastore namespaces, you can add an optional "NAMESPACE" to the DATABASES setting:
