@@ -104,9 +104,22 @@ This is a replacement for Django's `CharField` field. It uses the `MaxBytesValid
 
 This field is not specific to the App Engine Datastore (or any non-relational database), but is included in Djangae for convenience, especially as in a non-relational database it's often useful to be able to store structured data in a single table rather than in a complex structure of related tables.
 
-```JSONField(use_ordered_dict=False, **kwargs)```
+```JSONField(use_ordered_dict=False, default=dict, **kwargs)```
 
-* `use_ordered_dict`: (default: False) Use `collections.OrderedDict` rather than built-in `dict`.
+* `use_ordered_dict`: (default: False).  Tells the field to maintain the order of keys in the object by using `collections.OrderedDict` for the Python representation, rather than `dict`.
+* `default`: (default: dict).  A callable which returns or creates the default value.  E.g. `dict` or `list`.  Do not use `{}` or `[]`.
+
+
+Note that if you want to edit JSONField values in the Django admin, you must set `formfield_overrides` on your ModelAdmin class.  Otherwise, conversation to/from JSON will not happen correctly.  E.g.:
+
+```python
+from djangae.forms.fields import JSONWidget
+
+class MyModelAdmin(admin.ModelAdmin):
+    formfield_overrides = {
+        JSONField: {'widget': JSONWidget(attrs={'class': 'vLargeTextField'})},
+    }
+```
 
 
 ## TrueOrNullField
