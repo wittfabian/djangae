@@ -46,16 +46,29 @@ It works by storing a list of primary keys of the related objects.  Think of it 
 
 The `RelatedSetField` also accepts most of the same kwargs as `SetField`.
 
+The value of a `RelatedSetField` is a hybrid of a `QuerySet` and a `set`, and has the following methods:
+
+* `add(obj)` - takes a Django model instance and adds it to the set.  The instance must be of the same type as the `model` argument of the `RelatedSetField` and must be saved.
+* `remove(obj)` - takes a Django model instances and removes it from the set.  The instance must be of the same type as the `model` argument of the `RelatedSetField` and must be saved.
+* `clear()` - removes all values from the set.
+
+Note that (unlike a `ManyToManyField`) you must call `save()` on the object for the effects of the above method calls to be saved to the database.
+
+The value of a `RelatedSetField` also has all of the methods of a normal `QuerySet` such as `.filter()`, `.get()`, `.update()`, `.delete()` etc.
+
+### Additional Notes
+
+* If you delete any of the objects in the set (whether by calling `.delete()` on the field or by calling `.delete()` on objects individually), the IDs of the objects will still be stored in the field, even though they will never be returned (because they don't exist).  You should remove them from the field using `remove(obj)` or `clear()`.
+* You can access the underlying `set` which contains the IDs of the related objects.  Similar to how a `ForeignKey` field stores its ID in a `<field_name>_id` attribute, the `RelatedSetField` stores the IDs in a `<field_name>_ids` attribute.  You can access and manipulate this value manually.  For example, if you want to add an object to the set and you know its ID but don't have the actual instance and don't want to fetch it from the DB, you can do `my_obj.my_related_set_field_ids.add(new_id)`.
+* Because the `RelatedSetField` stores the IDs of objects, its queryset is immediately consistent, i.e. is unaffected by the Datastore's eventual consistency.  For example, `my_obj.my_related_set_field.filter(colour="blue")` will always return the latest versions of those objects.
 
 ## RelatedListField
 
 RelatedListField shares the same behavior as RelatedSetField but has the qualities of a list; it maintains the ordering of related objects and allows duplicates.
 
-```RelatedListField(related_model, **kwargs)```
+The field value still has the same `add`, `remove` and `clear` methods as the RelatedSetField, but the `add` method acts like `append` (because it's a `list` rather than a `set`).
 
-* `model`: the model of the related items.
-* `limit_choices_to`: a dictionary of query kwargs for limiting the possible related items.
-* `related_name` - the name of the reverse lookup attribute which is added to the model class of the related items.
+The underlying `<field_name>_ids` attribute is a `list`.
 
 
 ## ShardedCounterField
