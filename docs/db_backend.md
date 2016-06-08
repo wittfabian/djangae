@@ -232,16 +232,16 @@ Django's transaction decorators have no effect on the Datastore, which means tha
  - `django.db.transaction.atomic` and `non_atomic` will have no effect.
  - The `ATOMIC_REQUESTS` and `AUTOCOMMIT` settings in `DATABASES` will have no effect.
  - Django's `get_or_create` will not be atomic and may attempt to create duplicate objects.  You should instead do separate `get` and `create` operations using Djangae's `atomic` manager (see below).
- 
+
 
 The following functions are available to manage transactions:
 
  - `djangae.db.transaction.atomic` - Decorator and Context Manager. Starts a new transaction, accepted `xg`, `indepedendent` and `mandatory` args
  - `djangae.db.transaction.non_atomic` - Decorator and Context Manager. Breaks out of any current transactions so you can run queries outside the transaction
  - `djangae.db.transaction.in_atomic_block` - Returns True if inside a transaction, False otherwise
- 
+
   **Do not use `google.appengine.ext.db.run_in_transaction` and friends, it will break.**
-  
+
 
 
 ## Multiple Namespaces
