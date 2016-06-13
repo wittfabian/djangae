@@ -7,6 +7,7 @@
 ### Bug fixes:
 
 - Fixed a regression that prevented precreated users from logging in when `DJANGAE_CREATE_UNKNOWN_USER` is False.
+- Changed the default value of `DJANGAE_CREATE_UNKNOWN_USER` to `True` to match the original behaviour.
 
 ### Documentation:
 
