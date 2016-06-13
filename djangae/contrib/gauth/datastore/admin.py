@@ -6,5 +6,14 @@ from djangae.contrib.gauth.datastore.models import (
     Group
 )
 
-admin.site.register(GaeDatastoreUser)
+
+@admin.register(GaeDatastoreUser)
+class UserAdmin(admin.ModelAdmin):
+    exclude = ('password',)
+
+    def save_model(self, request, user, form, change):
+        if not user.password:
+            user.set_password(None)
+        user.save()
+
 admin.site.register(Group)

@@ -22,6 +22,8 @@ from django.conf import settings
 from django.utils import six
 from django.core.serializers.json import DjangoJSONEncoder
 
+from djangae.forms.fields import JSONFormField, JSONWidget
+
 __all__ = ( 'JSONField',)
 
 
@@ -76,11 +78,11 @@ class JSONField(models.TextField):
     JSON objects seamlessly.  Main thingy must be a dict object."""
 
     def __init__(self, use_ordered_dict=False, *args, **kwargs):
-        default = kwargs.get('default', None)
-        if default is None:
+        if 'default' in kwargs:
+            if not callable(kwargs['default']):
+                raise TypeError("'default' must be a callable (e.g. 'dict' or 'list')")
+        else:
             kwargs['default'] = dict
-        elif isinstance(default, (list, dict)):
-            kwargs['default'] = default
 
         # use `collections.OrderedDict` rather than built-in `dict`
         self.use_ordered_dict = use_ordered_dict
@@ -134,3 +136,11 @@ class JSONField(models.TextField):
         if self.default == {}:
             del kwargs['default']
         return name, path, args, kwargs
+
+    def formfield(self, **kwargs):
+        defaults = {
+            'form_class': JSONFormField,
+            'widget': JSONWidget,
+        }
+        defaults.update(kwargs)
+        return super(JSONField, self).formfield(**defaults)

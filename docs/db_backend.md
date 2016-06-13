@@ -75,7 +75,7 @@ live database!
 Here's an example of how your `DATABASES` might look in settings.py if you're using both Cloud SQL and the Datastore.
 
 ```python
-from djangae.utils import on_production
+from djangae.environment import is_development_environment
 
 DATABASES = {
     'default': {
@@ -83,7 +83,7 @@ DATABASES = {
     }
 }
 
-if on_production():
+if not is_development_environment():
     DATABASES['sql'] = {
         'ENGINE': 'django.db.backends.mysql',
         'HOST': '/cloudsql/YOUR_GOOGLE_CLOUD_PROJECT:YOUR_INSTANCE_NAME',

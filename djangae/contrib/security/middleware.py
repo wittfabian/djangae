@@ -79,7 +79,7 @@ def _HttpUrlLoggingWrapper(func):
             arg_value = get_default_argument(func, 'url')
 
         if arg_value and not arg_value.startswith('https://'):
-            logging.warn('SECURITY : fetching non-HTTPS url %s' % (arg_value))
+            logging.warn('SECURITY : fetching non-HTTPS url %r', arg_value)
         return func(*args, **kwargs)
     return _CheckAndLog
 

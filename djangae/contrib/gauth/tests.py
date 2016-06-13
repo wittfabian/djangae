@@ -48,9 +48,27 @@ class BackendTests(TestCase):
         self.assertEqual(user.pk, user2.pk)
 
     @override_settings(DJANGAE_CREATE_UNKNOWN_USER=True)
-    def test_user_pre_creation(self):
+    def test_user_pre_creation_create_unknown(self):
         """ User objects for Google-Accounts-based users should be able to be pre-created in DB and
-            then matched by email address when they log in.
+            then matched by email address when they log in - even if unknown users are allowed.
+        """
+        User = get_user_model()
+        backend = AppEngineUserAPIBackend()
+        email = '1@example.com'
+        # Pre-create our user
+        User.objects.pre_create_google_user(email)
+        # Now authenticate this user via the Google Accounts API
+        google_user = users.User(email=email, _user_id='111111111100000000001')
+        user = backend.authenticate(google_user=google_user)
+        # Check things
+        self.assertEqual(user.email, email)
+        self.assertIsNotNone(user.last_login)
+        self.assertFalse(user.has_usable_password())
+
+    @override_settings(DJANGAE_CREATE_UNKNOWN_USER=False)
+    def test_user_pre_creation_no_create_unknown(self):
+        """ User objects for Google-Accounts-based users should be able to be pre-created in DB and
+            then matched by email address when they log in - even if unknown users are not allowed.
         """
         User = get_user_model()
         backend = AppEngineUserAPIBackend()
@@ -107,6 +125,34 @@ class BackendTests(TestCase):
             user = backend.authenticate(google_user=google_user,)
         self.assertEqual(User.objects.count(), 1)
         self.assertEquals(User.objects.get(), user)
+
+    @override_settings(DJANGAE_CREATE_UNKNOWN_USER=True)
+    def test_user_creation_race_condition(self):
+        """ If a user double clicks a 'login' button or something, causing 2 threads to be
+            authenticating the same user at the same time, ensure it doesn't die.
+        """
+        email = "test@example.com"
+        user_id = "111111111100000000001"
+        original_user_get = get_user_model().objects.get
+
+        def crazy_user_get_patch(**kwargs):
+            """ Patch for User.objects.get which simulates another thread creating the same user
+                immedidately after this is called (by doing it as part of this function). """
+            User = get_user_model()
+            try:
+                return original_user_get(**kwargs) # We patched .get()
+            except User.DoesNotExist:
+                # This is horrible, but... the backend first tries get() by username and then tries
+                # get() by email, and we only want to create our user after that second call
+                if kwargs.keys() == ['email']:
+                    User.objects.create_user(username=user_id, email=email)
+                raise
+
+        backend = AppEngineUserAPIBackend()
+        google_user = users.User(email, _user_id=user_id)
+        user_class_path = "djangae.contrib.gauth.datastore.models.GaeDatastoreUser.objects.get"
+        with sleuth.switch(user_class_path, crazy_user_get_patch):
+            backend.authenticate(google_user)
 
 
 @override_settings(AUTHENTICATION_BACKENDS=AUTHENTICATION_BACKENDS)

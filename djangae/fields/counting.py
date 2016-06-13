@@ -134,7 +134,7 @@ class ReverseRelatedShardsDescriptor(ReverseRelatedObjectsDescriptor):
 
 class ShardedCounterField(RelatedSetField):
 
-    def __init__(self, shard_count=DEFAULT_SHARD_COUNT, *args, **kwargs):
+    def __init__(self, shard_count=DEFAULT_SHARD_COUNT, **kwargs):
         # Note that by removing the related_name by default we avoid reverse name clashes caused by
         # having multiple ShardedCounterFields on the same model.
 
@@ -145,6 +145,9 @@ class ShardedCounterField(RelatedSetField):
                 "on a ShardedCounterField, use increment() after creation instead"
             )
 
+        if "to" in kwargs:
+            del kwargs["to"]
+
         self.shard_count = shard_count
         if shard_count > MAX_ENTITIES_PER_GET:
             raise ImproperlyConfigured(
@@ -152,8 +155,7 @@ class ShardedCounterField(RelatedSetField):
                 "fetching in a single Get operation (%d)" % MAX_ENTITIES_PER_GET
             )
         kwargs.setdefault("related_name", "+")
-        from djangae.models import CounterShard
-        super(ShardedCounterField, self).__init__(CounterShard, *args, **kwargs)
+        super(ShardedCounterField, self).__init__('djangae.CounterShard', **kwargs)
 
     def contribute_to_class(self, cls, name):
         super(ShardedCounterField, self).contribute_to_class(cls, name)
@@ -162,7 +164,7 @@ class ShardedCounterField(RelatedSetField):
     def deconstruct(self):
         name, path, args, kwargs = super(ShardedCounterField, self).deconstruct()
 
-        args = tuple() # We don't take any non-kwargs (we override "model" in __ini__)
+        del kwargs["to"]
 
         # Add the shard count if necessary
         if self.shard_count != DEFAULT_SHARD_COUNT:
@@ -173,4 +175,3 @@ class ShardedCounterField(RelatedSetField):
             del kwargs["default"]
 
         return name, path, args, kwargs
-

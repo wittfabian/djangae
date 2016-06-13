@@ -1,5 +1,6 @@
 import warnings
 
+from django.db.utils import IntegrityError
 from django.db import transaction
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -91,9 +92,14 @@ class BaseAppEngineUserAPIBackend(ModelBackend):
         auto_create = should_create_unknown_user()
         user_is_admin = users.is_current_user_admin()
 
-        if not (auto_create or user_is_admin):
-            # User doesn't exist and we aren't going to create one.
-            return None
+        try:
+            existing_user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            if not (auto_create or user_is_admin):
+                # User doesn't exist and we aren't going to create one.
+                return None
+
+            existing_user = None
 
         # OK. We will grant access. We may need to update an existing user, or
         # create a new one, or both.
@@ -107,10 +113,6 @@ class BaseAppEngineUserAPIBackend(ModelBackend):
         # Google account. This is possible but very unlikely.
         # 3. There is no User object realting to this user whatsoever.
 
-        try:
-            existing_user = User.objects.get(email=email)
-        except User.DoesNotExist:
-            existing_user = None
 
         if existing_user:
             if existing_user.username is None:
@@ -130,4 +132,9 @@ class BaseAppEngineUserAPIBackend(ModelBackend):
 
                     return User.objects.create_user(user_id, email=email)
         else:
-            return User.objects.create_user(user_id, email=email)
+            # Create a new user, but account for another thread having created it already in a race
+            # condition scenario. Our logic cannot be in a transaction, so we have to just catch this.
+            try:
+                return User.objects.create_user(user_id, email=email)
+            except IntegrityError:
+                return User.objects.get(username=user_id)

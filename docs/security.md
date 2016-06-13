@@ -17,3 +17,10 @@ patches certain parts of App Engine and its libraries, specifically:
 * The Python `json` library is patched so that the default encoder class escapes the HTML entities `<`, `>` and `&`.
 
 This middleware applies the patches and then raises `django.core.exceptions.MiddlewareNotUsed` so that it does not re-apply the patches on subsequent requests.  Note that in tests which don't load any middleware the patches will not be applied.
+
+
+## `dumpurls` Management Command
+
+Use the `dumpurls` management command to generate a report listing all the configured URL patterns in your project.
+
+For each pattern, the report shows the regular expression for the full path, the Python dotted module name for the view that handles requests, and the names of decorators that may have been applied to the view.

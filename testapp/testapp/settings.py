@@ -39,11 +39,13 @@ INSTALLED_APPS = [
     'djangae.contrib.security',
     'djangae.contrib.consistency',
     'django.contrib.contenttypes',
+    'djangae.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.sites',
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'django.contrib.humanize',
+    'djangae.contrib.locking',
     'djangae.contrib.mappers',
     'djangae.contrib.pagination',
     'djangae.contrib.uniquetool',
@@ -59,7 +61,9 @@ if "test" in sys.argv:
 
     tests_dir = os.path.join(BASE_DIR, "libs", "django-stable-{}.{}.x/tests".format(*django.VERSION[:2]))
     if not os.path.exists(tests_dir):
-        tests_dir = os.path.join(BASE_DIR, "libs", "django-master/tests")
+        tests_dir = os.path.join(BASE_DIR, "libs", "django-{}/tests".format(django.get_version()))
+        if not os.path.exists(tests_dir):
+            tests_dir = os.path.join(BASE_DIR, "libs", "django-master/tests")
 
     sys.path.insert(0, tests_dir)
 
@@ -156,7 +160,6 @@ AUTH_USER_MODEL = 'djangae.GaeDatastoreUser'
 GENERATE_SPECIAL_INDEXES_DURING_TESTING = True
 COMPLETE_FLUSH_WHILE_TESTING = True
 DJANGAE_SEQUENTIAL_IDS_IN_TESTS = True
-DJANGAE_SIMULATE_CONTENTTYPES = True
 
 TEST_RUNNER = 'djangae.test_runner.SkipUnsupportedRunner'
 DJANGAE_ADDITIONAL_TEST_APPS = ["djangae"] + TO_TEST

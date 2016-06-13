@@ -1,10 +1,31 @@
-## Contributing
+# Contributing to Djangae
 
-Contributions are accepted via pull request and will be reviewed as soon as possible. If you have access to master, please do not commit directly! Pull requests only!
+Djangae is actively developed and maintained, so if you're thinking of contributing to the codebase, here is how to get started.
 
-Code style should follow PEP-8 with a loose line length of 100 characters (don't make the code ugly).
+## Get started with development
 
-### Pull request requirements
+1. First off, head to [our Github page](https://github.com/potatolondon/djangae) and fork the repository to have your own copy of it.
+2. Clone it locally to start setting up your development environment
+3. Run all tests to make sure your local version is working: `./runtests.sh`. This will also install all necessary dependencies.
+
+## Pick an issue & send a pull request
+
+If you spotted a bug in Djangae that you want to fix, it's a good idea to start
+off by [adding an issue](https://github.com/potatolondon/djangae/issues/new).
+This will allow us to verify that your issue is valid, and suggest ideas for fixing it, so
+no time is wasted for you.
+
+For help with creating the pull request, check out [Github documentation](https://help.github.com/articles/creating-a-pull-request/).
+
+## Code style
+
+Code style should follow PEP-8 with a loose line length of 100 characters.
+
+## Need help?
+
+Reach out to us on [djangae-users](https://groups.google.com/forum/#!forum/djangae-users) mailing list.
+
+## Pull request requirements
 
 For pull request to be merged, following requirements should be met:
 
@@ -12,25 +33,17 @@ For pull request to be merged, following requirements should be met:
 - Relevant documentation should be updated or added
 - Line item should be added to CHANGELOG.md, unless change is really irrelevant
 
-## Testing
+## Running tests
 
-For running the tests, (the first time only) you just need to run:
+For running the tests, you just need to run:
 
     $ ./runtests.sh
 
-This will download the App Engine SDK, pip install a bunch of stuff locally, download the Django tests and run them. If you want to run the
-tests on a specific Django version, simply do:
+On the first run this will download the App Engine SDK, pip install a bunch of stuff locally (into a folder, no virtualenv needed), download the Django tests and run them.  Subsequent runs will just run the tests. If you want to run the tests on a specific Django version, simply do:
 
     $ DJANGO_VERSION=1.8 ./runtests.sh
 
-Currently the default is 1.7. TravisCI runs on 1.7 and 1.8 currently, and 1.9 in the 1-9-support branch.
-
-After you have run the tests once, you can do:
-
-    $ cd testapp
-    ./runtests.sh
-
-This will avoid the re-downloading of the SDK and libraries.  Note that if you want to switch Django version then you need to use the `runtests.sh` command in the parent directory again.
+Currently the default is 1.8. TravisCI runs on 1.8 and 1.9 currently.
 
 You can run specific tests in the usual way by doing:
 

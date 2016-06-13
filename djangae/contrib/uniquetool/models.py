@@ -225,7 +225,7 @@ class CleanMapper(RawMapperMixin, MapReduceTask):
         """ The Clean mapper maps over all UniqueMarker instances. """
 
         alias = kwargs.get("db", "default")
-        namespace = settings.DATABASES.get(alias, {}).get("NAMESPACE")
+        namespace = settings.DATABASES.get(alias, {}).get("NAMESPACE", "")
 
         model = decode_model(model)
         if not entity.key().id_or_name().startswith(model._meta.db_table + "|"):
@@ -239,7 +239,7 @@ class CleanMapper(RawMapperMixin, MapReduceTask):
             try:
                 instance = model.objects.using(alias).get(pk=instance_id)
             except model.DoesNotExist:
-                logging.info("Deleting unique marker {} because the associated instance no longer exists".format(entity.key().id_or_name()))
+                logging.info("Deleting unique marker %s because the associated instance no longer exists", entity.key().id_or_name())
                 datastore.Delete(entity)
                 return
 
@@ -248,5 +248,5 @@ class CleanMapper(RawMapperMixin, MapReduceTask):
             identifiers = unique_identifiers_from_entity(model, instance_entity, ignore_pk=True)
             identifier_keys = [datastore.Key.from_path(UniqueMarker.kind(), i, namespace=entity["instance"].namespace()) for i in identifiers]
             if entity.key() not in identifier_keys:
-                logging.info("Deleting unique marker {} because the it no longer represents the associated instance state".format(entity.key().id_or_name()))
+                logging.info("Deleting unique marker %s because the it no longer represents the associated instance state", entity.key().id_or_name())
                 datastore.Delete(entity)
