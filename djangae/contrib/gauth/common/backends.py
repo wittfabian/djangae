@@ -38,7 +38,9 @@ if hasattr(settings, 'DJANGAE_ALLOW_USER_PRE_CREATION'):
 def should_create_unknown_user():
     """Returns True if we should create a Django user for unknown users.
 
-    Default is False.
+    Default is True unless DJANGAE_CREATE_UNKNOWN_USER is set to False
+
+    Other settings listed here are for backwards compatibility.
     """
     if hasattr(settings, 'DJANGAE_CREATE_UNKNOWN_USER'):
         return settings.DJANGAE_CREATE_UNKNOWN_USER
@@ -54,7 +56,7 @@ def should_create_unknown_user():
     if hasattr(settings, 'ALLOW_USER_PRE_CREATION'):
         return settings.ALLOW_USER_PRE_CREATION
 
-    return False
+    return True
 
 
 class BaseAppEngineUserAPIBackend(ModelBackend):
