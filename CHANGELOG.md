@@ -2,7 +2,7 @@
 
 ### New features & improvements:
 
--
+- Added a `DJANGAE_SUPERUSER_SYNC_MODE` setting to allow control of whether and how the gauth middleware updates users' `is_superuser` based on whether or not they are an admin of the App Engine application.
 
 ### Bug fixes:
 
