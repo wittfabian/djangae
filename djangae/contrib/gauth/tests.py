@@ -281,6 +281,47 @@ class MiddlewareTests(TestCase):
         self.assertEqual(request.user.email, email)
         self.assertEqual(request.user.pk, user.pk)
 
+    @override_settings(DJANGAE_CREATE_UNKNOWN_USER=True)
+    def test_superuser_sync_mode(self):
+        email = 'User@example.com'
+        user1 = users.User(email, _user_id='111111111100000000001')
+        request = HttpRequest()
+        SessionMiddleware().process_request(request)  # Make the damn sessions work
+        request.session[BACKEND_SESSION_KEY] = 'djangae.contrib.gauth.datastore.backends.AppEngineUserAPIBackend'
+        middleware = AuthenticationMiddleware()
+        with sleuth.switch('djangae.contrib.gauth.middleware.users.get_current_user', lambda: user1):
+            with override_settings(DJANGAE_SUPERUSER_SYNC_MODE=2):
+                # With sync mode set to 2, the user should be created/updated to have is_superuser
+                # matching the value of is_current_user_admin
+                with sleuth.switch('djangae.contrib.gauth.middleware.users.is_current_user_admin', lambda: True):
+                    middleware.process_request(request)
+                    self.assertTrue(request.user.is_superuser and request.user.is_staff)
+                with sleuth.switch('djangae.contrib.gauth.middleware.users.is_current_user_admin', lambda: False):
+                    middleware.process_request(request)
+                    self.assertFalse(request.user.is_superuser and request.user.is_staff)
+            with override_settings(DJANGAE_SUPERUSER_SYNC_MODE=1):
+                # With sync mode set to 1, the user should be set TO superuser but not set back again
+                with sleuth.switch('djangae.contrib.gauth.middleware.users.is_current_user_admin', lambda: True):
+                    middleware.process_request(request)
+                    self.assertTrue(request.user.is_superuser and request.user.is_staff)
+                with sleuth.switch('djangae.contrib.gauth.middleware.users.is_current_user_admin', lambda: False):
+                    middleware.process_request(request)
+                    # The user was already a superuser, so with sync mode 1 should not be changed
+                    self.assertTrue(request.user.is_superuser and request.user.is_staff)
+            with override_settings(DJANGAE_SUPERUSER_SYNC_MODE=0):
+                # With sync mode set to 0, is_current_user_admin should have no effect on the superuser state
+                with sleuth.switch('djangae.contrib.gauth.middleware.users.is_current_user_admin', lambda: False):
+                    middleware.process_request(request)
+                    # The user was already a superuser, so with sync mode 0 should not be changed
+                    self.assertTrue(request.user.is_superuser and request.user.is_staff)
+                # Switch is_superuser to False and check that it is not switched to True
+                request.user.is_staff, request.user.is_superuser = False, False
+                request.user.save()
+                with sleuth.switch('djangae.contrib.gauth.middleware.users.is_current_user_admin', lambda: True):
+                    middleware.process_request(request)
+                    # The user was already a superuser, so with sync mode 0 should not be changed
+                    self.assertFalse(request.user.is_superuser and request.user.is_staff)
+
 
 @override_settings(
     AUTH_USER_MODEL='djangae.GaeDatastoreUser',
