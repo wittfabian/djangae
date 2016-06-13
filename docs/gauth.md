@@ -90,7 +90,7 @@ The URL for the user to be sent to afterwards should be provided in `request.GET
 
 Learn more about [Google multiple sign-in on App Engine here](https://p.ota.to/blog/2014/2/google-multiple-sign-in-on-app-engine/).
 
-### Example usage:
+### Example switch accounts usage:
 
 Include GAuth urls in your main urls.py file.
 
@@ -103,3 +103,11 @@ Use this URL to add "Switch account" functionality for user:
 ```html
 <a href="{% url 'djangae_switch_accounts' %}">Switch account</a>
 ```
+
+## Making App Engine Admins into Superusers
+
+Gauth provides a setting to allow you to control whether and/or how gauth updates users' `is_superuser` and `is_staff` fields based on whether or not they are admins of the App Engine application.  The setting is `DJANGAE_SUPERUSER_SYNC_MODE` and it has 3 possible values.
+
+* `0`: Do not update the `is_superuser` or `is_staff` fields at all.
+* `1` (default): Any user who is authenticated as an admin of the App Engine application will have `is_staff` and `is_superuser` set to `True`, but there can also be other superusers who are not admins of the App Engine application and these will not be altered.
+* `2`: All users will have `is_staff` and `is_superuser` set to `True` or `False` based on whether or not they are admins of the App Engine application.
