@@ -93,11 +93,11 @@ def _acquire_identifiers(identifiers, entity_key):
                 created=now
             ))
         elif existing_marker.instance != entity_key and key_exists(existing_marker.instance):
-                fields_and_values = identifier.split("|")
-                table_name = fields_and_values[0]
-                fields_and_values = fields_and_values[1:]
-                fields = [ x.split(":")[0] for x in fields_and_values ]
-                raise IntegrityError("Unique constraint violation for kind {} on fields: {}".format(table_name, ", ".join(fields)))
+            fields_and_values = identifier.split("|")
+            table_name = fields_and_values[0]
+            fields_and_values = fields_and_values[1:]
+            fields = [ x.split(":")[0] for x in fields_and_values ]
+            raise IntegrityError("Unique constraint violation for kind {} on fields: {}".format(table_name, ", ".join(fields)))
         elif existing_marker.instance != entity_key:
             markers_to_create.append(UniqueMarker(
                 key=identifier_key,
