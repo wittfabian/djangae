@@ -4,6 +4,7 @@ from mapreduce import context
 from mapreduce.mapper_pipeline import MapperPipeline
 from mapreduce.mapreduce_pipeline import MapreducePipeline
 from mapreduce import pipeline_base
+from mapreduce.model import MapreduceState
 from mapreduce.input_readers import RawDatastoreInputReader
 
 from django.utils.module_loading import import_string
@@ -215,5 +216,12 @@ def pipeline_in_progress(pipeline_id):
     """
     return not pipeline_has_finished(pipeline_id)
 
+
 def get_pipeline_by_id(pipeline_id):
     return pipeline.Pipeline.from_id(pipeline_id)
+
+
+def get_mapreduce_state(pipeline):
+    mapreduce_id = pipeline.outputs.job_id.value
+    mapreduce_state = MapreduceState.get_by_job_id(mapreduce_id)
+    return mapreduce_state
