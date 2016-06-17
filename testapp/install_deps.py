@@ -4,6 +4,7 @@ import stat
 import subprocess
 import shutil
 
+import tarfile
 from StringIO import StringIO
 from zipfile import ZipFile
 from urllib import urlopen
@@ -28,11 +29,9 @@ DJANGO_VERSION = os.environ.get("DJANGO_VERSION", "1.8")
 if any([x in DJANGO_VERSION for x in ['master', 'a', 'b', 'rc']]):
     # For master, beta, alpha or rc versions, get exact versions
     DJANGO_FOR_PIP = "https://github.com/django/django/archive/{}.tar.gz".format(DJANGO_VERSION)
-    DJANGO_TESTS_URL = "https://github.com/django/django/archive/{}.zip".format(DJANGO_VERSION)
 else:
     # For normal (eg. 1.8, 1.9) releases, get latest (.x)
     DJANGO_FOR_PIP = "https://github.com/django/django/archive/stable/{}.x.tar.gz".format(DJANGO_VERSION)
-    DJANGO_TESTS_URL = "https://github.com/django/django/archive/stable/{}.x.zip".format(DJANGO_VERSION)
 
 if __name__ == '__main__':
 
@@ -74,8 +73,9 @@ if __name__ == '__main__':
     p.wait()
 
     print("Installing Django tests from {}".format(DJANGO_VERSION))
-    django_zip = urlopen(DJANGO_TESTS_URL)
-    zipfile = ZipFile(StringIO(django_zip.read()))
-    for filename in zipfile.namelist():
-        if filename.startswith("django-stable-{}.x/tests/".format(DJANGO_VERSION)) or filename.startswith("django-{}/tests/".format(DJANGO_VERSION)):
-            zipfile.extract(filename, os.path.join(TARGET_DIR))
+    django_tgz = urlopen(DJANGO_FOR_PIP)
+
+    tar_file = tarfile.open(fileobj=StringIO(django_tgz.read()))
+    for filename in tar_file.getnames():
+        if filename.startswith("django-stable-{}.x/tests/".format(DJANGO_VERSION)) or filename.startswith("django-master/tests/"):
+            tar_file.extract(filename, os.path.join(TARGET_DIR))
