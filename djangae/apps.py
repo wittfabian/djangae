@@ -21,6 +21,14 @@ class DjangaeConfig(AppConfig):
             "django.contrib.contenttypes."
         )
         if 'django.contrib.contenttypes' in settings.INSTALLED_APPS:
+            from django.db import router, connections
+            conn = connections[router.db_for_read("contenttypes.ContentType")]
+
+            if conn.settings_dict.get("ENGINE") != 'djangae.db.backends.appengine':
+                # Don't enforce djangae.contrib.contenttypes if content types are being
+                # saved to a different database backend
+                return
+
             if not 'djangae.contrib.contenttypes' in settings.INSTALLED_APPS:
                 # Raise error if User is using Django CT, but not Djangae
                 raise contenttype_configuration_error
