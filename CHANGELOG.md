@@ -9,7 +9,8 @@
 - Fixed a regression that prevented precreated users from logging in when `DJANGAE_CREATE_UNKNOWN_USER` is False.
 - Fixed a bug where the IntegrityError for a unique constraint violation could mention the wrong field(s).
 - Changed the default value of `DJANGAE_CREATE_UNKNOWN_USER` to `True` to match the original behaviour.
-- Fixed a bug where simulate contenttypes was required even on a SQL database
+- Fixed a bug where simulate contenttypes was required even on a SQL database.
+- Made configuration changes to the bundled 'testapp' to allow the `runserver` command to work.
 
 ### Documentation:
 
