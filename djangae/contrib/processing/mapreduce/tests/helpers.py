@@ -1,8 +1,13 @@
 from mapreduce import output_writers
 from django.db import models
 from djangae.test import TestCase
+from unittest import skipIf
 
+from django.core.files.base import ContentFile
+from djangae.storage import CloudStorage, has_cloudstorage
+from django.test.utils import override_settings
 from djangae.contrib.processing.mapreduce import (
+    map_files,
     map_queryset,
     map_entities,
     map_reduce_queryset,
@@ -11,6 +16,7 @@ from djangae.contrib.processing.mapreduce import (
 )
 
 from google.appengine.api import datastore
+
 
 class TestModel(models.Model):
     class Meta:
@@ -27,6 +33,12 @@ class Counter(models.Model):
 def count(instance, counter_id):
     counter = Counter.objects.get(pk=counter_id)
     counter.count = models.F('count') + 1
+    counter.save()
+
+
+def count_contents(file_obj, counter_id):
+    counter = Counter.objects.get(pk=counter_id)
+    counter.count = models.F('count') + len(file_obj.read())
     counter.save()
 
 
@@ -151,6 +163,30 @@ class MapQuerysetTests(TestCase):
 
         self.assertEqual(3, counter.count)
         self.assertFalse(TestModel.objects.count())
+
+
+@skipIf(not has_cloudstorage, "Cloud Storage not available")
+class MapFilesTests(TestCase):
+    @override_settings(CLOUD_STORAGE_BUCKET='test_bucket')
+    def test_map_over_files(self):
+        storage = CloudStorage()
+        storage.save('a/b/c/tmp1', ContentFile('abcdefghi'))
+        storage.save('c/tmp2', ContentFile('not matching pattern'))
+        storage.save('a/d/tmp3', ContentFile('xxx'))
+
+        counter = Counter.objects.create()
+        pipeline = map_files(
+            count_contents,
+            'test_bucket',
+            ['a/*'],
+            counter_id=counter.pk
+        )
+
+        self.process_task_queues()
+        pipeline = get_pipeline_by_id(pipeline.pipeline_id)
+        self.assertTrue(pipeline.has_finalized)
+        counter.refresh_from_db()
+        self.assertEqual(12, counter.count)
 
 
 def count_entity(entity, counter_id):

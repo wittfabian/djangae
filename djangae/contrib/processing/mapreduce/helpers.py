@@ -5,7 +5,7 @@ from mapreduce.mapper_pipeline import MapperPipeline
 from mapreduce.mapreduce_pipeline import MapreducePipeline
 from mapreduce import pipeline_base
 from mapreduce.model import MapreduceState
-from mapreduce.input_readers import RawDatastoreInputReader
+from mapreduce.input_readers import RawDatastoreInputReader, GoogleCloudStorageInputReader
 
 from django.utils.module_loading import import_string
 from djangae.contrib.processing.mapreduce.input_readers import DjangoInputReader
@@ -107,6 +107,40 @@ def map_queryset(
     )
 
 
+def map_files(
+    processor_func, bucketname, filenames=None, finalize_func=None, _shards=None,
+    _output_writer=None, _output_writer_kwargs=None, _job_name=None,
+    *processor_args, **processor_kwargs
+):
+    """
+        Iterates over files in cloudstorage matching patterns in filenames list.
+
+        output_writer is optional, but should be a mapreduce OutputWriter
+        subclass. Any additional args or kwargs are passed down to the
+        handling function.
+
+        Returns the pipeline
+    """
+    if filenames is None:
+        filenames = ['*']
+
+    params = {
+        'input_reader': {
+            GoogleCloudStorageInputReader.OBJECT_NAMES_PARAM: filenames,
+            GoogleCloudStorageInputReader.BUCKET_NAME_PARAM: bucketname,
+        },
+        'output_writer': _output_writer_kwargs or {}
+    }
+
+    return _do_map(
+        GoogleCloudStorageInputReader,
+        processor_func, finalize_func, params, _shards, _output_writer,
+        _output_writer_kwargs,
+        _job_name or "Map task over files {} in {}".format(filenames, bucketname),
+        *processor_args, **processor_kwargs
+    )
+
+
 def map_entities(kind_name, processor_func, finalize_func=None, _shards=None, _output_writer=None, _output_writer_kwargs=None, _job_name=None, *processor_args, **processor_kwargs):
     """
         Iterates over all entities of a particular kind, calling processor_func
@@ -130,17 +164,6 @@ def map_entities(kind_name, processor_func, finalize_func=None, _shards=None, _o
         _job_name or "Map task over {}".format(kind_name),
         *processor_args, **processor_kwargs
     )
-
-
-def map_files(bucket_name, process_func, finalize_func=None, shard_count=None, output_writer=None, output_writer_kwargs=None, prefixes=None, job_name=None):
-    """
-        Iterates over all the files on GoogleCloudStorage
-
-        prefixes should be a list of glob patterns for filename matching
-
-        Returns the pipeline
-    """
-    pass
 
 
 def map_reduce_queryset(queryset, map_func, reduce_func, output_writer, finalize_func=None, shard_count=None, output_writer_kwargs=None, job_name=None):
