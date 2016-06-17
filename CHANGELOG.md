@@ -18,6 +18,7 @@
 
 ### New features & improvements:
 
+- Added the ability to pre-create users in the Django admin who can then log in via Google Accounts.  (Previously you could only pre-create users via the shell.)
 - Added new `assert_login_required` and `assert_login_admin` methods to `djangae.test.TestCase`.
 - Improved ordering of `sys.path` so that libraries in the application folder take precedence over libraries that are bundled with the SDK (with some hard-to-avoid exceptions).
 - Added `djangae.contrib.locking`, for preventing simultaneous executing of functions or blocks of code.
