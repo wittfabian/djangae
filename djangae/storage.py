@@ -1,6 +1,8 @@
 # coding: utf-8
+import urllib
 import mimetypes
 import re
+import threading
 
 try:
     from cStringIO import StringIO
@@ -8,6 +10,7 @@ except ImportError:
     from StringIO import StringIO
 
 from django.conf import settings
+from django.core.exceptions import SuspiciousFileOperation
 from django.core.urlresolvers import reverse
 from django.core.files.base import File
 from django.core.files.storage import Storage
@@ -17,6 +20,7 @@ from django.core.files.uploadhandler import FileUploadHandler, \
 from django.http import HttpResponse
 from django.utils.encoding import smart_str, force_unicode
 from django.test.client import encode_multipart, MULTIPART_CONTENT, BOUNDARY
+from djangae.db import transaction
 
 from google.appengine.api import urlfetch
 from google.appengine.api import app_identity
@@ -46,6 +50,43 @@ except ImportError:
 BUCKET_KEY = 'CLOUD_STORAGE_BUCKET'
 DEFAULT_CONTENT_TYPE = 'application/binary'
 
+CACHE_LOCK = threading.Lock()
+KEY_CACHE = {}
+KEY_CACHE_LIST = []
+MAX_KEY_CACHE_SIZE = 500
+
+def _add_to_cache(blob_key_or_info, blob_key, file_info):
+    """
+        This helps remove overhead when serving cloud storage files
+        by caching the results of the RPC calls. We maintain a list of the
+        order in which keys were added so that we remove the first key
+        when we run out of room. This could be improved by limiting based on
+        usage frequency.
+    """
+
+    global KEY_CACHE
+    global KEY_CACHE_LIST
+    global CACHE_LOCK
+
+    with CACHE_LOCK:
+        if blob_key_or_info in KEY_CACHE:
+            return
+
+        KEY_CACHE_LIST.append(blob_key_or_info)
+        KEY_CACHE[blob_key_or_info] = (blob_key, file_info)
+
+        # Truncate the cache size if necessary
+        if len(KEY_CACHE_LIST) == MAX_KEY_CACHE_SIZE:
+            first = KEY_CACHE_LIST[0]
+            KEY_CACHE_LIST = KEY_CACHE_LIST[1:]
+            del KEY_CACHE[first]
+
+
+def _get_from_cache(blob_key_or_info):
+    with CACHE_LOCK:
+        return KEY_CACHE.get(blob_key_or_info)
+
+
 def serve_file(request, blob_key_or_info, as_download=False, content_type=None, filename=None, offset=None, size=None):
     """
         Serves a file from the blobstore, reads most of the data from the blobinfo by default but you can override stuff
@@ -70,9 +111,14 @@ def serve_file(request, blob_key_or_info, as_download=False, content_type=None, 
     if info == None:
         # Lack of blobstore_info means this is a Google Cloud Storage file
         if has_cloudstorage:
-            info = cloudstorage.stat(blob_key_or_info)
-            info.size = info.st_size
-            blob_key = create_gs_key('/gs{0}'.format(blob_key_or_info))
+            cached_value = _get_from_cache(blob_key_or_info)
+            if cached_value:
+                blob_key, info = cached_value
+            else:
+                info = cloudstorage.stat(blob_key_or_info)
+                info.size = info.st_size
+                blob_key = create_gs_key('/gs{0}'.format(blob_key_or_info))
+                _add_to_cache(blob_key_or_info, blob_key, info)
         else:
             raise ImportError("To serve a Cloud Storage file you need to install cloudstorage")
 
@@ -199,8 +245,11 @@ class BlobstoreStorage(Storage, BlobstoreUploadMixin):
     def get_valid_name(self, name):
         return force_unicode(name).strip().replace('\\', '/')
 
-    def get_available_name(self, name):
-        return name.replace('\\', '/')
+    def get_available_name(self, name, max_length=None):
+        ret = name.replace('\\', '/')
+        if max_length and len(ret) > max_length:
+            raise SuspiciousFileOperation()
+        return ret
 
     def _get_key(self, name):
         return BlobKey(name.split('/', 1)[0])
@@ -209,18 +258,25 @@ class BlobstoreStorage(Storage, BlobstoreUploadMixin):
         return BlobInfo.get(self._get_key(name))
 
     def _create_upload_url(self):
-        return create_upload_url(reverse('djangae_internal_upload_handler'))
+        # Creating the upload URL can't be atomic, otherwise the session
+        # key will not be consistent when uploading the file
+        with transaction.non_atomic():
+            return create_upload_url(reverse('djangae_internal_upload_handler'))
 
 
 class CloudStorage(Storage, BlobstoreUploadMixin):
     """
         Google Cloud Storage backend, set this as your default backend
-        for ease of use, you can speicify and non-default bucket in the
-        constructor
+        for ease of use, you can specify and non-default bucket in the
+        constructor.
+
+        You can modify objects access control by changing google_acl
+        attribute to one of mentioned by docs (XML column):
+        https://cloud.google.com/storage/docs/access-control?hl=en#predefined-acl
     """
     write_options = None
 
-    def __init__(self, bucket=None):
+    def __init__(self, bucket=None, google_acl=None):
         if not bucket:
             bucket = get_bucket_name()
         self.bucket = bucket
@@ -232,8 +288,14 @@ class CloudStorage(Storage, BlobstoreUploadMixin):
         else:
             self.api_url = 'https://storage.googleapis.com'
 
+        self.write_options = self.__class__.write_options or {}
+        if google_acl:
+            # If you don't specify an acl means you get the default permissions.
+            self.write_options['x-goog-acl'] = google_acl
+
     def url(self, filename):
-        return '{0}/{1}/{2}'.format(self.api_url, self.bucket, filename)
+        quoted_filename = urllib.quote(self._add_bucket(filename))
+        return '{0}{1}'.format(self.api_url, quoted_filename)
 
     def _open(self, name, mode='r'):
         # Handle 'rb' as 'r'.
@@ -242,7 +304,8 @@ class CloudStorage(Storage, BlobstoreUploadMixin):
         return File(fp)
 
     def _add_bucket(self, name):
-        return '/{0}/{1}'.format(self.bucket, name)
+        safe_name = urllib.quote(name.encode('utf-8'))
+        return '/{0}/{1}'.format(self.bucket, safe_name)
 
     def _content_type_for_name(self, name):
         # guess_type returns (None, encoding) if it can't guess.
@@ -344,48 +407,14 @@ class BlobstoreFileUploadHandler(FileUploadHandler):
         self.blobkey = None
 
     def new_file(self, field_name, file_name, content_type, content_length, charset=None, content_type_extra=None):
-        """
-            We can kill a lot of this hackery in Django 1.7 when content_type_extra is actually passed in!
-        """
-        self.data.seek(0)  # Rewind
-        data = self.data.read()
-
-        parts = data.split(self.boundary)
-
-        for part in parts:
-            match = re.search('blob-key="?(?P<blob_key>[a-zA-Z0-9_=-]+)', part)
-            blob_key = match.groupdict().get('blob_key') if match else None
-
-            if not blob_key:
-                continue
-
-            # OK, we have a blob key, but is it the one for the field?
-            match = re.search('\sname="?(?P<field_name>[a-zA-Z0-9_-]+)', part)
-            name = match.groupdict().get('field_name') if match else None
-            if name != field_name:
-                # Nope, not for this field
-                continue
-
-            self.blobkey = blob_key
-            break
+        if content_type_extra:
+            self.blobkey = content_type_extra.get('blob-key')
 
         if self.blobkey:
             self.blobkey = BlobKey(self.blobkey)
             raise StopFutureHandlers()
         else:
             return super(BlobstoreFileUploadHandler, self).new_file(field_name, file_name, content_type, content_length, charset)
-
-    def handle_raw_input(self, input_data, META, content_length, boundary, encoding):
-        """
-            App Engine, for some reason, allows seeking back the wsgi.input. However, FakePayload during testing (correctly) does not
-            because that's what the WSGI spec says. However, to make this work we need to abuse the seeking (at least till Django 1.7)
-        """
-        self.boundary = boundary
-        if hasattr(input_data, "body"):
-            self.data = StringIO(input_data.body)  # Create a string IO object
-        else:
-            self.data = input_data
-        return None #Pass back to Django
 
     def receive_data_chunk(self, raw_data, start):
         """

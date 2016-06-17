@@ -15,7 +15,7 @@ EXTRAS = {
 
 setup(
     name=NAME,
-    version='0.9.1',
+    version='0.9.5',
     packages=PACKAGES,
 
     # metadata for upload to PyPI
@@ -25,8 +25,10 @@ setup(
     keywords=["django", "Google App Engine", "GAE"],
     url=URL,
     classifiers=[
-        'Development Status :: 3 - Alpha',
+        'Development Status :: 4 - Beta',
         'Framework :: Django',
+        'Framework :: Django :: 1.8',
+        'Framework :: Django :: 1.9',
         'Intended Audience :: Developers',
         'License :: OSI Approved :: MIT License',
         'Operating System :: OS Independent',

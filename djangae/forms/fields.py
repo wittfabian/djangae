@@ -4,12 +4,16 @@ import base64
 from django import forms
 from django.contrib import admin
 from django.db import models
+from django.utils import six
 from django.utils.safestring import mark_safe
 from django.core.urlresolvers import reverse
 from django.contrib.admin.templatetags.admin_static import static
+
+# DJANGAE
 from djangae.utils import memoized
 
-class TrueOrNullFormField(forms.Field):
+
+class TrueOrNullFormField(forms.BooleanField):
     def clean(self, value):
         if value:
             return True
@@ -29,7 +33,7 @@ class ListWidget(forms.TextInput):
             of this widget. Returns None if it's not provided.
         """
         value = data.get(name, '')
-        if isinstance(value, (str, unicode)):
+        if isinstance(value, six.string_types):
             value = value.split(',')
         return [v.strip() for v in value if v.strip()]
 
@@ -46,12 +50,42 @@ class ListFormField(forms.Field):
                 self._check_values_against_delimiter(value)
                 return value
             return [v.strip() for v in value.split(',') if v.strip()]
-        return None
+        return []
 
     def _check_values_against_delimiter(self, values):
         delimiter = self.delimiter  # faster
         for value in values:
             assert delimiter not in value
+
+
+class JSONWidget(forms.Textarea):
+    """ A widget for being able to display a JSONField in a form. """
+
+    def render(self, name, value, attrs=None):
+        """ Dump the python object to JSON if it hasn't been done yet. """
+        from djangae.fields.json import dumps
+        if not isinstance(value, six.string_types):
+            value = dumps(value)
+        return super(JSONWidget, self).render(name, value, attrs)
+
+
+class JSONFormField(forms.CharField):
+    """ A form field for being able to display a JSONField in a form.
+        The JSON is rendered as string in a textarea, but is parsed to python (be)for validation.
+     """
+
+    widget = JSONWidget
+
+    def clean(self, value):
+        """ (Try to) parse JSON string back to python. """
+        if isinstance(value, six.string_types):
+            if value == "":
+                value = None
+            try:
+                value = json.loads(value)
+            except ValueError:
+                raise ValidationError("Could not parse value as JSON")
+        return value
 
 
 #Basic obfuscation, just so that the db_table doesn't

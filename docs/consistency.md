@@ -2,6 +2,9 @@
 
 A contrib app which helps to mitigate against eventual consistency issues with the App Engine Datastore.
 
+**Note: If all you want to do is make sure that a newly updated/created object is returned as part of a queryset
+take a look at [djangae.db.consistency.ensure_instance_included](db_backend.md#djangaedbconsistencyensure_instance_included).
+If you want a powerful solution to general consistency issues then this is the app for you!**
 
 ## In A Nutshell
 
@@ -43,6 +46,9 @@ behaviour so that it only caches particular models, only caches objects that mat
 criteria, and/or caches objects that were recently *modified* as well as recently *created*.
 
 ```python
+
+# settings.py
+
 CONSISTENCY_CONFIG = {
 
     # These defaults apply to every model, unless otherwise overriden.
@@ -58,7 +64,7 @@ CONSISTENCY_CONFIG = {
 
     # The settings can be overridden for each individual model
     "models": {
-        "app_name.ModelName": {
+        "app_name.modelname": {
             "cache_on_creation": True,
             "cache_on_modification": True,
             "caches": ["session", "django"],
@@ -71,7 +77,7 @@ CONSISTENCY_CONFIG = {
                 lambda obj: obj.method(),
             ]
         },
-        "app_name.UnimportantModel": {
+        "app_name.unimportantmodel": {
             "cache_on_creation": False,
             "cache_on_modification": False,
             # Any settings which you don't override inherit from "defaults".

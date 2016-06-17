@@ -7,8 +7,11 @@ import subprocess
 import getpass
 import logging
 import urllib
-import djangae.utils as utils
-from .utils import port_is_open, get_next_available_port
+
+from os.path import commonprefix
+
+from . import environment
+from .utils import get_next_available_port
 
 _SCRIPT_NAME = 'dev_appserver.py'
 
@@ -186,13 +189,42 @@ def _remote(configuration=None, remote_api_stub=None, apiproxy_stub_map=None, **
     os.environ['HTTP_HOST'] = '{0}.appspot.com'.format(app_id)
     os.environ['DEFAULT_VERSION_HOSTNAME'] = os.environ['HTTP_HOST']
 
-    remote_api_stub.ConfigureRemoteApi(
-        None,
-        '/_ah/remote_api',
-        auth_func,
-        servername='{0}.appspot.com'.format(app_id),
-        secure=True,
-    )
+    try:
+        from google.appengine.tools.appcfg import APPCFG_CLIENT_ID, APPCFG_CLIENT_NOTSOSECRET
+        from google.appengine.tools import appengine_rpc_httplib2
+
+        params = appengine_rpc_httplib2.HttpRpcServerOAuth2.OAuth2Parameters(
+            access_token=None,
+            client_id=APPCFG_CLIENT_ID,
+            client_secret=APPCFG_CLIENT_NOTSOSECRET,
+            scope=remote_api_stub._OAUTH_SCOPES,
+            refresh_token=None,
+            credential_file=os.path.expanduser("~/.djangae_oauth2_tokens"),
+            token_uri=None
+        )
+
+        def factory(*args, **kwargs):
+            kwargs["auth_tries"] = 3
+            return appengine_rpc_httplib2.HttpRpcServerOAuth2(*args, **kwargs)
+
+        remote_api_stub.ConfigureRemoteApi(
+            app_id=None,
+            path='/_ah/remote_api',
+            auth_func=params,
+            servername='{0}.appspot.com'.format(app_id),
+            secure=True,
+            save_cookies=True,
+            rpc_server_factory=factory
+        )
+    except ImportError:
+        logging.exception("Unable to use oauth2 falling back to username/password")
+        remote_api_stub.ConfigureRemoteApi(
+            None,
+            '/_ah/remote_api',
+            auth_func,
+            servername='{0}.appspot.com'.format(app_id),
+            secure=True,
+        )
 
     ps1 = getattr(sys, 'ps1', None)
     red = "\033[0;31m"
@@ -220,6 +252,7 @@ SANDBOXES = {
 }
 
 _OPTIONS = None
+_CONFIG = None
 
 @contextlib.contextmanager
 def activate(sandbox_name, add_sdk_to_path=False, new_env_vars=None, **overrides):
@@ -251,7 +284,7 @@ def activate(sandbox_name, add_sdk_to_path=False, new_env_vars=None, **overrides
     if sandbox_name not in SANDBOXES:
         raise RuntimeError('Unknown sandbox "{}"'.format(sandbox_name))
 
-    project_root = utils.find_project_root()
+    project_root = environment.get_application_root()
 
    # Store our original sys.path before we do anything, this must be tacked
     # onto the end of the other paths so we can access globally installed things (e.g. ipdb etc.)
@@ -274,8 +307,34 @@ def activate(sandbox_name, add_sdk_to_path=False, new_env_vars=None, **overrides
     sdk_path = _find_sdk_from_python_path()
     _PATHS = wrapper_util.Paths(sdk_path)
 
-    # Set the path to just the app engine SDK
-    sys.path[:] = _PATHS.script_paths(_SCRIPT_NAME) + _PATHS.scrub_path(_SCRIPT_NAME, original_path)
+    project_paths = [] # Paths under the application root
+    system_paths = [] # All other paths
+    app_root = environment.get_application_root()
+
+    # We need to look at the original path, and make sure that any paths
+    # which are under the project root are first, then any other paths
+    # are added after the SDK ones
+    for path in _PATHS.scrub_path(_SCRIPT_NAME, original_path):
+        if commonprefix([app_root, path]) == app_root:
+            project_paths.append(path)
+        else:
+            system_paths.append(path)
+
+    # We build a list of SDK paths, and add any additional ones required for
+    # the oauth client
+    appengine_paths = _PATHS.script_paths(_SCRIPT_NAME)
+    for path in _PATHS.oauth_client_extra_paths:
+        if path not in appengine_paths:
+            appengine_paths.append(path)
+
+    # Now, we make sure that paths within the project take precedence, followed
+    # by the SDK, then finally any paths from the system Python (for stuff like
+    # ipdb etc.)
+    sys.path = (
+        project_paths +
+        appengine_paths +
+        system_paths
+    )
 
     # Gotta set the runtime properly otherwise it changes appengine imports, like wepapp
     # when you are not running dev_appserver
@@ -325,6 +384,8 @@ def activate(sandbox_name, add_sdk_to_path=False, new_env_vars=None, **overrides
 
     try:
         global _OPTIONS
+        global _CONFIG
+        _CONFIG = configuration
         _OPTIONS = options # Store the options globally so they can be accessed later
         kwargs = dict(
             devappserver2=devappserver2,
@@ -348,11 +409,25 @@ def allow_mode_write():
     new_modes = set(stubs.FakeFile.ALLOWED_MODES)
     new_modes.add('w')
     new_modes.add('wb')
+
+    original_dirs = stubs.FakeFile._allowed_dirs
+    new_dirs = set(stubs.FakeFile._allowed_dirs or [])
+
+    # for some reason when we call gettempdir in some scenarios
+    # (we experience that in ajax call when we tried to render template
+    # with assets) we might end up with thread.error when Python tries
+    # to release the lock. Since we mess with the tempfile in allow_modules
+    # we could - instead of calling gettempdir - simply add default temp
+    # directories.
+    new_dirs.update(['/tmp', '/var/tmp', '/usr/tmp'])
+
     stubs.FakeFile.ALLOWED_MODES = frozenset(new_modes)
+    stubs.FakeFile._allowed_dirs = frozenset(new_dirs)
     try:
         yield
     finally:
         stubs.FakeFile.ALLOWED_MODES = original_modes
+        stubs.FakeFile._allowed_dirs = original_dirs
 
 
 def allow_modules(func, *args):

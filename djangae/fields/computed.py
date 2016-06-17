@@ -1,5 +1,6 @@
 from django.db import models
 
+
 class ComputedFieldMixin(object):
     def __init__(self, func, *args, **kwargs):
         self.computer = func
@@ -19,17 +20,27 @@ class ComputedFieldMixin(object):
         del kwargs["editable"]
         return name, path, args, kwargs
 
+    def from_db_value(self, value, expression, connection, context):
+        if value is None:
+            return value
+        return self.to_python(value)
+
+
 class ComputedCharField(ComputedFieldMixin, models.CharField):
-    __metaclass__ = models.SubfieldBase
+    pass
 
 
 class ComputedIntegerField(ComputedFieldMixin, models.IntegerField):
-    __metaclass__ = models.SubfieldBase
+    pass
 
 
 class ComputedTextField(ComputedFieldMixin, models.TextField):
-    __metaclass__ = models.SubfieldBase
+    pass
 
 
 class ComputedPositiveIntegerField(ComputedFieldMixin, models.PositiveIntegerField):
-    __metaclass__ = models.SubfieldBase
+    pass
+
+
+class ComputedBooleanField(ComputedFieldMixin, models.BooleanField):
+    pass

@@ -3,9 +3,9 @@ import os
 from unittest import TextTestResult
 
 from django.test.runner import DiscoverRunner
-
 from django.db import NotSupportedError
-from djangae.utils import find_project_root
+
+from djangae import environment
 
 from google.appengine.ext import testbed
 
@@ -41,7 +41,6 @@ DJANGO_TESTS_WHICH_HAVE_BUGS = {
 # values that went into the where, but that's for another day.
 DJANGO_TESTS_WHICH_EXPECT_SQL_PARAMS = {
     'model_forms.tests.ModelMultipleChoiceFieldTests.test_clean_does_deduplicate_values',
-    'model_forms.tests.OldFormForXTests.test_clean_does_deduplicate_values', #Same test, in 1.6
     'ordering.tests.OrderingTests.test_order_by_f_expression_duplicates'
 }
 
@@ -70,7 +69,7 @@ def init_testbed():
 
     stub_kwargs = {
         "init_taskqueue_stub": {
-            "root_path": find_project_root()
+            "root_path": environment.get_application_root()
         }
     }
     bed = testbed.Testbed()
@@ -103,10 +102,14 @@ def bed_wrap(test):
 class SkipUnsupportedTestResult(TextTestResult):
     def addError(self, test, err):
         skip = os.environ.get("SKIP_UNSUPPORTED", True)
-        if skip and err[0] in (NotSupportedError,):
+        # If the error is a NotSupportedError and the test is a Django test (where we expect some
+        # functionality to be unsupported) rather than a Djangae test (where our tests should be
+        # written to explicitly state which things are and aren't supported) then skip it
+        if skip and err[0] in (NotSupportedError,) and test.__module__.split(".")[0] != "djangae":
             self.addExpectedFailure(test, err)
         else:
             super(SkipUnsupportedTestResult, self).addError(test, err)
+
 
 class DjangaeTestSuiteRunner(DiscoverRunner):
     def _discover_additional_tests(self):

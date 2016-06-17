@@ -1,10 +1,16 @@
+# LIBRARIES
+from django.db import models, connections, connection as default_connection
 from django.db.models.sql.datastructures import EmptyResultSet
-from django.db import models, connections
-from djangae.test import TestCase
-from djangae.db.backends.appengine.query import transform_query, Query, WhereNode
 from django.db.models.query import Q
-
 from google.appengine.api import datastore
+
+# DJANGAE
+from djangae.db.backends.appengine.query import transform_query, Query, WhereNode
+from djangae.test import TestCase
+
+
+DEFAULT_NAMESPACE = default_connection.ops.connection.settings_dict.get("NAMESPACE")
+
 
 class TransformTestModel(models.Model):
     field1 = models.CharField(max_length=255)
@@ -97,14 +103,14 @@ class TransformQueryTest(TestCase):
             TransformTestModel.objects.values_list("field1").query
         )
 
-        self.assertEqual(["field1"], query.columns)
+        self.assertEqual(set(["field1"]), query.columns)
 
         query = transform_query(
             connections['default'],
             TransformTestModel.objects.defer("field1", "field4").query
         )
 
-        self.assertItemsEqual(["id", "field2", "field3"], query.columns)
+        self.assertItemsEqual(set(["id", "field2", "field3"]), query.columns)
 
     def test_no_results_returns_emptyresultset(self):
         self.assertRaises(
@@ -139,7 +145,7 @@ class TransformQueryTest(TestCase):
         )
 
         self.assertTrue(query.distinct)
-        self.assertEqual(query.columns, ["field2", "field3"])
+        self.assertEqual(query.columns, set(["field2", "field3"]))
 
         query = transform_query(
             connections['default'],
@@ -147,7 +153,7 @@ class TransformQueryTest(TestCase):
         )
 
         self.assertTrue(query.distinct)
-        self.assertEqual(query.columns, ["field2", "field3"])
+        self.assertEqual(query.columns, set(["field2", "field3"]))
 
     def test_order_by_pk(self):
         query = transform_query(
@@ -190,7 +196,7 @@ class TransformQueryTest(TestCase):
         self.assertFalse(query.projection_possible)
 
 
-from djangae.tests.test_connector import TestUser, Relation
+from djangae.tests.test_connector import Relation
 from djangae.db.backends.appengine.dnf import normalize_query
 
 
@@ -204,6 +210,7 @@ class QueryNormalizationTests(TestCase):
     """
 
     def test_and_with_child_or_promoted(self):
+        from .test_connector import TestUser
         """
             Given the following tree:
 
@@ -252,6 +259,7 @@ class QueryNormalizationTests(TestCase):
         self.assertEqual(3, len(query.where.children[1].children))
 
     def test_and_queries(self):
+        from .test_connector import TestUser
         qs = TestUser.objects.filter(username="test").all()
 
         query = normalize_query(transform_query(
@@ -325,6 +333,7 @@ class QueryNormalizationTests(TestCase):
 
 
     def test_or_queries(self):
+        from .test_connector import TestUser
         qs = TestUser.objects.filter(
             username="python").filter(
             Q(username__in=["ruby", "jruby"]) | (Q(username="php") & ~Q(username="perl"))
@@ -435,9 +444,9 @@ class QueryNormalizationTests(TestCase):
         self.assertEqual("__key__", query.where.children[1].column)
         self.assertEqual("__key__", query.where.children[2].column)
         self.assertEqual({
-                datastore.Key.from_path(TestUser._meta.db_table, 1),
-                datastore.Key.from_path(TestUser._meta.db_table, 2),
-                datastore.Key.from_path(TestUser._meta.db_table, 3),
+                datastore.Key.from_path(TestUser._meta.db_table, 1, namespace=DEFAULT_NAMESPACE),
+                datastore.Key.from_path(TestUser._meta.db_table, 2, namespace=DEFAULT_NAMESPACE),
+                datastore.Key.from_path(TestUser._meta.db_table, 3, namespace=DEFAULT_NAMESPACE),
             }, {
                 query.where.children[0].value,
                 query.where.children[1].value,
@@ -462,9 +471,9 @@ class QueryNormalizationTests(TestCase):
         self.assertEqual("test", query.where.children[0].children[1].value)
 
         self.assertEqual({
-                datastore.Key.from_path(TestUser._meta.db_table, 1),
-                datastore.Key.from_path(TestUser._meta.db_table, 2),
-                datastore.Key.from_path(TestUser._meta.db_table, 3),
+                datastore.Key.from_path(TestUser._meta.db_table, 1, namespace=DEFAULT_NAMESPACE),
+                datastore.Key.from_path(TestUser._meta.db_table, 2, namespace=DEFAULT_NAMESPACE),
+                datastore.Key.from_path(TestUser._meta.db_table, 3, namespace=DEFAULT_NAMESPACE),
             }, {
                 query.where.children[0].children[0].value,
                 query.where.children[1].children[0].value,

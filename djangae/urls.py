@@ -1,11 +1,14 @@
-from django.conf.urls import patterns, url, include
+from django.conf.urls import url, include
+
 import djangae.contrib.mappers.urls
+from . import views
 
-from djangae.views import warmup, deferred, internalupload
 
-urlpatterns = patterns('djangae.views',
-    url(r'^warmup$', warmup),
-    url(r'^queue/deferred/?$', deferred),
-    url(r'^internalupload/$', internalupload, name='djangae_internal_upload_handler'),
+urlpatterns = [
+    url(r'^start$', views.start),
+    url(r'^stop$', views.stop),
+    url(r'^warmup$', views.warmup),
+    url(r'^queue/deferred/?$', views.deferred),
+    url(r'^internalupload/$', views.internalupload, name='djangae_internal_upload_handler'),
     url(r'^mapreduce/', include(djangae.contrib.mappers.urls))
-)
+]

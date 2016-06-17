@@ -1,5 +1,4 @@
-import re
-
+# THIRD PARTY
 from django.contrib.auth.hashers import make_password
 from django.contrib.auth.models import (
     AbstractBaseUser,
@@ -7,11 +6,14 @@ from django.contrib.auth.models import (
     UserManager,
 )
 from django.core.mail import send_mail
-from django.core import validators
 from django.utils.http import urlquote
 from django.db import models
 from django.utils import timezone, six
 from django.utils.translation import ugettext_lazy as _
+
+# DJANGAE
+from djangae.fields import CharOrNoneField
+from .validators import validate_google_user_id
 
 
 class GaeUserManager(UserManager):
@@ -27,10 +29,16 @@ class GaeUserManager(UserManager):
             # things which cannot be overridden
             email=self.normalize_email(email),
             username=None,
-            password=make_password(None), # unusable password
+            password=make_password(None),  # unusable password
             # Stupidly, last_login is not nullable, so we can't set it to None.
         )
         return self.create(**values)
+
+    @classmethod
+    def normalize_email(cls, email):
+        """ Lowercase given email address """
+        email = email or ''
+        return email.lower()
 
 
 @python_2_unicode_compatible
@@ -38,13 +46,11 @@ class GaeAbstractBaseUser(AbstractBaseUser):
     """ Absract base class for creating a User model which works with the App
     Engine users API. """
 
-    username = models.CharField(
+    username = CharOrNoneField(
         # This stores the Google user_id, or custom username for non-Google-based users.
         # We allow it to be null so that Google-based users can be pre-created before they log in.
-        _('User ID'), max_length=21, unique=True, null=True, default=None,
-        validators=[
-            validators.RegexValidator(re.compile('^\d{21}$'), _('User Id should be 21 digits.'), 'invalid')
-        ]
+        _('User ID'), max_length=21, unique=True, blank=True, null=True, default=None,
+        validators=[validate_google_user_id]
     )
     first_name = models.CharField(_('first name'), max_length=30, blank=True)
     last_name = models.CharField(_('last name'), max_length=30, blank=True)
@@ -100,4 +106,3 @@ class GaeAbstractBaseUser(AbstractBaseUser):
         if username:
             return "{} ({})".format(six.text_type(self.email), six.text_type(username))
         return six.text_type(self.email)
-

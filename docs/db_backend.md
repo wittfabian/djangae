@@ -29,18 +29,31 @@ Here's the full list of magic:
 
 Due to the limitations of the App Engine Datastore (it being a non-relational database for a start), there are some
 things which you still can't do with the Django ORM when using the djangae backend.  The easiest way to find these out
-is to just build your app and look out for the `NotSupportedError` exceptions.  But if you don't like surprises, here's
-a quick list:
+is to just build your app and look out for the `NotSupportedError` exceptions.
 
-* `ManyToManyField` - a non-relational database simply can't do these (or not efficiently).  However, you can probably
-  solve these kind of problems using djangae's `ListField`.  We may even create a many-to-many replacement based on
-  that in the future.
-* `__in` queries with more than 30 values.  This is a limitation of the Datastore.  You can filter for up to 500 values
-  on the primary key field though.
-* More than one inequality filter, i.e. you can't do `.exclude(a=1, b=2)`.  This is a limitation of the Datastore.
-* Transactions.  The Datastore has transactions, but they are not "normal" transactions in the SQL sense. [Transactions
+### Notable Limitations
+
+Here is a brief list of hard limitations you may encounter when using the Djangae datastore backend:
+
+ - `bulk_create()` is limited to 25 instances if the model has active unique constraints, or the instances being inserted have
+   the primary key specified. In other cases the limit is 1000.
+ - `filter(field__in=[...])` queries are limited to 30 entries in the list if `field` is not the primary key
+ - `filter(pk__in=[...])` queries are limited to 1000 entries
+ - You are limited to a single inequality filter per query, although excluding by primary key is not included in this count
+ - Queries without primary key equality filters are not allowed within an `atomic` block
+ - Queries with an inequality filter on a field must be ordered first by that field
+ - Only 25 individual instances can be retrieved or saved within an `atomic` block, although you can get/save the same entity
+   multiple times without increasing the allowed count
+ - Primary key values of zero are not allowed
+ - Primary key string values must not start with a leading double underscore (`__`)
+ - `ManyToManyField` will not work reliably/efficiently - use `RelatedSetField` or `RelatedListField` instead
+ - Transactions.  The Datastore has transactions, but they are not "normal" transactions in the SQL sense. [Transactions
   should be done using djangae.db.transactional.atomic](db_backend.md#transactions).
+- If unique constraints are enabled, then you are limited to a maximum of 25 unique or unique_together constraints per model (see [Unique Constraint Checking](#unique-constraint-checking)).
+- You are also restricted to altering 12 unique field values on an instance in a single save
 
+There are probably more but the list changes regularly as we improve the datastore backend. If you find another limitation not
+mentioned above please consider sending a documentation PR.
 
 ## Other Considerations
 
@@ -62,7 +75,7 @@ live database!
 Here's an example of how your `DATABASES` might look in settings.py if you're using both Cloud SQL and the Datastore.
 
 ```python
-from djangae.utils import on_production
+from djangae.environment import is_development_environment
 
 DATABASES = {
     'default': {
@@ -70,7 +83,7 @@ DATABASES = {
     }
 }
 
-if on_production():
+if not is_development_environment():
     DATABASES['sql'] = {
         'ENGINE': 'django.db.backends.mysql',
         'HOST': '/cloudsql/YOUR_GOOGLE_CLOUD_PROJECT:YOUR_INSTANCE_NAME',
@@ -140,6 +153,25 @@ There are various solutions and workarounds for these issues.
     - You need to include the additional filters (in this case `size=large`) in both the inner and outer queries.
     - This technique only avoids the *Stale objects* issue, it does not avoid the *Missing objects* issue.
 
+#### djangae.db.consistency.ensure_instance_consistent
+
+It's very common to need to create a new object, and then redirect to a listing of all objects. This annoyingly falls foul of the
+datastore's eventual consistency. As a .all() query is eventually consistent, it's quite likely that the object you just created or updated
+either won't be returned, or if it was an update, will show stale data. You can fix this by using [djangae.contrib.consistency](consistency.md) or if you
+want a more lightweight approach you can use `djangae.db.consistency.ensure_instance_consistent` like this:
+
+```
+queryset = ensure_instance_consistent(MyModel.objects.all(), updated_instance_pk)
+```
+
+Be aware though, this will make an additional query for the extra object (although it's very likely to hit the cache). There are also
+caveats:
+
+ - If no ordering is specified, the instance will be returned first
+ - Only ordering on the queryset is respected, if you are relying on model ordering the instance may be returned in the wrong place (patches welcome!)
+ - This causes an extra iteration over the returned queryset once it's retrieved
+
+There is also an equivalent function for ensuring the consistency of multiple items called `ensure_instances_included`.
 
 ### Speed
 
@@ -150,7 +182,9 @@ There are various solutions and workarounds for these issues.
     - The query is not ordered by primary key.
     - All of the fetched fields are indexed by the Datastore (i.e. are not list/set fields, blob fields or text (as opposed to char) fields).
     - The model has got concrete parents.
+* Doing an `.only('foo')` or `.defer('bar')` with a `pk_in=[...]` filter may not be more efficient. This is because we must perform a projection query for each key, and although we send them over the RPC in batches of 30, the RPC costs may outweigh the savings of a plain old datastore.Get. You should profile and check to see whether using only/defer results in a speed improvement for your use case.
 * Due to the way it has to be implemented on the Datastore, an `update()` query is not particularly fast, and other than avoiding calling the `save()` method on each object it doesn't offer much speed advantage over iterating over the objects and modifying them.  However, it does offer significant integrity advantages, see [General behaviours](#general-behaviours) section above.
+* Doing filter(pk__in=Something.objects.values_list('pk', flat=True)) will implicitly evaluate the inner query while preparing to run the outer one. This means two queries, not one like SQL would do!
 
 
 
@@ -167,9 +201,10 @@ Unique constraint checks have the following caveats...
  - Unique constraints drastically increase your datastore writes. Djangae needs to create a marker for each unique constraint on each model, for each instance. This means if you have
    one unique field on your model, and you save() Djangae must do two datastore writes (one for the entity, one for the marker)
  - Unique constraints increase your datastore reads. Each time you save an object, Djangae needs to check for the existence of unique markers.
- - Unique constraints slow down your saves(). See above, each time you write a bunch of stuff needs to happen.
+ - Unique constraints slow down your saves(). See above, each time you save, a bunch of stuff needs to happen.
  - Updating instances via the datastore API (NDB, DB, or datastore.Put and friends) will break your unique constraints. Don't do that!
- - Updating instances via the datastore admin will do the same thing, you'll be bypassing the unique marker creation
+ - Updating instances via the datastore admin will do the same thing, you'll be bypassing the unique marker creation.
+ - There is a limit of 25 unique or unique_together constraints per model.
 
 However, unique markers are very powerful when you need to enforce uniqueness. **They are enabled by default** simply because that's the behaviour that Django expects. If you don't want to
 use this functionality, you have the following options:
@@ -198,3 +233,45 @@ The following functions are available to manage transactions:
  - `djangae.db.transaction.atomic` - Decorator and Context Manager. Starts a new transaction, accepted `xg`, `indepedendent` and `mandatory` args
  - `djangae.db.transaction.non_atomic` - Decorator and Context Manager. Breaks out of any current transactions so you can run queries outside the transaction
  - `djangae.db.transaction.in_atomic_block` - Returns True if inside a transaction, False otherwise
+
+
+## Multiple Namespaces (Experimental)
+
+**Namespace support is new and experimental, please make sure your code is well tested and report any bugs**
+
+It's possible to create separate "databases" on the datastore via "namespaces". This is supported in Djangae through the normal Django
+multiple database support. To configure multiple datastore namespaces, you can add an optional "NAMESPACE" to the DATABASES setting:
+
+```
+DATABASES = {
+    'default': {
+        'ENGINE': 'djangae.db.backends.appengine'
+    },
+    'archive': {
+        'ENGINE': 'djangae.db.backends.appengine'
+        'NAMESPACE': 'archive'
+    }
+}
+```
+
+If you do not specify a `NAMESPACE` for a connection, then the Datastore's default namespace will be used (i.e. no namespace).
+
+You can make use of Django's routers, the `using()` method, and the `save(using='...')` in the same way as normal multi-database support.
+
+Cross-namespace foreign keys aren't supported. Also namespaces effect caching keys and unique markers (which are also restricted to a namespace).
+
+
+## Migrations
+
+The App Engine Datastore is a schemaless database, so the idea of migrations in the normal Django sense doesn't really apply in the same way.
+
+In order to add a new Django model, you just save an instance of that model, you don't need to tell the database to add a "table" (called a "Kind" in the Datastore) for it.
+Similarly, if you want to add a new field to a model, you just add the field and start saving your objects, there's no need to create a new column in the database first.
+
+However, there are some behaviours of the Datastore which mean that in some cases you will want to run some kind of "migration".  The relevant behaviours are:
+
+* If you remove one of your Django models and you want to delete all of the instances, you can't just `DROP` the "table", you must run a task which maps over each object and deletes it.
+* If you add a new model field with a default value, that value won't get populated into the database until you re-save each instance.  When you load an instance of the model, the default value will be assigned, but the value won't actually be stored in the database until you re-save the object.  This means that querying for objects with that value will not return any objects that have not been re-saved.  This is true even if the default value is `None` (because the Datastore differentiates between a value being set to `None` and a value not existing at all).
+* If you remove a model field, the underlying Datastore entities will still contain the value until they are re-saved.  When you re-save each instance of the model the underlying entity will be overwritten, wiping out the removed field, but if you want to immediately destroy some sensitive data or reduce your used storage quota then simplying removing the field from the model will have no effect.
+
+For these reasons there is a legitimate case for implementing some kind of variant of the Django migration system for Datastore-backed models.  See the [migrations ticket on GitHub](https://github.com/potatolondon/djangae/issues/438) for more info.

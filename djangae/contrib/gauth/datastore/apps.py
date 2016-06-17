@@ -3,7 +3,7 @@ from django.contrib import auth
 from django.contrib.auth.management import create_permissions
 from django.db.models.signals import post_migrate
 
-from .models import PermissionsMixin
+
 
 
 # This is slightly unnecessary, because if the project is importing this file then it is *probably*
@@ -12,6 +12,7 @@ from .models import PermissionsMixin
 # Django's create_permissions() function
 
 def lazy_permission_creation(**kwargs):
+    from .models import PermissionsMixin
     if issubclass(auth.get_user_model(), PermissionsMixin):
         return
 

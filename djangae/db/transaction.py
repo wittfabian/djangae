@@ -21,6 +21,15 @@ def in_atomic_block():
     return IsInTransaction()
 
 
+# Because decorators are only instantiated once per function, we need to make sure any state
+# stored on them is both thread-local (to prevent function calls in different threads
+# interacting with each other) and safe to use recursively (by using a stack of state)
+
+class ContextState(object):
+    "Stores state per-call of the ContextDecorator"
+    pass
+
+
 class ContextDecorator(object):
     """
         A thread-safe ContextDecorator. Subclasses should implement classmethods
@@ -46,6 +55,7 @@ class ContextDecorator(object):
         # Add thread local state for variables that change per-call rather than
         # per insantiation of the decorator
         self.state = threading.local()
+        self.state.stack = []
 
     def __get__(self, obj, objtype=None):
         """ Implement descriptor protocol to support instance methods. """
@@ -63,14 +73,14 @@ class ContextDecorator(object):
             decorator_args = self.decorator_args.copy()
             exception = False
             try:
-                self.__class__._do_enter(self.state, decorator_args)
+                self.__class__._do_enter(self._push_state(), decorator_args)
                 try:
                     return self.func(*_args, **_kwargs)
                 except:
                     exception = True
                     raise
             finally:
-                self.__class__._do_exit(self.state, decorator_args, exception)
+                self.__class__._do_exit(self._pop_state(), decorator_args, exception)
 
         if not self.func:
             # We were instantiated with args
@@ -79,11 +89,25 @@ class ContextDecorator(object):
         else:
             return decorated(*args, **kwargs)
 
+    def _push_state(self):
+        "We need a stack for state in case a decorator is called recursively"
+        # self.state is a threading.local() object, so if the current thread is not the one in
+        # which ContextDecorator.__init__ was called (e.g. is not the thread in which the function
+        # was decorated), then the 'stack' attribute may not exist
+        if not hasattr(self.state, 'stack'):
+            self.state.stack = []
+
+        self.state.stack.append(ContextState())
+        return self.state.stack[-1]
+
+    def _pop_state(self):
+        return self.state.stack.pop()
+
     def __enter__(self):
-        self.__class__._do_enter(self.state, self.decorator_args.copy())
+        self.__class__._do_enter(self._push_state(), self.decorator_args.copy())
 
     def __exit__(self, exc_type, exc_value, traceback):
-        self.__class__._do_exit(self.state, self.decorator_args.copy(), exc_type)
+        self.__class__._do_exit(self._pop_state(), self.decorator_args.copy(), exc_type)
 
 
 class TransactionFailedError(Exception):
@@ -130,14 +154,13 @@ class AtomicDecorator(ContextDecorator):
         assert(_GetConnection())
 
         # Clear the context cache at the start of a transaction
-        caching.ensure_context()
         caching.get_context().stack.push()
         state.transaction_started = True
 
     @classmethod
     def _do_exit(cls, state, decorator_args, exception):
         independent = decorator_args.get("independent", False)
-
+        context = caching.get_context()
         try:
             if state.transaction_started:
                 if exception:
@@ -151,9 +174,9 @@ class AtomicDecorator(ContextDecorator):
 
                  # Clear the context cache at the end of a transaction
                 if exception:
-                    caching.get_context().stack.pop(discard=True)
+                    context.stack.pop(discard=True)
                 else:
-                    caching.get_context().stack.pop(apply_staged=True, clear_staged=True)
+                    context.stack.pop(apply_staged=True, clear_staged=True)
 
             # If we were in an independent transaction, put everything back
             # the way it was!
@@ -162,7 +185,7 @@ class AtomicDecorator(ContextDecorator):
                     _PushConnection(state.conn_stack.pop())
 
                 # Restore the in-context cache as it was
-                caching.get_context().stack = state.original_stack
+                context.stack = state.original_stack
 
 
 atomic = AtomicDecorator
@@ -173,13 +196,14 @@ class NonAtomicDecorator(ContextDecorator):
     @classmethod
     def _do_enter(cls, state, decorator_args):
         state.conn_stack = []
+        context = caching.get_context()
 
         # We aren't in a transaction, do nothing!
         if not in_atomic_block():
             return
 
         # Store the current in-context stack
-        state.original_stack = copy.deepcopy(caching.get_context().stack)
+        state.original_stack = copy.deepcopy(context.stack)
 
         # Similar to independent transactions, unwind the connection statck
         # until we aren't in a transaction
@@ -187,8 +211,8 @@ class NonAtomicDecorator(ContextDecorator):
             state.conn_stack.append(_PopConnection())
 
         # Unwind the in-context stack
-        while len(caching.get_context().stack.stack) > 1:
-            caching.get_context().stack.pop(discard=True)
+        while len(context.stack.stack) > 1:
+            context.stack.pop(discard=True)
 
     @classmethod
     def _do_exit(cls, state, decorator_args, exception):

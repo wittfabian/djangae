@@ -1,7 +1,8 @@
+import django
 from django import forms
 from django.db import router, models
 from django.db.models.query import QuerySet
-from django.db.models.fields.related import RelatedField, ForeignObjectRel
+from django.db.models.fields.related import ForeignObject, ForeignObjectRel
 from django.utils.functional import cached_property
 from django.core.exceptions import ImproperlyConfigured, ValidationError
 from djangae.forms.fields import (
@@ -11,14 +12,16 @@ from djangae.forms.fields import (
 from django.utils import six
 
 class RelatedIteratorRel(ForeignObjectRel):
-    def __init__(self, field, to, related_name=None, limit_choices_to=None):
+    def __init__(self, field, to, related_name=None, limit_choices_to=None, on_delete=models.DO_NOTHING):
         self.field = field
-        self.to = to
+        if django.VERSION[1] < 9: # Django 1.8 compatibility
+            self.to = to
+        self.model = to
         self.related_name = related_name
         self.related_query_name = None
         self.field_name = None
         self.parent_link = None
-        self.on_delete = models.DO_NOTHING
+        self.on_delete = on_delete
         self.symmetrical = False
 
         if limit_choices_to is None:
@@ -184,11 +187,7 @@ class RelatedIteratorObjectsDescriptor(object):
             model's default manager.
         """
 
-        # Django 1.7 uses self.related.model, but >1.7 it's related.related_model
-        if hasattr(self.related, 'related_model'):
-            manager = self.related.related_model._default_manager.__class__
-        else:
-            manager = self.related.model._default_manager.__class__
+        manager = self.related.related_model._default_manager.__class__
 
         return create_related_iter_manager(
             manager,
@@ -199,11 +198,7 @@ class RelatedIteratorObjectsDescriptor(object):
         if instance is None:
             return self
 
-        # Django 1.7 uses self.related.model, but >1.7 it's related.related_model
-        if hasattr(self.related, 'related_model'):
-            rel_model = self.related.related_model
-        else:
-            rel_model = self.related.model
+        rel_model = self.related.related_model
         rel_field = self.related.field
 
         manager = self.related_manager_cls(
@@ -258,7 +253,7 @@ class ReverseRelatedObjectsDescriptor(object):
 from abc import ABCMeta
 
 
-class RelatedIteratorField(RelatedField):
+class RelatedIteratorField(ForeignObject):
 
     __metaclass__ = ABCMeta
 
@@ -266,24 +261,52 @@ class RelatedIteratorField(RelatedField):
     generate_reverse_relation = True
     empty_strings_allowed = False
 
-    def __init__(self, model, limit_choices_to=None, related_name=None, **kwargs):
+    def __init__(self, to, limit_choices_to=None, related_name=None, on_delete=models.DO_NOTHING, **kwargs):
+        # Make sure that we do nothing on cascade by default
+        if on_delete == models.CASCADE:
+            raise ImproperlyConfigured(
+                "on_delete=CASCADE is disabled for iterable fields as this will "
+                "wipe out the instance when the field still has related objects"
+            )
+
+        if on_delete in (models.SET_NULL, models.SET_DEFAULT):
+            raise ImproperlyConfigured("Using an on_delete value of {} will cause undesirable behavior"
+                             " (e.g. wipeout the entire list) if you really want to do that "
+                             "then use models.SET instead and return an empty list/set")
+
         kwargs["rel"] = RelatedIteratorRel(
             self,
-            model,
+            to,
             related_name=related_name,
-            limit_choices_to=limit_choices_to
+            limit_choices_to=limit_choices_to,
+            on_delete=on_delete
         )
-        super(RelatedIteratorField, self).__init__(**kwargs)
+
+        if django.VERSION[1] >= 9:  # Django 1.8 doesn't have on_delete as attribute
+            kwargs.update({
+                'on_delete': models.DO_NOTHING,
+            })
+
+        from_fields = ['self']
+        to_fields = [None]
+
+        super(RelatedIteratorField, self).__init__(to, from_fields=from_fields, to_fields=to_fields, **kwargs)
 
     def deconstruct(self):
         name, path, args, kwargs = super(RelatedIteratorField, self).deconstruct()
-        args = (self.rel.to,)
-        del kwargs["null"]
-        del kwargs["default"]
+        # We hardcode a number of arguments for RelatedIteratorField, those arguments need to be removed here
+        for hardcoded_kwarg in ["to_fields", "from_fields", "on_delete"]:
+            del kwargs[hardcoded_kwarg]
+
         return name, path, args, kwargs
 
     def get_attname(self):
         return '%s_ids' % self.name
+
+    def get_attname_column(self):
+        attname = self.get_attname()
+        column = self.db_column or attname
+        return attname, column
 
     def contribute_to_class(self, cls, name):
         # To support multiple relations to self, it's useful to have a non-None
@@ -303,7 +326,7 @@ class RelatedIteratorField(RelatedField):
     def contribute_to_related_class(self, cls, related):
         # Internal M2Ms (i.e., those with a related name ending with '+')
         # and swapped models don't get a related descriptor.
-        if not self.rel.is_hidden() and not related.model._meta.swapped:
+        if not self.rel.is_hidden() and not related.to._meta.swapped:
             setattr(cls, related.get_accessor_name(), RelatedIteratorObjectsDescriptor(related))
 
 
@@ -334,14 +357,6 @@ class RelatedIteratorField(RelatedField):
         """
         return str(list(self._get_val_from_obj(obj)))
 
-    def save_form_data(self, instance, data):
-        getattr(instance, self.attname).clear() #Wipe out existing things
-
-        for value in data:
-            if isinstance(value, self.rel.to):
-                getattr(instance, self.name).add(value)
-            else:
-                getattr(instance, self.attname).add(value)
 
     def formfield(self, **kwargs):
         db = kwargs.pop('using', None)
@@ -372,6 +387,14 @@ class RelatedSetField(RelatedIteratorField):
 
         super(RelatedSetField, self).__init__(*args, **kwargs)
 
+    def deconstruct(self):
+        name, path, args, kwargs = super(RelatedSetField, self).deconstruct()
+        # We hardcode a number of arguments for RelatedIteratorField, those arguments need to be removed here
+        for hardcoded_kwarg in ["default", "null"]:
+            del kwargs[hardcoded_kwarg]
+
+        return name, path, args, kwargs
+
     def to_python(self, value):
         if value is None:
             return set()
@@ -395,6 +418,16 @@ class RelatedSetField(RelatedIteratorField):
 
         return set(value)
 
+    def save_form_data(self, instance, data):
+        setattr(instance, self.attname, set()) #Wipe out existing things
+        for value in data:
+            # If this is a model instance then add the pk
+            if isinstance(value, self.rel.to):
+                value = value.pk
+
+            field = getattr(instance, self.attname)
+            field.add(value)
+
 
 class RelatedListField(RelatedIteratorField):
 
@@ -407,6 +440,14 @@ class RelatedListField(RelatedIteratorField):
         kwargs["null"] = True
 
         super(RelatedListField, self).__init__(*args, **kwargs)
+
+    def deconstruct(self):
+        name, path, args, kwargs = super(RelatedListField, self).deconstruct()
+        # We hardcode a number of arguments for RelatedIteratorField, those arguments need to be removed here
+        for hardcoded_kwarg in ["default", "null"]:
+            del kwargs[hardcoded_kwarg]
+
+        return name, path, args, kwargs
 
     def to_python(self, value):
         if value is None:
@@ -429,6 +470,17 @@ class RelatedListField(RelatedIteratorField):
             return list(self.rel.to._default_manager.db_manager('default').filter(pk__in=ids))
 
         return list(value)
+
+    def save_form_data(self, instance, data):
+        setattr(instance, self.attname, []) #Wipe out existing things
+        for value in data:
+            # If this is a model instance then grab the PK
+            if isinstance(value, self.rel.to):
+                value = value.pk
+
+            # Add to the underlying list
+            field = getattr(instance, self.attname)
+            field.append(value)
 
 
 class GRCreator(property):

@@ -7,7 +7,8 @@ from django.http import HttpResponse, HttpResponseServerError
 from django.views.decorators.http import require_POST
 from django.views.decorators.csrf import csrf_exempt
 
-from djangae.utils import on_production
+from djangae import environment
+from djangae.core.signals import module_started, module_stopped
 
 
 def warmup(request):
@@ -21,8 +22,17 @@ def warmup(request):
                 import_module('%s.%s' % (app, name))
             except ImportError:
                 pass
-    content_type = 'text/plain; charset=%s' % settings.DEFAULT_CHARSET
-    return HttpResponse("Warmup done.", content_type=content_type)
+    return HttpResponse("Ok.")
+
+
+def start(request):
+    module_started.send(sender=__name__, request=request)
+    return HttpResponse("Ok.")
+
+
+def stop(request):
+    module_stopped.send(sender=__name__, request=request)
+    return HttpResponse("Ok.")
 
 
 @csrf_exempt
@@ -43,7 +53,7 @@ def deferred(request):
         response.status_code = 403
         return response
 
-    in_prod = on_production()
+    in_prod = environment.is_production_environment()
 
     if in_prod and os.environ.get("REMOTE_ADDR") != "0.1.0.2":
         logging.critical('Detected an attempted XSRF attack. This request did not originate from Task Queue.')

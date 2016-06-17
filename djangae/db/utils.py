@@ -10,15 +10,21 @@ from django.apps import apps
 from django.conf import settings
 from django.db.backends.utils import format_number
 from django.db import IntegrityError
+from django.db.models.query import QuerySet
 from django.utils import timezone
 from google.appengine.api import datastore
 from google.appengine.api.datastore import Key, Query
+try:
+    from django.db.models.expressions import BaseExpression
+except ImportError:
+    from django.db.models.expressions import ExpressionNode as BaseExpression
 
 #DJANGAE
 from djangae.utils import memoized
 from djangae.db.backends.appengine.indexing import special_indexes_for_column, REQUIRES_SPECIAL_INDEXES
 from djangae.db.backends.appengine.dbapi import CouldBeSupportedError
 from djangae.db.backends.appengine import POLYMODEL_CLASS_ATTRIBUTE
+
 
 def make_timezone_naive(value):
     if value is None:
@@ -94,6 +100,16 @@ def get_datastore_kind(model):
 
 def get_prepared_db_value(connection, instance, field, raw=False):
     value = getattr(instance, field.attname) if raw else field.pre_save(instance, instance._state.adding)
+
+    if isinstance(value, BaseExpression):
+        from djangae.db.backends.appengine.expressions import evaluate_expression
+
+        # We can't actually support F expressions on the datastore, but we can simulate
+        # them, evaluating the expression in place.
+
+        #TODO: For saves and updates we should raise a Warning. When evaluated in a filter
+        # we should raise an Error
+        value = evaluate_expression(value, instance, connection)
 
     if hasattr(value, "prepare_database_save"):
         value = value.prepare_database_save(field)
@@ -215,7 +231,8 @@ def django_instance_to_entity(connection, model, fields, raw, instance, check_nu
         else:
             raise ValueError("Invalid primary key value")
 
-    entity = datastore.Entity(db_table, **kwargs)
+    namespace = connection.settings_dict.get("NAMESPACE")
+    entity = datastore.Entity(db_table, namespace=namespace, **kwargs)
     entity.update(field_values)
 
     classes = get_concrete_db_tables(model)
@@ -225,12 +242,12 @@ def django_instance_to_entity(connection, model, fields, raw, instance, check_nu
     return entity
 
 
-def get_datastore_key(model, pk):
+def get_datastore_key(model, pk, namespace):
     """ Return a datastore.Key for the given model and primary key.
     """
 
     kind = get_top_concrete_parent(model)._meta.db_table
-    return Key.from_path(kind, pk)
+    return Key.from_path(kind, pk, namespace=namespace)
 
 
 class MockInstance(object):
@@ -242,6 +259,8 @@ class MockInstance(object):
 
     def __init__(self, **kwargs):
         is_adding = kwargs.pop('_is_adding', False)
+        self._original = kwargs.pop('_original', None)
+        self._meta = kwargs.pop('_meta', None)
 
         class State:
             adding = is_adding
@@ -259,7 +278,7 @@ class MockInstance(object):
 
 
 def key_exists(key):
-    qry = Query(keys_only=True)
+    qry = Query(keys_only=True, namespace=key.namespace())
     qry.Ancestor(key)
     return qry.Count(limit=1) > 0
 
@@ -300,8 +319,15 @@ def django_ordering_comparison(ordering, lhs, rhs):
     DESCENDING = 2
 
     for order, direction in ordering:
-        lhs_value = lhs.key() if order == "__key__" else lhs[order]
-        rhs_value = rhs.key() if order == "__key__" else rhs[order]
+        if lhs is not None:
+            lhs_value = lhs.key() if order == "__key__" else lhs.get(order)
+        else:
+            lhs_value = None
+
+        if rhs is not None:
+            rhs_value = rhs.key() if order == "__key__" else rhs.get(order)
+        else:
+            rhs_value = None
 
         if direction == ASCENDING and lhs_value != rhs_value:
             return -1 if lt(lhs_value, rhs_value) else 1
@@ -357,7 +383,10 @@ def entity_matches_query(entity, query):
                 # The query value can be a list of ANDed values
                 query_attrs = query_attr
 
-            query_attrs = [ getattr(query, x) if x == "_Query__kind" else query.get(x) for x in query_attrs ]
+            query_attrs = (
+                getattr(query, x) if x == "_Query__kind" else query.get(x)
+                for x in query_attrs
+            )
 
             if not isinstance(ent_attr, (list, tuple)):
                 ent_attr = [ ent_attr ]
@@ -365,7 +394,7 @@ def entity_matches_query(entity, query):
             matches = False
             for query_attr in query_attrs:  # [22, 23]
                 #If any of the values don't match then this query doesn't match
-                if not any([op(attr, query_attr) for attr in ent_attr]):
+                if not any(op(attr, query_attr) for attr in ent_attr):
                     matches = False
                     break
             else:

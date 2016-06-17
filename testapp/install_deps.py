@@ -1,8 +1,10 @@
+#!/usr/bin/env python
 import os
 import stat
 import subprocess
 import shutil
 
+import tarfile
 from StringIO import StringIO
 from zipfile import ZipFile
 from urllib import urlopen
@@ -14,7 +16,7 @@ TARGET_DIR = os.path.join(PROJECT_DIR, "libs")
 
 APPENGINE_TARGET_DIR = os.path.join(TARGET_DIR, "google_appengine")
 
-APPENGINE_SDK_VERSION = "1.9.22"
+APPENGINE_SDK_VERSION = "1.9.31"
 APPENGINE_SDK_FILENAME = "google_appengine_%s.zip" % APPENGINE_SDK_VERSION
 
 # Google move versions from 'featured' to 'deprecated' when they bring
@@ -22,22 +24,14 @@ APPENGINE_SDK_FILENAME = "google_appengine_%s.zip" % APPENGINE_SDK_VERSION
 FEATURED_SDK_REPO = "https://storage.googleapis.com/appengine-sdks/featured/"
 DEPRECATED_SDK_REPO = "https://storage.googleapis.com/appengine-sdks/deprecated/%s/" % APPENGINE_SDK_VERSION.replace('.', '')
 
-DJANGO_VERSION = os.environ.get("DJANGO_VERSION", "1.7")
-NEXT_DJANGO_VERSION = {
-    "1.5": "1.6",
-    "1.6": "1.7",
-    "1.7": "1.8",
-    "1.8": "1.9",
-    "1.9": "2.0",
-    "2.0": "2.1",
-}
+DJANGO_VERSION = os.environ.get("DJANGO_VERSION", "1.8")
 
-if DJANGO_VERSION != "master":
-    DJANGO_FOR_PIP = "https://github.com/django/django/archive/stable/{}.x.tar.gz".format(DJANGO_VERSION)
-    DJANGO_TESTS_URL = "https://github.com/django/django/archive/stable/{}.x.zip".format(DJANGO_VERSION)
+if any([x in DJANGO_VERSION for x in ['master', 'a', 'b', 'rc']]):
+    # For master, beta, alpha or rc versions, get exact versions
+    DJANGO_FOR_PIP = "https://github.com/django/django/archive/{}.tar.gz".format(DJANGO_VERSION)
 else:
-    DJANGO_FOR_PIP = "https://github.com/django/django/archive/master.tar.gz"
-    DJANGO_TESTS_URL = "https://github.com/django/django/archive/master.zip"
+    # For normal (eg. 1.8, 1.9) releases, get latest (.x)
+    DJANGO_FOR_PIP = "https://github.com/django/django/archive/stable/{}.x.tar.gz".format(DJANGO_VERSION)
 
 if __name__ == '__main__':
 
@@ -79,8 +73,9 @@ if __name__ == '__main__':
     p.wait()
 
     print("Installing Django tests from {}".format(DJANGO_VERSION))
-    django_zip = urlopen(DJANGO_TESTS_URL)
-    zipfile = ZipFile(StringIO(django_zip.read()))
-    for filename in zipfile.namelist():
+    django_tgz = urlopen(DJANGO_FOR_PIP)
+
+    tar_file = tarfile.open(fileobj=StringIO(django_tgz.read()))
+    for filename in tar_file.getnames():
         if filename.startswith("django-stable-{}.x/tests/".format(DJANGO_VERSION)) or filename.startswith("django-master/tests/"):
-            zipfile.extract(filename, os.path.join(TARGET_DIR))
+            tar_file.extract(filename, os.path.join(TARGET_DIR))

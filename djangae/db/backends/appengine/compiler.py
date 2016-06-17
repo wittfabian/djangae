@@ -1,16 +1,9 @@
 #LIBRARIES
+import django
+
 from django.db.models.sql import compiler
-# Following two ImportError blocks are for < 1.6 compatibility
-try:
-    from django.db.models.sql.compiler import SQLDateCompiler as DateCompiler
-except ImportError:
-    class DateCompiler(object):
-        pass
-try:
-    from django.db.models.sql.compiler import SQLDateTimeCompiler as DateTimeCompiler
-except ImportError:
-    class DateTimeCompiler(object):
-        pass
+from django.db.models.expressions import Value, OrderBy
+from django.db.models.sql.query import get_order_dir
 
 #DJANGAE
 from .commands import (
@@ -20,7 +13,29 @@ from .commands import (
     DeleteCommand
 )
 
+
 class SQLCompiler(compiler.SQLCompiler):
+
+    def find_ordering_name(self, name, opts, alias=None, default_order='ASC', already_seen=None):
+        """
+            Overridden just for the __scatter__ property ordering
+        """
+
+        # This allow special appengine properties (e.g. __scatter__) to be supplied as an ordering
+        # even though they don't (and can't) exist as Django model fields
+        if name.startswith("__") and name.endswith("__"):
+            name, order = get_order_dir(name, default_order)
+            descending = True if order == 'DESC' else False
+            return [ (OrderBy(Value('__scatter__'), descending=descending), False) ]
+
+        return super(SQLCompiler, self).find_ordering_name(
+            name,
+            opts,
+            alias=alias,
+            default_order=default_order,
+            already_seen=already_seen
+        )
+
     def as_sql(self, with_limits=True, with_col_aliases=False, subquery=False):
         self.pre_sql_setup()
         self.refcounts_before = self.query.alias_refcount.copy()
@@ -36,7 +51,7 @@ class SQLCompiler(compiler.SQLCompiler):
         return super(SQLCompiler, self).get_select()
 
 
-class SQLInsertCompiler(compiler.SQLInsertCompiler, SQLCompiler):
+class SQLInsertCompiler(SQLCompiler, compiler.SQLInsertCompiler):
     def __init__(self, *args, **kwargs):
         self.return_id = None
         super(SQLInsertCompiler, self).__init__(*args, **kwargs)
@@ -54,16 +69,12 @@ class SQLInsertCompiler(compiler.SQLInsertCompiler, SQLCompiler):
         ]
 
 
-class SQLDeleteCompiler(compiler.SQLDeleteCompiler, SQLCompiler):
+class SQLDeleteCompiler(SQLCompiler, compiler.SQLDeleteCompiler):
     def as_sql(self, with_limits=True, with_col_aliases=False, subquery=False):
         return (DeleteCommand(self.connection, self.query), tuple())
 
 
-class SQLUpdateCompiler(compiler.SQLUpdateCompiler, SQLCompiler):
-
-    def __init__(self, *args, **kwargs):
-        super(SQLUpdateCompiler, self).__init__(*args, **kwargs)
-
+class SQLUpdateCompiler(SQLCompiler, compiler.SQLUpdateCompiler):
     def as_sql(self, with_limits=True, with_col_aliases=False, subquery=False):
         self.pre_sql_setup()
         return (UpdateCommand(self.connection, self.query), tuple())
@@ -77,11 +88,17 @@ class SQLAggregateCompiler(compiler.SQLAggregateCompiler, SQLCompiler):
         return SQLCompiler.as_sql(self, with_limits, with_col_aliases, subquery)
 
 
-class SQLDateCompiler(DateCompiler, SQLCompiler):
-    def as_sql(self, with_limits=True, with_col_aliases=False, subquery=False):
-        return SQLCompiler.as_sql(self, with_limits, with_col_aliases, subquery)
+if django.VERSION < (1, 8):
+    from django.db.models.sql.compiler import (
+        SQLDateCompiler as DateCompiler,
+        SQLDateTimeCompiler as DateTimeCompiler
+    )
+
+    class SQLDateCompiler(DateCompiler, SQLCompiler):
+        def as_sql(self, with_limits=True, with_col_aliases=False, subquery=False):
+            return SQLCompiler.as_sql(self, with_limits, with_col_aliases, subquery)
 
 
-class SQLDateTimeCompiler(DateTimeCompiler, SQLCompiler):
-    def as_sql(self, with_limits=True, with_col_aliases=False, subquery=False):
-        return SQLCompiler.as_sql(self, with_limits, with_col_aliases, subquery)
+    class SQLDateTimeCompiler(DateTimeCompiler, SQLCompiler):
+        def as_sql(self, with_limits=True, with_col_aliases=False, subquery=False):
+            return SQLCompiler.as_sql(self, with_limits, with_col_aliases, subquery)

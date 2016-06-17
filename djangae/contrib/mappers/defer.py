@@ -39,7 +39,7 @@ def _shard(model, query, callback, shard_size, queue, offset=0):
             )
 
 
-def defer_iteration(queryset, callback, shard_size=500, _queue="default"):
+def defer_iteration(queryset, callback, shard_size=500, _queue="default", _target=None):
     """
         Shards background tasks to call 'callback' with each instance in queryset
 
@@ -55,4 +55,4 @@ def defer_iteration(queryset, callback, shard_size=500, _queue="default"):
     """
 
     # We immediately defer the _shard function so that we don't hold up execution
-    defer(_shard, queryset.model, queryset.query, callback, shard_size, _queue, _queue=_queue)
+    defer(_shard, queryset.model, queryset.query, callback, shard_size, _queue, _queue=_queue, _target=_target)

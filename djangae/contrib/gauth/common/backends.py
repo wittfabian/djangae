@@ -1,4 +1,6 @@
-import logging
+import warnings
+
+from django.db.utils import IntegrityError
 from django.db import transaction
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -15,94 +17,124 @@ from djangae.contrib.gauth.common.models import GaeAbstractBaseUser
 # Backwards compatibility, remove before 1.0
 # This is here so that we only log once on import, not on each authentication
 if hasattr(settings, "ALLOW_USER_PRE_CREATION"):
-    logging.warning(
+    warnings.warn(
         "settings.ALLOW_USER_PRE_CREATION is deprecated, "
-        "please use DJANGAE_ALLOW_USER_PRE_CREATION instead"
+        "please use DJANGAE_CREATE_UNKNOWN_USER instead"
+    )
+
+if hasattr(settings, 'DJANGAE_FORCE_USER_PRE_CREATION'):
+    warnings.warn(
+        'settings.DJANGAE_FORCE_USER_PRE_CREATION is deprecated, please use'
+        ' DJANGAE_CREATE_UNKNOWN_USER instead'
+    )
+
+if hasattr(settings, 'DJANGAE_ALLOW_USER_PRE_CREATION'):
+    warnings.warn(
+        'settings.DJANGAE_ALLOW_USER_PRE_CREATION is deprecated, please use'
+        ' DJANGAE_CREATE_UNKNOWN_USER instead'
     )
 
 
+def should_create_unknown_user():
+    """Returns True if we should create a Django user for unknown users.
+
+    Default is True unless DJANGAE_CREATE_UNKNOWN_USER is set to False
+
+    Other settings listed here are for backwards compatibility.
+    """
+    if hasattr(settings, 'DJANGAE_CREATE_UNKNOWN_USER'):
+        return settings.DJANGAE_CREATE_UNKNOWN_USER
+
+    if hasattr(settings, 'DJANGAE_FORCE_USER_PRE_CREATION'):
+        # This setting meant that there _had_ to be an existing user, it would
+        # refuse to create a new user (except for admins).
+        return not settings.DJANGAE_FORCE_USER_PRE_CREATION
+
+    if hasattr(settings, 'DJANGAE_ALLOW_USER_PRE_CREATION'):
+        return settings.DJANGAE_ALLOW_USER_PRE_CREATION
+
+    if hasattr(settings, 'ALLOW_USER_PRE_CREATION'):
+        return settings.ALLOW_USER_PRE_CREATION
+
+    return True
+
+
 class BaseAppEngineUserAPIBackend(ModelBackend):
-    """
-        A custom Django authentication backend, which lets us authenticate against the Google
-        users API
-    """
     atomic = transaction.atomic
     atomic_kwargs = {}
-    supports_anonymous_user = True
 
-    def authenticate(self, **credentials):
+    def authenticate(self, google_user=None):
         """
         Handles authentication of a user from the given credentials.
-        Credentials must be a combination of 'request' and 'google_user'.
-        If any other combination of credentials are given then we raise a TypeError, see
-        authenticate() in django.contrib.auth.__init__.py.
+        Credentials must be a 'google_user' as returned by the App Engine
+        Users API.
         """
+        if google_user is None:
+            return None
 
         User = get_user_model()
 
         if not issubclass(User, GaeAbstractBaseUser):
             raise ImproperlyConfigured(
-                "djangae.contrib.auth.backends.AppEngineUserAPI requires AUTH_USER_MODEL to be a "
+                "AppEngineUserAPIBackend requires AUTH_USER_MODEL to be a "
                 " subclass of djangae.contrib.auth.base.GaeAbstractBaseUser."
             )
 
-        if len(credentials) != 1:
-            # Django expects a TypeError if this backend cannot handle the given credentials
-            raise TypeError()
+        user_id = google_user.user_id()
+        email = BaseUserManager.normalize_email(google_user.email())
 
-        google_user = credentials.get('google_user', None)
+        try:
+            # User exists and we can bail immediately.
+            return User.objects.get(username=user_id)
+        except User.DoesNotExist:
+            pass
 
-        if google_user:
-            user_id = google_user.user_id()
-            email = google_user.email().lower()
-            try:
-                return User.objects.get(username=user_id)
-            except User.DoesNotExist:
-                try:
-                    existing_user = User.objects.get(email=BaseUserManager.normalize_email(email))
-                except User.DoesNotExist:
-                    force_pre_creation = getattr(settings, 'DJANGAE_FORCE_USER_PRE_CREATION', False)
-                    user_is_admin = users.is_current_user_admin()
-                    if force_pre_creation and not user_is_admin:
-                        # Indicate to Django that this user is not allowed
-                        return
-                    return User.objects.create_user(user_id, email)
+        auto_create = should_create_unknown_user()
+        user_is_admin = users.is_current_user_admin()
 
-                # If the existing user was precreated, update and reuse it
-                if existing_user.username is None:
-                    if (
-                        getattr(settings, 'DJANGAE_ALLOW_USER_PRE_CREATION', False) or
-                        # Backwards compatibility, remove before 1.0
-                        getattr(settings, 'ALLOW_USER_PRE_CREATION', False)
-                    ):
-                        # Convert the pre-created User object so that the user can now login via
-                        # Google Accounts, and ONLY via Google Accounts.
-                        existing_user.username = user_id
-                        existing_user.last_login = timezone.now()
-                        existing_user.save()
-                        return existing_user
+        try:
+            existing_user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            if not (auto_create or user_is_admin):
+                # User doesn't exist and we aren't going to create one.
+                return None
 
-                    # There's a precreated user but user precreation is disabled
-                    # This will fail with an integrity error
-                    from django.db import IntegrityError
-                    raise IntegrityError(
-                        "GAUTH: Found existing User with email=%s and username=None, "
-                        "but user precreation is disabled." % email
-                    )
+            existing_user = None
 
-                # There is an existing user with this email address, but it is tied to a different
-                # Google user id.  As we treat the user id as the primary identifier, not the email
-                # address, we leave the existing user in place and blank its email address (as the
-                # email field is unique), then create a new user with the new user id.
-                else:
-                    logging.info(
-                        "GAUTH: Creating a new user with an existing email address "
-                        "(User(email=%s, pk=%s))" % (email, existing_user.pk)
-                    )
-                    with self.atomic(**self.atomic_kwargs):
-                        existing_user = User.objects.get(pk=existing_user.pk)
-                        existing_user.email = None
-                        existing_user.save()
-                        return User.objects.create_user(user_id, email)
+        # OK. We will grant access. We may need to update an existing user, or
+        # create a new one, or both.
+
+        # Those 3 scenarios are:
+        # 1. A User object has been created for this user, but that they have not logged in yet.
+        # In this case wefetch the User object by email, and then update it with the Google User ID
+        # 2. A User object exists for this email address but belonging to a different Google account.
+        # This generally only happens when the email address of a Google Apps account has been
+        # signed up as a Google account and then the apps account itself has actually become a
+        # Google account. This is possible but very unlikely.
+        # 3. There is no User object realting to this user whatsoever.
+
+
+        if existing_user:
+            if existing_user.username is None:
+                # We can use the existing user for this new login.
+                existing_user.username = user_id
+                existing_user.email = email
+                existing_user.last_login = timezone.now()
+                existing_user.save()
+
+                return existing_user
+            else:
+                # We need to update the existing user and create a new one.
+                with self.atomic(**self.atomic_kwargs):
+                    existing_user = User.objects.get(pk=existing_user.pk)
+                    existing_user.email = None
+                    existing_user.save()
+
+                    return User.objects.create_user(user_id, email=email)
         else:
-            raise TypeError()  # Django expects to be able to pass in whatever credentials it has, and for you to raise a TypeError if they mean nothing to you
+            # Create a new user, but account for another thread having created it already in a race
+            # condition scenario. Our logic cannot be in a transaction, so we have to just catch this.
+            try:
+                return User.objects.create_user(user_id, email=email)
+            except IntegrityError:
+                return User.objects.get(username=user_id)

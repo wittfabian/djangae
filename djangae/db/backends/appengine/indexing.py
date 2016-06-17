@@ -4,6 +4,7 @@ import os
 import datetime
 import re
 
+from djangae import environment
 from djangae.sandbox import allow_mode_write
 from django.conf import settings
 
@@ -14,9 +15,7 @@ MAX_COLUMNS_PER_SPECIAL_INDEX = getattr(settings, "DJANGAE_MAX_COLUMNS_PER_SPECI
 CHARACTERS_PER_COLUMN = [31, 44, 54, 63, 71, 79, 85, 91, 97, 103]
 
 def _get_index_file():
-    from djangae.utils import find_project_root
-    index_file = os.path.join(find_project_root(), "djangaeidx.yaml")
-
+    index_file = os.path.join(environment.get_application_root(), "djangaeidx.yaml")
     return index_file
 
 
@@ -46,7 +45,7 @@ def load_special_indexes():
     _special_indexes = data
     _last_loaded_time = mtime
 
-    logging.debug("Loaded special indexes for {0} models".format(len(_special_indexes)))
+    logging.debug("Loaded special indexes for %d models", len(_special_indexes))
 
 
 def special_index_exists(model_class, field_name, index_type):
@@ -76,7 +75,7 @@ def write_special_indexes():
 
 
 def add_special_index(model_class, field_name, index_type, value=None):
-    from djangae.utils import on_production, in_testing
+    from djangae.utils import in_testing
     from django.conf import settings
 
     indexer = REQUIRES_SPECIAL_INDEXES[index_type]
@@ -89,7 +88,7 @@ def add_special_index(model_class, field_name, index_type, value=None):
     if special_index_exists(model_class, field_name, index_type):
         return
 
-    if on_production() or (in_testing() and not getattr(settings, "GENERATE_SPECIAL_INDEXES_DURING_TESTING", False)):
+    if environment.is_production_environment() or (in_testing() and not getattr(settings, "GENERATE_SPECIAL_INDEXES_DURING_TESTING", False)):
         raise RuntimeError(
             "There is a missing index in your djangaeidx.yaml - \n\n{0}:\n\t{1}: [{2}]".format(
                 _get_table_from_model(model_class), field_name, index_type
@@ -111,7 +110,12 @@ class Indexer(object):
     def prep_value_for_database(self, value, index): raise NotImplementedError()
     def prep_value_for_query(self, value): raise NotImplementedError()
     def indexed_column_name(self, field_column, value, index): raise NotImplementedError()
-    def prep_query_operator(self, op): return "exact"
+    def prep_query_operator(self, op):
+        if "__" in op:
+            return op.split("__")[-1]
+        else:
+            return "exact" # By default do an exact operation
+
     def prepare_index_type(self, index_type, value): return index_type
 
     def unescape(self, value):
@@ -134,10 +138,75 @@ class IExactIndexer(Indexer):
         return value.lower()
 
     def prep_value_for_query(self, value):
+        value = self.unescape(value)
         return value.lower()
 
     def indexed_column_name(self, field_column, value, index):
         return "_idx_iexact_{0}".format(field_column)
+
+
+class HourIndexer(Indexer):
+    def validate_can_be_indexed(self, value, negated):
+        return isinstance(value, datetime.datetime)
+
+    def prep_value_for_database(self, value, index):
+        if value:
+            return value.hour
+        return None
+
+    def prep_value_for_query(self, value):
+        if isinstance(value, (int, long)):
+            return value
+
+        if isinstance(value, basestring):
+            value = datetime.datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
+        return value.hour
+
+    def indexed_column_name(self, field_column, value, index):
+        return "_idx_hour_{0}".format(field_column)
+
+
+class MinuteIndexer(Indexer):
+    def validate_can_be_indexed(self, value, negated):
+        return isinstance(value, datetime.datetime)
+
+    def prep_value_for_database(self, value, index):
+        if value:
+            return value.minute
+        return None
+
+    def prep_value_for_query(self, value):
+        if isinstance(value, (int, long)):
+            return value
+
+        if isinstance(value, basestring):
+            value = datetime.datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
+        return value.minute
+
+    def indexed_column_name(self, field_column, value, index):
+        return "_idx_minute_{0}".format(field_column)
+        return "_idx_hour_{0}".format(field_column)
+
+
+class SecondIndexer(Indexer):
+    def validate_can_be_indexed(self, value, negated):
+        return isinstance(value, datetime.datetime)
+
+    def prep_value_for_database(self, value, index):
+        if value:
+            return value.second
+        return None
+
+    def prep_value_for_query(self, value):
+        if isinstance(value, (int, long)):
+            return value
+
+        if isinstance(value, basestring):
+            value = datetime.datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
+        return value.second
+
+    def indexed_column_name(self, field_column, value, index):
+        return "_idx_second_{0}".format(field_column)
 
 
 class DayIndexer(Indexer):
@@ -444,8 +513,11 @@ REQUIRES_SPECIAL_INDEXES = {
     "iexact": IExactIndexer(),
     "contains": ContainsIndexer(),
     "icontains": IContainsIndexer(),
-    "day" : DayIndexer(),
-    "month" : MonthIndexer(),
+    "hour": HourIndexer(),
+    "minute": MinuteIndexer(),
+    "second": SecondIndexer(),
+    "day": DayIndexer(),
+    "month": MonthIndexer(),
     "year": YearIndexer(),
     "week_day": WeekDayIndexer(),
     "endswith": EndsWithIndexer(),

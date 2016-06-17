@@ -32,27 +32,25 @@ ALLOWED_HOSTS = []
 # Application definition
 
 INSTALLED_APPS = [
+    'djangae',
     'django.contrib.admin',
     'django.contrib.auth',
     'djangae.contrib.gauth.datastore',
     'djangae.contrib.security',
     'djangae.contrib.consistency',
     'django.contrib.contenttypes',
+    'djangae.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.sites',
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'django.contrib.humanize',
+    'djangae.contrib.locking',
     'djangae.contrib.mappers',
     'djangae.contrib.pagination',
     'djangae.contrib.uniquetool',
-    'djangae',
     'testapp'
 ]
-# In 1.7+, djangae needs to come first in INSTALLED_APPS
-if django.VERSION >= (1, 7, 0, 0, 0):
-    INSTALLED_APPS.remove('djangae')
-    INSTALLED_APPS = ['djangae'] + INSTALLED_APPS
 
 TO_TEST = []
 
@@ -63,7 +61,9 @@ if "test" in sys.argv:
 
     tests_dir = os.path.join(BASE_DIR, "libs", "django-stable-{}.{}.x/tests".format(*django.VERSION[:2]))
     if not os.path.exists(tests_dir):
-        tests_dir = os.path.join(BASE_DIR, "libs", "django-master/tests")
+        tests_dir = os.path.join(BASE_DIR, "libs", "django-{}/tests".format(django.get_version()))
+        if not os.path.exists(tests_dir):
+            tests_dir = os.path.join(BASE_DIR, "libs", "django-master/tests")
 
     sys.path.insert(0, tests_dir)
 
@@ -96,7 +96,9 @@ if "test" in sys.argv:
         "update",
     ]
 
-    for folder in TO_TEST:
+    ADDITIONAL_INSTALLED_APPS = ["file_uploads"]
+
+    for folder in TO_TEST + ADDITIONAL_INSTALLED_APPS:
         if os.path.exists(os.path.join(tests_dir, folder, "tests.py")):
             INSTALLED_APPS.append(folder)
 
@@ -122,8 +124,16 @@ WSGI_APPLICATION = 'testapp.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'djangae.db.backends.appengine'
-    }
+        'ENGINE': 'djangae.db.backends.appengine',
+        'NAMESPACE': 'customdefaultnamespace',
+    },
+    "ns1": {
+        'ENGINE': 'djangae.db.backends.appengine',
+        'NAMESPACE': 'ns1namespace',
+    },
+    "nonamespace": {
+        'ENGINE': 'djangae.db.backends.appengine',
+    },
 }
 
 # Internationalization
@@ -150,9 +160,16 @@ AUTH_USER_MODEL = 'djangae.GaeDatastoreUser'
 GENERATE_SPECIAL_INDEXES_DURING_TESTING = True
 COMPLETE_FLUSH_WHILE_TESTING = True
 DJANGAE_SEQUENTIAL_IDS_IN_TESTS = True
-DJANGAE_SIMULATE_CONTENTTYPES = True
 
 TEST_RUNNER = 'djangae.test_runner.SkipUnsupportedRunner'
 DJANGAE_ADDITIONAL_TEST_APPS = ["djangae"] + TO_TEST
+
+
+# Here because of "You haven't defined a TEMPLATES setting" deprecation message
+TEMPLATES = [
+    {
+        'BACKEND': 'django.template.backends.django.DjangoTemplates',
+    },
+]
 
 from djangae.contrib.gauth.settings import *

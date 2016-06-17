@@ -1,6 +1,7 @@
 import random
 
 from django.core.exceptions import ImproperlyConfigured
+from django.db import models
 from google.appengine.datastore.datastore_rpc import BaseConnection
 from google.appengine.datastore.datastore_stub_util import _MAX_EG_PER_TXN
 
@@ -9,7 +10,6 @@ from djangae.fields.related import (
     RelatedIteratorManagerBase,
     ReverseRelatedObjectsDescriptor,
 )
-from djangae.models import CounterShard
 from djangae.db import transaction
 
 
@@ -20,7 +20,7 @@ MAX_ENTITIES_PER_GET = BaseConnection.MAX_GET_KEYS
 DEFAULT_SHARD_COUNT = MAX_SHARDS_PER_TRANSACTION = _MAX_EG_PER_TXN - 1
 
 
-class RelatedShardManager(RelatedIteratorManagerBase, CounterShard._default_manager.__class__):
+class RelatedShardManager(RelatedIteratorManagerBase, models.Manager):
     """ This is what is given to you when you access the field attribute on an instance.  It's a
         model manager with the usual queryset methods (the same as for RelatedSetField) but with
         the additional increment()/decrement()/reset() methods for the counting.
@@ -44,12 +44,14 @@ class RelatedShardManager(RelatedIteratorManagerBase, CounterShard._default_mana
 
     def reset(self):
         """ Reset the counter to 0. """
-        with transaction.atomic(xg=True):
-            value = self.value()
-            if value > 0:
-                self.decrement(value)
-            elif value < 0:
-                self.increment(value)
+        # This is not transactional because (1) that wouldn't work with > 24 shards, and (2) if
+        # there are other threads doing increments/decrements at the same time then it doesn't make
+        # any difference if they happen before or after our increment/decrement anyway.
+        value = self.value()
+        if value > 0:
+            self.decrement(value)
+        elif value < 0:
+            self.increment(abs(value))
 
     def clear(self):
         # Override the default `clear` method of the parent class, as that only clears the list of
@@ -79,7 +81,7 @@ class RelatedShardManager(RelatedIteratorManagerBase, CounterShard._default_mana
 
                 new_instance_shard_pks.update(new_shard_pks)
                 setattr(self.instance, self.field.attname, new_instance_shard_pks)
-                new_instance.save()
+                models.Model.save(new_instance) # avoid custom save method, which might do DB lookups
                 total_to_create -= num_to_create
 
     def _update_or_create_shard(self, step):
@@ -100,14 +102,16 @@ class RelatedShardManager(RelatedIteratorManagerBase, CounterShard._default_mana
                 new_instance_shard_pks = getattr(new_instance, self.field.attname, set())
                 new_instance_shard_pks.add(new_shard.pk)
                 setattr(self.instance, self.field.attname, new_instance_shard_pks)
-                new_instance.save()
+                models.Model.save(new_instance) # avoid custom save method, which might do DB lookups
         else:
             with transaction.atomic():
+                from djangae.models import CounterShard
                 shard = CounterShard.objects.get(pk=shard_pk)
                 shard.count += step
                 shard.save()
 
     def _create_shard(self, count):
+        from djangae.models import CounterShard
         return CounterShard.objects.create(
             count=count, label="%s.%s" % (self.instance._meta.db_table, self.field.name)
         )
@@ -130,9 +134,20 @@ class ReverseRelatedShardsDescriptor(ReverseRelatedObjectsDescriptor):
 
 class ShardedCounterField(RelatedSetField):
 
-    def __init__(self, shard_count=DEFAULT_SHARD_COUNT, *args, **kwargs):
+    def __init__(self, shard_count=DEFAULT_SHARD_COUNT, **kwargs):
         # Note that by removing the related_name by default we avoid reverse name clashes caused by
         # having multiple ShardedCounterFields on the same model.
+
+        if "default" in kwargs:
+            # We don't allow default because it causes all kinds of issues
+            raise ImproperlyConfigured(
+                "It is not possible to set a default value "
+                "on a ShardedCounterField, use increment() after creation instead"
+            )
+
+        if "to" in kwargs:
+            del kwargs["to"]
+
         self.shard_count = shard_count
         if shard_count > MAX_ENTITIES_PER_GET:
             raise ImproperlyConfigured(
@@ -140,8 +155,23 @@ class ShardedCounterField(RelatedSetField):
                 "fetching in a single Get operation (%d)" % MAX_ENTITIES_PER_GET
             )
         kwargs.setdefault("related_name", "+")
-        super(ShardedCounterField, self).__init__(CounterShard, *args, **kwargs)
+        super(ShardedCounterField, self).__init__('djangae.CounterShard', **kwargs)
 
     def contribute_to_class(self, cls, name):
         super(ShardedCounterField, self).contribute_to_class(cls, name)
         setattr(cls, self.name, ReverseRelatedShardsDescriptor(self))
+
+    def deconstruct(self):
+        name, path, args, kwargs = super(ShardedCounterField, self).deconstruct()
+
+        del kwargs["to"]
+
+        # Add the shard count if necessary
+        if self.shard_count != DEFAULT_SHARD_COUNT:
+            kwargs["shard_count"] = self.shard_count
+
+        # Default is not a valid kwarg
+        if "default" in kwargs:
+            del kwargs["default"]
+
+        return name, path, args, kwargs

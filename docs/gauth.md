@@ -3,6 +3,7 @@
 Djangae includes two applications to aid authentication and user management with
 App Engine. Each provides both an abstract class, to extend if you're defining your own custom User model, or a concrete version to use in place of `'django.contrib.auth.models.User'`.  Also provided are custom authentication backends which delegate to the App Engine users API and a middleware to handle the link between the Django's user object and App Engine's (amongst other things).
 
+The only minor difference between Djangae Gauth and Django Auth is that Djangae overrides `normalize_email` to lowercase whole email, not just the domain part like Django does. See rationale behind this decision in [issue #481 on Github](https://github.com/potatolondon/djangae/issues/481).
 
 ## Using the Datastore
 
@@ -14,7 +15,7 @@ Allows the use of Django's permissions system on the Datastore, despite it usual
 after `'django.contrib.auth'`.
 2. Replace `'django.contrib.auth.middleware.AuthenticationMiddleware'` with
 `'djangae.contrib.gauth.middleware.AuthenticationMiddleware'`.
-3. Set `AUTH_USER_MODEL = 'djangae.GaeUser'` in your settings file to use the supplied user model, or create your own by subclassing `'djangae.contrib.gauth.datastore.models.AbstractBaseUser'`.
+3. Set `AUTH_USER_MODEL = 'djangae.GaeDatastoreUser'` in your settings file to use the supplied user model, or create your own by subclassing `djangae.contrib.gauth.datastore.models.GaeAbstractDatastoreUser`.
 4. Add the backend to `AUTHENTICATION_BACKENDS` in your settings file eg:
 
 ```python
@@ -38,12 +39,12 @@ The Datastore-based user models have a `user_permissions` list field, which take
 after `'django.contrib.auth'`.
 2. Replace `'django.contrib.auth.middleware.AuthenticationMiddleware'` with
 `'djangae.contrib.gauth.middleware.AuthenticationMiddleware'`.
-3. Set `AUTH_USER_MODEL = 'djangae.GaeUser'` in your settings file to use the supplied user model or create your own by subclassing `'djangae.contrib.gauth.sql.models.AbstractBaseUser'`.
+3. Set `AUTH_USER_MODEL = 'djangae.GaeUser'` in your settings file to use the supplied user model or create your own by subclassing `djangae.contrib.gauth.sql.models.GaeAbstractUser`.
 4. Add the backend to `AUTHENTICATION_BACKENDS` in your settings file eg:
 
 ```python
 AUTHENTICATION_BACKENDS = (
-	'djangae.contrib.sql.backends.AppEngineUserAPIBackend',
+	'djangae.contrib.gauth.sql.backends.AppEngineUserAPIBackend',
 	 ...
 )
 ```
@@ -54,18 +55,16 @@ AUTHENTICATION_BACKENDS = (
 If you want to write your own permissions system, but you still want to take advantage of the authentication provided by the Google Users API, then you may want to subclass `djangae.contrib.gauth.common.models.GaeAbstractBaseUser`.
 
 
+## Authentication for unknown users
 
-## User Pre-Creation
+By default Djangae will deny access for unknown users (unless the user is an administrator for the App Engine application).
 
-When using Google Accounts-based authentication, the `username` field of the user model is populated with the `user_id` which is provided by Google Accounts.  This is populated when the user object is created on the user's first log in, and is then used as the authentication check for subsequent log ins.  It is impossible to know what this ID is going to be before the user logs in, which creates an issue if you want to create users and assign permissions to them before they have authenticated.
+Add `DJANGAE_CREATE_UNKNOWN_USER=True` to your settings and Djangae will always grant access (for authenticated Google Accounts users), creating a Django user if one does not exist.
 
-Djangae allows you to pre-create users by specifying their email address.  First, you need to set `DJANGAE_ALLOW_USER_PRE_CREATION` to `True` in settings, and then you can create user objects which have an email address and a `username` of `None`.  Djangae then recognises these as pre-created users, and will populate the `username` with their Google `user_id` when they first log in.
+If there is a Django user with a matching email address and username set to `None` then Djangae will update the Django user, setting the username to the Google user ID. If there is a user with a matching email address and username set to another user ID then Djangae will set the existing user's email address to `None` and create a new Django user.
 
-## Force user Pre-Creation
+App Engine administrators are always granted access, and a Django user will be created if one does not exist.
 
-If you want to prevent creating users for every single Google Account visiting your website, you can allow only pre-created users to be allowed to log in. To enable that you need to set `DJANGAE_FORCE_USER_PRE_CREATION` to `True` in your settings file. 
-
-Note: you don't need to pre-create User for GAE user admins.
 
 ## Username/password authentication
 
@@ -73,7 +72,7 @@ As well as using Djangae's Google Accounts-based authentication, you can also us
 
 ```python
 AUTHENTICATION_BACKENDS = (
-    'djangae.contrib.gauth.datastore.backends.AppEngineUserAPI',
+    'djangae.contrib.gauth.datastore.backends.AppEngineUserAPIBackend',
     'django.contrib.auth.backends.ModelBackend',
 )
 

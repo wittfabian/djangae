@@ -24,12 +24,13 @@ GitHub: [https://github.com/potatolondon/djangae](https://github.com/potatolondo
 * A `runserver` command which fires up the App Engine SDK to serve your app (while still using Django's code reloading).
 * [The ability to run management commands locally or on the remote App Engine Datastore](sandbox.md).
 * A `shell` command that correctly sets up the environment/database. (Note, we should support this set up for any custom commands as well, see [TODO.md](https://github.com/potatolondon/djangae/blob/master/TODO.md)).
+* [Storage backends](storage.md) for Cloud Storage and Blobstore.
 
 ## Supported Django Versions
 
 The intention is always to support the last two versions of Django, although older versions may work.
 
-**Currently Django 1.7 and 1.8 are supported. Django 1.9 (master) support is under development.**
+**Currently Django 1.8 and 1.9 are supported.**
 
 
 ## Contrib Applications
@@ -40,3 +41,4 @@ The intention is always to support the last two versions of Django, although old
  - [Pagination with djangae.contrib.pagination](pagination.md)
  - [Unique constraint repairs with djangae.contrib.uniquetool](uniquetool.md)
  - [Help with Datastore eventual consistency with djangae.contrib.consistency](consistency.md)
+ - [Concurrent thread locking with djangae.contrib.locking](locking.md)

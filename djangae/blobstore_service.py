@@ -39,6 +39,7 @@ def start_blobstore_service():
     from wsgiref.simple_server import make_server
     from google.appengine.tools.devappserver2 import blob_upload
     from google.appengine.tools.devappserver2 import blob_image
+    from google.appengine.tools.devappserver2 import gcs_server
 
     from django.core.handlers.wsgi import WSGIRequest
     from django.utils.encoding import force_str
@@ -62,6 +63,8 @@ def start_blobstore_service():
         # If this is an image serving URL, then use use the blob_image WSGI app
         if re.match(blob_image.BLOBIMAGE_URL_PATTERN, path.lstrip("/")):
             return blob_image.Application()(environ, start_response)
+        elif re.match(gcs_server.GCS_URL_PATTERN, path.lstrip("/")):
+            return gcs_server.Application()(environ, start_response)
 
         return blob_upload.Application(call_internal_upload)(environ, start_response)
 

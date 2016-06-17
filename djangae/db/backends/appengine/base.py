@@ -5,41 +5,20 @@ import warnings
 import logging
 
 #LIBRARIES
-import django
 from django.conf import settings
-
-try:
-    from django.db.backends.base.operations import BaseDatabaseOperations
-    from django.db.backends.base.client import BaseDatabaseClient
-    from django.db.backends.base.introspection import BaseDatabaseIntrospection
-    from django.db.backends.base.base import BaseDatabaseWrapper
-    from django.db.backends.base.features import BaseDatabaseFeatures
-    from django.db.backends.base.validation import BaseDatabaseValidation
-    from django.db.backends.base.creation import BaseDatabaseCreation
-    from django.db.backends.base.schema import BaseDatabaseSchemaEditor
-except ImportError:
-    # Django <= 1.7 (I think, at least 1.6)
-    from django.db.backends import (
-        BaseDatabaseOperations,
-        BaseDatabaseClient,
-        BaseDatabaseIntrospection,
-        BaseDatabaseWrapper,
-        BaseDatabaseFeatures,
-        BaseDatabaseValidation
-    )
-    from django.db.backends.creation import BaseDatabaseCreation
-
-    try:
-        from django.db.backends.schema import BaseDatabaseSchemaEditor
-    except ImportError:
-        #Django < 1.7 doesn't have BaseDatabaseSchemaEditor
-        class BaseDatabaseSchemaEditor(object):
-            pass
-
-
 from django.utils import timezone
+
+from django.db.backends.base.operations import BaseDatabaseOperations
+from django.db.backends.base.client import BaseDatabaseClient
+from django.db.backends.base.introspection import BaseDatabaseIntrospection
+from django.db.backends.base.introspection import TableInfo
+from django.db.backends.base.base import BaseDatabaseWrapper
+from django.db.backends.base.features import BaseDatabaseFeatures
+from django.db.backends.base.validation import BaseDatabaseValidation
+from django.db.backends.base.creation import BaseDatabaseCreation
+from django.db.backends.base.schema import BaseDatabaseSchemaEditor
+
 from google.appengine.api.datastore_types import Blob, Text
-from google.appengine.ext.db import metadata
 from google.appengine.datastore import datastore_stub_util
 from google.appengine.api import datastore, datastore_errors
 
@@ -49,7 +28,8 @@ from djangae.db.utils import (
     make_timezone_naive,
     get_datastore_key,
 )
-from djangae.db import caching
+
+from djangae.db.backends.appengine.caching import get_context
 from djangae.db.backends.appengine.indexing import load_special_indexes
 from .commands import (
     SelectCommand,
@@ -57,8 +37,7 @@ from .commands import (
     FlushCommand,
     UpdateCommand,
     DeleteCommand,
-    coerce_unicode,
-    get_field_from_column
+    coerce_unicode
 )
 
 from djangae.db.backends.appengine import dbapi as Database
@@ -116,15 +95,6 @@ class Cursor(object):
         return row
 
     def fetchone(self, delete_flag=False):
-        def convert_values(value, field):
-            """ For 1.7 support """
-            ops = self.connection.ops
-
-            if django.VERSION[1] < 8:
-                return ops.convert_values(value, field)
-            else:
-                return value
-
         try:
             result = self.last_select_command.results.next()
 
@@ -140,8 +110,7 @@ class Cursor(object):
                 row.append(result.get(col))
 
             for col in self.last_select_command.query.init_list:
-                field = get_field_from_column(query.model, col)
-                row.append(convert_values(result.get(col), field))
+                row.append(result.get(col))
 
             self.returned_ids.append(result.key().id_or_name())
             return row
@@ -213,7 +182,7 @@ class DatabaseOperations(BaseDatabaseOperations):
         elif internal_type == 'TimeField':
             converters.append(self.convert_time_value)
         elif internal_type == 'DecimalField':
-            converters.append(self.convert_time_value)
+            converters.append(self.convert_decimal_value)
         elif db_type == 'list':
             converters.append(self.convert_list_value)
         elif db_type == 'set':
@@ -256,35 +225,8 @@ class DatabaseOperations(BaseDatabaseOperations):
             value = set(value)
         return value
 
-
-    def convert_values(self, value, field):
-        """ Called when returning values from the datastore ONLY USED ON DJANGO <= 1.7"""
-        value = super(DatabaseOperations, self).convert_values(value, field)
-
-        db_type = field.db_type(self.connection)
-        if db_type == 'string' and isinstance(value, str):
-            value = self.convert_textfield_value(value, field, self.connection)
-        elif db_type == "datetime":
-            value = self.connection.ops.value_from_db_datetime(value)
-        elif db_type == "date":
-            value = self.connection.ops.value_from_db_date(value)
-        elif db_type == "time":
-            value = self.connection.ops.value_from_db_time(value)
-        elif db_type == "decimal":
-            value = self.connection.ops.value_from_db_decimal(value)
-        elif db_type == 'list':
-            if not value:
-                value = [] # Convert None back to an empty list
-        elif db_type == 'set':
-            if not value:
-                value = set()
-            else:
-                value = set(value)
-
-        return value
-
     def sql_flush(self, style, tables, seqs, allow_cascade=False):
-        return [ FlushCommand(table) for table in tables ]
+        return [ FlushCommand(table, self.connection) for table in tables ]
 
     def prep_lookup_key(self, model, value, field):
         if isinstance(value, basestring):
@@ -318,13 +260,13 @@ class DatabaseOperations(BaseDatabaseOperations):
         if isinstance(value, datetime.datetime):
             return value
 
-        return self.value_to_db_date(value)
+        return self.adapt_datefield_value(value)
 
     def prep_lookup_time(self, model, value, field):
         if isinstance(value, datetime.datetime):
             return value
 
-        return self.value_to_db_time(value)
+        return self.adapt_timefield_value(value)
 
     def prep_lookup_value(self, model, value, field, column=None):
         if field.primary_key and (not column or column == model._meta.pk.column):
@@ -355,7 +297,15 @@ class DatabaseOperations(BaseDatabaseOperations):
 
         db_type = field.db_type(self.connection)
 
-        if db_type == 'string' or db_type == 'text':
+        if db_type in ('integer', 'long'):
+            if isinstance(value, float):
+                # round() always returns a float, which has a smaller max value than an int
+                # so only round() it if it's already a float
+                value = round(value)
+            value = long(value)
+        elif db_type == 'float':
+            value = float(value)
+        elif db_type == 'string' or db_type == 'text':
             value = coerce_unicode(value)
             if db_type == 'text':
                 value = Text(value)
@@ -363,7 +313,7 @@ class DatabaseOperations(BaseDatabaseOperations):
             # Store BlobField, DictField and EmbeddedModelField values as Blobs.
             value = Blob(value)
         elif db_type == 'decimal':
-            value = self.value_to_db_decimal(value, field.max_digits, field.decimal_places)
+            value = self.adapt_decimalfield_value(value, field.max_digits, field.decimal_places)
         elif db_type in ('list', 'set'):
             if hasattr(value, "__len__") and not value:
                 value = None #Convert empty lists to None
@@ -388,25 +338,37 @@ class DatabaseOperations(BaseDatabaseOperations):
     def fetch_returned_insert_id(self, cursor):
         return cursor.lastrowid
 
-    def value_to_db_datetime(self, value):
+    def adapt_datetimefield_value(self, value):
         value = make_timezone_naive(value)
         return value
 
-    def value_to_db_date(self, value):
+    def value_to_db_datetime(self, value):  # Django 1.8 compatibility
+        return self.adapt_datetimefield_value(value)
+
+    def adapt_datefield_value(self, value):
         if value is not None:
             value = datetime.datetime.combine(value, datetime.time())
         return value
 
-    def value_to_db_time(self, value):
+    def value_to_db_date(self, value):  # Django 1.8 compatibility
+        return self.adapt_datefield_value(value)
+
+    def adapt_timefield_value(self, value):
         if value is not None:
             value = make_timezone_naive(value)
             value = datetime.datetime.combine(datetime.datetime.fromtimestamp(0), value)
         return value
 
-    def value_to_db_decimal(self, value, max_digits, decimal_places):
+    def value_to_db_time(self, value):  # Django 1.8 compatibility
+        return self.adapt_timefield_value(value)
+
+    def adapt_decimalfield_value(self, value, max_digits, decimal_places):
         if isinstance(value, decimal.Decimal):
             return decimal_to_string(value, max_digits, decimal_places)
         return value
+
+    def value_to_db_decimal(self, value, max_digits, decimal_places):  # Django 1.8 compatibility
+        return self.adapt_decimalfield_value(value, max_digits, decimal_places)
 
     # Unlike value_to_db, these are not overridden or standard Django, it's just nice to have symmetry
     def value_from_db_datetime(self, value):
@@ -463,6 +425,7 @@ class DatabaseCreation(BaseDatabaseCreation):
         'DateField':                  'date',
         'DateTimeField':              'datetime',
         'DecimalField':               'decimal',
+        'DurationField':              'long',
         'EmailField':                 'string',
         'FileField':                  'string',
         'FilePathField':              'string',
@@ -479,6 +442,7 @@ class DatabaseCreation(BaseDatabaseCreation):
         'URLField':                   'string',
         'TextField':                  'text',
         'XMLField':                   'text',
+        'BinaryField':                'bytes'
     }
 
     def __init__(self, *args, **kwargs):
@@ -516,11 +480,11 @@ class DatabaseCreation(BaseDatabaseCreation):
         self.testbed.activate()
         self.testbed.init_datastore_v3_stub(**kwargs)
         self.testbed.init_memcache_stub()
-        caching.clear_context_cache()
+        get_context().reset()
 
     def _destroy_test_db(self, name, verbosity):
         if self.testbed:
-            caching.clear_context_cache()
+            get_context().reset()
             self.testbed.deactivate()
             self.testbed = None
 
@@ -528,12 +492,9 @@ class DatabaseCreation(BaseDatabaseCreation):
 class DatabaseIntrospection(BaseDatabaseIntrospection):
     @datastore.NonTransactional
     def get_table_list(self, cursor):
-        kinds = metadata.get_kinds()
-        try:
-            from django.db.backends.base.introspection import TableInfo
-            return [ TableInfo(x, "t") for x in kinds ]
-        except ImportError:
-            return kinds # Django <= 1.7
+        namespace = self.connection.settings_dict.get("NAMESPACE")
+        kinds = [kind.key().id_or_name() for kind in datastore.Query('__kind__', namespace=namespace).Run()]
+        return [TableInfo(x, "t") for x in kinds]
 
 
 class DatabaseSchemaEditor(BaseDatabaseSchemaEditor):
@@ -562,7 +523,6 @@ class DatabaseFeatures(BaseDatabaseFeatures):
     autocommits_when_autocommit_is_off = True
     uses_savepoints = False
     allows_auto_pk_0 = False
-    needs_datetime_string_cast = False
 
 
 class DatabaseWrapper(BaseDatabaseWrapper):
@@ -618,7 +578,3 @@ class DatabaseWrapper(BaseDatabaseWrapper):
 
     def schema_editor(self, *args, **kwargs):
         return DatabaseSchemaEditor(self, *args, **kwargs)
-
-    def _cursor(self):
-        # For < Django 1.6 compatibility
-        return self.create_cursor()

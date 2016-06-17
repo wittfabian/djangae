@@ -1,9 +1,11 @@
+# -*- encoding: utf-8 -*
 from collections import OrderedDict
 
 # LIBRARIES
+from django import forms
 from django.db import models
 from django.db.utils import IntegrityError
-from django.contrib.contenttypes.models import ContentType
+from django.core.exceptions import ValidationError
 
 # DJANGAE
 from djangae.db import transaction
@@ -16,6 +18,8 @@ from djangae.fields import (
     RelatedListField,
     ShardedCounterField,
     SetField,
+    CharField,
+    CharOrNoneField,
 )
 from djangae.fields.counting import DEFAULT_SHARD_COUNT
 from djangae.models import CounterShard
@@ -51,12 +55,22 @@ class ModelWithCounter(models.Model):
     class Meta:
         app_label = "djangae"
 
+
 class ModelWithManyCounters(models.Model):
     counter1 = ShardedCounterField()
     counter2 = ShardedCounterField()
 
     class Meta:
         app_label = "djangae"
+
+
+class ModelWithCounterWithManyShards(models.Model):
+    # The DEFAULT_SHARD_COUNT is based on the max allowed in a Datastore transaction
+    counter = ShardedCounterField(shard_count=DEFAULT_SHARD_COUNT+5)
+
+    class Meta:
+        app_label = "djangae"
+
 
 class ISOther(models.Model):
     name = models.CharField(max_length=500)
@@ -109,6 +123,20 @@ class IterableFieldModel(models.Model):
 
 class JSONFieldModel(models.Model):
     json_field = JSONField(use_ordered_dict=True)
+
+
+class JSONFieldWithDefaultModel(models.Model):
+    json_field = JSONField(use_ordered_dict=True)
+
+
+class ModelWithCharField(models.Model):
+    char_field_with_max = CharField(max_length=10, default='', blank=True)
+    char_field_without_max = CharField(default='', blank=True)
+
+
+class ModelWithCharOrNoneField(models.Model):
+
+    char_or_none_field = CharOrNoneField(max_length=100)
 
 
 class ShardedCounterTest(TestCase):
@@ -168,6 +196,24 @@ class ShardedCounterTest(TestCase):
         self.assertEqual(instance.counter.value(), 7)
         instance.counter.reset()
         self.assertEqual(instance.counter.value(), 0)
+
+    def test_reset_negative_count(self):
+        """ Test resetting a negative count. """
+        instance = ModelWithCounter.objects.create()
+        self.assertEqual(instance.counter.value(), 0)
+        instance.counter.decrement(7)
+        self.assertEqual(instance.counter.value(), -7)
+        instance.counter.reset()
+        self.assertEqual(instance.counter.value(), 0)
+
+    def test_reset_with_many_shards(self):
+        """ Test that even if the counter field has more shards than can be counted in a single
+            transaction, that the `reset` method still works.
+        """
+        instance = ModelWithCounterWithManyShards.objects.create()
+        instance.counter.populate()
+        instance.counter.increment(5)
+        instance.counter.reset()
 
     def test_populate(self):
         """ Test that the populate() method correctly generates all of the CounterShard objects. """
@@ -278,13 +324,6 @@ class IterableFieldTests(TestCase):
         instance = IterableFieldModel.objects.get(pk=instance.pk)
         self.assertEqual(["One"], instance.list_field)
 
-        instance.list_field = None
-
-        # Or anything else for that matter!
-        with self.assertRaises(ValueError):
-            instance.list_field = "Bananas"
-            instance.save()
-
         results = IterableFieldModel.objects.filter(list_field="One")
         self.assertEqual([instance], list(results))
 
@@ -302,13 +341,6 @@ class IterableFieldTests(TestCase):
         instance = IterableFieldModel.objects.get(pk=instance.pk)
         self.assertEqual(set(["One"]), instance.set_field)
 
-        instance.set_field = None
-
-        # Or anything else for that matter!
-        with self.assertRaises(ValueError):
-            instance.set_field = "Bananas"
-            instance.save()
-
         self.assertEqual({1, 2}, SetField(models.IntegerField).to_python("{1, 2}"))
 
     def test_empty_list_queryable_with_is_null(self):
@@ -325,9 +357,74 @@ class IterableFieldTests(TestCase):
         self.assertFalse(IterableFieldModel.objects.exclude(set_field__isnull=False).exists())
         self.assertTrue(IterableFieldModel.objects.exclude(set_field__isnull=True).exists())
 
-    def test_assign_integer_throws_typeerror(self):
-        self.assertRaises(TypeError, IterableFieldModel, list_field=1)
-        self.assertRaises(TypeError, IterableFieldModel, set_field=1)
+    def test_saving_forms(self):
+        class TestForm(forms.ModelForm):
+            class Meta:
+                model = IterableFieldModel
+                fields = ("set_field", "list_field")
+
+        post_data = {
+            "set_field": [ "1", "2" ],
+            "list_field": [ "1", "2" ]
+        }
+
+        form = TestForm(post_data)
+        self.assertTrue(form.is_valid())
+        self.assertTrue(form.save())
+
+
+class RelatedListFieldModelTests(TestCase):
+
+    def test_can_update_related_field_from_form(self):
+        related = ISOther.objects.create()
+        thing = ISModel.objects.create(related_list=[related])
+        before_list = thing.related_list
+        thing.related_list.field.save_form_data(thing, [])
+        self.assertNotEqual(before_list.all(), thing.related_list.all())
+
+    def test_saving_forms(self):
+        class TestForm(forms.ModelForm):
+            class Meta:
+                model = ISModel
+                fields = ("related_list", )
+
+        related = ISOther.objects.create()
+        post_data = {
+            "related_list": [ str(related.pk) ],
+        }
+
+        form = TestForm(post_data)
+        self.assertTrue(form.is_valid())
+        instance = form.save()
+        self.assertEqual([related.pk], instance.related_list_ids)
+
+
+class RelatedSetFieldModelTests(TestCase):
+
+    def test_can_update_related_field_from_form(self):
+        related = ISOther.objects.create()
+        thing = ISModel.objects.create(related_things={related})
+        before_set = thing.related_things
+        thing.related_list.field.save_form_data(thing, set())
+        thing.save()
+        self.assertNotEqual(before_set.all(), thing.related_things.all())
+
+    def test_saving_forms(self):
+        class TestForm(forms.ModelForm):
+            class Meta:
+                model = ISModel
+                fields = ("related_things", )
+
+        related = ISOther.objects.create()
+        post_data = {
+            "related_things": [ str(related.pk) ],
+        }
+
+        form = TestForm(post_data)
+        self.assertTrue(form.is_valid())
+        instance = form.save()
+        self.assertEqual({related.pk}, instance.related_things_ids)
+
 
 class InstanceListFieldTests(TestCase):
 
@@ -337,6 +434,18 @@ class InstanceListFieldTests(TestCase):
         # Does the to_python need to return ordered list? SetField test only passes because the set
         # happens to order it correctly
         self.assertItemsEqual([i1, i2], ISModel._meta.get_field("related_list").to_python("[1, 2]"))
+
+    def test_default_on_delete_does_nothing(self):
+        child = ISOther.objects.create(pk=1)
+        parent = ISModel.objects.create(related_list=[child])
+
+        child.delete()
+
+        try:
+            parent = ISModel.objects.get(pk=parent.pk)
+            self.assertEqual([1], parent.related_list_ids)
+        except ISModel.DoesNotExist:
+            self.fail("Parent instance was deleted, apparently by on_delete=CASCADE")
 
     def test_save_and_load_empty(self):
         """
@@ -497,7 +606,8 @@ class InstanceSetFieldTests(TestCase):
         self.assertEqual({other.pk}, main.related_things_ids)
         self.assertEqual(list(ISOther.objects.filter(pk__in=main.related_things_ids)), list(main.related_things.all()))
 
-        self.assertEqual([main], list(other.ismodel_set.all()))
+        self.assertItemsEqual([main], ISModel.objects.filter(related_things=other).all())
+        self.assertItemsEqual([main], list(other.ismodel_set.all()))
 
         main.related_things.remove(other)
         self.assertFalse(main.related_things_ids)
@@ -657,3 +767,125 @@ class JSONFieldModelTests(TestCase):
         self.assertFalse(isinstance(thing.json_field, OrderedDict))
 
         field.use_ordered_dict = True
+
+    def test_float_values(self):
+        """ Tests that float values in JSONFields are correctly serialized over repeated saves.
+            Regression test for 46e685d4, which fixes floats being returned as strings after a second save.
+        """
+        test_instance = JSONFieldModel(json_field={'test': 0.1})
+        test_instance.save()
+
+        test_instance = JSONFieldModel.objects.get()
+        test_instance.save()
+
+        test_instance = JSONFieldModel.objects.get()
+        self.assertEqual(test_instance.json_field['test'], 0.1)
+
+    def test_defaults_are_handled_as_pythonic_data_structures(self):
+        """ Tests that default values are handled as python data structures and
+            not as strings. This seems to be a regression after changes were
+            made to remove Subfield from the JSONField and simply use TextField
+            instead.
+        """
+        thing = JSONFieldModel()
+        self.assertEqual(thing.json_field, {})
+
+    def test_default_value_correctly_handled_as_data_structure(self):
+        """ Test that default value - if provided is not transformed into
+            string anymore. Previously we needed string, since we used
+            SubfieldBase in JSONField. Since it is now deprecated we need
+            to change handling of default value.
+        """
+        thing = JSONFieldWithDefaultModel()
+        self.assertEqual(thing.json_field, {})
+
+
+class CharFieldModelTests(TestCase):
+
+    def test_char_field_with_max_length_set(self):
+        test_bytestrings = [
+            (u'01234567891', 11),
+            (u'ążźsęćńół', 17),
+        ]
+
+        for test_text, byte_len in test_bytestrings:
+            test_instance = ModelWithCharField(
+                char_field_with_max=test_text,
+            )
+            self.assertRaisesMessage(
+                ValidationError,
+                'Ensure this value has at most 10 bytes (it has %d).' % byte_len,
+                test_instance.full_clean,
+            )
+
+    def test_char_field_with_not_max_length_set(self):
+        longest_valid_value = u'0123456789' * 150
+        too_long_value = longest_valid_value + u'more'
+
+        test_instance = ModelWithCharField(
+            char_field_without_max=longest_valid_value,
+        )
+        test_instance.full_clean()  # max not reached so it's all good
+
+        test_instance.char_field_without_max = too_long_value
+        self.assertRaisesMessage(
+            ValidationError,
+            u'Ensure this value has at most 1500 bytes (it has 1504).',
+            test_instance.full_clean,
+         )
+
+    def test_too_long_max_value_set(self):
+        try:
+            class TestModel(models.Model):
+                test_char_field = CharField(max_length=1501)
+        except AssertionError, e:
+            self.assertEqual(
+                e.message,
+                'CharFields max_length must not be grater than 1500 bytes.',
+            )
+
+
+class CharOrNoneFieldTests(TestCase):
+
+    def test_char_or_none_field(self):
+        # Ensure that empty strings are coerced to None on save
+        obj = ModelWithCharOrNoneField.objects.create(char_or_none_field="")
+        obj.refresh_from_db()
+        self.assertIsNone(obj.char_or_none_field)
+
+
+class ISStringReferenceModel(models.Model):
+    related_things = RelatedSetField('ISOther')
+    related_list = RelatedListField('ISOther', related_name="ismodel_list_string")
+    limted_related = RelatedSetField('RelationWithoutReverse', limit_choices_to={'name': 'banana'}, related_name="+")
+    children = RelatedSetField("self", related_name="+")
+
+    class Meta:
+        app_label = "djangae"
+
+
+class StringReferenceRelatedSetFieldModelTests(TestCase):
+
+    def test_can_update_related_field_from_form(self):
+        related = ISOther.objects.create()
+        thing = ISStringReferenceModel.objects.create(related_things={related})
+        before_set = thing.related_things
+        thing.related_list.field.save_form_data(thing, set())
+        thing.save()
+        self.assertNotEqual(before_set.all(), thing.related_things.all())
+
+    def test_saving_forms(self):
+        class TestForm(forms.ModelForm):
+            class Meta:
+                model = ISStringReferenceModel
+                fields = ("related_things", )
+
+        related = ISOther.objects.create()
+        post_data = {
+            "related_things": [ str(related.pk) ],
+        }
+
+        form = TestForm(post_data)
+        self.assertTrue(form.is_valid())
+        instance = form.save()
+        self.assertEqual({related.pk}, instance.related_things_ids)

@@ -40,7 +40,7 @@ It works by storing a list of primary keys of the related objects.  Think of it 
 ```RelatedSetField(related_model, **kwargs)```
 
 * `model`: the model of the related items.
-* `limit_choices_to`: a ditionary of query kwargs for limiting the possible related items.
+* `limit_choices_to`: a dictionary of query kwargs for limiting the possible related items.
 * `related_name` - the name of the reverse lookup attribute which is added to the model class of the related items.
 
 
@@ -54,7 +54,7 @@ RelatedListField shares the same behavior as RelatedSetField but has the qualiti
 ```RelatedListField(related_model, **kwargs)```
 
 * `model`: the model of the related items.
-* `limit_choices_to`: a ditionary of query kwargs for limiting the possible related items.
+* `limit_choices_to`: a dictionary of query kwargs for limiting the possible related items.
 * `related_name` - the name of the reverse lookup attribute which is added to the model class of the related items.
 
 
@@ -71,7 +71,7 @@ It works by creating a set of `CounterShard` objects, each of which stores a cou
 
 When you access the attribute of your sharded counter field on your model, you get a `RelatedShardManager` object, which has the following API:
 
-* `.value()`: Gives you the value of counter.
+* `.value()`: Gives you the value of counter.  This is immediately consistent (i.e. is not affected by the Datastore's eventual consistency behaviour).
 * `.increment(step=1)`: Transactionally increment the counter by the given step.
     - If you have not yet called `.populate()` then this might also cause your model object to be re-saved, depending on whether or not it needs to create a new shard.
 * `.decrement(step=1)`: Transactionally decrement the counter by the given step.
@@ -79,7 +79,7 @@ When you access the attribute of your sharded counter field on your model, you g
 * `.populate()`: Creates all the shards that the counter will need.
      - This is useful if you want to ensure that additional saves to your model object are avoided when calling `.increment()` or `.decrement()`, as these saves may cause issues if you're doing things inside a transaction or at such a rate that they cause DB contention on your model object.
      - Note that this causes your model instance to be re-saved.
-* `.reset()`: Transactionally resets the counter to 0.
+* `.reset()`: Resets the counter to 0.
     - This is done by changing the value of the shards, not by deleting them.  So you can continue to use your counter afterwards without having to call `populate()` again first.
 
 
@@ -96,10 +96,13 @@ This is a replacement for Django's `GenericForeignKey` field, which doesn't use 
 
 This field requires no special kwargs, and should accept all standard Django field kwargs as normal.
 
+## CharField
+
+This is a replacement for Django's `CharField` field. It uses the `MaxBytesValidator` validator that makes sure the value does not exceed the hard datastore limit of 1500 bytes (see `google.appengine.api.datastore_types _MAX_STRING_LENGTH`). Use this field whenever you're planning to store large char values in the datastore, else your data may get silently trimmed.
 
 ## JSONField
 
-This field is not specific to to the App Engine Datastore (or any non-relational database), but is included in Djangae for convenience, especially as in a non-relational database it's often useful to be able to store structured data in a single table rather than in a complex structure of related tables.
+This field is not specific to the App Engine Datastore (or any non-relational database), but is included in Djangae for convenience, especially as in a non-relational database it's often useful to be able to store structured data in a single table rather than in a complex structure of related tables.
 
 ```JSONField(use_ordered_dict=False, **kwargs)```
 
@@ -108,9 +111,28 @@ This field is not specific to to the App Engine Datastore (or any non-relational
 
 ## TrueOrNullField
 
-This field is not specific to to the App Engine Datastore (or any non-relational database), but is included in Djangae for convenience.
+This field is not specific to the App Engine Datastore (or any non-relational database), but is included in Djangae for convenience.
 
 Its primary use case is for when you want a boolean field which can only be set to true for *one* object.  This is done by making use of the fact that Django (and most databases) ignore `None` values in unique constraints, so by having a field which can only store values of `True` or `None` and by setting the field to unique, you get a field which can only be `True` on one object.
+
+
+## Computed Fields
+
+These fields allow you to have a value which is computed from other fields values when an instance is saved.
+This can be particularly useful with the Datastore where there are limitations to queries.
+For example, you can't do `.filter(a__gte=x, b__gte=y)`, but if `x` and `y` are constant then you could add a computed field which stores a boolean value to indicate whether or not an object meets these criteria.
+So you could then do `.filter(a_is_gte_x_and_b_is_gte_y=True)`.
+
+Each computed field takes a single argument of a "computer" function. This function is called each time the model instance is saved with the model instance passed as a single argument.
+The value which the function returns is what is stored in the computed field.
+
+Computed fields are:
+
+* `ComputedCharField`
+* `ComputedTextField`
+* `ComputedIntegerField`
+* `ComputedPositiveIntegerField`
+* `ComputedBooleanField`
 
 
 ## Example Usages
@@ -129,6 +151,9 @@ class KittenSanctuary(models.Model):
     historic_weekly_kitten_count = fields.ListField(models.PositiveIntegerField())
     number_of_meows = fields.ShardedCounterField()
     current_staff_rota = fields.JSONField()
+    number_of_meows_is_greater_than_sum_of_weekly_kitten_counts = ComputedBooleanField(
+        lambda self: self.number_of_meows > sum(self.historic_weekly_kitten_count)
+    )
 
 
 def new_kitten_arrival(sanctuary, kitten):
