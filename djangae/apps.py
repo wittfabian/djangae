@@ -22,7 +22,7 @@ class DjangaeConfig(AppConfig):
         )
         if 'django.contrib.contenttypes' in settings.INSTALLED_APPS:
             from django.db import router, connections
-            from django.contrib.contentttypes.models import ContentType
+            from django.contrib.contenttypes.models import ContentType
             conn = connections[router.db_for_read(ContentType)]
 
             if conn.settings_dict.get("ENGINE") != 'djangae.db.backends.appengine':
