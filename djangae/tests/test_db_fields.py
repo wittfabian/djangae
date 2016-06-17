@@ -19,6 +19,7 @@ from djangae.fields import (
     ShardedCounterField,
     SetField,
     CharField,
+    CharOrNoneField,
 )
 from djangae.fields.counting import DEFAULT_SHARD_COUNT
 from djangae.models import CounterShard
@@ -126,6 +127,16 @@ class JSONFieldModel(models.Model):
 
 class JSONFieldWithDefaultModel(models.Model):
     json_field = JSONField(use_ordered_dict=True)
+
+
+class ModelWithCharField(models.Model):
+    char_field_with_max = CharField(max_length=10, default='', blank=True)
+    char_field_without_max = CharField(default='', blank=True)
+
+
+class ModelWithCharOrNoneField(models.Model):
+
+    char_or_none_field = CharOrNoneField(max_length=100)
 
 
 class ShardedCounterTest(TestCase):
@@ -789,11 +800,6 @@ class JSONFieldModelTests(TestCase):
         self.assertEqual(thing.json_field, {})
 
 
-class ModelWithCharField(models.Model):
-    char_field_with_max = CharField(max_length=10, default='', blank=True)
-    char_field_without_max = CharField(default='', blank=True)
-
-
 class CharFieldModelTests(TestCase):
 
     def test_char_field_with_max_length_set(self):
@@ -837,6 +843,15 @@ class CharFieldModelTests(TestCase):
                 e.message,
                 'CharFields max_length must not be grater than 1500 bytes.',
             )
+
+
+class CharOrNoneFieldTests(TestCase):
+
+    def test_char_or_none_field(self):
+        # Ensure that empty strings are coerced to None on save
+        obj = ModelWithCharOrNoneField.objects.create(char_or_none_field="")
+        obj.refresh_from_db()
+        self.assertIsNone(obj.char_or_none_field)
 
 
 class ISStringReferenceModel(models.Model):
