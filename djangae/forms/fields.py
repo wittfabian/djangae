@@ -84,7 +84,7 @@ class JSONFormField(forms.CharField):
             try:
                 value = json.loads(value)
             except ValueError:
-                raise ValidationError("Could not parse value as JSON")
+                raise forms.ValidationError("Could not parse value as JSON")
         return value
 
 
