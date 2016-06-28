@@ -1699,6 +1699,20 @@ class EdgeCaseTests(TestCase):
         ).distinct("color").values_list("color", flat=True)
         self.assertEqual(sorted(nz_colours), ["Green", "Red"])
 
+    def test_empty_key_lookups_work_correctly(self):
+        t1 = TestFruit.objects.create(name="Kiwi", origin="New Zealand", color="Green")
+        TestFruit.objects.create(name="Apple", origin="New Zealand", color="Green")
+
+        self.assertEqual(t1,
+            TestFruit.objects.exclude(name="Apple").exclude(name="").get(name="Kiwi")
+        )
+        self.assertFalse(TestFruit.objects.filter(name="", color="Green"))
+        self.assertTrue(TestFruit.objects.filter(Q(name="") | Q(name="Kiwi")).filter(color="Green"))
+        self.assertFalse(TestFruit.objects.filter(name="", color__gt="A"))
+        self.assertEqual(4, TestFruit.objects.exclude(name="").count())
+
+
+
 
 class BlobstoreFileUploadHandlerTest(TestCase):
     boundary = "===============7417945581544019063=="
