@@ -75,6 +75,18 @@ VALID_OPERATORS = (
     '=', '<', '>', '<=', '>=', 'IN'
 )
 
+def _get_concrete_fields_with_model(model):
+    return [
+        (f, f.model if f.model != model else None)
+        for f in model._meta.get_fields()
+        if f.concrete and (
+            not f.is_relation
+            or f.one_to_one
+            or (f.many_to_one and f.related_model)
+        )
+    ]
+
+
 def convert_operator(operator):
     if operator == 'exact':
         return '='
@@ -781,7 +793,7 @@ def _extract_projected_columns_from_query_18(query):
         # for all (concrete) inherited models and then only include columns if they appear in that list
         only_load = query.get_loaded_field_names()
         if only_load:
-            for field, model in query.model._meta.get_concrete_fields_with_model():
+            for field, model in _get_concrete_fields_with_model(query.model):
                 model = model or query.model
                 try:
                     if field.column in only_load[model]:
