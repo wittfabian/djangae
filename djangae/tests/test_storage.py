@@ -129,4 +129,4 @@ class BlobstoreStorageTests(TestCase):
     def test_transformation_error(self):
         storage = BlobstoreStorage()
         with sleuth.detonate('djangae.storage.get_serving_url', TransformationError):
-            self.assertIsNone(storage.url('thing'))
+            self.assertEqual('thing', storage.url('thing'))
