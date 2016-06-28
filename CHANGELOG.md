@@ -1,7 +1,25 @@
-## v0.9.5 (in progress)
+## v0.9.6 (in development)
 
 ### New features & improvements:
 
+-
+
+### Bug fixes:
+
+- Fixed a regression that prevented precreated users from logging in when `DJANGAE_CREATE_UNKNOWN_USER` is False.
+- Fixed a bug where the IntegrityError for a unique constraint violation could mention the wrong field(s).
+- Changed the default value of `DJANGAE_CREATE_UNKNOWN_USER` to `True` to match the original behaviour.
+- Fixed a bug where simulate contenttypes was required even on a SQL database
+
+### Documentation:
+
+-
+
+## v0.9.5 (release date: 6th June 2016)
+
+### New features & improvements:
+
+- Added the ability to pre-create users in the Django admin who can then log in via Google Accounts.  (Previously you could only pre-create users via the shell.)
 - Added new `assert_login_required` and `assert_login_admin` methods to `djangae.test.TestCase`.
 - Improved ordering of `sys.path` so that libraries in the application folder take precedence over libraries that are bundled with the SDK (with some hard-to-avoid exceptions).
 - Added `djangae.contrib.locking`, for preventing simultaneous executing of functions or blocks of code.
@@ -10,9 +28,11 @@
 - Extended runserver's file watcher patching to allow ignoring of directories.
 - Add tasks utility functions to djangae.environment.
 - Alias DatastorePaginator -> Paginator, and DatastorePage -> Page to be more like Django
+- Moved `ContentType` patching to `djangae.contrib.contenttypes`. `DJANGAE_SIMULATE_CONTENTTYPES` setting has been removed, add `djangae.contrib.contenttypes` to `INSTALLED_APPS` instead. `djangae.contrib.contenttypes` needs to be after `django.contrib.contenttypes` in the `INSTALLED_APPS` order.
 
 ### Bug fixes:
 
+- Fixed `atomic` and `non_atomic` transaction decorators/context managers so that they can be called recursively.
 - Fix `JSONField` behaviour in forms: it's properly validating JSON string before saving
 it and returns json object, not string when accessed through `cleaned_data`.
 - Fixing `ListFormField.clean` to return `[]` instead of `None` for empty values.

@@ -926,6 +926,32 @@ class ConstraintTests(TestCase):
         finally:
             constraints.UNOWNED_MARKER_TIMEOUT_IN_SECONDS = 5
 
+    def test_integrity_error_message_correct(self):
+        """ Check that the IntegrityError messages mentions the correct field(s). """
+
+        # Create a conflict on `unique_field`
+        obj1 = UniqueModel.objects.create(unique_field="One")
+        try:
+            UniqueModel.objects.create(unique_field="One", unique_combo_one=1)
+        except IntegrityError as e:
+            self.assertTrue("unique_field" in unicode(e))
+
+        # Create a conflict on `unique_relation`
+        UniqueModel.objects.create(unique_relation=obj1, unique_field="two", unique_combo_one=2)
+        try:
+            UniqueModel.objects.create(unique_relation=obj1, unique_field="three", unique_combo_one=3)
+        except IntegrityError as e:
+            self.assertTrue("unique_relation" in unicode(e))
+
+        # Create a conflict on a unique_together combo`
+        UniqueModel.objects.create(unique_field="four", unique_combo_one=4, unique_combo_two="five")
+        try:
+            UniqueModel.objects.create(unique_field="five", unique_combo_one=4, unique_combo_two="five")
+        except IntegrityError as e:
+            self.assertTrue("unique_combo_one" in unicode(e))
+            self.assertTrue("unique_combo_two" in unicode(e))
+
+
     def test_table_flush_clears_markers_for_that_table(self):
         ModelWithUniques.objects.create(name="One")
         UniqueModel.objects.create(unique_field="One")

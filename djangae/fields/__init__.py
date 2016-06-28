@@ -1,5 +1,6 @@
 from djangae.forms.fields import TrueOrNullFormField
 from djangae.core import validators
+from django.core.exceptions import ImproperlyConfigured
 from django.utils.translation import ugettext_lazy as _
 from google.appengine.api.datastore_types import _MAX_STRING_LENGTH
 
@@ -49,6 +50,30 @@ class TrueOrNullField(models.NullBooleanField):
         }
         defaults.update(kwargs)
         return super(TrueOrNullField, self).formfield(**defaults)
+
+
+class CharOrNoneField(models.CharField):
+    """ A field that stores only non-empty strings or None (it won't store empty strings).
+        This is useful if you want values to be unique but also want to allow empty values.
+    """
+    empty_strings_allowed = False
+
+    def __init__(self, *args, **kwargs):
+        # Don't allow null=False because that would be insane.
+        if not kwargs.get('null', True):
+            raise ImproperlyConfigured("You can't set null=False on a CharOrNoneField.")
+        # Set blank=True as the default, but allow it to be overridden, as it's theoretically
+        # possible that you might want to prevent emptiness only in a form
+        defaults = dict(null=True, blank=True, default=None)
+        defaults.update(**kwargs)
+        super(CharOrNoneField, self).__init__(*args, **defaults)
+
+    def pre_save(self, model_instance, add):
+        value = super(CharOrNoneField, self).pre_save(model_instance, add)
+        # Change empty strings to None
+        if not value:
+            return None
+        return value
 
 
 class CharField(models.CharField):
