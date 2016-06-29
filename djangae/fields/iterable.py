@@ -1,7 +1,9 @@
 import copy
+import warnings
 
 from django import forms
 from django.db import models
+from django.db.models.lookups import Lookup, Exact, In, IsNull
 from django.core.exceptions import ValidationError, ImproperlyConfigured
 from djangae.forms.fields import ListFormField
 from django.utils.text import capfirst
@@ -17,6 +19,63 @@ class _FakeModel(object):
     def __init__(self, field, value):
         setattr(self, field.attname, value)
 
+from djangae.utils import DjangaeDeprecation
+
+class ContainsLookup(Lookup):
+    lookup_name = 'contains'
+
+
+class IsEmptyLookup(Lookup):
+    lookup_name = 'isempty'
+
+
+class OverlapLookup(Lookup):
+    lookup_name = 'overlap'
+
+
+class IsNullLookup(IsNull):
+    lookup_name = 'isnull'
+
+    def get_prep_lookup(self):
+        warnings.warn(
+            "'isnull' lookups on ListField and SetField are deprecated. Please use __isempty",
+            DjangaeDeprecation, 2
+        )
+        return super(IsNullLookup, self).get_prep_lookup()
+
+
+class ExactLookup(Exact):
+    lookup_name = 'exact'
+
+    def get_db_prep_lookup(self, value, connection):
+        # This prevents IterableField.get_prep_value() from listifying the string
+        if not hasattr(value, "__iter__"):
+            return ('%s', [value])
+
+        return super(ExactLookup, self).get_db_prep_lookup(value, connection)
+
+    def get_prep_lookup(self):
+        warnings.warn(
+            "'=' lookups on ListField and SetField are deprecated. Please use __contains",
+            DjangaeDeprecation, 2
+        )
+
+        if hasattr(self.rhs, "__iter__"):
+            raise ValueError("You can't query a list field for equality, use __overlap")
+
+        return super(ExactLookup, self).get_prep_lookup()
+
+
+class InLookup(In):
+    lookup_name = 'in'
+
+    def get_prep_lookup(self):
+        warnings.warn(
+            "IN lookups on ListField and SetField are deprecated. Please use __overlap.",
+            DjangaeDeprecation, 2
+        )
+        return super(InLookup, self).get_prep_lookup()
+
 
 class IterableField(models.Field):
     @property
@@ -27,38 +86,6 @@ class IterableField(models.Field):
 
     def db_type(self, connection):
         return 'list'
-
-    def get_prep_lookup(self, lookup_type, value):
-        if hasattr(value, 'prepare'):
-            return value.prepare()
-        if hasattr(value, '_prepare'):
-            return value._prepare()
-
-        if value is None:
-            raise ValueError("You can't query an iterable field with None")
-
-        if lookup_type == 'isnull' and value in (True, False):
-            return value
-
-        if lookup_type not in ['exact', 'in', 'regex', 'iregex']:
-            raise ValueError("You can only query using exact and in lookups on iterable fields")
-
-        if isinstance(value, (list, set)):
-            return [ self.item_field_type.to_python(x) for x in value ]
-
-        return self.item_field_type.to_python(value)
-
-    def get_prep_value(self, value):
-        if value is None:
-            raise ValueError("You can't set a {} to None (did you mean {}?)".format(
-                self.__class__.__name__, str(self._iterable_type())
-            ))
-
-        if isinstance(value, basestring):
-            # Catch accidentally assigning a string to a ListField
-            raise ValueError("Tried to assign a string to a {}".format(self.__class__.__name__))
-
-        return super(IterableField, self).get_prep_value(value)
 
     def __init__(self, item_field_type, *args, **kwargs):
 
@@ -133,7 +160,13 @@ class IterableField(models.Field):
         """
         value = getattr(model_instance, self.attname)
         if value is None:
-            return None
+            raise ValueError("You can't set a {} to None (did you mean {}?)".format(
+                self.__class__.__name__, str(self._iterable_type())
+            ))
+
+        if isinstance(value, basestring):
+            # Catch accidentally assigning a string to a ListField
+            raise ValueError("Tried to assign a string to a {}".format(self.__class__.__name__))
 
         return self._map(lambda item: self.item_field_type.pre_save(_FakeModel(self.item_field_type, item), add), value)
 
@@ -213,6 +246,17 @@ class IterableField(models.Field):
             form_field_class = ListFormField
         defaults.update(**kwargs)
         return form_field_class(**defaults)
+
+
+# New API
+IterableField.register_lookup(ContainsLookup)
+IterableField.register_lookup(OverlapLookup)
+IterableField.register_lookup(IsEmptyLookup)
+
+# Deprecated lookups
+IterableField.register_lookup(ExactLookup)
+IterableField.register_lookup(IsNullLookup)
+IterableField.register_lookup(InLookup)
 
 
 class ListField(IterableField):

@@ -531,10 +531,20 @@ class DatabaseWrapper(BaseDatabaseWrapper):
 
     operators = {
         'exact': '= %s',
+        'iexact': 'iexact %s',
+        'contains': 'contains %s',
+        'icontains': 'icontains %s',
+        'regex': 'regex %s',
+        'iregex': 'iregex %s',
         'gt': '> %s',
         'gte': '>= %s',
         'lt': '< %s',
-        'lte': '<= %s'
+        'lte': '<= %s',
+        'startswith': 'startswith %s',
+        'endswith': 'endswith %s',
+        'istartswith': 'istartswith %s',
+        'iendswith': 'iendswith %s',
+        'isnull': 'isnull %s'
     }
 
     Database = Database

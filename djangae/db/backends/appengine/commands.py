@@ -573,7 +573,6 @@ class SelectCommand(object):
         # we need to make sure that we grab more than we were asked for otherwise we could filter
         # out too many! These are again limited back to the original request limit
         # while we're processing the results later
-
         # Apply the namespace before excluding
         excluded_pks = [
             datastore.Key.from_path(x.kind(), x.id_or_name(), namespace=self.namespace)

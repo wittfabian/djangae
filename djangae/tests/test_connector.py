@@ -1155,7 +1155,7 @@ class ConstraintTests(TestCase):
         )
 
         # Without a custom mixin, Django can't construct a unique validation query for a list field
-        self.assertRaises(BadValueError, instance1.full_clean)
+        self.assertRaises(ValueError, instance1.full_clean)
         UniqueModel.__bases__ = (UniquenessMixin,) + UniqueModel.__bases__
         instance1.full_clean()
         instance1.save()

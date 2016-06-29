@@ -319,7 +319,7 @@ class Query(object):
         if name == "Count":
             return # Handled elsewhere
 
-        if name not in ("Col", "Date", "DateTime"):
+        if name not in ("Trunc", "Col", "Date", "DateTime"):
             raise NotSupportedError("Unsupported annotation %s" % name)
 
         def process_date(value, lookup_type):
@@ -343,13 +343,24 @@ class Query(object):
         # Abuse the extra_select functionality
         if name == "Col":
             self.extra_selects.append((column, (lambda x: x, [column])))
-        elif name in ("Date", "DateTime"):
+        elif name in ("Trunc", "Date", "DateTime"):
+            # Trunc stores the source column and the lookup type differently to Date
+            # which is why we have the getattr craziness here
+            lookup_column = (
+                annotation.lhs.output_field.column
+                if name == "Trunc" else getattr(annotation, "lookup", column)
+            )
+
+            lookup_type = getattr(annotation, "lookup_type", getattr(annotation, "kind"))
+
             self.extra_selects.append(
                 (column,
-                (lambda x: process_date(x, annotation.lookup_type), [getattr(annotation, "lookup", column)]))
+                (lambda x: process_date(x, lookup_type), [
+                    lookup_column
+                ]))
             )
             # Override the projection so that we only get this column
-            self.columns = set([ getattr(annotation, "lookup", column) ])
+            self.columns = set([ lookup_column ])
 
 
     def add_projected_column(self, column):
@@ -720,8 +731,10 @@ def _extract_ordering_from_query_18(query):
                     name = annotation.__class__.__name__
 
                     # We only support a few expressions
-                    if name not in ("Col", "Date", "DateTime"):
+                    if name not in ("Trunc", "Col", "Date", "DateTime"):
                         raise NotSupportedError("Tried to order by unsupported expression")
+                    elif name == "Trunc":
+                        column = annotation.lhs.output_field.column
                     else:
                         # Retrieve the original column and use that for ordering
                         if name == "Col":
@@ -839,6 +852,14 @@ def _walk_django_where(query, trunk_callback, leaf_callback, **kwargs):
 def _django_18_query_walk_leaf(node, negated, new_parent, connection, model):
     new_node = WhereNode()
 
+    def convert_rhs_op(node):
+        value = node.get_rhs_op(connection, node.rhs)
+        operator = value.split()[0].lower().strip()
+        if operator == 'between':
+            operator = 'range'
+
+        return operator
+
     if not hasattr(node, "lhs"):
         raise NotSupportedError("Attempted probable subquery, these aren't supported on the datastore")
 
@@ -847,16 +868,16 @@ def _django_18_query_walk_leaf(node, negated, new_parent, connection, model):
         # from Django 1.9, some node.lhs might not have a target attribute
         # as they might be wrapping date fields
         field = node.lhs.target
-        operator = node.lookup_name
+        operator = convert_rhs_op(node)
     else:
         field = node.lhs.lhs.target
-        operator = node.lhs.lookup_name
+        operator = convert_rhs_op(node)
 
         # This deals with things like datefield__month__gt=X which means from this point
         # on, operator will have two parts in that particular case and will probably need to
         # be dealt with by a special indexer
-        if node.lookup_name != operator:
-            operator = "{}__{}".format(operator, node.lookup_name)
+        if node.lookup_name != node.lhs.lookup_name:
+            operator = "{}__{}".format(node.lhs.lookup_name, node.lookup_name)
 
     if get_top_concrete_parent(field.model) != get_top_concrete_parent(model):
         raise NotSupportedError("Cross-join where filters are not supported on the datastore")
@@ -882,8 +903,7 @@ def _django_18_query_walk_leaf(node, negated, new_parent, connection, model):
             # this WILL execute another query, but that is to be expected on a
             # non-relational datastore.
 
-            node.rhs = [ x for x in node.rhs ] # Evaluate the queryset
-            rhs = node.process_rhs(None, connection) # Process the RHS as if it was a list
+            rhs = [ x for x in node.rhs ] # Evaluate the queryset
 
         elif isinstance(node.rhs, QuerySet):
             # In Django 1.9, ValuesListQuerySet doesn't exist anymore, and instead
@@ -892,29 +912,33 @@ def _django_18_query_walk_leaf(node, negated, new_parent, connection, model):
                 # if the queryset has FlatValuesListIterable as iterable class
                 # then it's a flat list, and we just need to evaluate the
                 # queryset converting it into a list
-                node.rhs = [ x for x in node.rhs ]
+                rhs = [ x for x in node.rhs ]
             else:
                 # otherwise, we try to get the PK from the queryset
-                node.rhs = [ x.pk for x in node.rhs ]
-
-            rhs = node.process_rhs(None, connection) # Process the RHS as if it was a list
-
+                rhs = [ x.pk for x in node.rhs ]
         else:
-            rhs = node.process_rhs(None, connection)
+            rhs = node.rhs
     except EmptyResultSet:
         if operator == 'in':
             # Deal with this later
-            rhs = [ [] ]
+            rhs = []
         else:
             raise
 
+    # There is a lot of special casing here for list/set fields because their get_db_prep_lookup
+    # calls get_db_prep_value which listifies things. This will get much simpler when we disallow
+    # exact lookups on list fields
+    if field.db_type(connection) in ('list', 'set') and operator == 'in':
+        rhs = [ rhs ]
 
-    if operator in ('in', 'range'):
-        rhs = rhs[-1]
-    elif operator == 'isnull':
-        rhs = node.rhs
-    else:
-        rhs = rhs[-1][0]
+    rhs = node.get_db_prep_lookup(rhs, connection)[-1]
+
+    if not hasattr(node.rhs, "__iter__"):
+        rhs = rhs[0]
+    elif field.db_type(connection) in ('list', 'set'):
+        rhs = [x for x in chain(*rhs)]
+
+    #print operator, node.rhs, "=>", rhs, field
 
     new_node.set_leaf(
         lhs,
