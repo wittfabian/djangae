@@ -2,7 +2,7 @@
 
 ### New features & improvements:
 
--
+- Added version string to `__init__`
 
 ### Bug fixes:
 

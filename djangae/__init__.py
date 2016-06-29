@@ -9,3 +9,8 @@ default_app_config = 'djangae.apps.DjangaeConfig'
 
 from .patches import json
 json.patch()
+
+__title__ = 'Djangae'
+__version__ = '0.9.6'
+
+VERSION = __version__
