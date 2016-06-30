@@ -240,7 +240,7 @@ class UniquenessMixin(object):
             # Split IN queries into multiple lookups if they are too long
             lookups = []
             for k, v in lookup_kwargs.iteritems():
-                if k.endswith("__in") and len(v) > 30:
+                if (k.endswith("__in") or k.endswith("__overlap")) and len(v) > 30:
                     v = list(v)
                     while v:
                         new_lookup = lookup_kwargs.copy()
