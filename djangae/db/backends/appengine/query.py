@@ -351,7 +351,8 @@ class Query(object):
                 if name == "Trunc" else getattr(annotation, "lookup", column)
             )
 
-            lookup_type = getattr(annotation, "lookup_type", getattr(annotation, "kind"))
+            lookup_type = getattr(annotation, "lookup_type", getattr(annotation, "kind", None))
+            assert lookup_type
 
             self.extra_selects.append(
                 (column,
