@@ -107,6 +107,7 @@ class WhereNode(object):
         self.operator = None
         self.value = None
         self.output_field = None
+        self.will_never_return_results = False
         self.lookup_name = None
 
         self.children = []
@@ -149,20 +150,10 @@ class WhereNode(object):
                     for x in value if x
                 ]
             else:
-                if operator == "isnull" and value is True:
-                    # FIXME: Strictly, this isn't correct, this could be one of several branches
-                    # but id=None filters are silly anyway. This should be moved to after normalization..
-                    # probably. This fixes a test in Django which does this in get_or_create for some reason
-                    raise EmptyResultSet()
-
-                if not value:
+                if (operator == "isnull" and value is True) or not value:
+                    # id=None will never return anything and
                     # Empty strings and 0 are forbidden as keys
-                    # so make this an impossible filter
-                    # FIXME: This is a hack! It screws with the ordering
-                    # because it's an inequality. Instead we should wipe this
-                    # filter out when preprocessing in the DNF (because it's impossible)
-                    value = datastore.Key.from_path('', 1)
-                    operator = '<'
+                    self.will_never_return_results = True
                 else:
                     value = datastore.Key.from_path(table, value, namespace=namespace)
             column = "__key__"
@@ -400,13 +391,13 @@ class Query(object):
         if not self.init_list:
             self.init_list = [ x.column for x in self.model._meta.fields ]
 
+        self._remove_impossible_branches()
         self._remove_erroneous_isnull()
         self._remove_negated_empty_in()
         self._add_inheritence_filter()
         self._populate_excluded_pks()
         self._disable_projection_if_fields_used_in_equality_filter()
         self._check_only_single_inequality_filter()
-
 
     @property
     def where(self):
@@ -433,14 +424,19 @@ class Query(object):
                 negated = not negated
 
             for child in node.children[:]:
-                if negated and child.operator == "=" and child.column == "__key__":
-                    self.excluded_pks.add(child.value)
-                    node.children.remove(child)
-                elif negated and child.operator == "IN" and child.column == "__key__":
-                    [ self.excluded_pks.add(x) for x in child.value ]
-                    node.children.remove(child)
-
-                walk(child, negated)
+                # As more than one inequality filter is not allowed on the datastore
+                # this leaf + count check is probably pointless, but at least if you
+                # do try to exclude two things it will blow up in the right place and not
+                # return incorrect results
+                if child.is_leaf and len(node.children) == 1:
+                    if negated and child.operator == "=" and child.column == "__key__":
+                        self.excluded_pks.add(child.value)
+                        node.children.remove(child)
+                    elif negated and child.operator == "IN" and child.column == "__key__":
+                        [ self.excluded_pks.add(x) for x in child.value ]
+                        node.children.remove(child)
+                else:
+                    walk(child, negated)
 
             node.children = [ x for x in node.children if x.children or x.column ]
 
@@ -518,6 +514,43 @@ class Query(object):
                     walk(child, negated)
         if self.where:
             walk(self._where, False)
+
+    def _remove_impossible_branches(self):
+        """
+            If we mark a child node as never returning results we either need to
+            remove those nodes, or remove the branches of the tree they are on depending
+            on the connector of the parent node.
+        """
+        if not self._where:
+            return
+
+        def walk(node, negated):
+            if node.negated:
+                negated = not negated
+
+            for child in node.children[:]:
+                walk(child, negated)
+
+                if child.will_never_return_results:
+                    if node.connector == 'AND':
+                        if child.negated:
+                            node.children.remove(child)
+                        else:
+                            node.will_never_return_results = True
+                    else:
+                        #OR
+                        if not child.negated:
+                            node.children.remove(child)
+                            if not node.children:
+                                node.will_never_return_results = True
+                        else:
+                            node.children[:] = []
+
+        walk(self._where, False)
+
+        if self._where.will_never_return_results:
+            # We removed all the children of the root where node, so no results
+            raise EmptyResultSet()
 
     def _check_only_single_inequality_filter(self):
         inequality_fields = set()
