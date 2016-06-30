@@ -328,8 +328,6 @@ class ContainsIndexer(Indexer):
         else:
             value = unicode(value)
         value = self.unescape(value)
-        if value.startswith("%") and value.endswith("%"):
-            value = value[1:-1]
         return value
 
     def indexed_column_name(self, field_column, value, index):
@@ -379,8 +377,6 @@ class EndsWithIndexer(Indexer):
 
     def prep_value_for_query(self, value):
         value = self.unescape(value)
-        if value.startswith("%"):
-            value = value[1:]
         return value
 
     def indexed_column_name(self, field_column, value, index):
@@ -429,9 +425,6 @@ class StartsWithIndexer(Indexer):
 
     def prep_value_for_query(self, value):
         value = self.unescape(value)
-        if value.endswith("%"):
-            value = value[:-1]
-
         return value
 
     def indexed_column_name(self, field_column, value, index):

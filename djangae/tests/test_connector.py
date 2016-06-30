@@ -21,7 +21,7 @@ from django.forms import ModelForm
 from django.test import RequestFactory
 from django.utils.safestring import SafeText
 from django.forms.models import modelformset_factory
-from google.appengine.api.datastore_errors import EntityNotFoundError, BadValueError, TransactionFailedError
+from google.appengine.api.datastore_errors import EntityNotFoundError, TransactionFailedError
 from google.appengine.datastore import datastore_rpc
 from google.appengine.api import datastore
 from google.appengine.ext import deferred
@@ -1155,7 +1155,7 @@ class ConstraintTests(TestCase):
         )
 
         # Without a custom mixin, Django can't construct a unique validation query for a list field
-        self.assertRaises(ValueError, instance1.full_clean)
+        self.assertRaises(TypeError, instance1.full_clean)
         UniqueModel.__bases__ = (UniquenessMixin,) + UniqueModel.__bases__
         instance1.full_clean()
         instance1.save()

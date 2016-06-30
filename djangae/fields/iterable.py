@@ -90,8 +90,8 @@ class ExactLookup(Exact):
             DjangaeDeprecation, 2
         )
 
-        if hasattr(self.rhs, "__iter__"):
-            raise ValueError("You can't query a list field for equality, use __overlap")
+        if self.rhs and hasattr(self.rhs, "__iter__"):
+            raise TypeError("You cannot perform exact lookups with a list, use __overlap")
 
         return super(ExactLookup, self).get_prep_lookup()
 

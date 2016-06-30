@@ -218,7 +218,7 @@ class UniquenessMixin(object):
                 # we conditionally build a __in lookup if the value is an iterable.
                 lookup = str(field_name)
                 if isinstance(lookup_value, (list, set, tuple)):
-                    lookup = "%s__in" % lookup
+                    lookup = "%s__overlap" % lookup
 
                 lookup_kwargs[lookup] = lookup_value
                 ##########################################################################

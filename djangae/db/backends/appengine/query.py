@@ -885,10 +885,17 @@ def _walk_django_where(query, trunk_callback, leaf_callback, **kwargs):
     kwargs.setdefault("negated", False)
     walk_node(query.where, **kwargs)
 
-def _django_18_query_walk_leaf(node, negated, new_parent, connection, model):
+def _django_18_query_walk_leaf(node, negated, new_parent, connection, model, compiler):
     new_node = WhereNode()
 
     def convert_rhs_op(node):
+        db_rhs = getattr(node.rhs, '_db', None)
+        if db_rhs is not None and db_rhs != connection.alias:
+            raise ValueError(
+                "Subqueries aren't allowed across different databases. Force "
+                "the inner query to be evaluated using `list(inner_query)`."
+            )
+
         value = node.get_rhs_op(connection, node.rhs)
         operator = value.split()[0].lower().strip()
         if operator == 'between':
@@ -897,6 +904,17 @@ def _django_18_query_walk_leaf(node, negated, new_parent, connection, model):
 
     if not hasattr(node, "lhs"):
         raise NotSupportedError("Attempted probable subquery, these aren't supported on the datastore")
+
+    # Although we do nothing with this. We need to call it as many lookups
+    # perform validation etc.
+    if not hasattr(node.rhs, "_as_sql"): # Don't call on querysets
+        try:
+            node.process_rhs(compiler, connection)
+        except EmptyResultSet:
+            if node.lookup_name == 'in':
+                node.rhs = []
+            else:
+                raise
 
     # Leaf
     if hasattr(node.lhs, 'target'):
@@ -928,37 +946,31 @@ def _django_18_query_walk_leaf(node, negated, new_parent, connection, model):
 
     lhs = field.column
 
-    try:
-        if hasattr(node.rhs, "get_compiler"):
-            # This is a subquery
-            raise NotSupportedError("Attempted to run a subquery on the datastore")
-        elif isinstance(node.rhs, ValuesListQuerySet):
-            # We explicitly handle ValuesListQuerySet because of the
-            # common case of pk__in=Something.objects.values_list("pk", flat=True)
-            # this WILL execute another query, but that is to be expected on a
-            # non-relational datastore.
+    if hasattr(node.rhs, "get_compiler"):
+        # This is a subquery
+        raise NotSupportedError("Attempted to run a subquery on the datastore")
+    elif isinstance(node.rhs, ValuesListQuerySet):
+        # We explicitly handle ValuesListQuerySet because of the
+        # common case of pk__in=Something.objects.values_list("pk", flat=True)
+        # this WILL execute another query, but that is to be expected on a
+        # non-relational datastore.
 
-            rhs = [ x for x in node.rhs ] # Evaluate the queryset
+        rhs = [ x for x in node.rhs ] # Evaluate the queryset
 
-        elif isinstance(node.rhs, QuerySet):
-            # In Django 1.9, ValuesListQuerySet doesn't exist anymore, and instead
-            # values_list returns a QuerySet
-            if node.rhs._iterable_class == FlatValuesListIterable:
-                # if the queryset has FlatValuesListIterable as iterable class
-                # then it's a flat list, and we just need to evaluate the
-                # queryset converting it into a list
-                rhs = [ x for x in node.rhs ]
-            else:
-                # otherwise, we try to get the PK from the queryset
-                rhs = [ x.pk for x in node.rhs ]
+    elif isinstance(node.rhs, QuerySet):
+        # In Django 1.9, ValuesListQuerySet doesn't exist anymore, and instead
+        # values_list returns a QuerySet
+        if node.rhs._iterable_class == FlatValuesListIterable:
+            # if the queryset has FlatValuesListIterable as iterable class
+            # then it's a flat list, and we just need to evaluate the
+            # queryset converting it into a list
+            rhs = [ x for x in node.rhs ]
         else:
-            rhs = node.rhs
-    except EmptyResultSet:
-        if operator == 'in':
-            # Deal with this later
-            rhs = []
-        else:
-            raise
+            # otherwise, we try to get the PK from the queryset
+            rhs = [ x.pk for x in node.rhs ]
+    else:
+        rhs = node.rhs
+
 
     was_iter = hasattr(node.rhs, "__iter__")
     rhs = node.get_db_prep_lookup(rhs, connection)[-1]
@@ -1045,7 +1057,8 @@ def _transform_query_18(connection, kind, query):
         new_parent=output,
         connection=connection,
         negated=query.where.negated,
-        model=query.model
+        model=query.model,
+        compiler=query.get_compiler(connection.alias)
     )
 
     # If there no child nodes, just wipe out the where
@@ -1112,7 +1125,8 @@ def _transform_query_19(connection, kind, query):
         new_parent=output,
         connection=connection,
         negated=query.where.negated,
-        model=query.model
+        model=query.model,
+        compiler=query.get_compiler(connection.alias)
     )
 
     # If there no child nodes, just wipe out the where
