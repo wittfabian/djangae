@@ -973,7 +973,7 @@ def _django_18_query_walk_leaf(node, negated, new_parent, connection, model, com
 
     was_iter = hasattr(node.rhs, "__iter__")
     rhs = node.get_db_prep_lookup(rhs, connection)[-1]
-    if not was_iter:
+    if rhs and not was_iter and hasattr(rhs, "__iter__"):
         rhs = rhs[0]
 
     new_node.set_leaf(
