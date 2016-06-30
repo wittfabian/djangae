@@ -1,5 +1,6 @@
 import copy
 import warnings
+from itertools import chain
 
 from django import forms
 from django.db import models
@@ -21,16 +22,52 @@ class _FakeModel(object):
 
 from djangae.utils import DjangaeDeprecation
 
+
 class ContainsLookup(Lookup):
     lookup_name = 'contains'
+
+    def get_rhs_op(self, connection, rhs):
+        return '= %s' % rhs
+
+    def get_prep_lookup(self):
+        if hasattr(self.rhs, "__iter__"):
+            raise ValueError("__contains cannot take an iterable")
+
+        if self.rhs is None:
+            raise ValueError("__contains cannot take None, use __isempty instead")
+
+        return self.rhs
 
 
 class IsEmptyLookup(Lookup):
     lookup_name = 'isempty'
 
+    def get_rhs_op(self, connection, rhs):
+        return 'isnull %s' % rhs
 
-class OverlapLookup(Lookup):
+    def get_prep_lookup(self):
+        if self.rhs not in (True, False):
+            raise ValueError("__isempty takes a boolean as a value")
+
+        return self.rhs
+
+
+class OverlapLookup(In):
     lookup_name = 'overlap'
+
+    def get_rhs_op(self, connection, rhs):
+        return 'IN %s' % rhs
+
+    def get_db_prep_lookup(self, value, connection):
+        # the In lookup wraps each element in a list, so we unwrap here
+        ret = super(OverlapLookup, self).get_db_prep_lookup(value, connection)
+        return (ret[0], [x for x in chain(*ret[-1])])
+
+    def get_prep_lookup(self):
+        if not isinstance(self.rhs, (list, set)):
+            raise ValueError("__overlap takes a list or set as a value")
+
+        return super(OverlapLookup, self).get_prep_lookup()
 
 
 class IsNullLookup(IsNull):
@@ -47,13 +84,6 @@ class IsNullLookup(IsNull):
 class ExactLookup(Exact):
     lookup_name = 'exact'
 
-    def get_db_prep_lookup(self, value, connection):
-        # This prevents IterableField.get_prep_value() from listifying the string
-        if not hasattr(value, "__iter__"):
-            return ('%s', [value])
-
-        return super(ExactLookup, self).get_db_prep_lookup(value, connection)
-
     def get_prep_lookup(self):
         warnings.warn(
             "'=' lookups on ListField and SetField are deprecated. Please use __contains",
@@ -66,7 +96,7 @@ class ExactLookup(Exact):
         return super(ExactLookup, self).get_prep_lookup()
 
 
-class InLookup(In):
+class InLookup(OverlapLookup):
     lookup_name = 'in'
 
     def get_prep_lookup(self):
@@ -305,7 +335,7 @@ class SetField(IterableField):
         return ret
 
     def get_db_prep_lookup(self, *args, **kwargs):
-        ret =  super(SetField, self).get_db_prep_lookup(*args, **kwargs)
+        ret = super(SetField, self).get_db_prep_lookup(*args, **kwargs)
         if ret:
             ret = list(ret)
         return ret

@@ -107,6 +107,7 @@ class WhereNode(object):
         self.operator = None
         self.value = None
         self.output_field = None
+        self.lookup_name = None
 
         self.children = []
         self.connector = 'AND'
@@ -122,7 +123,7 @@ class WhereNode(object):
     def append_child(self, node):
         self.children.append(node)
 
-    def set_leaf(self, column, operator, value, is_pk_field, negated, namespace, target_field=None):
+    def set_leaf(self, column, operator, value, is_pk_field, negated, lookup_name, namespace, target_field=None):
         assert column
         assert operator
         assert isinstance(is_pk_field, bool)
@@ -184,6 +185,7 @@ class WhereNode(object):
         self.column = column
         self.operator = convert_operator(operator)
         self.value = value
+        self.lookup_name = lookup_name
 
 
 
@@ -405,6 +407,7 @@ class Query(object):
         self._disable_projection_if_fields_used_in_equality_filter()
         self._check_only_single_inequality_filter()
 
+
     @property
     def where(self):
         return self._where
@@ -501,12 +504,11 @@ class Query(object):
 
                 for child in node.children[:]:
                     if negated:
-                        if child.operator == "=":
+                        if child.lookup_name != 'isnull':
                             equality_fields.add(child.column)
                             if child.column in negated_isnull_fields:
                                 node.children.remove(isnull_lookup[child.column])
-
-                        elif child.operator == "ISNULL":
+                        else:
                             negated_isnull_fields.add(child.column)
                             if child.column in equality_fields:
                                 node.children.remove(child)
@@ -858,7 +860,6 @@ def _django_18_query_walk_leaf(node, negated, new_parent, connection, model):
         operator = value.split()[0].lower().strip()
         if operator == 'between':
             operator = 'range'
-
         return operator
 
     if not hasattr(node, "lhs"):
@@ -926,20 +927,10 @@ def _django_18_query_walk_leaf(node, negated, new_parent, connection, model):
         else:
             raise
 
-    # There is a lot of special casing here for list/set fields because their get_db_prep_lookup
-    # calls get_db_prep_value which listifies things. This will get much simpler when we disallow
-    # exact lookups on list fields
-    if field.db_type(connection) in ('list', 'set') and operator == 'in':
-        rhs = [ rhs ]
-
+    was_iter = hasattr(node.rhs, "__iter__")
     rhs = node.get_db_prep_lookup(rhs, connection)[-1]
-
-    if not hasattr(node.rhs, "__iter__"):
+    if not was_iter:
         rhs = rhs[0]
-    elif field.db_type(connection) in ('list', 'set'):
-        rhs = [x for x in chain(*rhs)]
-
-    #print operator, node.rhs, "=>", rhs, field
 
     new_node.set_leaf(
         lhs,
@@ -947,6 +938,7 @@ def _django_18_query_walk_leaf(node, negated, new_parent, connection, model):
         rhs,
         is_pk_field=field==model._meta.pk,
         negated=negated,
+        lookup_name=node.lookup_name,
         namespace=connection.ops.connection.settings_dict.get("NAMESPACE"),
         target_field=field,
     )

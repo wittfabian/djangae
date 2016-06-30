@@ -276,27 +276,27 @@ class IterableFieldTests(TestCase):
             set_field=set(['A', 'B', 'C', 'H', 'I', 'J']))
 
         # filtering using exact lookup with ListField:
-        qry = IterableFieldModel.objects.filter(list_field='A')
+        qry = IterableFieldModel.objects.filter(list_field__contains='A')
         self.assertEqual(sorted(x.pk for x in qry), sorted([list1.pk, list2.pk]))
-        qry = IterableFieldModel.objects.filter(list_field='H')
+        qry = IterableFieldModel.objects.filter(list_field__contains='H')
         self.assertEqual(sorted(x.pk for x in qry), [list2.pk,])
 
         # filtering using exact lookup with SetField:
-        qry = IterableFieldModel.objects.filter(set_field='A')
+        qry = IterableFieldModel.objects.filter(set_field__contains='A')
         self.assertEqual(sorted(x.pk for x in qry), sorted([list1.pk, list2.pk]))
-        qry = IterableFieldModel.objects.filter(set_field='H')
+        qry = IterableFieldModel.objects.filter(set_field__contains='H')
         self.assertEqual(sorted(x.pk for x in qry), [list2.pk,])
 
         # filtering using in lookup with ListField:
-        qry = IterableFieldModel.objects.filter(list_field__in=['A', 'B', 'C'])
+        qry = IterableFieldModel.objects.filter(list_field__overlap=['A', 'B', 'C'])
         self.assertEqual(sorted(x.pk for x in qry), sorted([list1.pk, list2.pk,]))
-        qry = IterableFieldModel.objects.filter(list_field__in=['H', 'I', 'J'])
+        qry = IterableFieldModel.objects.filter(list_field__overlap=['H', 'I', 'J'])
         self.assertEqual(sorted(x.pk for x in qry), sorted([list2.pk,]))
 
         # filtering using in lookup with SetField:
-        qry = IterableFieldModel.objects.filter(set_field__in=set(['A', 'B']))
+        qry = IterableFieldModel.objects.filter(set_field__overlap=set(['A', 'B']))
         self.assertEqual(sorted(x.pk for x in qry), sorted([list1.pk, list2.pk]))
-        qry = IterableFieldModel.objects.filter(set_field__in=set(['H']))
+        qry = IterableFieldModel.objects.filter(set_field__overlap=['H'])
         self.assertEqual(sorted(x.pk for x in qry), [list2.pk,])
 
     def test_empty_iterable_fields(self):
@@ -324,7 +324,7 @@ class IterableFieldTests(TestCase):
         instance = IterableFieldModel.objects.get(pk=instance.pk)
         self.assertEqual(["One"], instance.list_field)
 
-        results = IterableFieldModel.objects.filter(list_field="One")
+        results = IterableFieldModel.objects.filter(list_field__contains="One")
         self.assertEqual([instance], list(results))
 
         self.assertEqual([1, 2], ListField(models.IntegerField).to_python("[1, 2]"))
@@ -346,16 +346,16 @@ class IterableFieldTests(TestCase):
     def test_empty_list_queryable_with_is_null(self):
         instance = IterableFieldModel.objects.create()
 
-        self.assertTrue(IterableFieldModel.objects.filter(set_field__isnull=True).exists())
+        self.assertTrue(IterableFieldModel.objects.filter(set_field__isempty=True).exists())
 
         instance.set_field.add(1)
         instance.save()
 
-        self.assertFalse(IterableFieldModel.objects.filter(set_field__isnull=True).exists())
-        self.assertTrue(IterableFieldModel.objects.filter(set_field__isnull=False).exists())
+        self.assertFalse(IterableFieldModel.objects.filter(set_field__isempty=True).exists())
+        self.assertTrue(IterableFieldModel.objects.filter(set_field__isempty=False).exists())
 
-        self.assertFalse(IterableFieldModel.objects.exclude(set_field__isnull=False).exists())
-        self.assertTrue(IterableFieldModel.objects.exclude(set_field__isnull=True).exists())
+        self.assertFalse(IterableFieldModel.objects.exclude(set_field__isempty=False).exists())
+        self.assertTrue(IterableFieldModel.objects.exclude(set_field__isempty=True).exists())
 
     def test_saving_forms(self):
         class TestForm(forms.ModelForm):
