@@ -54,6 +54,7 @@ class IsEmptyLookup(Lookup):
 
 class OverlapLookup(In):
     lookup_name = 'overlap'
+    get_db_prep_lookup_value_is_iterable = False
 
     def get_rhs_op(self, connection, rhs):
         return 'IN %s' % rhs
