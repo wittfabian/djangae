@@ -6,8 +6,14 @@ from django.db.models.fields import FieldDoesNotExist
 from django.db import NotSupportedError
 from django.db.models.expressions import Star
 from django.db.models.sql.datastructures import EmptyResultSet
-from django.db.models.query import FlatValuesListIterable
 from django.db.models.query import QuerySet
+
+try:
+    from django.db.models.query import FlatValuesListIterable
+except ImportError:
+    # Django 1.8
+    class FlatValuesListIterable(object):
+        pass
 
 try:
     from django.db.models.query import ValuesListQuerySet
