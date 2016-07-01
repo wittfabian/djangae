@@ -50,6 +50,16 @@ class Parser(BaseParser):
             if node.lookup_name != operator:
                 operator = "{}__{}".format(operator, node.lookup_name)
 
+        # FIXME: This is a hack. In the base parser (> 1.9) we make use of the get_rhs_op
+        # method on lookups to work out what these operators should be
+        if field.db_type(connection) in ('set', 'list'):
+            if operator == "isempty":
+                operator = "isnull"
+            elif operator == "overlap":
+                operator = "in"
+            elif operator == "contains":
+                operator = "exact"
+
         if get_top_concrete_parent(field.model) != get_top_concrete_parent(model):
             raise NotSupportedError("Cross-join where filters are not supported on the datastore")
 
@@ -99,7 +109,6 @@ class Parser(BaseParser):
                 rhs = [ [] ]
             else:
                 raise
-
 
         if operator in ('in', 'range'):
             rhs = rhs[-1]
