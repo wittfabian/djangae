@@ -11,6 +11,8 @@ djangae_datetimemodel:
   datetime_field: [contains]
 djangae_integermodel:
   integer_field: [iexact]
+djangae_iterablefieldmodel:
+  list_field: [contains]
 djangae_related:
   headline: [startswith]
 djangae_specialindexesmodel:

@@ -1,3 +1,4 @@
+import django
 import logging
 import yaml
 import os
@@ -13,6 +14,8 @@ _last_loaded_time = None
 
 MAX_COLUMNS_PER_SPECIAL_INDEX = getattr(settings, "DJANGAE_MAX_COLUMNS_PER_SPECIAL_INDEX", 3)
 CHARACTERS_PER_COLUMN = [31, 44, 54, 63, 71, 79, 85, 91, 97, 103]
+
+STRIP_PERCENTS = django.VERSION < (1, 10)
 
 def _get_index_file():
     index_file = os.path.join(environment.get_application_root(), "djangaeidx.yaml")
@@ -328,6 +331,11 @@ class ContainsIndexer(Indexer):
         else:
             value = unicode(value)
         value = self.unescape(value)
+
+        if STRIP_PERCENTS:
+            if value.startswith("%") and value.endswith("%"):
+                value = value[1:-1]
+
         return value
 
     def indexed_column_name(self, field_column, value, index):
@@ -377,6 +385,9 @@ class EndsWithIndexer(Indexer):
 
     def prep_value_for_query(self, value):
         value = self.unescape(value)
+        if STRIP_PERCENTS:
+            if value.startswith("%"):
+                value = value[1:]
         return value
 
     def indexed_column_name(self, field_column, value, index):
@@ -425,6 +436,9 @@ class StartsWithIndexer(Indexer):
 
     def prep_value_for_query(self, value):
         value = self.unescape(value)
+        if STRIP_PERCENTS:
+            if value.endswith("%"):
+                value = value[:-1]
         return value
 
     def indexed_column_name(self, field_column, value, index):
