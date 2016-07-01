@@ -1,7 +1,13 @@
 from django.db import NotSupportedError
 from django.db.models.sql.datastructures import EmptyResultSet
 from django.db.models.query import QuerySet
-from django.db.models.query import FlatValuesListIterable
+
+try:
+    from django.db.models.query import FlatValuesListIterable
+except ImportError:
+    # Django 1.8
+    class FlatValuesListIterable(object):
+        pass
 
 try:
     from django.db.models.query import ValuesListQuerySet
