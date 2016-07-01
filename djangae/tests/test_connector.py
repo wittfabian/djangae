@@ -1155,7 +1155,7 @@ class ConstraintTests(TestCase):
         )
 
         # Without a custom mixin, Django can't construct a unique validation query for a list field
-        self.assertRaises(TypeError, instance1.full_clean)
+        self.assertRaises(ValueError, instance1.full_clean)
         UniqueModel.__bases__ = (UniquenessMixin,) + UniqueModel.__bases__
         instance1.full_clean()
         instance1.save()
@@ -1886,11 +1886,11 @@ class TestSpecialIndexers(TestCase):
             self.assertEqual(len(qry), len([x for x in self.names if re.search(pattern, x, flags=re.I)]))
 
             # Check that the same works for ListField and SetField too
-            qry = self.qry.filter(sample_list__regex=pattern)
+            qry = self.qry.filter(sample_list__item__regex=pattern)
             expected = [sample_list for sample_list in self.lists if any([bool(re.search(pattern, x)) for x in sample_list])]
             self.assertEqual(len(qry), len(expected))
 
-            qry = self.qry.filter(sample_list__iregex=pattern)
+            qry = self.qry.filter(sample_list__item__iregex=pattern)
             expected = [sample_list for sample_list in self.lists if any([bool(re.search(pattern, x, flags=re.I)) for x in sample_list])]
             self.assertEqual(len(qry), len(expected))
 

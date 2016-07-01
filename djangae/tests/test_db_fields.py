@@ -686,8 +686,8 @@ class InstanceSetFieldTests(TestCase):
     def test_querying_with_isnull(self):
         obj = ISModel.objects.create()
 
-        self.assertItemsEqual([obj], ISModel.objects.filter(related_things__isnull=True))
-        self.assertItemsEqual([obj], ISModel.objects.filter(related_things_ids__isnull=True))
+        self.assertItemsEqual([obj], ISModel.objects.filter(related_things__isempty=True))
+        self.assertItemsEqual([obj], ISModel.objects.filter(related_things_ids__isempty=True))
 
 
 class TestGenericRelationField(TestCase):

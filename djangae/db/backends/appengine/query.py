@@ -145,6 +145,9 @@ class WhereNode(object):
         primary_operation = operator.split("__")[0]
         special_indexer = REQUIRES_SPECIAL_INDEXES.get(primary_operation)
 
+        if special_indexer and target_field.__class__ not in special_indexer.ACTIVE_FOR_FIELDS:
+            raise NotSupportedError("Unable to query field with lookup: {}".format(primary_operation))
+
         if special_indexer:
             if is_pk_field:
                 column = model._meta.pk.column

@@ -5,6 +5,8 @@ import os
 import datetime
 import re
 
+from django.db import models
+
 from djangae import environment
 from djangae.sandbox import allow_mode_write
 from django.conf import settings
@@ -106,6 +108,13 @@ def add_special_index(model_class, field_name, index_type, value=None):
 
 
 class Indexer(object):
+    ACTIVE_FOR_FIELDS = (
+        models.CharField,
+        models.TextField,
+        models.DateField,
+        models.DateTimeField
+    )
+
     def validate_can_be_indexed(self, value, negated):
         """Return True if the value is indexable, False otherwise"""
         raise NotImplementedError()
@@ -129,6 +138,15 @@ class Indexer(object):
 
 
 class IExactIndexer(Indexer):
+    ACTIVE_FOR_FIELDS = (
+        models.CharField,
+        models.TextField,
+        models.DateField,
+        models.DateTimeField,
+        models.IntegerField,
+        models.PositiveIntegerField
+    )
+
     def validate_can_be_indexed(self, value, negated):
         return len(value) < 500
 
@@ -149,6 +167,11 @@ class IExactIndexer(Indexer):
 
 
 class HourIndexer(Indexer):
+    ACTIVE_FOR_FIELDS = (
+        models.TimeField,
+        models.DateTimeField
+    )
+
     def validate_can_be_indexed(self, value, negated):
         return isinstance(value, datetime.datetime)
 
@@ -170,6 +193,11 @@ class HourIndexer(Indexer):
 
 
 class MinuteIndexer(Indexer):
+    ACTIVE_FOR_FIELDS = (
+        models.TimeField,
+        models.DateTimeField
+    )
+
     def validate_can_be_indexed(self, value, negated):
         return isinstance(value, datetime.datetime)
 
@@ -192,6 +220,11 @@ class MinuteIndexer(Indexer):
 
 
 class SecondIndexer(Indexer):
+    ACTIVE_FOR_FIELDS = (
+        models.TimeField,
+        models.DateTimeField
+    )
+
     def validate_can_be_indexed(self, value, negated):
         return isinstance(value, datetime.datetime)
 
@@ -213,6 +246,11 @@ class SecondIndexer(Indexer):
 
 
 class DayIndexer(Indexer):
+    ACTIVE_FOR_FIELDS = (
+        models.DateField,
+        models.DateTimeField
+    )
+
     def validate_can_be_indexed(self, value, negated):
         return isinstance(value, (datetime.datetime, datetime.date))
 
@@ -234,6 +272,11 @@ class DayIndexer(Indexer):
 
 
 class YearIndexer(Indexer):
+    ACTIVE_FOR_FIELDS = (
+        models.DateField,
+        models.DateTimeField
+    )
+
     def validate_can_be_indexed(self, value, negated):
         return isinstance(value, (datetime.datetime, datetime.date))
 
@@ -256,6 +299,11 @@ class YearIndexer(Indexer):
 
 
 class MonthIndexer(Indexer):
+    ACTIVE_FOR_FIELDS = (
+        models.DateField,
+        models.DateTimeField
+    )
+
     def validate_can_be_indexed(self, value, negated):
         return isinstance(value, (datetime.datetime, datetime.date))
 
@@ -278,6 +326,11 @@ class MonthIndexer(Indexer):
 
 
 class WeekDayIndexer(Indexer):
+    ACTIVE_FOR_FIELDS = (
+        models.DateField,
+        models.DateTimeField
+    )
+
     def validate_can_be_indexed(self, value, negated):
         return isinstance(value, (datetime.datetime, datetime.date))
 

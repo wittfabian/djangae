@@ -4,7 +4,7 @@ from itertools import chain
 
 from django import forms
 from django.db import models
-from django.db.models.lookups import Lookup, Exact, In, IsNull
+from django.db.models.lookups import Lookup, Exact, In, IsNull, Transform
 from django.core.exceptions import ValidationError, ImproperlyConfigured
 from djangae.forms.fields import ListFormField
 from django.utils.text import capfirst
@@ -19,8 +19,6 @@ class _FakeModel(object):
 
     def __init__(self, field, value):
         setattr(self, field.attname, value)
-
-from djangae.utils import DjangaeDeprecation
 
 
 class ContainsLookup(Lookup):
@@ -52,7 +50,7 @@ class IsEmptyLookup(Lookup):
         return self.rhs
 
 
-class OverlapLookup(In):
+class OverlapLookup(Lookup):
     lookup_name = 'overlap'
     get_db_prep_lookup_value_is_iterable = False
 
@@ -71,41 +69,12 @@ class OverlapLookup(In):
         return super(OverlapLookup, self).get_prep_lookup()
 
 
-class IsNullLookup(IsNull):
-    lookup_name = 'isnull'
+class IterableTransform(Transform):
+    def __init__(self, item_field_type):
+        self.item_field_type = item_field_type
 
-    def get_prep_lookup(self):
-        warnings.warn(
-            "'isnull' lookups on ListField and SetField are deprecated. Please use __isempty",
-            DjangaeDeprecation, 2
-        )
-        return super(IsNullLookup, self).get_prep_lookup()
-
-
-class ExactLookup(Exact):
-    lookup_name = 'exact'
-
-    def get_prep_lookup(self):
-        warnings.warn(
-            "'=' lookups on ListField and SetField are deprecated. Please use __contains",
-            DjangaeDeprecation, 2
-        )
-
-        if self.rhs and hasattr(self.rhs, "__iter__"):
-            raise TypeError("You cannot perform exact lookups with a list, use __overlap")
-
-        return super(ExactLookup, self).get_prep_lookup()
-
-
-class InLookup(OverlapLookup):
-    lookup_name = 'in'
-
-    def get_prep_lookup(self):
-        warnings.warn(
-            "IN lookups on ListField and SetField are deprecated. Please use __overlap.",
-            DjangaeDeprecation, 2
-        )
-        return super(InLookup, self).get_prep_lookup()
+    def get_lookup(self, name):
+        return self.item_field_type.get_lookup(name)
 
 
 class IterableField(models.Field):
@@ -117,6 +86,31 @@ class IterableField(models.Field):
 
     def db_type(self, connection):
         return 'list'
+
+    def get_lookup(self, name):
+        # isnull is explitly not blocked here, because annoyingly Django adds isnull lookups implicitly on
+        # excluded nullable with no way of switching it off!
+
+        if name == "exact":
+            raise ValueError("You can't perform __{} on an iterable field, did you mean __contains?".format(name))
+
+        if name == "in":
+            raise ValueError("You can't perform __{} on an iterable field, did you mean __overlap?".format(name))
+
+        if name in ("regex", "startswith", "endswith", "iexact", "istartswith", "icontains", "iendswith"):
+            raise ValueError("You can't perform __{} on an iterable field, did you mean __item__{}?".format(name, name))
+
+        return super(IterableField, self).get_lookup(name)
+
+    def get_transform(self, name):
+        transform = super(IterableField, self).get_transform(name)
+        if transform:
+            return transform
+
+        if name == "item":
+            return lambda x: IterableTransform(self.item_field_type)
+
+        return None
 
     def __init__(self, item_field_type, *args, **kwargs):
 
@@ -283,11 +277,6 @@ class IterableField(models.Field):
 IterableField.register_lookup(ContainsLookup)
 IterableField.register_lookup(OverlapLookup)
 IterableField.register_lookup(IsEmptyLookup)
-
-# Deprecated lookups
-IterableField.register_lookup(ExactLookup)
-IterableField.register_lookup(IsNullLookup)
-IterableField.register_lookup(InLookup)
 
 
 class ListField(IterableField):
