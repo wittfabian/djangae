@@ -33,16 +33,6 @@ from djangae.db.backends.appengine import POLYMODEL_CLASS_ATTRIBUTE
 from djangae.db import constraints, utils
 from djangae.db.backends.appengine import caching
 from djangae.db.unique_utils import query_is_unique
-from djangae.db.backends.appengine import transforms
-
-DATE_TRANSFORMS = {
-    "year": transforms.year_transform,
-    "month": transforms.month_transform,
-    "day": transforms.day_transform,
-    "hour": transforms.hour_transform,
-    "minute": transforms.minute_transform,
-    "second": transforms.second_transform
-}
 
 DJANGAE_LOG = logging.getLogger("djangae")
 
@@ -91,22 +81,6 @@ def _get_tables_from_where(where_node):
     else:
         return list(set([x.alias for x in cols]))
 
-
-def field_conv_year_only(value):
-    value = ensure_datetime(value)
-    return datetime(value.year, 1, 1, 0, 0)
-
-
-def field_conv_month_only(value):
-    value = ensure_datetime(value)
-    return datetime(value.year, value.month, 1, 0, 0)
-
-
-def field_conv_day_only(value):
-    value = ensure_datetime(value)
-    return datetime(value.year, value.month, value.day, 0, 0)
-
-
 def ensure_datetime(value):
     """
         Painfully, sometimes the Datastore returns dates as datetime objects, and sometimes
@@ -128,21 +102,6 @@ def coerce_unicode(value):
 
     # The SDK raises BadValueError for unicode sub-classes like SafeText.
     return unicode(value)
-
-
-FILTER_CMP_FUNCTION_MAP = {
-    'exact': lambda a, b: a == b,
-    'iexact': lambda a, b: a.lower() == b.lower(),
-    'gt': lambda a, b: a > b,
-    'lt': lambda a, b: a < b,
-    'gte': lambda a, b: a >= b,
-    'lte': lambda a, b: a <= b,
-    'isnull': lambda a, b: (b and (a is None)) or (a is not None),
-    'in': lambda a, b: a in b,
-    'startswith': lambda a, b: a.startswith(b),
-    'range': lambda a, b: b[0] < a < b[1], #I'm assuming that b is a tuple
-    'year': lambda a, b: field_conv_year_only(a) == b,
-}
 
 
 def log_once(logging_call, text, args):
