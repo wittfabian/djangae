@@ -11,6 +11,9 @@ from djangae.forms.fields import (
 )
 from django.utils import six
 
+from djangae.fields.iterable import IsEmptyLookup, ContainsLookup, OverlapLookup
+
+
 class RelatedIteratorRel(ForeignObjectRel):
     def __init__(self, field, to, related_name=None, limit_choices_to=None, on_delete=models.DO_NOTHING):
         self.field = field
@@ -115,7 +118,7 @@ class RelatedIteratorManagerBase(object):
         self.reverse = reverse
 
         if reverse:
-            self.core_filters = {'%s__exact' % self.field.column: instance.pk}
+            self.core_filters = {'%s__contains' % self.field.column: instance.pk}
         else:
             self.core_filters = {'pk__in': field.value_from_object(instance)}
 
@@ -253,6 +256,21 @@ class ReverseRelatedObjectsDescriptor(object):
 from abc import ABCMeta
 
 
+class RelatedContainsLookup(ContainsLookup):
+    def get_prep_lookup(self):
+        # If this is an instance, then we want to lookup based on the PK
+        if isinstance(self.rhs, models.Model):
+            self.rhs = self.rhs.pk
+        return super(RelatedContainsLookup, self).get_prep_lookup()
+
+
+class RelatedOverlapLookup(OverlapLookup):
+    def get_prep_lookup(self):
+        # Transform any instances to primary keys
+        self.rhs = [ x.pk if isinstance(x, models.Model) else x for x in self.rhs ]
+        return super(RelatedContainsLookup, self).get_prep_lookup()
+
+
 class RelatedIteratorField(ForeignObject):
 
     __metaclass__ = ABCMeta
@@ -373,6 +391,23 @@ class RelatedIteratorField(ForeignObject):
                 initial = initial()
             defaults['initial'] = [i._get_pk_val() for i in initial]
         return super(RelatedIteratorField, self).formfield(**defaults)
+
+    def get_lookup(self, lookup_name):
+        if lookup_name == 'isempty':
+            return IsEmptyLookup
+        elif lookup_name == 'overlap':
+            return OverlapLookup
+        elif lookup_name == 'contains':
+            return RelatedContainsLookup
+        elif lookup_name in ('in', 'exact', 'isnull'):
+            raise TypeError("RelatedIteratorFields don't allow exact, in or isnull. Use contains, overlap or isempty respectively")
+
+        return super(RelatedIteratorField, self).get_lookup(lookup_name)
+
+
+RelatedIteratorField.register_lookup(RelatedContainsLookup)
+RelatedIteratorField.register_lookup(OverlapLookup)
+RelatedIteratorField.register_lookup(IsEmptyLookup)
 
 
 class RelatedSetField(RelatedIteratorField):
