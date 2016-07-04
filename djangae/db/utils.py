@@ -21,7 +21,7 @@ except ImportError:
 
 #DJANGAE
 from djangae.utils import memoized
-from djangae.db.backends.appengine.indexing import special_indexes_for_column, REQUIRES_SPECIAL_INDEXES
+from djangae.db.backends.appengine.indexing import special_indexes_for_column, get_indexer
 from djangae.db.backends.appengine.dbapi import CouldBeSupportedError
 from djangae.db.backends.appengine import POLYMODEL_CLASS_ATTRIBUTE
 
@@ -197,11 +197,7 @@ def django_instance_to_entity(connection, model, fields, raw, instance, check_nu
 
         # Add special indexed fields
         for index in special_indexes_for_column(model, field.column):
-            indexer = REQUIRES_SPECIAL_INDEXES[index.split('__')[0]] # Indexes can be named regex__aaa, hence splitting by __
-
-            if field.__class__ not in indexer.ACTIVE_FOR_FIELDS:
-                continue
-
+            indexer = get_indexer(field, index)
             values = indexer.prep_value_for_database(value, index)
 
             if values is None:

@@ -38,7 +38,7 @@ from djangae.db.backends.appengine.commands import FlushCommand
 from djangae.db import constraints
 from djangae.db.constraints import UniqueMarker, UniquenessMixin
 from djangae.db.unique_utils import _unique_combinations, unique_identifiers_from_entity
-from djangae.db.backends.appengine.indexing import add_special_index
+from djangae.db.backends.appengine.indexing import add_special_index, IExactIndexer, get_indexer
 from djangae.db.utils import entity_matches_query, decimal_to_string, normalise_field_value
 from djangae.db.caching import disable_cache
 from djangae.fields import SetField, ListField, RelatedSetField
@@ -1214,7 +1214,7 @@ class EdgeCaseTests(TestCase):
     def setUp(self):
         super(EdgeCaseTests, self).setUp()
 
-        add_special_index(TestUser, "username", "iexact")
+        add_special_index(TestUser, "username", IExactIndexer(), "iexact")
 
         self.u1 = TestUser.objects.create(username="A", email="test@example.com", last_login=datetime.datetime.now().date(), id=1)
         self.u2 = TestUser.objects.create(username="B", email="test@example.com", last_login=datetime.datetime.now().date(), id=2)
@@ -1553,7 +1553,7 @@ class EdgeCaseTests(TestCase):
         user = TestUser.objects.get(username__iexact="a")
         self.assertEqual("A", user.username)
 
-        add_special_index(IntegerModel, "integer_field", "iexact")
+        add_special_index(IntegerModel, "integer_field", IExactIndexer(), "iexact")
         IntegerModel.objects.create(integer_field=1000)
         integer_model = IntegerModel.objects.get(integer_field__iexact=str(1000))
         self.assertEqual(integer_model.integer_field, 1000)
@@ -1562,7 +1562,7 @@ class EdgeCaseTests(TestCase):
         self.assertEqual("A", user.username)
 
     def test_iexact_containing_underscores(self):
-        add_special_index(TestUser, "username", "iexact")
+        add_special_index(TestUser, "username", IExactIndexer(), "iexact")
         user = TestUser.objects.create(username="A_B", email="test@example.com")
         results = TestUser.objects.filter(username__iexact=user.username.lower())
         self.assertEqual(list(results), [user])
@@ -1662,14 +1662,14 @@ class EdgeCaseTests(TestCase):
         obj = TestFruit.objects.create(name='pear')
         indexes = ['icontains', 'contains', 'iexact', 'iendswith', 'endswith', 'istartswith', 'startswith']
         for index in indexes:
-            add_special_index(TestFruit, 'color', index)
+            add_special_index(TestFruit, 'color', get_indexer(TestFruit._meta.get_field("color"), index), index)
         obj.save()
 
     def test_special_indexes_for_unusually_long_values(self):
         obj = TestFruit.objects.create(name='pear', color='1234567890-=!@#$%^&*()_+qQWERwertyuiopasdfghjklzxcvbnm')
         indexes = ['icontains', 'contains', 'iexact', 'iendswith', 'endswith', 'istartswith', 'startswith']
         for index in indexes:
-            add_special_index(TestFruit, 'color', index)
+            add_special_index(TestFruit, 'color', get_indexer(TestFruit._meta.get_field("color"), index), index)
         obj.save()
 
         qry = TestFruit.objects.filter(color__contains='1234567890-=!@#$%^&*()_+qQWERwertyuiopasdfghjklzxcvbnm')

@@ -11,8 +11,6 @@ djangae_datetimemodel:
   datetime_field: [contains]
 djangae_integermodel:
   integer_field: [iexact]
-djangae_iterablefieldmodel:
-  list_field: [contains]
 djangae_related:
   headline: [startswith]
 djangae_specialindexesmodel:
@@ -20,13 +18,13 @@ djangae_specialindexesmodel:
     regex__285b412d5a5d295c772b, regex__285b412d5a5d295c772b5c735b2b5d5c73285b412d5a5d295c772b,
     regex__5c2d546573745c2d, iregex__285b412d5a5d295c772b, iregex__285b412d5a5d295c772b5c735b2b5d5c73285b412d5a5d295c772b,
     iregex__5c2d546573745c2d]
-  sample_list: [regex__285b412d5a5d295c772b, regex__285b412d5a5d295c772b5c735b2b5d5c73285b412d5a5d295c772b,
-    regex__5c2d546573745c2d, iregex__285b412d5a5d295c772b, iregex__285b412d5a5d295c772b5c735b2b5d5c73285b412d5a5d295c772b,
-    iregex__5c2d546573745c2d]
+  sample_list: [item__regex__285b412d5a5d295c772b, item__iregex__285b412d5a5d295c772b,
+    item__regex__285b412d5a5d295c772b5c735b2b5d5c73285b412d5a5d295c772b, item__iregex__285b412d5a5d295c772b5c735b2b5d5c73285b412d5a5d295c772b,
+    item__regex__5c2d546573745c2d, item__iregex__5c2d546573745c2d]
 djangae_testfruit:
   color: [icontains, contains, iexact, iendswith, endswith, istartswith, startswith]
 djangae_testuser:
-  last_login: [year]
+  last_login: [year, year__exact]
   username: [iexact, contains, startswith]
 djangae_user:
   username: [iexact]

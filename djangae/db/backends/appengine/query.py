@@ -26,7 +26,7 @@ except ImportError:
 
 from django.db import NotSupportedError
 from djangae.db.backends.appengine.indexing import (
-    REQUIRES_SPECIAL_INDEXES,
+    get_indexer,
     add_special_index,
 )
 
@@ -142,18 +142,14 @@ class WhereNode(object):
             column = "__key__"
 
         # Do any special index conversions necessary to perform this lookup
-        primary_operation = operator.split("__")[0]
-        special_indexer = REQUIRES_SPECIAL_INDEXES.get(primary_operation)
-
-        if special_indexer and target_field.__class__ not in special_indexer.ACTIVE_FOR_FIELDS:
-            raise NotSupportedError("Unable to query field with lookup: {}".format(primary_operation))
+        special_indexer = get_indexer(target_field, operator)
 
         if special_indexer:
             if is_pk_field:
                 column = model._meta.pk.column
                 value = unicode(value.id_or_name())
 
-            add_special_index(target_field.model, column, primary_operation, value)
+            add_special_index(target_field.model, column, special_indexer, operator, value)
             index_type = special_indexer.prepare_index_type(operator, value)
             value = special_indexer.prep_value_for_query(value)
             column = special_indexer.indexed_column_name(column, value, index_type)

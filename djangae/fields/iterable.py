@@ -70,11 +70,22 @@ class OverlapLookup(Lookup):
 
 
 class IterableTransform(Transform):
-    def __init__(self, item_field_type):
+    lookup_name = 'item'
+
+    def __init__(self, item_field_type, *args, **kwargs):
+        super(IterableTransform, self).__init__(*args, **kwargs)
         self.item_field_type = item_field_type
 
     def get_lookup(self, name):
         return self.item_field_type.get_lookup(name)
+
+
+class IterableTransformFactory(object):
+    def __init__(self, base_field):
+        self.base_field = base_field
+
+    def __call__(self, *args, **kwargs):
+        return IterableTransform(self.base_field, *args, **kwargs)
 
 
 class IterableField(models.Field):
@@ -103,14 +114,10 @@ class IterableField(models.Field):
         return super(IterableField, self).get_lookup(name)
 
     def get_transform(self, name):
-        transform = super(IterableField, self).get_transform(name)
-        if transform:
-            return transform
-
         if name == "item":
-            return lambda x: IterableTransform(self.item_field_type)
+            return IterableTransformFactory(self.item_field_type)
 
-        return None
+        return super(IterableField, self).get_transform(name)
 
     def __init__(self, item_field_type, *args, **kwargs):
 
