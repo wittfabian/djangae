@@ -77,5 +77,7 @@ if __name__ == '__main__':
 
     tar_file = tarfile.open(fileobj=StringIO(django_tgz.read()))
     for filename in tar_file.getnames():
-        if filename.startswith("django-stable-{}.x/tests/".format(DJANGO_VERSION)) or filename.startswith("django-master/tests/"):
+        if filename.startswith("django-stable-{}.x/tests/".format(DJANGO_VERSION)) or \
+                filename.startswith("django-master/tests/") or \
+                filename.startswith("django-{}/tests/".format(DJANGO_VERSION)):
             tar_file.extract(filename, os.path.join(TARGET_DIR))
