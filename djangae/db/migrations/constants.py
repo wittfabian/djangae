@@ -1,0 +1,2 @@
+MIGRATION_TASK_MARKER_KIND = "_djangae_migration_task"
+TASK_RECHECK_INTERVAL = 5
