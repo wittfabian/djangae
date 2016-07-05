@@ -304,11 +304,46 @@ class RelatedIteratorField(ForeignObject):
             kwargs.update({
                 'on_delete': models.DO_NOTHING,
             })
+        elif django.VERSION[1] == 8:
+            # in Django 1.8 ForeignObject uses get_lookup_constraint instead
+            # of get_lookup. We want to override it (but only for Django 1.8)
+            self.get_lookup_constraint = self._get_lookup_constraint
 
         from_fields = ['self']
         to_fields = [None]
 
         super(RelatedIteratorField, self).__init__(to, from_fields=from_fields, to_fields=to_fields, **kwargs)
+
+    def _get_lookup_constraint(self, constraint_class, alias, targets, sources, lookups, raw_value):
+        from django.core import exceptions
+        from django.db.models.sql.where import AND
+
+        root_constraint = constraint_class()
+
+        # we need some checks from ForeignObject.get_lookup_constraint
+        # before we could check the lookups.
+        assert len(targets) == len(sources)
+        if len(lookups) > 1:
+            raise exceptions.FieldError('Relation fields do not support nested lookups')
+
+        lookup_type = lookups[0]
+        target = targets[0]
+        source = sources[0]
+
+        # use custom Lookups when applicable
+        if lookup_type in ['isempty', 'overlap', 'contains']:
+            if lookup_type == 'isempty':
+                root_constraint.add(IsEmptyLookup(target.get_col(alias, source), raw_value), AND)
+            elif lookup_type == 'overlap':
+                root_constraint.add(RelatedOverlapLookup(target.get_col(alias, source), raw_value), AND)
+            elif lookup_type == 'contains':
+                root_constraint.add(RelatedContainsLookup(target.get_col(alias, source), raw_value), AND)
+            return root_constraint
+        elif lookup_type in ('in', 'exact', 'isnull'):
+            raise TypeError("RelatedIteratorFields don't allow exact, in or isnull. Use contains, overlap or isempty respectively")
+
+        return super(RelatedIteratorField, self).get_lookup_constraint(
+                constraint_class, alias, targets, sources, lookups, raw_value)
 
     def deconstruct(self):
         name, path, args, kwargs = super(RelatedIteratorField, self).deconstruct()
