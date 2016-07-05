@@ -33,6 +33,10 @@ class BaseEntityMapperOperation(Operation):
         pass
 
     def database_forwards(self, app_label, schema_editor, from_state, to_state):
+        # Django's `migrate` command writes to stdout without a trailing line break, which means
+        # that unless we print a blank line our first print statement is on the same line
+        print ""   # yay
+
         self._set_identifider(app_label, schema_editor, from_state, to_state)
         self._set_map_kind(app_label, schema_editor, from_state, to_state)
         self._pre_map_hook(app_label, schema_editor, from_state, to_state)
@@ -58,16 +62,16 @@ class BaseEntityMapperOperation(Operation):
         return Get(self._get_task_marker_key())
 
     def _wait_until_task_finished(self, task_marker):
-            print "Task for migration operation %s already finished. Skipping." % self.identifier
         if task_marker.get('is_finished'):
+            print "Task for migration operation '%s' already finished. Skipping." % self.identifier
             return
-            print "Waiting for migration operation %s to complete." % self.identifier
         while not task_marker.get('is_finished'):
+            print "Waiting for migration operation '%s' to complete." % self.identifier
             time.sleep(TASK_RECHECK_INTERVAL)
             task_marker = Get(task_marker.key())
             if task_marker is None:
-                raise Exception("Task marker for operation %s disappeared." % self.identifier)
-        print "Migration operation %s completed!" % self.identifier
+                raise Exception("Task marker for operation '%s' disappeared." % self.identifier)
+        print "Migration operation '%s' completed!" % self.identifier
 
     def _start_task(self):
         marker_key = self._get_task_marker_key()
