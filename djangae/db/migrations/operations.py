@@ -37,11 +37,12 @@ class BaseEntityMapperOperation(Operation):
         self._set_map_kind(app_label, schema_editor, from_state, to_state)
         self._pre_map_hook(app_label, schema_editor, from_state, to_state)
         self.namespace = schema_editor.connection.settings_dict.get("NAMESPACE")
-        task_marker = self._get_task_marker()
-        if task_marker:
+
+        try:
+            task_marker = self._get_task_marker()
             self._wait_until_task_finished(task_marker)
             return
-        else:
+        except datastore_errors.EntityNotFoundError:
             print "Deferring migration operation task for %s" % self.identifier
             task_marker = self._start_task()
             self._wait_until_task_finished(task_marker)
@@ -57,11 +58,11 @@ class BaseEntityMapperOperation(Operation):
         return Get(self._get_task_marker_key())
 
     def _wait_until_task_finished(self, task_marker):
-        if task_marker.is_finished:
             print "Task for migration operation %s already finished. Skipping." % self.identifier
+        if task_marker.get('is_finished'):
             return
-        while not task_marker.is_finished:
             print "Waiting for migration operation %s to complete." % self.identifier
+        while not task_marker.get('is_finished'):
             time.sleep(TASK_RECHECK_INTERVAL)
             task_marker = Get(task_marker.key())
             if task_marker is None:
@@ -72,7 +73,13 @@ class BaseEntityMapperOperation(Operation):
         marker_key = self._get_task_marker_key()
 
         def txn():
-            assert Get(marker_key) is None, "Error.  Migration started by separate thread?"
+            try:
+                Get(marker_key)
+            except datastore_errors.EntityNotFoundError:
+                # This is what we expect
+                pass
+            else:
+                raise Exception("Error.  Migration started by separate thread?")
             marker_entity = Entity(
                 marker_key.kind(), namespace=self.namespace, name=self.identifier
             )
@@ -80,7 +87,7 @@ class BaseEntityMapperOperation(Operation):
             marker_entity['is_finished'] = False
             Put(marker_entity)
             mapper_library.start_mapping(
-                marker_key, self.map_kind, self.namespace, self._wrapped_map_entity
+                marker_key, self.map_kind, self.namespace, self
             )
             return marker_entity
 
