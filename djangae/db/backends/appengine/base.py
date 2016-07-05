@@ -1,10 +1,10 @@
-#STANDARD LIB
+# STANDARD LIB
 import datetime
 import decimal
 import warnings
 import logging
 
-#LIBRARIES
+# LIBRARIES
 from django.conf import settings
 from django.utils import timezone
 
@@ -22,7 +22,7 @@ from google.appengine.api.datastore_types import Blob, Text
 from google.appengine.datastore import datastore_stub_util
 from google.appengine.api import datastore, datastore_errors
 
-#DJANGAE
+# DJANGAE
 from djangae.db.utils import (
     decimal_to_string,
     make_timezone_naive,
@@ -498,8 +498,8 @@ class DatabaseIntrospection(BaseDatabaseIntrospection):
 
 
 class DatabaseSchemaEditor(BaseDatabaseSchemaEditor):
-    def column_sql(self, model, field):
-        return "", {}
+    def column_sql(self, model, field, include_default=False):
+        return None, {}
 
     def create_model(self, model):
         """ Don't do anything when creating tables """
