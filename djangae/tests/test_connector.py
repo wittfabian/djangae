@@ -1900,6 +1900,9 @@ class TestSpecialIndexers(TestCase):
             qry = self.qry.filter(sample_list__item__contains=text)
             self.assertEqual(len(qry), 1)
 
+            qry = self.qry.filter(sample_list__item__icontains=text)
+            self.assertEqual(len(qry), 1)
+
 
 class NamespaceTests(TestCase):
     multi_db = True
