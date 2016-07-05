@@ -413,7 +413,8 @@ class ContainsIndexer(StringIndexerMixin, Indexer):
                 raise ValueError("Can't index for contains query, this value can be maximum {0} characters long.".format(CHARACTERS_PER_COLUMN[-1]))
 
             length = len(value)
-            result = list(set([value[i:j + 1] for i in xrange(length) for j in xrange(i, length)]))
+            lists = [value[i:j + 1] for i in xrange(length) for j in xrange(i, length)]
+            result = map(list, set(map(tuple, lists)))
 
         return result or None
 
@@ -439,6 +440,7 @@ class ContainsIndexer(StringIndexerMixin, Indexer):
             if length > x:
                 column_number += 1
         return "_idx_contains_{0}_{1}".format(field_column, column_number)
+
 
 class IContainsIndexer(ContainsIndexer):
     OPERATOR = 'icontains'
