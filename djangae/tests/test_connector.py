@@ -1912,6 +1912,15 @@ class TestSpecialIndexers(TestCase):
             qry = self.qry.filter(sample_list__item__istartswith=text)
             self.assertEqual(len(qry), 1)
 
+    def test_item_endswith_item_iendswith_lookup(self):
+        tests = ['a', 'la', 'Ola']
+        for text in tests:
+            qry = self.qry.filter(sample_list__item__endswith=text)
+            self.assertEqual(len(qry), 1)
+
+            qry = self.qry.filter(sample_list__item__iendswith=text)
+            self.assertEqual(len(qry), 1)
+
 
 class NamespaceTests(TestCase):
     multi_db = True
