@@ -42,14 +42,14 @@ class BaseEntityMapperOperation(Operation):
         self._pre_map_hook(app_label, schema_editor, from_state, to_state)
         self.namespace = schema_editor.connection.settings_dict.get("NAMESPACE")
 
-        try:
-            task_marker = self._get_task_marker()
+        task_marker = self._get_task_marker()
+        if task_marker is not None:
             self._wait_until_task_finished(task_marker)
             return
-        except datastore_errors.EntityNotFoundError:
-            print "Deferring migration operation task for %s" % self.identifier
-            task_marker = self._start_task()
-            self._wait_until_task_finished(task_marker)
+
+        print "Deferring migration operation task for %s" % self.identifier
+        task_marker = self._start_task()
+        self._wait_until_task_finished(task_marker)
 
     def database_backwards(self, app_label, schema_editor, from_state, to_state):
         raise NotImplementedError("Erm...?  Help?!")
@@ -59,7 +59,10 @@ class BaseEntityMapperOperation(Operation):
 
     def _get_task_marker(self):
         """ Get the unique identifier entity for this marker from the Dastastore, if it exists. """
-        return Get(self._get_task_marker_key())
+        try:
+            return Get(self._get_task_marker_key())
+        except datastore_errors.EntityNotFoundError:
+            return None
 
     def _wait_until_task_finished(self, task_marker):
         if task_marker.get('is_finished'):
@@ -74,26 +77,21 @@ class BaseEntityMapperOperation(Operation):
         print "Migration operation '%s' completed!" % self.identifier
 
     def _start_task(self):
-        marker_key = self._get_task_marker_key()
 
         def txn():
-            try:
-                Get(marker_key)
-            except datastore_errors.EntityNotFoundError:
-                # This is what we expect
-                pass
-            else:
-                raise Exception("Error.  Migration started by separate thread?")
-            marker_entity = Entity(
-                marker_key.kind(), namespace=self.namespace, name=self.identifier
+            task_marker = self._get_task_marker()
+            assert task_marker is None, "Migration started by separate thread?"
+
+            task_marker = Entity(
+                MIGRATION_TASK_MARKER_KIND, namespace=self.namespace, name=self.identifier
             )
-            marker_entity['start_time'] = timezone.now()
-            marker_entity['is_finished'] = False
-            Put(marker_entity)
+            task_marker['start_time'] = timezone.now()
+            task_marker['is_finished'] = False
+            Put(task_marker)
             mapper_library.start_mapping(
-                marker_key, self.map_kind, self.namespace, self
+                task_marker.key(), self.map_kind, self.namespace, self
             )
-            return marker_entity
+            return task_marker
 
         return RunInTransaction(txn)
 
