@@ -4,7 +4,6 @@ import yaml
 import os
 import datetime
 import re
-import itertools
 
 from django.db import models
 
