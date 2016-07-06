@@ -20,6 +20,7 @@ CHARACTERS_PER_COLUMN = [31, 44, 54, 63, 71, 79, 85, 91, 97, 103]
 
 STRIP_PERCENTS = django.VERSION < (1, 10)
 
+
 def _get_index_file():
     index_file = os.path.join(environment.get_application_root(), "djangaeidx.yaml")
     return index_file
@@ -29,12 +30,22 @@ def _get_table_from_model(model_class):
     return model_class._meta.db_table.encode("utf-8")
 
 
-def is_iterable(value):
+def _is_iterable(value):
     return hasattr(value, '__iter__')  # is a list, tuple or set?
 
 
-def deduplicate_list(value_list):
-    return [e for e in set(value_list)]
+def _deduplicate_list(value_list):
+    """ Deduplicate list of elements; value_list is expected to be a list
+    of containing hashable elements. """
+    return list(set(value_list))
+
+
+def _make_lower(value):
+    """ Make string and list of strings lowercase """
+    if _is_iterable(value):
+        return [v.lower() for v in value]
+    else:
+        return value.lower()
 
 
 def load_special_indexes():
@@ -419,7 +430,7 @@ class ContainsIndexer(StringIndexerMixin, Indexer):
             if len(value) > CHARACTERS_PER_COLUMN[-1]:
                 raise ValueError("Can't index for contains query, this value can be maximum {0} characters long.".format(CHARACTERS_PER_COLUMN[-1]))
 
-            if is_iterable(value):
+            if _is_iterable(value):
                 for element in value:
                     length = len(element)
                     lists = [element[i:j + 1] for i in xrange(length) for j in xrange(i, length)]
@@ -432,7 +443,7 @@ class ContainsIndexer(StringIndexerMixin, Indexer):
         if not results:
             return None
 
-        return deduplicate_list(results)
+        return _deduplicate_list(results)
 
     def prep_value_for_query(self, value):
         if hasattr(value, "isoformat"):
@@ -467,10 +478,7 @@ class IContainsIndexer(ContainsIndexer):
     def prep_value_for_database(self, value, index):
         if value is None:
             return None
-        if is_iterable(value):
-            value = [v.lower() for v in value]
-        else:
-            value = value.lower()
+        value = _make_lower(value)
         result = super(IContainsIndexer, self).prep_value_for_database(value, index)
         return result if result else None
 
@@ -503,7 +511,7 @@ class EndsWithIndexer(StringIndexerMixin, Indexer):
             return None
 
         results = []
-        if is_iterable(value):
+        if _is_iterable(value):
             for element in value:
                 for i in xrange(0, len(element)):
                     results.append(element[i:])
@@ -514,7 +522,7 @@ class EndsWithIndexer(StringIndexerMixin, Indexer):
         if not results:
             return None
 
-        return deduplicate_list(results)
+        return _deduplicate_list(results)
 
     def prep_value_for_query(self, value):
         value = self.unescape(value)
@@ -538,11 +546,7 @@ class IEndsWithIndexer(EndsWithIndexer):
 
     def prep_value_for_database(self, value, index):
         if value:
-            if is_iterable(value):
-                value = [v.lower() for v in value]
-            else:
-                value = value.lower()
-
+            value = _make_lower(value)
         return super(IEndsWithIndexer, self).prep_value_for_database(value, index)
 
     def prep_value_for_query(self, value):
@@ -573,7 +577,7 @@ class StartsWithIndexer(StringIndexerMixin, Indexer):
             value = value.strftime("%Y-%m-%d %H:%M:%S")
 
         results = []
-        if is_iterable(value):
+        if _is_iterable(value):
             for element in value:
                 for i in xrange(1, len(element) + 1):
                     results.append(element[:i])
@@ -584,7 +588,7 @@ class StartsWithIndexer(StringIndexerMixin, Indexer):
         if not results:
             return None
 
-        return deduplicate_list(results)
+        return _deduplicate_list(results)
 
     def prep_value_for_query(self, value):
         value = self.unescape(value)
@@ -608,10 +612,7 @@ class IStartsWithIndexer(StartsWithIndexer):
 
     def prep_value_for_database(self, value, index):
         if value:
-            if is_iterable(value):
-                value = [v.lower() for v in value]
-            else:
-                value = value.lower()
+            value = _make_lower(value)
         return super(IStartsWithIndexer, self).prep_value_for_database(value, index)
 
     def prep_value_for_query(self, value):
@@ -647,7 +648,7 @@ class RegexIndexer(StringIndexerMixin, Indexer):
         pattern = self.get_pattern(index)
 
         if value:
-            if is_iterable(value):
+            if _is_iterable(value):
                 if any([bool(re.search(pattern, x, flags)) for x in value]):
                     return True
             else:
