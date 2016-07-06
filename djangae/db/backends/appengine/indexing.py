@@ -538,12 +538,20 @@ class StartsWithIndexer(StringIndexerMixin, Indexer):
         return isinstance(value, basestring) and len(value) < 500
 
     def prep_value_for_database(self, value, index):
+        if value is None:
+            return None
+
         if isinstance(value, datetime.datetime):
             value = value.strftime("%Y-%m-%d %H:%M:%S")
 
         results = []
-        for i in xrange(1, len(value) + 1):
-            results.append(value[:i])
+        if hasattr(value, '__iter__'):  # is a list, tuple or set?
+            for element in value:
+                for i in xrange(1, len(element) + 1):
+                    results.append(element[:i])
+        else:
+            for i in xrange(1, len(value) + 1):
+                results.append(value[:i])
 
         if not results:
             return None
@@ -559,6 +567,9 @@ class StartsWithIndexer(StringIndexerMixin, Indexer):
     def indexed_column_name(self, field_column, value, index):
         return "_idx_startswith_{0}".format(field_column)
 
+    def prep_query_operator(self, op):
+        return "exact"
+
 
 class IStartsWithIndexer(StartsWithIndexer):
     """
@@ -567,7 +578,12 @@ class IStartsWithIndexer(StartsWithIndexer):
     OPERATOR = 'istartswith'
 
     def prep_value_for_database(self, value, index):
-        return super(IStartsWithIndexer, self).prep_value_for_database(value.lower(), index)
+        if value:
+            if hasattr(value, '__iter__'):  # is a list, tuple or set?
+                value = [v.lower() for v in value]
+            else:
+                value = value.lower()
+        return super(IStartsWithIndexer, self).prep_value_for_database(value, index)
 
     def prep_value_for_query(self, value):
         return super(IStartsWithIndexer, self).prep_value_for_query(value.lower())
