@@ -4,6 +4,7 @@ import yaml
 import os
 import datetime
 import re
+import itertools
 
 from django.db import models
 
@@ -269,7 +270,6 @@ class MinuteIndexer(TimeIndexerMixin, Indexer):
 
     def indexed_column_name(self, field_column, value, index):
         return "_idx_minute_{0}".format(field_column)
-        return "_idx_hour_{0}".format(field_column)
 
 
 class SecondIndexer(TimeIndexerMixin, Indexer):
@@ -412,9 +412,16 @@ class ContainsIndexer(StringIndexerMixin, Indexer):
             if len(value) > CHARACTERS_PER_COLUMN[-1]:
                 raise ValueError("Can't index for contains query, this value can be maximum {0} characters long.".format(CHARACTERS_PER_COLUMN[-1]))
 
-            length = len(value)
-            lists = [value[i:j + 1] for i in xrange(length) for j in xrange(i, length)]
-            result = map(list, set(map(tuple, lists)))
+            if hasattr(value, '__iter__'):  # is a list, tuple or set?
+                for element in value:
+                    length = len(element)
+                    lists = [element[i:j + 1] for i in xrange(length) for j in xrange(i, length)]
+                    result.extend(lists)
+            else:
+                length = len(value)
+                lists = [value[i:j + 1] for i in xrange(length) for j in xrange(i, length)]
+                result.extend(lists)
+                result = [e for e in set(result)]
 
         return result or None
 
@@ -441,6 +448,9 @@ class ContainsIndexer(StringIndexerMixin, Indexer):
                 column_number += 1
         return "_idx_contains_{0}_{1}".format(field_column, column_number)
 
+    def prep_query_operator(self, op):
+        return "exact"
+
 
 class IContainsIndexer(ContainsIndexer):
     OPERATOR = 'icontains'
@@ -448,7 +458,11 @@ class IContainsIndexer(ContainsIndexer):
     def prep_value_for_database(self, value, index):
         if value is None:
             return None
-        result = super(IContainsIndexer, self).prep_value_for_database(value.lower(), index)
+        if hasattr(value, '__iter__'):  # is a list, tuple or set?
+            value = [v.lower() for v in value]
+        else:
+            value = value.lower()
+        result = super(IContainsIndexer, self).prep_value_for_database(value, index)
         return result if result else None
 
     def indexed_column_name(self, field_column, value, index):

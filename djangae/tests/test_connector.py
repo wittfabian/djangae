@@ -1894,7 +1894,7 @@ class TestSpecialIndexers(TestCase):
             expected = [sample_list for sample_list in self.lists if any([bool(re.search(pattern, x, flags=re.I)) for x in sample_list])]
             self.assertEqual(len(qry), len(expected))
 
-    def test_item_contains_lookup(self):
+    def test_item_contains_item_icontains_lookup(self):
         tests = ['O', 'la', 'ola']
         for text in tests:
             qry = self.qry.filter(sample_list__item__contains=text)
