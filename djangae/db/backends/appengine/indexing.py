@@ -29,6 +29,14 @@ def _get_table_from_model(model_class):
     return model_class._meta.db_table.encode("utf-8")
 
 
+def is_iterable(value):
+    return hasattr(value, '__iter__')  # is a list, tuple or set?
+
+
+def deduplicate_list(value_list):
+    return [e for e in set(value_list)]
+
+
 def load_special_indexes():
     global _special_indexes
     global _last_loaded_time
@@ -399,7 +407,7 @@ class ContainsIndexer(StringIndexerMixin, Indexer):
         return isinstance(value, basestring) and len(value) <= 500
 
     def prep_value_for_database(self, value, index):
-        result = []
+        results = []
         if value:
             # If this a date or a datetime, or something that supports isoformat, then use that
             if hasattr(value, "isoformat"):
@@ -411,18 +419,20 @@ class ContainsIndexer(StringIndexerMixin, Indexer):
             if len(value) > CHARACTERS_PER_COLUMN[-1]:
                 raise ValueError("Can't index for contains query, this value can be maximum {0} characters long.".format(CHARACTERS_PER_COLUMN[-1]))
 
-            if hasattr(value, '__iter__'):  # is a list, tuple or set?
+            if is_iterable(value):
                 for element in value:
                     length = len(element)
                     lists = [element[i:j + 1] for i in xrange(length) for j in xrange(i, length)]
-                    result.extend(lists)
+                    results.extend(lists)
             else:
                 length = len(value)
                 lists = [value[i:j + 1] for i in xrange(length) for j in xrange(i, length)]
-                result.extend(lists)
-                result = [e for e in set(result)]
+                results.extend(lists)
 
-        return result or None
+        if not results:
+            return None
+
+        return deduplicate_list(results)
 
     def prep_value_for_query(self, value):
         if hasattr(value, "isoformat"):
@@ -457,7 +467,7 @@ class IContainsIndexer(ContainsIndexer):
     def prep_value_for_database(self, value, index):
         if value is None:
             return None
-        if hasattr(value, '__iter__'):  # is a list, tuple or set?
+        if is_iterable(value):
             value = [v.lower() for v in value]
         else:
             value = value.lower()
@@ -493,14 +503,18 @@ class EndsWithIndexer(StringIndexerMixin, Indexer):
             return None
 
         results = []
-        if hasattr(value, '__iter__'):  # is a list, tuple or set?
+        if is_iterable(value):
             for element in value:
                 for i in xrange(0, len(element)):
                     results.append(element[i:])
         else:
             for i in xrange(0, len(value)):
                 results.append(value[i:])
-        return results or None
+
+        if not results:
+            return None
+
+        return deduplicate_list(results)
 
     def prep_value_for_query(self, value):
         value = self.unescape(value)
@@ -524,7 +538,7 @@ class IEndsWithIndexer(EndsWithIndexer):
 
     def prep_value_for_database(self, value, index):
         if value:
-            if hasattr(value, '__iter__'):  # is a list, tuple or set?
+            if is_iterable(value):
                 value = [v.lower() for v in value]
             else:
                 value = value.lower()
@@ -559,7 +573,7 @@ class StartsWithIndexer(StringIndexerMixin, Indexer):
             value = value.strftime("%Y-%m-%d %H:%M:%S")
 
         results = []
-        if hasattr(value, '__iter__'):  # is a list, tuple or set?
+        if is_iterable(value):
             for element in value:
                 for i in xrange(1, len(element) + 1):
                     results.append(element[:i])
@@ -569,7 +583,8 @@ class StartsWithIndexer(StringIndexerMixin, Indexer):
 
         if not results:
             return None
-        return results
+
+        return deduplicate_list(results)
 
     def prep_value_for_query(self, value):
         value = self.unescape(value)
@@ -593,7 +608,7 @@ class IStartsWithIndexer(StartsWithIndexer):
 
     def prep_value_for_database(self, value, index):
         if value:
-            if hasattr(value, '__iter__'):  # is a list, tuple or set?
+            if is_iterable(value):
                 value = [v.lower() for v in value]
             else:
                 value = value.lower()
@@ -632,7 +647,7 @@ class RegexIndexer(StringIndexerMixin, Indexer):
         pattern = self.get_pattern(index)
 
         if value:
-            if hasattr(value, '__iter__'): # is a list, tuple or set?
+            if is_iterable(value):
                 if any([bool(re.search(pattern, x, flags)) for x in value]):
                     return True
             else:
