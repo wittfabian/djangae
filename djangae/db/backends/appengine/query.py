@@ -40,7 +40,8 @@ from djangae.db.backends.appengine import POLYMODEL_CLASS_ATTRIBUTE
 from djangae.db.utils import (
     get_top_concrete_parent,
     has_concrete_parents,
-    get_field_from_column
+    get_field_from_column,
+    ensure_datetime,
 )
 
 from google.appengine.api import datastore
@@ -302,7 +303,6 @@ class Query(object):
             raise NotSupportedError("Unsupported annotation %s" % name)
 
         def process_date(value, lookup_type):
-            from djangae.db.backends.appengine.commands import ensure_datetime #FIXME move func to utils
             value = ensure_datetime(value)
             ret = datetime.datetime.fromtimestamp(0)
 
