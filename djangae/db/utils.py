@@ -417,5 +417,5 @@ def ensure_datetime(value):
         it returns them as unix timestamps in microseconds!!
     """
     if isinstance(value, long):
-        return datetime.fromtimestamp(value / 1000000)
+        return datetime.fromtimestamp(value / 1e6)
     return value
