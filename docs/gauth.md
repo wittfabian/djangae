@@ -65,6 +65,22 @@ If there is a Django user with a matching email address and username set to `Non
 
 App Engine administrators are always granted access, and a Django user will be created if one does not exist.
 
+## Customizing user data syncing
+
+By default `djangae.contrib.gauth.middleware.AuthenticationMiddleware` syncs email and superuser status. In case you need to customize this behaviour (for example sync first and last names as well) you could inherit from `AuthenticationMiddleware` and override `sync_user_data` method.
+
+For example if we would like to sync only an email address, not a superuser status, we could do the following:
+
+```python
+class MyAuthenticationMiddleware(AuthenticationMiddleware):
+
+    def sync_user_data(self, django_user, google_user):
+        if django_user.email != google_user.email():
+            django_user.email = google_user.email()
+            django_user.save()
+```
+
+and replace `'djangae.contrib.gauth.middleware.AuthenticationMiddleware'` with your middleware.
 
 ## Username/password authentication
 
