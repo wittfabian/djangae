@@ -67,7 +67,7 @@ App Engine administrators are always granted access, and a Django user will be c
 
 ## Customizing user data syncing
 
-By default `djangae.contrib.gauth.middleware.AuthenticationMiddleware` syncs email and superuser status. In case you need to customize this behaviour (for example sync first and last names as well) you could instantiate `AuthenticationMiddleware` and override `sync_user_data` method.
+By default `djangae.contrib.gauth.middleware.AuthenticationMiddleware` syncs email and superuser status. In case you need to customize this behaviour (for example sync first and last names as well) you could inherit from `AuthenticationMiddleware` and override `sync_user_data` method.
 
 For example if we would like to sync only an email address, not a superuser status, we could do the following:
 
