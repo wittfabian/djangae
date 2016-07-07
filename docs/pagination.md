@@ -119,7 +119,7 @@ def listing(request):
     return render_to_response('list.html', {"contacts": contacts})
 ```
 
-Alternatively, if you are using a generic class based view which inherits from `Multiple Object Mixin` all you need to do is:
+Alternatively, if you are using a generic class based view which inherits from `MultipleObjectMixin` all you need to do is:
 
 ```
 from django.views.generic import ListView
