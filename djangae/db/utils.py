@@ -409,3 +409,13 @@ def entity_matches_query(entity, query):
             return True
 
     return False
+
+
+def ensure_datetime(value):
+    """
+        Painfully, sometimes the Datastore returns dates as datetime objects, and sometimes
+        it returns them as unix timestamps in microseconds!!
+    """
+    if isinstance(value, long):
+        return datetime.fromtimestamp(value / 1000000)
+    return value
