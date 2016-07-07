@@ -119,6 +119,19 @@ def listing(request):
     return render_to_response('list.html', {"contacts": contacts})
 ```
 
+Alternatively, if you are using a generic class based view which inherits from `Multiple Object Mixin` all you need to do is:
+
+```
+from django.views.generic import ListView
+
+from djangae.contrib.pagination import Paginator
+
+class MyView(ListView):
+    paginate_by = 25
+    paginator_class = Paginator
+    ...
+```
+
 ## Configuation
 
 The Paginator caches the values for offsetting the queries.  You can configure the cache expiry time
