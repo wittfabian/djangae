@@ -3,6 +3,7 @@ import logging
 import time
 
 # THIRD PARTY
+from django.db import DataError
 from django.db.migrations.operations.base import Operation
 from django.utils import timezone
 from google.appengine.api.datastore import Delete, Entity, Get, Key, Put, RunInTransaction
@@ -15,7 +16,7 @@ from djangae.db.backends.appengine.commands import reserve_id
 from . import mapper_library
 
 from .constants import MIGRATION_TASK_MARKER_KIND, TASK_RECHECK_INTERVAL
-from .utils import do_with_retry
+from .utils import do_with_retry, clone_entity
 
 
 class BaseEntityMapperOperation(Operation):
@@ -228,7 +229,7 @@ class CopyFieldData(BaseEntityMapperOperation):
         self.to_column_name = to_column_name
 
     def _set_identifider(self, app_label, schema_editor, from_state, to_state):
-        identifier = "%s.%s.%s:%s" % (
+        identifier = "%s.%s.%s:%s.%s" % (
             app_label, self.model_name, self.__class__.__name__,
             self.from_column_name, self.to_column_name
         )
@@ -249,9 +250,9 @@ class CopyFieldData(BaseEntityMapperOperation):
                 entity[self.to_column_name] = entity[self.from_column_name]
             except KeyError:
                 return
-            Put(entity, entity)
+            Put(entity)
 
-        RunInTransaction(txn)
+        RunInTransaction(txn, entity)
 
 
 class DeleteModelData(BaseEntityMapperOperation):
@@ -260,7 +261,7 @@ class DeleteModelData(BaseEntityMapperOperation):
         self.model_name = model_name
 
     def _set_identifider(self, app_label, schema_editor, from_state, to_state):
-        identifier = "%s.%s.%s:%s" % (
+        identifier = "%s.%s:%s" % (
             app_label, self.model_name, self.__class__.__name__
         )
         # TODO: ideally we need some kind of way of getting hold of the migration name here, as per
@@ -283,18 +284,18 @@ class CopyModelData(BaseEntityMapperOperation):
     """ Copies entities from one entity kind to another. """
 
     def __init__(
-        self, model_name, to_model_app_label, to_model_name,
+        self, model_name, to_app_label, to_model_name,
         overwrite_existing=False
     ):
         self.model_name = model_name
-        self.to_model_app_label = to_model_app_label
+        self.to_app_label = to_app_label
         self.to_model_name = to_model_name
         self.overwrite_existing = overwrite_existing
 
     def _set_identifider(self, app_label, schema_editor, from_state, to_state):
         identifier = "%s.%s.%s:%s.%s" % (
             app_label, self.model_name, self.__class__.__name__,
-            self.to_model_app_label, self.to_model_name
+            self.to_app_label, self.to_model_name
         )
         # TODO: ideally we need some kind of way of getting hold of the migration name here, as per
         # other operations
@@ -302,24 +303,27 @@ class CopyModelData(BaseEntityMapperOperation):
 
     def _set_map_kind(self, app_label, schema_editor, from_state, to_state):
         """ We need to map over the entities that we're copying *from*. """
-        model = to_state.apps.get_model(self.app_label, self.model_name)
+        model = to_state.apps.get_model(app_label, self.model_name)
         kind = model._meta.db_table
         self.map_kind = kind
 
     def _pre_map_hook(self, app_label, schema_editor, from_state, to_state):
-        self.to_kind = to_state.apps.get_model(self.to_model_app_label, self.to_model_name)
+        to_model = to_state.apps.get_model(self.to_app_label, self.to_model_name)
+        self.to_kind = to_model._meta.db_table
 
     def _map_entity(self, entity):
-        new_key = Key(self.to_kind, entity.key().id_or_name, namespace=self.namespace)
+        new_key = Key.from_path(self.to_kind, entity.key().id_or_name(), namespace=self.namespace)
 
         def txn():
-            existing = Get(new_key)
+            try:
+                existing = Get(new_key)
+            except datastore_errors.EntityNotFoundError:
+                existing = None
             if existing and not self.overwrite_existing:
                 return
             if isinstance(entity.key().id_or_name(), (int, long)):
-                reserve_id(self.to_model_kind, entity.key().id_or_name(), self.namespace)
-            new_entity = entity.copy()
-            new_entity._Entity__key = new_key
+                reserve_id(self.to_kind, entity.key().id_or_name(), self.namespace)
+            new_entity = clone_entity(entity, new_key)
             Put(new_entity)
 
         RunInTransaction(txn)
@@ -329,48 +333,64 @@ class CopyModelDataToNamespace(BaseEntityMapperOperation):
     """ Copies entities from one Datastore namespace to another. """
 
     def __init__(
-        self, model_name, to_namespace, to_model_app_label=None, to_model_name=None,
+        self, model_name, to_namespace, to_app_label=None, to_model_name=None,
         overwrite_existing=False
     ):
         self.model_name = model_name
         self.to_namespace = to_namespace
-        self.to_model_app_label = to_model_app_label
+        self.to_app_label = to_app_label
         self.to_model_name = to_model_name
         self.overwrite_existing = overwrite_existing
 
     def _set_identifider(self, app_label, schema_editor, from_state, to_state):
-        identifier = "%s.%s.%s:%s.%s" % (
-            app_label, self.model_name, self.__class__.__name__, self.to_namespace
+        to_app_label = self.to_app_label or app_label
+        to_model_name = self.to_model_name or self.model_name
+        identifier = "%s.%s.%s:%s.%s.%s" % (
+            app_label, self.model_name, self.__class__.__name__, self.to_namespace, to_app_label,
+            to_model_name
         )
-        if self.to_model_app_label:
-            identifier += (".%s" % self.to_model_app_label)
-        if self.to_model_name:
-            identifier += (".%s" % self.to_model_name)
         # TODO: ideally we need some kind of way of getting hold of the migration name here, as per
         # other operations
         self.identifier = identifier
 
     def _set_map_kind(self, app_label, schema_editor, from_state, to_state):
         """ We need to map over the entities that we're copying *from*. """
-        model = to_state.apps.get_model(self.app_label, self.model_name)
+        model = to_state.apps.get_model(app_label, self.model_name)
         self.map_kind = model._meta.db_table
 
     def _pre_map_hook(self, app_label, schema_editor, from_state, to_state):
-        to_model_app_label = self.to_model_app_label or app_label
+        to_app_label = self.to_app_label or app_label
         to_model_name = self.to_model_name or self.model_name
-        self.to_kind = to_state.apps.get_model(to_model_app_label, to_model_name)
+        to_model = to_state.apps.get_model(to_app_label, to_model_name)
+        self.to_kind = to_model._meta.db_table
 
     def _map_entity(self, entity):
-        new_key = Key(self.to_kind, entity.key().id_or_name, namespace=self.to_namespace)
+        new_key = Key.from_path(
+            self.to_kind, entity.key().id_or_name(), namespace=self.to_namespace
+        )
+
+        parent = entity.parent()
+        if parent:
+            # If the entity has an ancestor then we need to make sure that that ancestor exists in
+            # the new namespace as well
+            new_parent_key = Key.from_path(
+                parent.kind(), parent.is_or_name(), namespace=self.to_namespace
+            )
+            new_parent_exists = Get([new_parent_key])[0]
+            if not new_parent_exists:
+                raise DataError(
+                    "Trying to copy entity with an ancestor (%r) to a new namespace but the "
+                    "ancestor does not exist in the new namespace. Copy the ancestors first."
+                    % entity.key()
+                )
 
         def txn():
-            existing = Get(new_key)
+            existing = Get([new_key])[0]
             if existing and not self.overwrite_existing:
                 return
             if isinstance(entity.key().id_or_name(), (int, long)):
-                reserve_id(self.to_model_kind, entity.key().id_or_name(), self.to_namespace)
-            new_entity = entity.copy()
-            new_entity._Entity__key = new_key
+                reserve_id(self.to_kind, entity.key().id_or_name(), self.to_namespace)
+            new_entity = clone_entity(entity, new_key)
             Put(new_entity)
 
         RunInTransaction(txn)
