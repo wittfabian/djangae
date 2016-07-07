@@ -41,9 +41,7 @@ class AuthenticationMiddleware(DjangoMiddleware):
 
         # Note that the logic above may have logged us out, hence new `if` statement
         if django_user.is_authenticated():
-            resave = self.sync_user_data(django_user, google_user)
-            if resave:
-                django_user.save()
+            self.sync_user_data(django_user, google_user)
 
         request.user = django_user
 
@@ -63,4 +61,5 @@ class AuthenticationMiddleware(DjangoMiddleware):
             django_user.email = google_user.email()
             resave = True
 
-        return resave
+        if resave:
+            django_user.save()

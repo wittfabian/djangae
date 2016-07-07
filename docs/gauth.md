@@ -77,8 +77,7 @@ class MyAuthenticationMiddleware(AuthenticationMiddleware):
     def sync_user_data(self, django_user, google_user):
         if django_user.email != google_user.email():
             django_user.email = google_user.email()
-            return True
-        return False
+            django_user.save()
 ```
 
 and replace `'djangae.contrib.gauth.middleware.AuthenticationMiddleware'` with your middleware.
