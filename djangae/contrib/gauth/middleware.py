@@ -1,6 +1,6 @@
 from django.contrib.auth import authenticate, login, logout, get_user, BACKEND_SESSION_KEY, load_backend
 from django.contrib.auth.middleware import AuthenticationMiddleware as DjangoMiddleware
-from django.contrib.auth.models import BaseUserManager, AnonymousUser
+from django.contrib.auth.models import AnonymousUser
 from djangae.contrib.gauth.common.backends import BaseAppEngineUserAPIBackend
 
 from google.appengine.api import users
