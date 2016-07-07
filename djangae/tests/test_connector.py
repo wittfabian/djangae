@@ -646,7 +646,7 @@ class BackendTests(TestCase):
         entity.update(values)
         datastore.Put(entity)
 
-        # Ok, we can get all 3 instances
+        # Ok, we can get all 4 instances
         self.assertEqual(TestFruit.objects.count(), 4)
 
         # Sorted list. No exception should be raised
@@ -654,12 +654,14 @@ class BackendTests(TestCase):
         with sleuth.watch('djangae.db.backends.appengine.commands.utils.django_ordering_comparison') as compare:
             all_names = ['a', 'b', 'c', 'd']
             fruits = list(
-                TestFruit.objects.filter(name__in=all_names).order_by('color')
+                TestFruit.objects.filter(name__in=all_names).order_by('color', 'name')
             )
             # Make sure troubled code got triggered
             # ie. with all() it doesn't
             self.assertTrue(compare.called)
 
+        # Test the ordering of the results.  The ones with a color of None should come back first,
+        # and of the ones with color=None, they should be ordered by name
         # Missing one (None) as first
         expected_fruits = [
             ('c', None), ('d', None), ('a', 'a'), ('b', 'b'),

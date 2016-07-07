@@ -11,6 +11,7 @@
 - Changed the default value of `DJANGAE_CREATE_UNKNOWN_USER` to `True` to match the original behaviour.
 - Fixed a bug where simulate contenttypes was required even on a SQL database
 - Fixed a bug where filtering on an empty PK would result in an inequality filter being used
+- Fixed a test which could intermittently fail (`test_ordering_on_sparse_field`).
 
 ### Documentation:
 
