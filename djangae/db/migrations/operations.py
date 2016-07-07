@@ -19,7 +19,13 @@ from .constants import MIGRATION_TASK_MARKER_KIND, TASK_RECHECK_INTERVAL
 from .utils import do_with_retry, clone_entity
 
 
-class BaseEntityMapperOperation(Operation):
+class DjangaeMigration(object):
+    """ Base class to enable us to distinguish between Djangae migrations and Django migrations.
+    """
+    pass
+
+
+class BaseEntityMapperOperation(Operation, DjangaeMigration):
     """ Base class for operations which map over Datastore Entities, rather than Django model
         instances.
     """
