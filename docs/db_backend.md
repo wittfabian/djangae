@@ -231,7 +231,10 @@ Django's transaction decorators have no effect on the Datastore, which means tha
 
  - `django.db.transaction.atomic` and `non_atomic` will have no effect.
  - The `ATOMIC_REQUESTS` and `AUTOCOMMIT` settings in `DATABASES` will have no effect.
- - Django's `get_or_create` will not be atomic and may attempt to create duplicate objects.  You should instead do separate `get` and `create` operations using Djangae's `atomic` manager (see below).
+ - Django's `get_or_create` will not have the same behaviour when dealing with collisions between threads.  This is because it use's Django's transaction manager rather than Djangae's.
+  - If your `get` aspect filters by PK then you should wrap `get_or_create` with `djangae.db.transaction.atomic`.  A collision with another thread will result in a `TransactionFailedError`.
+  - If your `get` aspect filters by a unique field or unique-together fields, but not by PK, then (assuming you're using Djangae's unique markers) you won't experience any data corruption, but a collision with another thread will throw an `IntegrityError`.
+  - If your `get` aspect does not filter on any unique or unique-together fields then you should fix that.
 
 
 The following functions are available to manage transactions:
