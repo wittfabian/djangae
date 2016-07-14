@@ -18,7 +18,17 @@
 
 ### Documentation:
 
--
+- Added documentation for:
+    - Creating users for gauth.
+- Improved documentation for:
+    - Installation
+    - Transactions
+    - JSONField
+    - RelatedSetField
+    - Running management commands locally and remotely
+- Fixed incorrect documentation for:
+    - The restrictions on projection queries.
+- Removed "experimental" flag from the "namespaces" feature of the Datastore DB backend.
 
 ## v0.9.5 (release date: 6th June 2016)
 
