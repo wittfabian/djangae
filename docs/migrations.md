@@ -13,7 +13,10 @@ Imagine banter here about:
 * How the Django migration operations (AddModel, AddField, etc) will deliberately be no-ops, becase we can't decide for you whether you want to actually do a data migration.
 * Ergo... if you want to do a data migration, Djangae provides a bunch of custom migration operations which you can put into custom migrations to do what you want.
 * You will still need to include Django's auto-generated migration files in your 'migrations' folder(s), because without them the Djangae migrations will not be given the correct state of the models.
-
+* You MUST NOT put djangae operations in the same migration file as Django operations.
+* Note that if you run an operation and then change the parameters of an operation, it will be treated as a new operation and if the migration in which it resides is run again, the operation will be run (again).
+* The entity-based operations work directly with the underlying Datastore entities, and therefore do not update any `auto_now` or `auto_now_add` values.
+* When using the `CopyModelData` operation, be aware that it is simply copying the data with no regard for any differences there may be between the two models.
 
 ## Reference Guide For How To Do Each Kind of Migration
 
@@ -79,3 +82,10 @@ TODO:
 * Move/rename model.
 * Move a model to a different namespace.
 * Custom data fiddling.
+
+
+QUESTIONS / DESIGN DECISIONS:
+
+* Do the arguments to the various operations make sense, and are they consistent?  E.g. for CopyFieldData, should it take a field, rather than just the column name?
+* Is `to_model_app_label` a crap kwarg name for CopyModelDataToNamespace?  Should it just be `to_app_label`.
+
