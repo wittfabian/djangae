@@ -14,6 +14,7 @@
 - Fixed a bug where filtering on an empty PK would result in an inequality filter being used
 - Fixed a bug where making a projection query on time or datetime fields will return truncated values without microseconds
 - Fixed a test which could intermittently fail (`test_ordering_on_sparse_field`).
+- Fixed a bug where an empty upload_to argument to FileField would result in a broken "./" folder in Cloud Storage.
 
 ### Documentation:
 
