@@ -123,7 +123,7 @@ This field is not specific to the App Engine Datastore (or any non-relational da
 * `default`: (default: dict).  A callable which returns or creates the default value.  E.g. `dict` or `list`.  Do not use `{}` or `[]`.
 
 
-Note that if you want to edit JSONField values in the Django admin, you must set `formfield_overrides` on your ModelAdmin class.  Otherwise, conversation to/from JSON will not happen correctly.  E.g.:
+Note that if you want to edit JSONField values in the Django admin, you must set `formfield_overrides` on your ModelAdmin class.  Otherwise converting to/from JSON will not happen correctly.  E.g.:
 
 ```python
 from djangae.forms.fields import JSONWidget
