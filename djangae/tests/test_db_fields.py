@@ -177,7 +177,6 @@ class ShardedCounterTest(TestCase):
         instance.counter.increment(2)
         self.assertEqual(instance.counter.value(), 5)
 
-
     def test_decrement_step(self):
         """ Test the behvaviour of decrementing in steps of more than 1. """
         instance = ModelWithCounter.objects.create()
@@ -237,7 +236,6 @@ class ShardedCounterTest(TestCase):
         instance = ModelWithCounter.objects.get()
         self.assertEqual(instance.counter.all().count(), DEFAULT_SHARD_COUNT)
 
-
     def test_label_reference_is_saved(self):
         """ Test that each CounterShard which the field creates is saved with the label of the
             model and field to which it belongs.
@@ -264,6 +262,21 @@ class ShardedCounterTest(TestCase):
         instance.counter1.reset()
         self.assertEqual(instance.counter1.value(), 0)
         self.assertEqual(instance.counter2.value(), 1)
+
+    def test_count_raises_attribute_error(self):
+        """ The RelatedShardManager should not have a `count()` method because its purpose would
+            be unclear.
+        """
+        instance = ModelWithCounter.objects.create()
+        self.assertEqual(instance.counter.value(), 0)
+        self.assertRaises(AttributeError, getattr, instance, 'count')
+
+    def test_shard_count(self):
+        """ The shard_count() method should return the number of CounterShard objects. """
+        instance = ModelWithCounter.objects.create()
+        self.assertEqual(instance.counter.shard_count(), 0)
+        instance.counter.populate()
+        self.assertEqual(instance.counter.shard_count(), 24)  # The default shard count is 24
 
 
 class IterableFieldTests(TestCase):

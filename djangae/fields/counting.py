@@ -26,6 +26,15 @@ class RelatedShardManager(RelatedIteratorManagerBase, models.Manager):
         the additional increment()/decrement()/reset() methods for the counting.
     """
 
+    def __getattr__(self, name):
+        """ Disable count() because it's ambiguous. """
+        if name == 'count':
+            raise AttributeError(
+                "RelatedShardManager has no attribute 'count'. Use 'shard_count()' for the "
+                "number of shards or 'value()' for the total counter value."
+            )
+        return super(RelatedShardManager, self).__getattr__(name)
+
     def increment(self, step=1):
         if step < 0:
             raise ValueError("Tried to increment with a negative number, use decrement instead")
@@ -41,6 +50,10 @@ class RelatedShardManager(RelatedIteratorManagerBase, models.Manager):
         """ Calcuate the aggregated sum of all the shard values. """
         shards = self.all().values_list('count', flat=True)
         return sum(shards)
+
+    def shard_count(self):
+        """ Return the number of shard objects. """
+        return super(RelatedShardManager, self).count()
 
     def reset(self):
         """ Reset the counter to 0. """

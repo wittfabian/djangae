@@ -4,6 +4,7 @@
 
 - ALLOWED_HOSTS is now set to ("*",) by default as App Engine deals with routing and this prevents
   users being confused when their deployed app returns 400 responses.
+- `ShardedCounterField` no longer has a `count()` method because its function was ambiguous or misleading and was often mistakenly used instead of `value()`. It is replaced with a `shard_count()` method.
 
 ### Bug fixes:
 
