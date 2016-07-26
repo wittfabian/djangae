@@ -4,53 +4,118 @@ import os
 import datetime
 import re
 
-from djangae import environment
-from djangae.sandbox import allow_mode_write
+from django.apps import apps
 from django.conf import settings
 
-_special_indexes = {}
-_last_loaded_time = None
+from djangae import environment
+from djangae.sandbox import allow_mode_write
+
+
+_project_special_indexes = {}
+_additional_special_indexes = {}
+_last_loaded_times = {}
+
 
 MAX_COLUMNS_PER_SPECIAL_INDEX = getattr(settings, "DJANGAE_MAX_COLUMNS_PER_SPECIAL_INDEX", 3)
 CHARACTERS_PER_COLUMN = [31, 44, 54, 63, 71, 79, 85, 91, 97, 103]
+
 
 def _get_index_file():
     index_file = os.path.join(environment.get_application_root(), "djangaeidx.yaml")
     return index_file
 
 
+def _get_additional_index_files():
+    index_files = []
+
+    for app_config in apps.get_app_configs():
+        app_path = app_config.path
+        index_file = os.path.join(app_path, "djangaeidx.yaml")
+
+        if not os.path.exists(index_file):
+            continue
+
+        index_files.append(index_file)
+    return index_files
+
+
 def _get_table_from_model(model_class):
     return model_class._meta.db_table.encode("utf-8")
 
+def _merged_indexes():
+    """
+        Returns the combination of the additional and project special indexes
+    """
+    global _project_special_indexes
+    global _additional_special_indexes
+
+    result = _additional_special_indexes.copy()
+    for model, indexes in _project_special_indexes.items():
+        for field_name, values in indexes.items():
+            result.setdefault(
+                model, {}
+            ).setdefault(field_name, []).extend(values)
+    return result
+
 
 def load_special_indexes():
-    global _special_indexes
-    global _last_loaded_time
+    global _project_special_indexes
+    global _additional_special_indexes
+    global _last_loaded_times
+
+    def _read_file(filepath):
+        # Load any existing indexes
+        with open(filepath, "r") as stream:
+            data = yaml.load(stream)
+        return data
 
     index_file = _get_index_file()
+    additional_files = _get_additional_index_files()
 
-    if not os.path.exists(index_file):
-        # No file, no special index
-        logging.debug("Not loading any special indexes")
-        return
+    files_to_reload = {}
 
-    mtime = os.path.getmtime(index_file)
-    if _last_loaded_time and _last_loaded_time == mtime:
-        return
+    # Go through and reload any files that we find
+    for file_path in [ index_file ] + additional_files:
+        if not os.path.exists(file_path):
+            continue
 
-    # Load any existing indexes
-    with open(index_file, "r") as stream:
-        data = yaml.load(stream)
+        mtime = os.path.getmtime(file_path)
+        if _last_loaded_times.get(file_path) and _last_loaded_times[file_path] == mtime:
+            # The file hasn't changed since last time, so do nothing
+            continue
+        else:
+            # Mark this file for reloading, store the current modified time
+            files_to_reload[file_path] = mtime
 
-    _special_indexes = data
-    _last_loaded_time = mtime
 
-    logging.debug("Loaded special indexes for %d models", len(_special_indexes))
+    # First, reload the project index file,
+    if index_file in files_to_reload:
+        mtime = files_to_reload[index_file]
+        _project_special_indexes = _read_file(index_file)
+        _last_loaded_times[index_file] = mtime
+
+        # Remove it from the files to reload
+        del files_to_reload[index_file]
+
+    # Now, load the rest of the files and update any entries
+    for file_path in files_to_reload:
+        mtime = files_to_reload[index_file]
+        new_data = _read_file(file_path)
+        _last_loaded_times[file_path] = mtime
+
+        # Update the additional special indexes list
+        for model, indexes in new_data.items():
+            for field_name, values in indexes.items():
+                _additional_special_indexes.setdefault(
+                    model, {}
+                ).setdefault(field_name, []).extend(values)
+
+    logging.debug("Loaded special indexes for %d models", len(_merged_indexes()))
 
 
 def special_index_exists(model_class, field_name, index_type):
     table = _get_table_from_model(model_class)
-    return index_type in _special_indexes.get(table, {}).get(field_name, [])
+    return index_type in _merged_indexes().get(table, {}).get(field_name, [])
 
 
 def special_indexes_for_model(model_class):
@@ -58,7 +123,7 @@ def special_indexes_for_model(model_class):
 
     result = {}
     for klass in classes:
-        result.update(_special_indexes.get(_get_table_from_model(klass), {}))
+        result.update(_merged_indexes().get(_get_table_from_model(klass), {}))
     return result
 
 
@@ -67,11 +132,14 @@ def special_indexes_for_column(model_class, column):
 
 
 def write_special_indexes():
+    """
+        Writes the project-specific indexes to the project djangaeidx.yaml
+    """
     index_file = _get_index_file()
 
     with allow_mode_write():
         with open(index_file, "w") as stream:
-            stream.write(yaml.dump(_special_indexes))
+            stream.write(yaml.dump(_project_special_indexes))
 
 
 def add_special_index(model_class, field_name, index_type, value=None):
@@ -95,7 +163,7 @@ def add_special_index(model_class, field_name, index_type, value=None):
             )
         )
 
-    _special_indexes.setdefault(
+    _project_special_indexes.setdefault(
         _get_table_from_model(model_class), {}
     ).setdefault(field_name, []).append(str(index_type))
 

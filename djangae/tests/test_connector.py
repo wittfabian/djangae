@@ -39,6 +39,7 @@ from djangae.db import constraints
 from djangae.db.constraints import UniqueMarker, UniquenessMixin
 from djangae.db.unique_utils import _unique_combinations, unique_identifiers_from_entity
 from djangae.db.backends.appengine.indexing import add_special_index
+from djangae.db.backends.appengine import indexing
 from djangae.db.utils import entity_matches_query, decimal_to_string, normalise_field_value
 from djangae.db.caching import disable_cache
 from djangae.fields import SetField, ListField, RelatedSetField
@@ -1725,6 +1726,21 @@ class EdgeCaseTests(TestCase):
         self.assertFalse(TestFruit.objects.filter(name="", color__gt="A"))
         self.assertEqual(4, TestFruit.objects.exclude(name="").count())
 
+    def test_additional_indexes_respected(self):
+        project, additional = indexing._project_special_indexes.copy(), indexing._additional_special_indexes.copy()
+
+        try:
+            indexing._project_special_indexes = {}
+            indexing._additional_special_indexes = {
+                TestFruit._meta.db_table: { "name": ["iexact"] }
+            }
+
+            t1 = TestFruit.objects.create(name="Kiwi", origin="New Zealand", color="Green")
+            self.assertEqual(t1, TestFruit.objects.filter(name__iexact="kiwi").get())
+            self.assertFalse(indexing._project_special_indexes) # Nothing was added
+        finally:
+            indexing._project_special_indexes = project
+            indexing._additional_special_indexes = additional
 
 
 
