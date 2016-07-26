@@ -1,9 +1,10 @@
-#STANDARD LIB
+# STANDARD LIB
 from urlparse import urlparse
 
 # LIBRARIES
 from django.contrib.auth import get_user_model, get_user, BACKEND_SESSION_KEY
 from django.contrib.sessions.middleware import SessionMiddleware
+from django.core.exceptions import ValidationError
 from django.http import HttpRequest
 from django.test import TestCase
 from django.test.utils import override_settings
@@ -442,3 +443,22 @@ class SwitchAccountsTests(TestCase):
             expected_user_query = GaeDatastoreUser.objects.filter(username=hyde.user_id())
             self.assertEqual(len(expected_user_query), 1)
             self.assertEqual(int(self.client._session()['_auth_user_id']), expected_user_query[0].pk)
+
+
+class ModelTests(TestCase):
+
+    def test_email_uniqueness_validation_raised_correctly(self):
+        """ GaeAbstractBaseUser has an `email_lower` field whcih is unique, but it's really a proxy
+            for uniqueness on the `email` field.
+        """
+        no_pass = make_password(None)
+        User = get_user_model()
+        User.objects.create_user("111111111111111111111", email="ab@example.com", password=no_pass)
+        user2 = User(username="111111111111111111112", email="AB@example.com", password=no_pass)
+        # We expect the second user to have a unique violation on the `email_lower` field, but it
+        # should be attached to the (editable) `email` field
+        try:
+            user2.full_clean()
+        except ValidationError as e:
+            self.assertTrue("email" in e.error_dict)
+            self.assertFalse("email_lower" in e.error_dict)
