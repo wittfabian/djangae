@@ -4,6 +4,9 @@
 
 - ALLOWED_HOSTS is now set to ("*",) by default as App Engine deals with routing and this prevents
   users being confused when their deployed app returns 400 responses.
+- It is now possible to have a per-app djangaeidx.yaml file which can be distributed. The indexes in this file
+  are combined in memory with the ones from the project root's djangaeidx.yaml. This means that a user of your app
+  will not be required to run queries to generate indexes or manually add them to their project file.
 
 ### Bug fixes:
 
@@ -29,6 +32,7 @@
 - Fixed incorrect documentation for:
     - The restrictions on projection queries.
 - Removed "experimental" flag from the "namespaces" feature of the Datastore DB backend.
+- Added documentation for djangaeidx.yaml
 
 ## v0.9.5 (release date: 6th June 2016)
 

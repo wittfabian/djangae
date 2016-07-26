@@ -22,8 +22,6 @@ Here's the full list of magic:
 1.0-beta
 
  - Support for ancestor queries. Lots of tests
- - All NotSupportedError tests being skipped, everything passes in the testapp
- - Namespaces handled via the connection settings
 
 ## What Can't It Do?
 
@@ -271,6 +269,22 @@ You can make use of Django's routers, the `using()` method, and the `save(using=
 
 Cross-namespace foreign keys aren't supported. Also namespaces effect caching keys and unique markers (which are also restricted to a namespace).
 
+## Special Indexes
+
+The App Engine datastore backend handles certain queries which are unsupported natively by adding hidden fields to the datastore instances.
+The mechanism for adding these fields and then using them during querying is called "special indexing".
+
+For example, querying for `name__iexact` is not supported by the datastore. In this case Djangae generate an additional entity property with the name
+value lower-cased, and then when performing an iexact query, will lower case the lookup value and use the generated column rather than the `name` column.
+
+When you run a query that requires special indexes for the first time, an entry will be added to a generated file called `djangaeidx.yaml`. You will
+see this file appear in your project root. From that point on, any entities that are saved will have the additional property added. If a new entry
+appears in djangaeidx.yaml, you will need to resave all of your entities of that kind so that they will be returned by query lookups.
+
+### Distributing djangaeidx.yaml
+
+If you are writing a portable app, and your app makes queries which require special indexes, you can ship a custom djangaeidx.yaml in the root of
+your Django app. The indexes in this file will be combined with the user's main project djangaeidx.yaml at runtime.
 
 ## Migrations
 
