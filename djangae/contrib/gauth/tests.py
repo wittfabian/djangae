@@ -282,27 +282,6 @@ class MiddlewareTests(TestCase):
         # and so with pre-creation required, authentication should have failed
         self.assertTrue(isinstance(request.user, AnonymousUser))
 
-    @override_settings(DJANGAE_CREATE_UNKNOWN_USER=True)
-    def test_middleware_resaves_email(self):
-        # Create user with uppercased email
-        email = 'User@example.com'
-        google_user = users.User(email, _user_id='111111111100000000001')
-        backend = AppEngineUserAPIBackend()
-        user = backend.authenticate(google_user=google_user,)
-        # Normalize_email should save a user with lowercase email
-        self.assertEqual(user.email, email.lower())
-
-        # Run AuthenticationMiddleware, if email are mismatched
-        with sleuth.switch('djangae.contrib.gauth.middleware.users.get_current_user', lambda: google_user):
-            request = HttpRequest()
-            SessionMiddleware().process_request(request)  # Make the damn sessions work
-            middleware = AuthenticationMiddleware()
-            middleware.process_request(request)
-
-        # Middleware should resave to uppercased email, keeping user the same
-        self.assertEqual(request.user.email, email)
-        self.assertEqual(request.user.pk, user.pk)
-
 
 @override_settings(
     AUTH_USER_MODEL='djangae.GaeDatastoreUser',
