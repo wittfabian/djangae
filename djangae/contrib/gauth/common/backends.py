@@ -1,5 +1,6 @@
 import warnings
 
+from django.db.models.query_utils import Q
 from django.db.utils import IntegrityError
 from django.db import transaction
 from django.conf import settings
@@ -81,11 +82,18 @@ class BaseAppEngineUserAPIBackend(ModelBackend):
             )
 
         user_id = google_user.user_id()
-        email = BaseUserManager.normalize_email(google_user.email())
+        email = BaseUserManager.normalize_email(google_user.email())  # Normalizes the domain only.
 
         try:
-            # User exists and we can bail immediately.
-            return User.objects.get(username=user_id)
+            # User exists and we can bail immediately. With one caveat.
+            user = User.objects.get(username=user_id)
+            # Ensure that the user has got both the `email` and `email_lower` fields populated
+            if not user.email_lower:
+                # The user existed before the introduction of the `email_lower` field. Update it.
+                user.email = email
+                # The save will also update the email_lower field
+                user.save(update_fields=['email', 'email_lower'])
+            return user
         except User.DoesNotExist:
             pass
 
@@ -93,7 +101,10 @@ class BaseAppEngineUserAPIBackend(ModelBackend):
         user_is_admin = users.is_current_user_admin()
 
         try:
-            existing_user = User.objects.get(email=email)
+            # Users that existed before the introduction of the `email_lower` field will not have
+            # that field, but will mostly likely have a lower case email address because we used to
+            # lower case the email field
+            existing_user = User.objects.get(Q(email_lower=email.lower()) | Q(email=email.lower()))
         except User.DoesNotExist:
             if not (auto_create or user_is_admin):
                 # User doesn't exist and we aren't going to create one.
@@ -106,13 +117,12 @@ class BaseAppEngineUserAPIBackend(ModelBackend):
 
         # Those 3 scenarios are:
         # 1. A User object has been created for this user, but that they have not logged in yet.
-        # In this case wefetch the User object by email, and then update it with the Google User ID
+        # In this case we fetch the User object by email, and then update it with the Google User ID
         # 2. A User object exists for this email address but belonging to a different Google account.
         # This generally only happens when the email address of a Google Apps account has been
         # signed up as a Google account and then the apps account itself has actually become a
         # Google account. This is possible but very unlikely.
         # 3. There is no User object realting to this user whatsoever.
-
 
         if existing_user:
             if existing_user.username is None:
@@ -127,7 +137,7 @@ class BaseAppEngineUserAPIBackend(ModelBackend):
                 # We need to update the existing user and create a new one.
                 with self.atomic(**self.atomic_kwargs):
                     existing_user = User.objects.get(pk=existing_user.pk)
-                    existing_user.email = None
+                    existing_user.email = ""
                     existing_user.save()
 
                     return User.objects.create_user(user_id, email=email)

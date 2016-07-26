@@ -28,18 +28,13 @@ class GaeUserManager(UserManager):
         values.update(**extra_fields)
         values.update(
             # things which cannot be overridden
-            email=self.normalize_email(email),
+            email=self.normalize_email(email),  # lowercase the domain only
             username=None,
             password=make_password(None),  # unusable password
             # Stupidly, last_login is not nullable, so we can't set it to None.
         )
         return self.create(**values)
 
-    @classmethod
-    def normalize_email(cls, email):
-        """ Lowercase given email address """
-        email = email or ''
-        return email.lower()
 
 def _get_email_lower(user):
     """ Computer function for the computed lowercase email field. """

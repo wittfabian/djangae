@@ -38,11 +38,12 @@ class BackendTests(TestCase):
         """
         User = get_user_model()
         self.assertEqual(User.objects.count(), 0)
-        email = 'UpperCasedAddress@example.com'
+        email = 'UpperCasedAddress@Example.Com'
         google_user = users.User(email, _user_id='111111111100000000001')
         backend = AppEngineUserAPIBackend()
         user = backend.authenticate(google_user=google_user,)
-        self.assertEqual(user.email, email.lower())
+        self.assertEqual(user.email, 'UpperCasedAddress@example.com')  # Domain is lower cased
+        self.assertEqual(user.email_lower, email.lower())
         self.assertEqual(User.objects.count(), 1)
         # Calling authenticate again with the same credentials should not create another user
         user2 = backend.authenticate(google_user=google_user)
@@ -84,6 +85,26 @@ class BackendTests(TestCase):
         self.assertIsNotNone(user.last_login)
         self.assertFalse(user.has_usable_password())
 
+    def test_user_pre_created_users_are_authenticated_case_insensitively(self):
+        """ When a user is pre-created their email address may not have been saved with the same
+            upper/lower case-ness as that which they end up logging in with.  So the matching needs
+            to be done case insensitively.
+        """
+        User = get_user_model()
+        backend = AppEngineUserAPIBackend()
+        email = 'SomePerson@example.com'
+        # Pre-create our user
+        User.objects.pre_create_google_user(email)
+        # Now authenticate this user via the Google Accounts API
+        google_user = users.User(email='somEpersoN@example.com', _user_id='111111111100000000001')
+        user = backend.authenticate(google_user=google_user)
+        # Check things
+        self.assertEqual(user.username, '111111111100000000001')
+        # We expect the email address to have been updated to the one which they logged in with
+        self.assertEqual(user.email, google_user.email())
+        self.assertIsNotNone(user.last_login)
+        self.assertFalse(user.has_usable_password())
+
     @override_settings(DJANGAE_CREATE_UNKNOWN_USER=True)
     def test_user_id_switch(self):
         """ Users sometimes login with the same email, but a different google user id. We handle those cases by
@@ -108,7 +129,7 @@ class BackendTests(TestCase):
 
         # The old account is kept around, but the email is blanked
         user1 = User.objects.get(pk=user1.pk)
-        self.assertEqual(user1.email, None)
+        self.assertEqual(user1.email, "")
 
     @override_settings(DJANGAE_FORCE_USER_PRE_CREATION=True)
     def test_force_user_pre_creation(self):
@@ -136,16 +157,16 @@ class BackendTests(TestCase):
         user_id = "111111111100000000001"
         original_user_get = get_user_model().objects.get
 
-        def crazy_user_get_patch(**kwargs):
+        def crazy_user_get_patch(*args, **kwargs):
             """ Patch for User.objects.get which simulates another thread creating the same user
                 immedidately after this is called (by doing it as part of this function). """
             User = get_user_model()
             try:
-                return original_user_get(**kwargs) # We patched .get()
+                return original_user_get(*args, **kwargs)  # We patched .get()
             except User.DoesNotExist:
                 # This is horrible, but... the backend first tries get() by username and then tries
                 # get() by email, and we only want to create our user after that second call
-                if kwargs.keys() == ['email']:
+                if kwargs.keys() != ['username']:
                     User.objects.create_user(username=user_id, email=email)
                 raise
 
@@ -245,7 +266,7 @@ class MiddlewareTests(TestCase):
         self.assertEqual(user2.email(), django_user2.email)
 
         django_user1 = User.objects.get(pk=django_user1.pk)
-        self.assertEqual(django_user1.email, None)
+        self.assertEqual(django_user1.email, "")
 
     @override_settings(DJANGAE_FORCE_USER_PRE_CREATION=True)
     def test_force_user_pre_creation(self):
