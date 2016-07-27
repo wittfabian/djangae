@@ -103,12 +103,17 @@ class RelatedShardManager(RelatedIteratorManagerBase, models.Manager):
                 new_instance_shard_pks.add(new_shard.pk)
                 setattr(self.instance, self.field.attname, new_instance_shard_pks)
                 models.Model.save(new_instance) # avoid custom save method, which might do DB lookups
+                shard = new_shard
         else:
             with transaction.atomic():
                 from djangae.models import CounterShard
                 shard = CounterShard.objects.get(pk=shard_pk)
                 shard.count += step
                 shard.save()
+
+        # if the ShardedCounter has on_change callback, run it now
+        if hasattr(self.field, 'on_change'):
+            self.field.on_change(self.instance, step)
 
     def _create_shard(self, count):
         from djangae.models import CounterShard
@@ -154,6 +159,10 @@ class ShardedCounterField(RelatedSetField):
                 "ShardedCounterField.shard_count cannot be more than the Datastore is capable of "
                 "fetching in a single Get operation (%d)" % MAX_ENTITIES_PER_GET
             )
+
+        if "on_change" in kwargs:
+            self.on_change = kwargs.pop("on_change")
+
         kwargs.setdefault("related_name", "+")
         super(ShardedCounterField, self).__init__('djangae.CounterShard', **kwargs)
 
