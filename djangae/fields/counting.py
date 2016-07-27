@@ -26,16 +26,16 @@ class RelatedShardManager(RelatedIteratorManagerBase, models.Manager):
         the additional increment()/decrement()/reset() methods for the counting.
     """
 
-    def increment(self, step=1, is_reset=False):
+    def increment(self, step=1):
         if step < 0:
             raise ValueError("Tried to increment with a negative number, use decrement instead")
 
-        self._update_or_create_shard(step, is_reset=is_reset)
+        self._update_or_create_shard(step)
 
-    def decrement(self, step=1, is_reset=False):
+    def decrement(self, step=1):
         if step < 0:
             raise ValueError("Tried to decrement with a negative number, use increment instead")
-        self._update_or_create_shard(-step, is_reset=is_reset)
+        self._update_or_create_shard(-step)
 
     def value(self):
         """ Calcuate the aggregated sum of all the shard values. """
@@ -47,11 +47,8 @@ class RelatedShardManager(RelatedIteratorManagerBase, models.Manager):
         # This is not transactional because (1) that wouldn't work with > 24 shards, and (2) if
         # there are other threads doing increments/decrements at the same time then it doesn't make
         # any difference if they happen before or after our increment/decrement anyway.
-        value = self.value()
-        if value > 0:
-            self.decrement(value, is_reset=True)
-        elif value < 0:
-            self.increment(abs(value), is_reset=True)
+        value = -self.value()
+        self._update_or_create_shard(value, is_reset=True)
 
     def clear(self):
         # Override the default `clear` method of the parent class, as that only clears the list of
