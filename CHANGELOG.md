@@ -4,6 +4,7 @@
 
 - ALLOWED_HOSTS is now set to ("*",) by default as App Engine deals with routing and this prevents
   users being confused when their deployed app returns 400 responses.
+- Added version string to `__init__`
 
 ### Bug fixes:
 
