@@ -12,7 +12,7 @@ from djangae.sandbox import allow_mode_write
 
 
 _project_special_indexes = {}
-_additional_special_indexes = {}
+_app_special_indexes = {}
 _last_loaded_times = {}
 _indexes_loaded = False
 
@@ -21,18 +21,18 @@ MAX_COLUMNS_PER_SPECIAL_INDEX = getattr(settings, "DJANGAE_MAX_COLUMNS_PER_SPECI
 CHARACTERS_PER_COLUMN = [31, 44, 54, 63, 71, 79, 85, 91, 97, 103]
 
 
-def _get_index_file():
-    index_file = os.path.join(environment.get_application_root(), "djangaeidx.yaml")
-    return index_file
+def _get_project_index_file():
+    project_index_file = os.path.join(environment.get_application_root(), "djangaeidx.yaml")
+    return project_index_file
 
 
-def _get_additional_index_files():
+def _get_app_index_files():
     index_files = []
 
     for app_config in apps.get_app_configs():
         app_path = app_config.path
-        index_file = os.path.join(app_path, "djangaeidx.yaml")
-        index_files.append(index_file)
+        project_index_file = os.path.join(app_path, "djangaeidx.yaml")
+        index_files.append(project_index_file)
     return index_files
 
 
@@ -42,12 +42,12 @@ def _get_table_from_model(model_class):
 
 def _merged_indexes():
     """
-        Returns the combination of the additional and project special indexes
+        Returns the combination of the app and project special indexes
     """
     global _project_special_indexes
-    global _additional_special_indexes
+    global _app_special_indexes
 
-    result = _additional_special_indexes.copy()
+    result = _app_special_indexes.copy()
     for model, indexes in _project_special_indexes.items():
         for field_name, values in indexes.items():
             result.setdefault(
@@ -58,7 +58,7 @@ def _merged_indexes():
 
 def load_special_indexes():
     global _project_special_indexes
-    global _additional_special_indexes
+    global _app_special_indexes
     global _last_loaded_times
     global _indexes_loaded
 
@@ -73,13 +73,13 @@ def load_special_indexes():
             data = yaml.load(stream)
         return data
 
-    index_file = _get_index_file()
-    additional_files = _get_additional_index_files()
+    project_index_file = _get_project_index_file()
+    app_files = _get_app_index_files()
 
     files_to_reload = {}
 
     # Go through and reload any files that we find
-    for file_path in [index_file] + additional_files:
+    for file_path in [project_index_file] + app_files:
         if not os.path.exists(file_path):
             continue
 
@@ -92,24 +92,24 @@ def load_special_indexes():
             files_to_reload[file_path] = mtime
 
     # First, reload the project index file,
-    if index_file in files_to_reload:
-        mtime = files_to_reload[index_file]
-        _project_special_indexes = _read_file(index_file)
-        _last_loaded_times[index_file] = mtime
+    if project_index_file in files_to_reload:
+        mtime = files_to_reload[project_index_file]
+        _project_special_indexes = _read_file(project_index_file)
+        _last_loaded_times[project_index_file] = mtime
 
         # Remove it from the files to reload
-        del files_to_reload[index_file]
+        del files_to_reload[project_index_file]
 
     # Now, load the rest of the files and update any entries
     for file_path in files_to_reload:
-        mtime = files_to_reload[index_file]
+        mtime = files_to_reload[project_index_file]
         new_data = _read_file(file_path)
         _last_loaded_times[file_path] = mtime
 
-        # Update the additional special indexes list
+        # Update the app special indexes list
         for model, indexes in new_data.items():
             for field_name, values in indexes.items():
-                _additional_special_indexes.setdefault(
+                _app_special_indexes.setdefault(
                     model, {}
                 ).setdefault(field_name, []).extend(values)
 
@@ -139,10 +139,10 @@ def write_special_indexes():
     """
         Writes the project-specific indexes to the project djangaeidx.yaml
     """
-    index_file = _get_index_file()
+    project_index_file = _get_project_index_file()
 
     with allow_mode_write():
-        with open(index_file, "w") as stream:
+        with open(project_index_file, "w") as stream:
             stream.write(yaml.dump(_project_special_indexes))
 
 

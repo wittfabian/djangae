@@ -1727,11 +1727,11 @@ class EdgeCaseTests(TestCase):
         self.assertEqual(4, TestFruit.objects.exclude(name="").count())
 
     def test_additional_indexes_respected(self):
-        project, additional = indexing._project_special_indexes.copy(), indexing._additional_special_indexes.copy()
+        project, additional = indexing._project_special_indexes.copy(), indexing._app_special_indexes.copy()
 
         try:
             indexing._project_special_indexes = {}
-            indexing._additional_special_indexes = {
+            indexing._app_special_indexes = {
                 TestFruit._meta.db_table: { "name": ["iexact"] }
             }
 
@@ -1740,7 +1740,7 @@ class EdgeCaseTests(TestCase):
             self.assertFalse(indexing._project_special_indexes) # Nothing was added
         finally:
             indexing._project_special_indexes = project
-            indexing._additional_special_indexes = additional
+            indexing._app_special_indexes = additional
 
 
 
