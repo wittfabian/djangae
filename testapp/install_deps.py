@@ -16,7 +16,7 @@ TARGET_DIR = os.path.join(PROJECT_DIR, "libs")
 
 APPENGINE_TARGET_DIR = os.path.join(TARGET_DIR, "google_appengine")
 
-APPENGINE_SDK_VERSION = "1.9.31"
+APPENGINE_SDK_VERSION = "1.9.37"
 APPENGINE_SDK_FILENAME = "google_appengine_%s.zip" % APPENGINE_SDK_VERSION
 
 # Google move versions from 'featured' to 'deprecated' when they bring
@@ -77,5 +77,7 @@ if __name__ == '__main__':
 
     tar_file = tarfile.open(fileobj=StringIO(django_tgz.read()))
     for filename in tar_file.getnames():
-        if filename.startswith("django-stable-{}.x/tests/".format(DJANGO_VERSION)) or filename.startswith("django-master/tests/"):
+        if filename.startswith("django-stable-{}.x/tests/".format(DJANGO_VERSION)) or \
+                filename.startswith("django-master/tests/") or \
+                filename.startswith("django-{}/tests/".format(DJANGO_VERSION)):
             tar_file.extract(filename, os.path.join(TARGET_DIR))

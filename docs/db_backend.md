@@ -55,6 +55,7 @@ Here is a brief list of hard limitations you may encounter when using the Djanga
 There are probably more but the list changes regularly as we improve the datastore backend. If you find another limitation not
 mentioned above please consider sending a documentation PR.
 
+
 ## Other Considerations
 
 When using the Datastore you should bear in mind its capabilities and limitations. While Djangae allows you to run
@@ -181,7 +182,7 @@ There is also an equivalent function for ensuring the consistency of multiple it
     - None of the fetched fields are also being filtered on (which would be a weird thing to do anyway).
     - The query is not ordered by primary key.
     - All of the fetched fields are indexed by the Datastore (i.e. are not list/set fields, blob fields or text (as opposed to char) fields).
-    - The model has got concrete parents.
+    - The model has not got concrete parents.
 * Doing an `.only('foo')` or `.defer('bar')` with a `pk_in=[...]` filter may not be more efficient. This is because we must perform a projection query for each key, and although we send them over the RPC in batches of 30, the RPC costs may outweigh the savings of a plain old datastore.Get. You should profile and check to see whether using only/defer results in a speed improvement for your use case.
 * Due to the way it has to be implemented on the Datastore, an `update()` query is not particularly fast, and other than avoiding calling the `save()` method on each object it doesn't offer much speed advantage over iterating over the objects and modifying them.  However, it does offer significant integrity advantages, see [General behaviours](#general-behaviours) section above.
 * Doing filter(pk__in=Something.objects.values_list('pk', flat=True)) will implicitly evaluate the inner query while preparing to run the outer one. This means two queries, not one like SQL would do!
@@ -226,7 +227,15 @@ In general, Django's emulation of SQL ON DELETE constraints works with djangae o
 
 ## Transactions
 
-**Do not use `google.appengine.ext.db.run_in_transaction` and friends, it will break.**
+Django's transaction decorators have no effect on the Datastore, which means that when using the Datastore:
+
+ - `django.db.transaction.atomic` and `non_atomic` will have no effect.
+ - The `ATOMIC_REQUESTS` and `AUTOCOMMIT` settings in `DATABASES` will have no effect.
+ - Django's `get_or_create` will not have the same behaviour when dealing with collisions between threads.  This is because it use's Django's transaction manager rather than Djangae's.
+  - If your `get` aspect filters by PK then you should wrap `get_or_create` with `djangae.db.transaction.atomic`.  A collision with another thread will result in a `TransactionFailedError`.
+  - If your `get` aspect filters by a unique field or unique-together fields, but not by PK, then (assuming you're using Djangae's unique markers) you won't experience any data corruption, but a collision with another thread will throw an `IntegrityError`.
+  - If your `get` aspect does not filter on any unique or unique-together fields then you should fix that.
+
 
 The following functions are available to manage transactions:
 
@@ -234,10 +243,12 @@ The following functions are available to manage transactions:
  - `djangae.db.transaction.non_atomic` - Decorator and Context Manager. Breaks out of any current transactions so you can run queries outside the transaction
  - `djangae.db.transaction.in_atomic_block` - Returns True if inside a transaction, False otherwise
 
+  **Do not use `google.appengine.ext.db.run_in_transaction` and friends, it will break.**
 
-## Multiple Namespaces (Experimental)
 
-**Namespace support is new and experimental, please make sure your code is well tested and report any bugs**
+
+## Multiple Namespaces
+
 
 It's possible to create separate "databases" on the datastore via "namespaces". This is supported in Djangae through the normal Django
 multiple database support. To configure multiple datastore namespaces, you can add an optional "NAMESPACE" to the DATABASES setting:

@@ -2,7 +2,8 @@
 
 ### New features & improvements:
 
--
+- ALLOWED_HOSTS is now set to ("*",) by default as App Engine deals with routing and this prevents
+  users being confused when their deployed app returns 400 responses.
 
 ### Bug fixes:
 
@@ -11,10 +12,23 @@
 - Changed the default value of `DJANGAE_CREATE_UNKNOWN_USER` to `True` to match the original behaviour.
 - Fixed a bug where simulate contenttypes was required even on a SQL database
 - Fixed a bug where filtering on an empty PK would result in an inequality filter being used
+- Fixed a bug where making a projection query on time or datetime fields will return truncated values without microseconds
+- Fixed a test which could intermittently fail (`test_ordering_on_sparse_field`).
+- Fixed a bug where an empty upload_to argument to FileField would result in a broken "./" folder in Cloud Storage.
 
 ### Documentation:
 
--
+- Added documentation for:
+    - Creating users for gauth.
+- Improved documentation for:
+    - Installation
+    - Transactions
+    - JSONField
+    - RelatedSetField
+    - Running management commands locally and remotely
+- Fixed incorrect documentation for:
+    - The restrictions on projection queries.
+- Removed "experimental" flag from the "namespaces" feature of the Datastore DB backend.
 
 ## v0.9.5 (release date: 6th June 2016)
 
@@ -30,6 +44,7 @@
 - Add tasks utility functions to djangae.environment.
 - Alias DatastorePaginator -> Paginator, and DatastorePage -> Page to be more like Django
 - Moved `ContentType` patching to `djangae.contrib.contenttypes`. `DJANGAE_SIMULATE_CONTENTTYPES` setting has been removed, add `djangae.contrib.contenttypes` to `INSTALLED_APPS` instead. `djangae.contrib.contenttypes` needs to be after `django.contrib.contenttypes` in the `INSTALLED_APPS` order.
+- Allow customization of which user data is synced in gauth `AuthenticationMiddleware`.
 
 ### Bug fixes:
 
@@ -45,6 +60,7 @@ filenames properly.
 - Fix for `RelatedIterator` that fails when related iterated fields model is set as string.
 - Ensure `MapReduceTask `uses the db returned by the application router(s) unless explicitly passed.
 - Fixed bug with `__iexact` indexer where values containing underscores would not be correctly indexed.  (Existing objects will need to be re-saved to be correctly indexed.)
+- Allow running Djangae tests with non-stable, non-master version of Django.
 
 ### Documentation:
 

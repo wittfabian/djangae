@@ -26,7 +26,8 @@ from djangae.db.utils import (
     django_instance_to_entity,
     MockInstance,
     has_concrete_parents,
-    get_field_from_column
+    get_field_from_column,
+    ensure_datetime,
 )
 
 from djangae.db.backends.appengine import POLYMODEL_CLASS_ATTRIBUTE
@@ -81,14 +82,21 @@ def _get_tables_from_where(where_node):
     else:
         return list(set([x.alias for x in cols]))
 
-def ensure_datetime(value):
-    """
-        Painfully, sometimes the Datastore returns dates as datetime objects, and sometimes
-        it returns them as unix timestamps in microseconds!!
-    """
-    if isinstance(value, long):
-        return datetime.fromtimestamp(value / 1000000)
-    return value
+
+def field_conv_year_only(value):
+    value = ensure_datetime(value)
+    return datetime(value.year, 1, 1, 0, 0)
+
+
+def field_conv_month_only(value):
+    value = ensure_datetime(value)
+    return datetime(value.year, value.month, 1, 0, 0)
+
+
+def field_conv_day_only(value):
+    value = ensure_datetime(value)
+    return datetime(value.year, value.month, value.day, 0, 0)
+
 
 def coerce_unicode(value):
     if isinstance(value, str):

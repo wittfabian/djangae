@@ -65,6 +65,32 @@ If there is a Django user with a matching email address and username set to `Non
 
 App Engine administrators are always granted access, and a Django user will be created if one does not exist.
 
+## Customizing user data syncing
+
+By default `djangae.contrib.gauth.middleware.AuthenticationMiddleware` syncs email and superuser status. In case you need to customize this behaviour (for example sync first and last names as well) you could inherit from `AuthenticationMiddleware` and override `sync_user_data` method.
+
+For example if we would like to sync only an email address, not a superuser status, we could do the following:
+
+```python
+class MyAuthenticationMiddleware(AuthenticationMiddleware):
+
+    def sync_user_data(self, django_user, google_user):
+        if django_user.email != google_user.email():
+            django_user.email = google_user.email()
+            django_user.save()
+```
+
+and replace `'djangae.contrib.gauth.middleware.AuthenticationMiddleware'` with your middleware.
+
+## Pre-creating Users
+
+You can add users to the database before they have logged in.  If you've set `DJANGAE_CREATE_UNKNOWN_USER` to `False` then **only** users who already exist in the database can log in.
+
+Users are keyed by their Google User ID, which is stored in the `username` field.  However, it is impossible to know what a user's Google User ID will be until they have logged in.  Therefore, pre-created users who have not yet logged in are keyed by their email address.  To create a user who has not yet logged in you can either:
+
+* Create the user via the Django admin, leaving the `username` field (labelled _"User ID"_) blank.  Or...
+* Create the user via the remote shell with `get_user_model().objects.pre_create_google_user("user@example.com")`.
+
 
 ## Username/password authentication
 

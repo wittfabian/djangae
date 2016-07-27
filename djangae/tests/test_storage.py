@@ -50,6 +50,14 @@ class CloudStorageTests(TestCase):
         self.assertFalse(storage.exists(filename))
 
     @override_settings(CLOUD_STORAGE_BUCKET='test_bucket')
+    def test_dotslash_prefix(self):
+        storage = CloudStorage()
+        name = './my_file'
+        f = ContentFile('content')
+        filename = storage.save(name, f)
+        self.assertEqual(filename, name.lstrip("./"))
+
+    @override_settings(CLOUD_STORAGE_BUCKET='test_bucket')
     def test_supports_nameless_files(self):
         storage = CloudStorage()
         f2 = ContentFile('nameless-content')

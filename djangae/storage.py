@@ -307,6 +307,13 @@ class CloudStorage(Storage, BlobstoreUploadMixin):
         fp = cloudstorage.open(self._add_bucket(name), mode=mode)
         return File(fp)
 
+    def get_valid_name(self, name):
+        # App Engine doesn't properly deal with "./" and a blank upload_to argument
+        # on a filefield results in ./filename so we must remove it if it's there.
+        if name.startswith("./"):
+            name = name.replace("./", "", 1)
+        return name
+
     def _add_bucket(self, name):
         safe_name = urllib.quote(name.encode('utf-8'))
         return '/{0}/{1}'.format(self.bucket, safe_name)
@@ -316,6 +323,8 @@ class CloudStorage(Storage, BlobstoreUploadMixin):
         return mimetypes.guess_type(name)[0] or DEFAULT_CONTENT_TYPE
 
     def _save(self, name, content):
+        name = self.get_valid_name(name) #Make sure the name is valid
+
         kwargs = {
             'content_type': self._content_type_for_name(name),
             'options': self.write_options,
