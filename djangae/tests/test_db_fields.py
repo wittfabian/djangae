@@ -8,6 +8,7 @@ from django.db.utils import IntegrityError
 from django.core.exceptions import ValidationError
 
 # DJANGAE
+from djangae.contrib import sleuth
 from djangae.db import transaction
 from djangae.fields import (
     ComputedCharField,
@@ -263,13 +264,15 @@ class ShardedCounterTest(TestCase):
         self.assertEqual(instance.counter1.value(), 0)
         self.assertEqual(instance.counter2.value(), 1)
 
-    def test_count_raises_attribute_error(self):
-        """ The RelatedShardManager should not have a `count()` method because its purpose would
-            be unclear.
+    def test_count_issues_deprecation_warning(self):
+        """ The RelatedShardManager should warn you when using the deprecated `count()` method
+            because its purpose is unclear.
         """
         instance = ModelWithCounter.objects.create()
         self.assertEqual(instance.counter.value(), 0)
-        self.assertRaises(AttributeError, getattr, instance, 'count')
+        with sleuth.watch("djangae.fields.counting.warnings.warn") as warn:
+            instance.counter.count()
+            self.assertTrue(warn.called)
 
     def test_shard_count(self):
         """ The shard_count() method should return the number of CounterShard objects. """
