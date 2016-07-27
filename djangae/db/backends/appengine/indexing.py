@@ -31,10 +31,6 @@ def _get_additional_index_files():
     for app_config in apps.get_app_configs():
         app_path = app_config.path
         index_file = os.path.join(app_path, "djangaeidx.yaml")
-
-        if not os.path.exists(index_file):
-            continue
-
         index_files.append(index_file)
     return index_files
 
