@@ -135,8 +135,10 @@ class GaeAbstractBaseUser(AbstractBaseUser):
             super_error = None
 
         if self.email and "email" not in exclude:
-            existing = self.__class__.objects.filter(email_lower=self.email.lower()).exists()
-            if existing:
+            existing = self.__class__.objects.filter(email_lower=self.email.lower())
+            if not self._state.adding:
+                existing = existing.exclude(pk=self.pk)
+            if existing.exists():
                 model_name = self._meta.verbose_name
                 field_name = self._meta.get_field("email").verbose_name
                 message = "%s with this %s already exists" % (model_name, field_name)
