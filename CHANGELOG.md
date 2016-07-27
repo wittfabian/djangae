@@ -5,6 +5,7 @@
 - ALLOWED_HOSTS is now set to ("*",) by default as App Engine deals with routing and this prevents
   users being confused when their deployed app returns 400 responses.
 - The `count()` method on `ShardedCounterField` is deprecated because its function was ambiguous or misleading and was often mistakenly used instead of `value()`. It is replaced with a `shard_count()` method.
+- Added version string to `__init__`
 
 ### Bug fixes:
 
@@ -16,6 +17,8 @@
 - Fixed a bug where making a projection query on time or datetime fields will return truncated values without microseconds
 - Fixed a test which could intermittently fail (`test_ordering_on_sparse_field`).
 - Fixed a bug where an empty upload_to argument to FileField would result in a broken "./" folder in Cloud Storage.
+- Fixed an issue where pre-created users may not have been able to log in if the email address associated with their Google account differed in case to the email address saved in their pre-created User object.
+- Made configuration changes to the bundled 'testapp' to allow the `runserver` command to work.
 
 ### Documentation:
 

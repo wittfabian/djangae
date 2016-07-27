@@ -5,6 +5,7 @@ from django.contrib.auth.models import (
     python_2_unicode_compatible,
     UserManager,
 )
+from django.core.exceptions import ValidationError
 from django.core.mail import send_mail
 from django.utils.http import urlquote
 from django.db import models
@@ -12,7 +13,7 @@ from django.utils import timezone, six
 from django.utils.translation import ugettext_lazy as _
 
 # DJANGAE
-from djangae.fields import CharOrNoneField
+from djangae.fields import CharOrNoneField, ComputedCharField
 from .validators import validate_google_user_id
 
 
@@ -27,18 +28,19 @@ class GaeUserManager(UserManager):
         values.update(**extra_fields)
         values.update(
             # things which cannot be overridden
-            email=self.normalize_email(email),
+            email=self.normalize_email(email),  # lowercase the domain only
             username=None,
             password=make_password(None),  # unusable password
             # Stupidly, last_login is not nullable, so we can't set it to None.
         )
         return self.create(**values)
 
-    @classmethod
-    def normalize_email(cls, email):
-        """ Lowercase given email address """
-        email = email or ''
-        return email.lower()
+
+def _get_email_lower(user):
+    """ Computer function for the computed lowercase email field. """
+    # Note that the `email` field is not nullable, but the `email_lower` one is nullable and must
+    # not contain empty strings because it is unique
+    return user.email and user.email.lower() or None
 
 
 @python_2_unicode_compatible
@@ -54,8 +56,18 @@ class GaeAbstractBaseUser(AbstractBaseUser):
     )
     first_name = models.CharField(_('first name'), max_length=30, blank=True)
     last_name = models.CharField(_('last name'), max_length=30, blank=True)
-    # The null-able-ness of the email is only to deal with when an email address moves between Google Accounts
-    email = models.EmailField(_('email address'), unique=True, null=True)
+
+    # Email addresses are case sensitive, but many email systems and many people treat them as if
+    # they're not.  We must store the case-preserved email address to ensure that sending emails
+    # always works, but we must be able to query for them case insensitively and therefore we must
+    # enforce uniqueness on a case insensitive basis, hence these 2 fields
+    email = models.EmailField(_('email address'))
+    # The null-able-ness of the email_lower is only to deal with when an email address moves between
+    # Google Accounts and therefore we need to wipe it without breaking the unique constraint.
+    email_lower = ComputedCharField(
+        _get_email_lower, max_length=email.max_length, unique=True, null=True
+    )
+
     is_staff = models.BooleanField(
         _('staff status'), default=False,
         help_text=_('Designates whether the user can log into this admin site.')
@@ -106,3 +118,33 @@ class GaeAbstractBaseUser(AbstractBaseUser):
         if username:
             return "{} ({})".format(six.text_type(self.email), six.text_type(username))
         return six.text_type(self.email)
+
+    def validate_unique(self, exclude=None):
+        """ Check that the email address does not already exist by querying on email_lower. """
+        exclude = exclude or []
+        if "email_lower" not in exclude:
+            # We do our own check using the email_lower field, so we don't need Django to query
+            # on it as well
+            exclude.append("email_lower")
+
+        try:
+            super(GaeAbstractBaseUser, self).validate_unique(exclude=exclude)
+        except ValidationError as super_error:
+            pass
+        else:
+            super_error = None
+
+        if self.email and "email" not in exclude:
+            existing = self.__class__.objects.filter(email_lower=self.email.lower()).exists()
+            if existing:
+                model_name = self._meta.verbose_name
+                field_name = self._meta.get_field("email").verbose_name
+                message = "%s with this %s already exists" % (model_name, field_name)
+                error_dict = {"email": [message]}
+                if super_error:
+                    super_error.update_error_dict(error_dict)
+                    raise super_error
+                else:
+                    raise ValidationError(error_dict)
+        elif super_error:
+            raise
