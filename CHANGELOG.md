@@ -15,6 +15,7 @@
 - Fixed a bug where making a projection query on time or datetime fields will return truncated values without microseconds
 - Fixed a test which could intermittently fail (`test_ordering_on_sparse_field`).
 - Fixed a bug where an empty upload_to argument to FileField would result in a broken "./" folder in Cloud Storage.
+- Fixed an issue where pre-created users may not have been able to log in if the email address associated with their Google account differed in case to the email address saved in their pre-created User object.
 
 ### Documentation:
 
