@@ -7,6 +7,7 @@
 - It is now possible to have a per-app djangaeidx.yaml file which can be distributed. The indexes in this file
   are combined in memory with the ones from the project root's djangaeidx.yaml. This means that a user of your app
   will not be required to run queries to generate indexes or manually add them to their project file.
+- Made a small performance improvement to avoid checking for changes to djangaeindx.yaml files when on production.
 
 ### Bug fixes:
 
