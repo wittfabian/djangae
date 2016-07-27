@@ -42,6 +42,7 @@ def _get_additional_index_files():
 def _get_table_from_model(model_class):
     return model_class._meta.db_table.encode("utf-8")
 
+
 def _merged_indexes():
     """
         Returns the combination of the additional and project special indexes
@@ -75,7 +76,7 @@ def load_special_indexes():
     files_to_reload = {}
 
     # Go through and reload any files that we find
-    for file_path in [ index_file ] + additional_files:
+    for file_path in [index_file] + additional_files:
         if not os.path.exists(file_path):
             continue
 
@@ -86,7 +87,6 @@ def load_special_indexes():
         else:
             # Mark this file for reloading, store the current modified time
             files_to_reload[file_path] = mtime
-
 
     # First, reload the project index file,
     if index_file in files_to_reload:
@@ -119,7 +119,7 @@ def special_index_exists(model_class, field_name, index_type):
 
 
 def special_indexes_for_model(model_class):
-    classes = [ model_class ] + model_class._meta.parents.keys()
+    classes = [model_class] + model_class._meta.parents.keys()
 
     result = {}
     for klass in classes:
@@ -156,7 +156,9 @@ def add_special_index(model_class, field_name, index_type, value=None):
     if special_index_exists(model_class, field_name, index_type):
         return
 
-    if environment.is_production_environment() or (in_testing() and not getattr(settings, "GENERATE_SPECIAL_INDEXES_DURING_TESTING", False)):
+    if environment.is_production_environment() or (
+        in_testing() and not getattr(settings, "GENERATE_SPECIAL_INDEXES_DURING_TESTING", False)
+    ):
         raise RuntimeError(
             "There is a missing index in your djangaeidx.yaml - \n\n{0}:\n\t{1}: [{2}]".format(
                 _get_table_from_model(model_class), field_name, index_type
@@ -182,7 +184,7 @@ class Indexer(object):
         if "__" in op:
             return op.split("__")[-1]
         else:
-            return "exact" # By default do an exact operation
+            return "exact"  # By default do an exact operation
 
     def prepare_index_type(self, index_type, value): return index_type
 
@@ -380,10 +382,17 @@ class ContainsIndexer(Indexer):
                 value = value.isoformat()
 
             if self.number_of_permutations(value) > MAX_COLUMNS_PER_SPECIAL_INDEX*500:
-                raise ValueError("Can't index for contains query, this value is too long and has too many permutations. \
-                    You can increase the DJANGAE_MAX_COLUMNS_PER_SPECIAL_INDEX setting to fix that. Use with caution.")
+                raise ValueError(
+                    "Can't index for contains query, this value is too long and has too many "
+                    "permutations. You can increase the DJANGAE_MAX_COLUMNS_PER_SPECIAL_INDEX "
+                    "setting to fix that. Use with caution."
+                )
             if len(value) > CHARACTERS_PER_COLUMN[-1]:
-                raise ValueError("Can't index for contains query, this value can be maximum {0} characters long.".format(CHARACTERS_PER_COLUMN[-1]))
+                raise ValueError((
+                    "Can't index for contains query, this value can be maximum {0} characters "
+                    "long."
+                    ).format(CHARACTERS_PER_COLUMN[-1])
+                )
 
             length = len(value)
             result = list(set([value[i:j + 1] for i in xrange(length) for j in xrange(i, length)]))
@@ -409,6 +418,7 @@ class ContainsIndexer(Indexer):
             if length > x:
                 column_number += 1
         return "_idx_contains_{0}_{1}".format(field_column, column_number)
+
 
 class IContainsIndexer(ContainsIndexer):
     def prep_value_for_database(self, value, index):
@@ -545,7 +555,7 @@ class RegexIndexer(Indexer):
         pattern = self.get_pattern(index)
 
         if value:
-            if hasattr(value, '__iter__'): # is a list, tuple or set?
+            if hasattr(value, '__iter__'):  # is a list, tuple or set?
                 if any([bool(re.search(pattern, x, flags)) for x in value]):
                     return True
             else:
@@ -562,7 +572,9 @@ class RegexIndexer(Indexer):
         return True
 
     def indexed_column_name(self, field_column, value, index):
-        return "_idx_regex_{0}_{1}".format(field_column, self.get_pattern(index).encode("utf-8").encode('hex'))
+        return "_idx_regex_{0}_{1}".format(
+            field_column, self.get_pattern(index).encode("utf-8").encode('hex')
+        )
 
 
 class IRegexIndexer(RegexIndexer):
