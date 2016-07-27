@@ -14,6 +14,7 @@ from djangae.sandbox import allow_mode_write
 _project_special_indexes = {}
 _additional_special_indexes = {}
 _last_loaded_times = {}
+_indexes_loaded = False
 
 
 MAX_COLUMNS_PER_SPECIAL_INDEX = getattr(settings, "DJANGAE_MAX_COLUMNS_PER_SPECIAL_INDEX", 3)
@@ -59,6 +60,12 @@ def load_special_indexes():
     global _project_special_indexes
     global _additional_special_indexes
     global _last_loaded_times
+    global _indexes_loaded
+
+    if _indexes_loaded and environment.is_production_environment():
+        # Index files can't change if we're on production, so once they're loaded we don't need
+        # to check their modified times and reload them
+        return
 
     def _read_file(filepath):
         # Load any existing indexes
@@ -106,6 +113,7 @@ def load_special_indexes():
                     model, {}
                 ).setdefault(field_name, []).extend(values)
 
+    _indexes_loaded = True
     logging.debug("Loaded special indexes for %d models", len(_merged_indexes()))
 
 
