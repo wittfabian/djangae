@@ -109,7 +109,7 @@ class RelatedShardManager(RelatedIteratorManagerBase, models.Manager):
                 shard.save()
 
         # if the ShardedCounter has on_change callback, run it now
-        if hasattr(self.field, 'on_change'):
+        if self.field.on_change:
             self.field.on_change(self.instance, step, is_reset=is_reset)
 
     def _create_shard(self, count):
@@ -157,8 +157,7 @@ class ShardedCounterField(RelatedSetField):
                 "fetching in a single Get operation (%d)" % MAX_ENTITIES_PER_GET
             )
 
-        if "on_change" in kwargs:
-            self.on_change = kwargs.pop("on_change")
+        self.on_change = kwargs.pop("on_change", None)
 
         kwargs.setdefault("related_name", "+")
         super(ShardedCounterField, self).__init__('djangae.CounterShard', **kwargs)
