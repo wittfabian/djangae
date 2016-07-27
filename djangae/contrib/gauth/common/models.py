@@ -64,7 +64,9 @@ class GaeAbstractBaseUser(AbstractBaseUser):
     email = models.EmailField(_('email address'))
     # The null-able-ness of the email_lower is only to deal with when an email address moves between
     # Google Accounts and therefore we need to wipe it without breaking the unique constraint.
-    email_lower = ComputedCharField(_get_email_lower, unique=True, null=True)
+    email_lower = ComputedCharField(
+        _get_email_lower, max_length=email.max_length, unique=True, null=True
+    )
 
     is_staff = models.BooleanField(
         _('staff status'), default=False,
