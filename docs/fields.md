@@ -101,10 +101,10 @@ If you want to perform some actions after a sharded counter was changed you can 
 
 ```your_field = ShardedCounterField(on_change=your_callback_function)```
 
-The callback function takes two arguments: `instance` and `step`, where instance is the instance of the object with the `ShardedCounterField` and `step` informs us how much the counter was changed.
+The callback function takes two arguments: `instance`, `step` and optional `is_reset`, where instance is the instance of the object with the `ShardedCounterField`, `step` informs us how much the counter was changed and `is_reset` lets us know if the counter was reset.
 
 ```python
-def your_callback_function(instance, step):
+def your_callback_function(instance, step, is_reset=False):
     ...
 ```
 

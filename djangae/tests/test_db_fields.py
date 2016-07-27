@@ -64,14 +64,19 @@ class ModelWithManyCounters(models.Model):
         app_label = "djangae"
 
 
-def update_denormalized_counter(instance, step):
+def update_denormalized_counter(instance, step, is_reset=False):
     instance.denormalized_counter += step
+
+    if is_reset:
+        instance.reset_count += 1
+
     instance.save()
 
 
 class ModelWithCountersWithCallback(models.Model):
     counter = ShardedCounterField(on_change=update_denormalized_counter)
     denormalized_counter = models.IntegerField(default=0)
+    reset_count = models.IntegerField(default=0)
 
     class Meta:
         app_label = "djangae"
@@ -294,9 +299,11 @@ class ShardedCounterTest(TestCase):
         self.assertEquals(instance.denormalized_counter, 4)
 
         # and reset
+        self.assertEquals(instance.reset_count, 0)
         instance.counter.reset()
         instance.refresh_from_db()
         self.assertEquals(instance.denormalized_counter, 0)
+        self.assertEquals(instance.reset_count, 1)
 
 
 class IterableFieldTests(TestCase):

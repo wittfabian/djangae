@@ -26,16 +26,16 @@ class RelatedShardManager(RelatedIteratorManagerBase, models.Manager):
         the additional increment()/decrement()/reset() methods for the counting.
     """
 
-    def increment(self, step=1):
+    def increment(self, step=1, is_reset=False):
         if step < 0:
             raise ValueError("Tried to increment with a negative number, use decrement instead")
 
-        self._update_or_create_shard(step)
+        self._update_or_create_shard(step, is_reset=is_reset)
 
-    def decrement(self, step=1):
+    def decrement(self, step=1, is_reset=False):
         if step < 0:
             raise ValueError("Tried to decrement with a negative number, use increment instead")
-        self._update_or_create_shard(-step)
+        self._update_or_create_shard(-step, is_reset=is_reset)
 
     def value(self):
         """ Calcuate the aggregated sum of all the shard values. """
@@ -49,9 +49,9 @@ class RelatedShardManager(RelatedIteratorManagerBase, models.Manager):
         # any difference if they happen before or after our increment/decrement anyway.
         value = self.value()
         if value > 0:
-            self.decrement(value)
+            self.decrement(value, is_reset=True)
         elif value < 0:
-            self.increment(abs(value))
+            self.increment(abs(value), is_reset=True)
 
     def clear(self):
         # Override the default `clear` method of the parent class, as that only clears the list of
@@ -84,7 +84,7 @@ class RelatedShardManager(RelatedIteratorManagerBase, models.Manager):
                 models.Model.save(new_instance) # avoid custom save method, which might do DB lookups
                 total_to_create -= num_to_create
 
-    def _update_or_create_shard(self, step):
+    def _update_or_create_shard(self, step, is_reset=False):
         """ Find or create a random shard and alter its `count` by the given step. """
         shard_index = random.randint(0, self.field.shard_count - 1)
         # Converting the set to a list introduces some randomness in the ordering, but that's fine
@@ -113,7 +113,7 @@ class RelatedShardManager(RelatedIteratorManagerBase, models.Manager):
 
         # if the ShardedCounter has on_change callback, run it now
         if hasattr(self.field, 'on_change'):
-            self.field.on_change(self.instance, step)
+            self.field.on_change(self.instance, step, is_reset=is_reset)
 
     def _create_shard(self, count):
         from djangae.models import CounterShard
