@@ -64,6 +64,24 @@ class ModelWithManyCounters(models.Model):
         app_label = "djangae"
 
 
+def update_denormalized_counter(instance, step, is_reset=False):
+    instance.denormalized_counter += step
+
+    if is_reset:
+        instance.reset_count += 1
+
+    instance.save()
+
+
+class ModelWithCountersWithCallback(models.Model):
+    counter = ShardedCounterField(on_change=update_denormalized_counter)
+    denormalized_counter = models.IntegerField(default=0)
+    reset_count = models.IntegerField(default=0)
+
+    class Meta:
+        app_label = "djangae"
+
+
 class ModelWithCounterWithManyShards(models.Model):
     # The DEFAULT_SHARD_COUNT is based on the max allowed in a Datastore transaction
     counter = ShardedCounterField(shard_count=DEFAULT_SHARD_COUNT+5)
@@ -177,7 +195,6 @@ class ShardedCounterTest(TestCase):
         instance.counter.increment(2)
         self.assertEqual(instance.counter.value(), 5)
 
-
     def test_decrement_step(self):
         """ Test the behvaviour of decrementing in steps of more than 1. """
         instance = ModelWithCounter.objects.create()
@@ -237,7 +254,6 @@ class ShardedCounterTest(TestCase):
         instance = ModelWithCounter.objects.get()
         self.assertEqual(instance.counter.all().count(), DEFAULT_SHARD_COUNT)
 
-
     def test_label_reference_is_saved(self):
         """ Test that each CounterShard which the field creates is saved with the label of the
             model and field to which it belongs.
@@ -264,6 +280,30 @@ class ShardedCounterTest(TestCase):
         instance.counter1.reset()
         self.assertEqual(instance.counter1.value(), 0)
         self.assertEqual(instance.counter2.value(), 1)
+
+    def test_on_change_callback_called(self):
+        """ Test that if ShardedCounter has on_change callback specified, it
+            will be called after any change to the counter.
+        """
+        instance = ModelWithCountersWithCallback.objects.create()
+        self.assertEquals(instance.denormalized_counter, 0)
+
+        # callback called after increment
+        instance.counter.increment(5)
+        instance.refresh_from_db()
+        self.assertEquals(instance.denormalized_counter, 5)
+
+        # after decrement
+        instance.counter.decrement(1)
+        instance.refresh_from_db()
+        self.assertEquals(instance.denormalized_counter, 4)
+
+        # and reset
+        self.assertEquals(instance.reset_count, 0)
+        instance.counter.reset()
+        instance.refresh_from_db()
+        self.assertEquals(instance.denormalized_counter, 0)
+        self.assertEquals(instance.reset_count, 1)
 
 
 class IterableFieldTests(TestCase):
