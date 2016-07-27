@@ -646,7 +646,7 @@ class BackendTests(TestCase):
         entity.update(values)
         datastore.Put(entity)
 
-        # Ok, we can get all 3 instances
+        # Ok, we can get all 4 instances
         self.assertEqual(TestFruit.objects.count(), 4)
 
         # Sorted list. No exception should be raised
@@ -654,12 +654,14 @@ class BackendTests(TestCase):
         with sleuth.watch('djangae.db.backends.appengine.commands.utils.django_ordering_comparison') as compare:
             all_names = ['a', 'b', 'c', 'd']
             fruits = list(
-                TestFruit.objects.filter(name__in=all_names).order_by('color')
+                TestFruit.objects.filter(name__in=all_names).order_by('color', 'name')
             )
             # Make sure troubled code got triggered
             # ie. with all() it doesn't
             self.assertTrue(compare.called)
 
+        # Test the ordering of the results.  The ones with a color of None should come back first,
+        # and of the ones with color=None, they should be ordered by name
         # Missing one (None) as first
         expected_fruits = [
             ('c', None), ('d', None), ('a', 'a'), ('b', 'b'),
@@ -721,6 +723,18 @@ class BackendTests(TestCase):
         key = datastore.Key.from_path(DurationModel._meta.db_table, durations_as_3.pk, namespace=DEFAULT_NAMESPACE)
         entity = datastore.Get(key)
         self.assertTrue(isinstance(entity['duration_field'], (int, long)))
+
+    def test_datetime_and_time_fields_precision_for_projection_queries(self):
+        """
+        The returned datetime and time values should include microseconds.
+        See issue #707.
+        """
+        t = datetime.time(22, 13, 50, 541022)
+        dt = datetime.datetime(2016, 5, 27, 18, 40, 12, 927371)
+        NullDate.objects.create(time=t, datetime=dt)
+        result = NullDate.objects.all().values_list('time', 'datetime')
+        expected = [(t, dt)]
+        self.assertItemsEqual(result, expected)
 
 
 class ModelFormsetTest(TestCase):
@@ -1698,6 +1712,20 @@ class EdgeCaseTests(TestCase):
             origin="New Zealand"
         ).distinct("color").values_list("color", flat=True)
         self.assertEqual(sorted(nz_colours), ["Green", "Red"])
+
+    def test_empty_key_lookups_work_correctly(self):
+        t1 = TestFruit.objects.create(name="Kiwi", origin="New Zealand", color="Green")
+        TestFruit.objects.create(name="Apple", origin="New Zealand", color="Green")
+
+        self.assertEqual(t1,
+            TestFruit.objects.exclude(name="Apple").exclude(name="").get(name="Kiwi")
+        )
+        self.assertFalse(TestFruit.objects.filter(name="", color="Green"))
+        self.assertTrue(TestFruit.objects.filter(Q(name="") | Q(name="Kiwi")).filter(color="Green"))
+        self.assertFalse(TestFruit.objects.filter(name="", color__gt="A"))
+        self.assertEqual(4, TestFruit.objects.exclude(name="").count())
+
+
 
 
 class BlobstoreFileUploadHandlerTest(TestCase):

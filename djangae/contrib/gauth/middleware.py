@@ -1,6 +1,6 @@
 from django.contrib.auth import authenticate, login, logout, get_user, BACKEND_SESSION_KEY, load_backend
 from django.contrib.auth.middleware import AuthenticationMiddleware as DjangoMiddleware
-from django.contrib.auth.models import BaseUserManager, AnonymousUser
+from django.contrib.auth.models import AnonymousUser
 from djangae.contrib.gauth.common.backends import BaseAppEngineUserAPIBackend
 
 from google.appengine.api import users
@@ -41,22 +41,14 @@ class AuthenticationMiddleware(DjangoMiddleware):
 
         # Note that the logic above may have logged us out, hence new `if` statement
         if django_user.is_authenticated():
-            # Now make sure we update is_superuser and is_staff appropriately
-            is_superuser = users.is_current_user_admin()
-            resave = False
-
-            if is_superuser != django_user.is_superuser:
-                django_user.is_superuser = django_user.is_staff = is_superuser
-                resave = True
-
-            # for users which already exist, we want to verify that their email is still correct
-            # users are already authenticated with their user_id, so we can save their real email
-            # not the lowercased version
-            if django_user.email != google_user.email():
-                django_user.email = google_user.email()
-                resave = True
-
-            if resave:
-                django_user.save()
+            self.sync_user_data(django_user, google_user)
 
         request.user = django_user
+
+    def sync_user_data(self, django_user, google_user):
+        # Now make sure we update is_superuser and is_staff appropriately
+        is_superuser = users.is_current_user_admin()
+
+        if is_superuser != django_user.is_superuser:
+            django_user.is_superuser = django_user.is_staff = is_superuser
+            django_user.save(update_fields=['is_superuser', 'is_staff'])
