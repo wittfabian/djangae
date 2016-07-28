@@ -180,10 +180,12 @@ class StringIndexerMixin(object):
         except ValueError:
             return False
 
-        if field.__class__ in self.STRING_FIELDS:
+        if isinstance(field, self.STRING_FIELDS):
             return True
-        elif (field.__class__ in (iterable.ListField, iterable.SetField)
-            and field.item_field_type.__class__ in self.STRING_FIELDS and operator.startswith("item__")):
+        elif (
+            isinstance(field, (iterable.ListField, iterable.SetField)) and
+            field.item_field_type.__class__ in self.STRING_FIELDS and operator.startswith("item__")
+        ):
             return True
         return False
 
@@ -198,10 +200,12 @@ class DateIndexerMixin(object):
         if operator.split("__")[0] != self.OPERATOR:
             return False
 
-        if field.__class__ in DATE_FIELDS:
+        if isinstance(field, DATE_FIELDS):
             return True
-        elif (field.__class__ in (iterable.ListField, iterable.SetField)
-            and field.item_field_type.__class__ in DATE_FIELDS and operator.startswith("item__")):
+        elif (
+            isinstance(field, (iterable.ListField, iterable.SetField)) and
+            field.item_field_type.__class__ in DATE_FIELDS and operator.startswith("item__")
+        ):
             return True
 
         return False
@@ -217,10 +221,12 @@ class TimeIndexerMixin(object):
         if operator.split("__")[0] != self.OPERATOR:
             return False
 
-        if field.__class__ in TIME_FIELDS:
+        if isinstance(field, TIME_FIELDS):
             return True
-        elif (field.__class__ in (iterable.ListField, iterable.SetField)
-            and field.item_field_type.__class__ in TIME_FIELDS and operator.startswith("item__")):
+        elif (
+            isinstance(field, (iterable.ListField, iterable.SetField)) and
+            field.item_field_type.__class__ in TIME_FIELDS and operator.startswith("item__")
+        ):
             return True
 
         return False

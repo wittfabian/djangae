@@ -32,6 +32,7 @@ from django.template import Template, Context
 
 # DJANGAE
 from djangae.contrib import sleuth
+from djangae.fields import CharField
 from djangae.test import inconsistent_db, TestCase
 from django.db import IntegrityError, NotSupportedError
 from djangae.db.backends.appengine.commands import FlushCommand
@@ -230,6 +231,7 @@ class ModelWithUniquesAndOverride(models.Model):
 
 class SpecialIndexesModel(models.Model):
     name = models.CharField(max_length=255, primary_key=True)
+    nickname = CharField(blank=True)
     sample_list = ListField(models.CharField)
 
     def __unicode__(self):
@@ -1871,6 +1873,14 @@ class TestSpecialIndexers(TestCase):
 
             qry = self.qry.filter(name__icontains=name)
             self.assertEqual(len(qry), len([x for x in self.names if name.lower() in x.lower()]))
+
+    def test_contains_lookup_on_charfield_subclass(self):
+        """ Test that the __contains lookup also works on subclasses of the Django CharField, e.g.
+            the custom Djangae CharField.
+        """
+        instance = SpecialIndexesModel.objects.create(name="whatever", nickname="Voldemort")
+        query = SpecialIndexesModel.objects.filter(nickname__contains="demo")
+        self.assertEqual(list(query), [instance])
 
     def test_endswith_lookup_and_iendswith_lookup(self):
         tests = self.names + ['a', 'A', 'aa']

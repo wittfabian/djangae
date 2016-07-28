@@ -18,6 +18,7 @@ djangae_specialindexesmodel:
     regex__285b412d5a5d295c772b, regex__285b412d5a5d295c772b5c735b2b5d5c73285b412d5a5d295c772b,
     regex__5c2d546573745c2d, iregex__285b412d5a5d295c772b, iregex__285b412d5a5d295c772b5c735b2b5d5c73285b412d5a5d295c772b,
     iregex__5c2d546573745c2d]
+  nickname: [contains]
   sample_list: [item__regex__285b412d5a5d295c772b, item__iregex__285b412d5a5d295c772b,
     item__regex__285b412d5a5d295c772b5c735b2b5d5c73285b412d5a5d295c772b, item__iregex__285b412d5a5d295c772b5c735b2b5d5c73285b412d5a5d295c772b,
     item__regex__5c2d546573745c2d, item__iregex__5c2d546573745c2d, item__contains,
