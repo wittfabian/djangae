@@ -97,7 +97,7 @@ class Parser(BaseParser):
                     node.rhs = [x for x in node.rhs]
                 else:
                     # otherwise, we try to get the PK from the queryset
-                    node.rhs = [x.pk for x in node.rhs]
+                    node.rhs = list(node.rhs.values_list('pk', flat=True))
 
                 rhs = node.process_rhs(None, connection) # Process the RHS as if it was a list
 
