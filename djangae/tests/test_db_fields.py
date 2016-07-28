@@ -275,29 +275,29 @@ class IterableFieldTests(TestCase):
             list_field=['A', 'B', 'C', 'H', 'I', 'J'],
             set_field=set(['A', 'B', 'C', 'H', 'I', 'J']))
 
-        # filtering using exact lookup with ListField:
+        # filtering using __contains lookup with ListField:
         qry = IterableFieldModel.objects.filter(list_field__contains='A')
         self.assertEqual(sorted(x.pk for x in qry), sorted([list1.pk, list2.pk]))
         qry = IterableFieldModel.objects.filter(list_field__contains='H')
-        self.assertEqual(sorted(x.pk for x in qry), [list2.pk,])
+        self.assertEqual(sorted(x.pk for x in qry), [list2.pk])
 
-        # filtering using exact lookup with SetField:
+        # filtering using __contains lookup with SetField:
         qry = IterableFieldModel.objects.filter(set_field__contains='A')
         self.assertEqual(sorted(x.pk for x in qry), sorted([list1.pk, list2.pk]))
         qry = IterableFieldModel.objects.filter(set_field__contains='H')
-        self.assertEqual(sorted(x.pk for x in qry), [list2.pk,])
+        self.assertEqual(sorted(x.pk for x in qry), [list2.pk])
 
-        # filtering using in lookup with ListField:
+        # filtering using __overlap lookup with ListField:
         qry = IterableFieldModel.objects.filter(list_field__overlap=['A', 'B', 'C'])
-        self.assertEqual(sorted(x.pk for x in qry), sorted([list1.pk, list2.pk,]))
+        self.assertEqual(sorted(x.pk for x in qry), sorted([list1.pk, list2.pk]))
         qry = IterableFieldModel.objects.filter(list_field__overlap=['H', 'I', 'J'])
-        self.assertEqual(sorted(x.pk for x in qry), sorted([list2.pk,]))
+        self.assertEqual(sorted(x.pk for x in qry), sorted([list2.pk]))
 
-        # filtering using in lookup with SetField:
+        # filtering using __overlap lookup with SetField:
         qry = IterableFieldModel.objects.filter(set_field__overlap=set(['A', 'B']))
         self.assertEqual(sorted(x.pk for x in qry), sorted([list1.pk, list2.pk]))
         qry = IterableFieldModel.objects.filter(set_field__overlap=['H'])
-        self.assertEqual(sorted(x.pk for x in qry), [list2.pk,])
+        self.assertEqual(sorted(x.pk for x in qry), [list2.pk])
 
     def test_empty_iterable_fields(self):
         """ Test that an empty set field always returns set(), not None """
