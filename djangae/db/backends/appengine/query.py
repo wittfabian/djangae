@@ -85,6 +85,7 @@ def convert_operator(operator):
 
     return operator.upper()
 
+
 class WhereNode(object):
     def __init__(self):
         self.column = None
@@ -161,13 +162,10 @@ class WhereNode(object):
         self.value = value
         self.lookup_name = lookup_name
 
-
-
     def __iter__(self):
         for child in chain(*imap(iter, self.children)):
             yield child
         yield self
-
 
     def __repr__(self):
         if self.is_leaf:
@@ -190,6 +188,7 @@ class WhereNode(object):
         else:
             return hash((self.connector,) + tuple([hash(x) for x in self.children]))
 
+
 class Query(object):
     def __init__(self, model, kind):
         assert kind in VALID_QUERY_KINDS
@@ -201,12 +200,12 @@ class Query(object):
         self.projection_possible = True
         self.tables = []
 
-        self.columns = None # None means all fields
+        self.columns = None  # None means all fields
         self.init_list = []
 
         self.distinct = False
         self.order_by = []
-        self.row_data = [] # For insert/updates
+        self.row_data = []  # For insert/updates
         self._where = None
         self.low_mark = self.high_mark = None
 
@@ -293,7 +292,7 @@ class Query(object):
     def add_annotation(self, column, annotation):
         name = annotation.__class__.__name__
         if name == "Count":
-            return # Handled elsewhere
+            return  # Handled elsewhere
 
         if name not in ("Trunc", "Col", "Date", "DateTime"):
             raise NotSupportedError("Unsupported annotation %s" % name)
@@ -336,8 +335,7 @@ class Query(object):
                 ]))
             )
             # Override the projection so that we only get this column
-            self.columns = set([ lookup_column ])
-
+            self.columns = set([lookup_column])
 
     def add_projected_column(self, column):
         self.init_list.append(column)
@@ -359,7 +357,7 @@ class Query(object):
             return
 
         if not self.columns:
-            self.columns = set([ column ])
+            self.columns = set([column])
         else:
             self.columns.add(column)
 
@@ -371,7 +369,7 @@ class Query(object):
 
     def prepare(self):
         if not self.init_list:
-            self.init_list = [ x.column for x in self.model._meta.fields ]
+            self.init_list = [x.column for x in self.model._meta.fields]
 
         self._remove_impossible_branches()
         self._remove_erroneous_isnull()
@@ -396,6 +394,7 @@ class Query(object):
             return
 
         self.excluded_pks = set()
+
         def walk(node, negated):
             if node.connector == "OR":
                 # We can only process AND nodes, if we hit an OR we can't
@@ -415,12 +414,12 @@ class Query(object):
                         self.excluded_pks.add(child.value)
                         node.children.remove(child)
                     elif negated and child.operator == "IN" and child.column == "__key__":
-                        [ self.excluded_pks.add(x) for x in child.value ]
+                        [self.excluded_pks.add(x) for x in child.value]
                         node.children.remove(child)
                 else:
                     walk(child, negated)
 
-            node.children = [ x for x in node.children if x.children or x.column ]
+            node.children = [x for x in node.children if x.children or x.column]
 
         walk(self._where, False)
 
@@ -445,7 +444,7 @@ class Query(object):
 
                 walk(child, negated)
 
-            node.children = [ x for x in node.children if x.children or x.column ]
+            node.children = [x for x in node.children if x.children or x.column]
 
         had_where = bool(self._where.children)
         walk(self._where, False)
@@ -520,7 +519,7 @@ class Query(object):
                         else:
                             node.will_never_return_results = True
                     else:
-                        #OR
+                        # OR
                         if not child.negated:
                             node.children.remove(child)
                             if not node.children:
@@ -536,6 +535,7 @@ class Query(object):
 
     def _check_only_single_inequality_filter(self):
         inequality_fields = set()
+
         def walk(node, negated):
             if node.negated:
                 negated = not negated
@@ -596,11 +596,11 @@ class Query(object):
             # We add this bare AND just to stay consistent with what Django does
             new_and = WhereNode()
             new_and.connector = 'AND'
-            new_and.children = [ new_filter ]
+            new_and.children = [new_filter]
 
             new_root = WhereNode()
             new_root.connector = 'AND'
-            new_root.children = [ new_and ]
+            new_root.children = [new_and]
             if self._where:
                 # Add the original where if there was one
                 new_root.children.append(self._where)
@@ -623,7 +623,7 @@ class Query(object):
         result["kind"] = self.kind
         result["table"] = self.model._meta.db_table
         result["concrete_table"] = self.concrete_model._meta.db_table
-        result["columns"] = list(self.columns or []) # set() is not JSONifiable
+        result["columns"] = list(self.columns or [])  # set() is not JSONifiable
         result["projection_possible"] = self.projection_possible
         result["init_list"] = self.init_list
         result["distinct"] = self.distinct
@@ -670,6 +670,7 @@ def _get_parser(query, connection=None):
     else:
         from djangae.db.backends.appengine.parsers import base
         return base.BaseParser(query, connection)
+
 
 def transform_query(connection, query):
     return _get_parser(query, connection).get_transformed_query()

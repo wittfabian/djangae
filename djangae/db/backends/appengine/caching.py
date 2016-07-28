@@ -106,7 +106,7 @@ class KeyPrefixedClient(Client):
             )
 
     def delete_multi_async(self, keys, seconds=0, key_prefix='', namespace=None, rpc=None):
-        keys = [ default_key_func(x, KEY_PREFIX, VERSION) for x in keys ]
+        keys = [default_key_func(x, KEY_PREFIX, VERSION) for x in keys]
 
         if self.sync_mode:
             # We don't call up, because delete_multi calls delete_multi_async

@@ -180,7 +180,7 @@ class QueryByKeys(object):
             key = self.queries_by_key.keys()[0]
             result = caching.get_from_cache_by_key(key)
             if result is not None:
-                results = [ result ]
+                results = [result]
                 cache = False # Don't update cache, we just got it from there
 
         if results is None:
@@ -268,7 +268,7 @@ class QueryByKeys(object):
         return iter_results(results)
 
     def Count(self, limit, offset):
-        return len([ x for x in self.Run(limit, offset) ])
+        return len([x for x in self.Run(limit, offset)])
 
 
 class NoOpQuery(object):
@@ -394,7 +394,7 @@ class SelectCommand(object):
         self.query = normalize_query(self.query)
 
         self.original_query = query
-        self.keys_only = (keys_only or [x.field for x in query.select] == [ query.model._meta.pk ])
+        self.keys_only = (keys_only or [x.field for x in query.select] == [query.model._meta.pk])
 
         # MultiQuery doesn't support keys_only
         if self.query.where and len(self.query.where.children) > 1:
@@ -469,7 +469,7 @@ class SelectCommand(object):
             )
 
             # This deals with the oddity that the root of the tree may well be a leaf
-            filters = [ and_branch ] if and_branch.is_leaf else and_branch.children
+            filters = [and_branch] if and_branch.is_leaf else and_branch.children
 
             for filter_node in filters:
                 lookup = "{} {}".format(filter_node.column, filter_node.operator)
@@ -498,7 +498,7 @@ class SelectCommand(object):
                 # If there is already a value for this lookup, we need to make the
                 # value a list and append the new entry
                 if lookup in query and not isinstance(query[lookup], (list, tuple)) and query[lookup] != value:
-                    query[lookup] = [ query[lookup ] ] + [ value ]
+                    query[lookup] = [query[lookup] ] + [value]
                 else:
                     # If the value is a list, we can't just assign it to the query
                     # which will treat each element as its own value. So in this
@@ -506,7 +506,7 @@ class SelectCommand(object):
                     # which we could throw ourselves, but the datastore might start supporting
                     # list values in lookups.. you never know!
                     if isinstance(value, (list, tuple)):
-                        query[lookup] = [ value ]
+                        query[lookup] = [value]
                     else:
                         # Common case: just add the raw where constraint
                         query[lookup] = value
@@ -631,7 +631,7 @@ class SelectCommand(object):
                         except ValueError:
                             continue
                     return arg
-                elif arg in [ x.column for x in model_fields ]:
+                elif arg in [x.column for x in model_fields]:
                     # Column value
                     return result.get(arg)
 
@@ -740,7 +740,7 @@ class SelectCommand(object):
                 result += u" " + u" ".join([
                     u"WHERE",
                     u" OR ".join([
-                        u" AND ".join( [ u"{} {}".format(k, v) for k, v in x.iteritems() ])
+                        u" AND ".join( [u"{} {}".format(k, v) for k, v in x.iteritems()])
                         for x in qry["where"]
                     ])
                 ])
@@ -995,7 +995,7 @@ class DeleteCommand(object):
         self.select.execute()
 
         constraints_enabled = constraints.has_active_unique_constraints(self.model)
-        keys = [ x.key() for x in self.select.results ]
+        keys = [x.key() for x in self.select.results]
 
         def wipe_polymodel_from_entity(entity, db_table):
             """

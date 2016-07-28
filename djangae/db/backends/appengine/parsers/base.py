@@ -254,7 +254,7 @@ class BaseParser(object):
             # this WILL execute another query, but that is to be expected on a
             # non-relational datastore.
 
-            rhs = [ x for x in node.rhs ] # Evaluate the queryset
+            rhs = [x for x in node.rhs]  # Evaluate the queryset
 
         elif isinstance(node.rhs, QuerySet):
             # In Django 1.9, ValuesListQuerySet doesn't exist anymore, and instead
@@ -263,10 +263,10 @@ class BaseParser(object):
                 # if the queryset has FlatValuesListIterable as iterable class
                 # then it's a flat list, and we just need to evaluate the
                 # queryset converting it into a list
-                rhs = [ x for x in node.rhs ]
+                rhs = [x for x in node.rhs]
             else:
                 # otherwise, we try to get the PK from the queryset
-                rhs = [ x.pk for x in node.rhs ]
+                rhs = [x.pk for x in node.rhs]
         else:
             rhs = node.rhs
 
@@ -488,7 +488,7 @@ class BaseParser(object):
                 return "-{}".format(col)
 
         if not query.standard_ordering:
-            final = [ x if x in expressions else swap(x) for x in final ]
+            final = [x if x in expressions else swap(x) for x in final]
 
         if len(final) != len(result):
             diff = set(result) - set(final)

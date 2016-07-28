@@ -84,7 +84,7 @@ class Parser(BaseParser):
                 # this WILL execute another query, but that is to be expected on a
                 # non-relational datastore.
 
-                node.rhs = [ x for x in node.rhs ] # Evaluate the queryset
+                node.rhs = [x for x in node.rhs]  # Evaluate the queryset
                 rhs = node.process_rhs(None, connection) # Process the RHS as if it was a list
 
             elif isinstance(node.rhs, QuerySet):
@@ -94,10 +94,10 @@ class Parser(BaseParser):
                     # if the queryset has FlatValuesListIterable as iterable class
                     # then it's a flat list, and we just need to evaluate the
                     # queryset converting it into a list
-                    node.rhs = [ x for x in node.rhs ]
+                    node.rhs = [x for x in node.rhs]
                 else:
                     # otherwise, we try to get the PK from the queryset
-                    node.rhs = [ x.pk for x in node.rhs ]
+                    node.rhs = [x.pk for x in node.rhs]
 
                 rhs = node.process_rhs(None, connection) # Process the RHS as if it was a list
 

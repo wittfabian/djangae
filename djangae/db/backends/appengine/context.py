@@ -109,7 +109,7 @@ class ContextStack(object):
     """
 
     def __init__(self):
-        self.stack = [ Context(self) ]
+        self.stack = [Context(self)]
         self.staged = []
 
     def push(self):

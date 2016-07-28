@@ -39,7 +39,6 @@ def has_active_unique_constraints(model_or_instance):
     return not getattr(settings, "DJANGAE_DISABLE_CONSTRAINT_CHECKS", False)
 
 
-
 class KeyProperty(db.Property):
     """A property that stores a datastore.Key reference to another object.
         Think of this as a Django GenericForeignKey which returns only the PK value, not the whole
@@ -96,7 +95,7 @@ def _acquire_identifiers(identifiers, entity_key):
             fields_and_values = identifier_key.name().split("|")
             table_name = fields_and_values[0]
             fields_and_values = fields_and_values[1:]
-            fields = [ x.split(":")[0] for x in fields_and_values ]
+            fields = [x.split(":")[0] for x in fields_and_values]
             raise IntegrityError("Unique constraint violation for kind {} on fields: {}".format(table_name, ", ".join(fields)))
         elif existing_marker.instance != entity_key:
             markers_to_create.append(UniqueMarker(
@@ -234,7 +233,7 @@ class UniquenessMixin(object):
             # a unique combination
             #######################################################
 
-            if len([x for x in lookup_kwargs if x.endswith("__in") ]) > 1:
+            if len([x for x in lookup_kwargs if x.endswith("__in")]) > 1:
                 raise NotSupportedError("You cannot currently have two list fields in a unique combination")
 
             # Split IN queries into multiple lookups if they are too long
@@ -250,7 +249,7 @@ class UniquenessMixin(object):
                     break
             else:
                 # Otherwise just use the one lookup
-                lookups = [ lookup_kwargs ]
+                lookups = [lookup_kwargs]
 
             for lookup_kwargs in lookups:
                 qs = model_class._default_manager.filter(**lookup_kwargs).values_list("pk", flat=True)

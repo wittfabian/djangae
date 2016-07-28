@@ -79,7 +79,7 @@ def special_index_exists(model_class, field_name, index_type):
 
 
 def special_indexes_for_model(model_class):
-    classes = [ model_class ] + model_class._meta.parents.keys()
+    classes = [model_class] + model_class._meta.parents.keys()
 
     result = {}
     for klass in classes:
@@ -112,7 +112,10 @@ def add_special_index(model_class, field_name, indexer, operator, value=None):
     if special_index_exists(model_class, field_name, index_type):
         return
 
-    if environment.is_production_environment() or (in_testing() and not getattr(settings, "GENERATE_SPECIAL_INDEXES_DURING_TESTING", False)):
+    if (
+        environment.is_production_environment() or
+        (in_testing() and not getattr(settings, "GENERATE_SPECIAL_INDEXES_DURING_TESTING", False))
+    ):
         raise RuntimeError(
             "There is a missing index in your djangaeidx.yaml - \n\n{0}:\n\t{1}: [{2}]".format(
                 _get_table_from_model(model_class), field_name, index_type
@@ -425,10 +428,16 @@ class ContainsIndexer(StringIndexerMixin, Indexer):
                 value = value.isoformat()
 
             if self.number_of_permutations(value) > MAX_COLUMNS_PER_SPECIAL_INDEX*500:
-                raise ValueError("Can't index for contains query, this value is too long and has too many permutations. \
-                    You can increase the DJANGAE_MAX_COLUMNS_PER_SPECIAL_INDEX setting to fix that. Use with caution.")
+                raise ValueError(
+                    "Can't index for contains query, this value is too long and has too many "
+                    "permutations. You can increase the DJANGAE_MAX_COLUMNS_PER_SPECIAL_INDEX "
+                    "setting to fix that. Use with caution."
+                )
             if len(value) > CHARACTERS_PER_COLUMN[-1]:
-                raise ValueError("Can't index for contains query, this value can be maximum {0} characters long.".format(CHARACTERS_PER_COLUMN[-1]))
+                raise ValueError(
+                    "Can't index for contains query, this value can be maximum {0} characters long."
+                    .format(CHARACTERS_PER_COLUMN[-1])
+                )
 
             if _is_iterable(value):
                 for element in value:
