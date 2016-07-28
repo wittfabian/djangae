@@ -324,7 +324,9 @@ class RelatedIteratorField(ForeignObject):
         # before we could check the lookups.
         assert len(targets) == len(sources)
         if len(lookups) > 1:
-            raise exceptions.FieldError('Relation fields do not support nested lookups')
+            raise exceptions.FieldError(
+                '%s does not support nested lookups' % self.__class__.__name__
+            )
 
         lookup_type = lookups[0]
         target = targets[0]
@@ -340,7 +342,10 @@ class RelatedIteratorField(ForeignObject):
                 root_constraint.add(RelatedContainsLookup(target.get_col(alias, source), raw_value), AND)
             return root_constraint
         elif lookup_type in ('in', 'exact', 'isnull'):
-            raise TypeError("RelatedIteratorFields don't allow exact, in or isnull. Use contains, overlap or isempty respectively")
+            raise TypeError(
+                "%s doesn't allow exact, in or isnull. Use contains, overlap or isempty respectively"
+                % self.__class__.__name__
+            )
 
         return super(RelatedIteratorField, self).get_lookup_constraint(
                 constraint_class, alias, targets, sources, lookups, raw_value)
