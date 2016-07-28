@@ -24,11 +24,8 @@ except ImportError:
 
 from djangae import environment
 
-from djangae.db.utils import (
-    get_top_concrete_parent,
-    has_concrete_parents,
-    get_field_from_column
-)
+from djangae.db.utils import get_top_concrete_parent
+
 
 DJANGAE_LOG = logging.getLogger("djangae")
 

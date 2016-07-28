@@ -1,17 +1,16 @@
 import datetime
 import logging
-import contextlib
 
+from django.conf import settings
 from django.core.exceptions import NON_FIELD_ERRORS
-
-from google.appengine.ext import db
 from google.appengine.api.datastore import Key, Delete
 from google.appengine.datastore.datastore_rpc import TransactionOptions
+from google.appengine.ext import db
 
 from .unique_utils import unique_identifiers_from_entity
 from .utils import key_exists
 from djangae.db.backends.appengine.dbapi import IntegrityError, NotSupportedError
-from django.conf import settings
+
 
 DJANGAE_LOG = logging.getLogger("djangae")
 

@@ -1,10 +1,9 @@
 import copy
-import warnings
 from itertools import chain
 
 from django import forms
 from django.db import models
-from django.db.models.lookups import Lookup, Exact, In, IsNull, Transform
+from django.db.models.lookups import Lookup, Transform
 from django.core.exceptions import ValidationError, ImproperlyConfigured
 from djangae.forms.fields import ListFormField
 from django.utils.text import capfirst
@@ -316,6 +315,7 @@ class ListField(IterableField):
         name, path, args, kwargs = super(ListField, self).deconstruct()
         kwargs['ordering'] = self.ordering
         return name, path, args, kwargs
+
 
 class SetField(IterableField):
     @property

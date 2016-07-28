@@ -4,7 +4,6 @@ import logging
 import copy
 import decimal
 import json
-import contextlib
 
 from functools import partial
 from itertools import chain, groupby
@@ -15,7 +14,7 @@ from django.db import DatabaseError
 from django.db import IntegrityError
 
 from google.appengine.api import datastore, datastore_errors, memcache
-from google.appengine.datastore import datastore_rpc, datastore_stub_util
+from google.appengine.datastore import datastore_stub_util
 from google.appengine.api.datastore import Query
 from google.appengine.ext import db
 
