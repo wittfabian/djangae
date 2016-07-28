@@ -3,7 +3,7 @@ import logging
 
 from django.conf import settings
 from django.core.exceptions import NON_FIELD_ERRORS
-from google.appengine.api.datastore import Key, Delete
+from google.appengine.api.datastore import Key, Delete, MAX_ALLOWABLE_QUERIES
 from google.appengine.datastore.datastore_rpc import TransactionOptions
 from google.appengine.ext import db
 
@@ -238,7 +238,7 @@ class UniquenessMixin(object):
             # Split IN queries into multiple lookups if they are too long
             lookups = []
             for k, v in lookup_kwargs.iteritems():
-                if (k.endswith("__in") or k.endswith("__overlap")) and len(v) > 30:
+                if (k.endswith("__in") or k.endswith("__overlap")) and len(v) > MAX_ALLOWABLE_QUERIES:
                     v = list(v)
                     while v:
                         new_lookup = lookup_kwargs.copy()
