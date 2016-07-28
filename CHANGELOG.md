@@ -4,7 +4,9 @@
 
 - ALLOWED_HOSTS is now set to ("*",) by default as App Engine deals with routing and this prevents
   users being confused when their deployed app returns 400 responses.
-- Added version string to `__init__`
+- Added version string to `__init__`.
+- Added an `--install_deps` flag to the `runtests.sh` script to allow triggering of dependency installation without having to delete the SDK folder.
+- Added an `--install_sdk` flag to both the `runtests.sh` script and to the `install_deps.py` script in the bundled 'testapp'.
 
 ### Bug fixes:
 
@@ -18,6 +20,7 @@
 - Fixed a bug where an empty upload_to argument to FileField would result in a broken "./" folder in Cloud Storage.
 - Fixed an issue where pre-created users may not have been able to log in if the email address associated with their Google account differed in case to the email address saved in their pre-created User object.
 - Made configuration changes to the bundled 'testapp' to allow the `runserver` command to work.
+- Fixed a bug in the `install_deps.py` script in the bundled 'testapp' where it would always re-install the App Engine SDK, even if it already existed.
 
 ### Documentation:
 
