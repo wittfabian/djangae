@@ -31,6 +31,9 @@ class ContainsLookup(Lookup):
         if hasattr(self.rhs, "__iter__"):
             raise ValueError("__contains cannot take an iterable")
 
+        # Currently, we cannot differentiate between an empty list (which we store as None) and a
+        # list which contains None.  Once we move to storing empty lists as empty lists (now that
+        # GAE allows it) we can remove this restriction.
         if self.rhs is None:
             raise ValueError("__contains cannot take None, use __isempty instead")
 

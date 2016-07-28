@@ -290,6 +290,8 @@ class Query(object):
         self.order_by.append(column)
 
     def add_annotation(self, column, annotation):
+        # The Trunc annotation class doesn't exist in Django 1.8, hence we compare by
+        # strings, rather than importing the class to compare it
         name = annotation.__class__.__name__
         if name == "Count":
             return  # Handled elsewhere

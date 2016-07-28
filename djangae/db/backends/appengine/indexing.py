@@ -440,11 +440,14 @@ class ContainsIndexer(StringIndexerMixin, Indexer):
                 )
 
             if _is_iterable(value):
+                # `value` is a list of strings. Generate a single combined list containing the
+                # substrings of each string in `value`
                 for element in value:
                     length = len(element)
                     lists = [element[i:j + 1] for i in xrange(length) for j in xrange(i, length)]
                     results.extend(lists)
             else:
+                # `value` is a string. Generate a list of all its substrings.
                 length = len(value)
                 lists = [value[i:j + 1] for i in xrange(length) for j in xrange(i, length)]
                 results.extend(lists)
@@ -462,6 +465,7 @@ class ContainsIndexer(StringIndexerMixin, Indexer):
         value = self.unescape(value)
 
         if STRIP_PERCENTS:
+            # SQL does __contains by doing LIKE %value%
             if value.startswith("%") and value.endswith("%"):
                 value = value[1:-1]
 
@@ -521,10 +525,13 @@ class EndsWithIndexer(StringIndexerMixin, Indexer):
 
         results = []
         if _is_iterable(value):
+            # `value` is a list of strings. Create a single combined list of "endswith" values
+            # of all the strings in the list
             for element in value:
                 for i in xrange(0, len(element)):
                     results.append(element[i:])
         else:
+            # `value` is a string. Create a list of "endswith" strings.
             for i in xrange(0, len(value)):
                 results.append(value[i:])
 
@@ -587,10 +594,13 @@ class StartsWithIndexer(StringIndexerMixin, Indexer):
 
         results = []
         if _is_iterable(value):
+            # `value` is a list of strings. Create a single combined list of "startswith" values
+            # of all the strings in the list
             for element in value:
                 for i in xrange(1, len(element) + 1):
                     results.append(element[:i])
         else:
+            # `value` is a string. Create a list of "startswith" strings.
             for i in xrange(1, len(value) + 1):
                 results.append(value[:i])
 
