@@ -49,6 +49,7 @@
 - Alias DatastorePaginator -> Paginator, and DatastorePage -> Page to be more like Django
 - Moved `ContentType` patching to `djangae.contrib.contenttypes`. `DJANGAE_SIMULATE_CONTENTTYPES` setting has been removed, add `djangae.contrib.contenttypes` to `INSTALLED_APPS` instead. `djangae.contrib.contenttypes` needs to be after `django.contrib.contenttypes` in the `INSTALLED_APPS` order.
 - Allow customization of which user data is synced in gauth `AuthenticationMiddleware`.
+- Allow passing `on_change` callback run when ShardedCounter is changed.
 
 ### Bug fixes:
 
