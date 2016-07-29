@@ -1,16 +1,18 @@
 import random
+import warnings
 
 from django.core.exceptions import ImproperlyConfigured
 from django.db import models
 from google.appengine.datastore.datastore_rpc import BaseConnection
 from google.appengine.datastore.datastore_stub_util import _MAX_EG_PER_TXN
 
+from djangae.db import transaction
 from djangae.fields.related import (
     RelatedSetField,
     RelatedIteratorManagerBase,
     ReverseRelatedObjectsDescriptor,
 )
-from djangae.db import transaction
+from djangae.utils import DjangaeDeprecation
 
 
 MAX_ENTITIES_PER_GET = BaseConnection.MAX_GET_KEYS
@@ -25,6 +27,14 @@ class RelatedShardManager(RelatedIteratorManagerBase, models.Manager):
         model manager with the usual queryset methods (the same as for RelatedSetField) but with
         the additional increment()/decrement()/reset() methods for the counting.
     """
+
+    def count(self):
+        warnings.warn(
+            "RelatedShardManager.count is deprecated. Use 'shard_count()' for the "
+            "number of shards or 'value()' for the total counter value.",
+            DjangaeDeprecation, 2
+        )
+        return super(RelatedShardManager, self).count()
 
     def increment(self, step=1):
         if step < 0:
@@ -41,6 +51,10 @@ class RelatedShardManager(RelatedIteratorManagerBase, models.Manager):
         """ Calcuate the aggregated sum of all the shard values. """
         shards = self.all().values_list('count', flat=True)
         return sum(shards)
+
+    def shard_count(self):
+        """ Return the number of shard objects. """
+        return super(RelatedShardManager, self).count()
 
     def reset(self):
         """ Reset the counter to 0. """

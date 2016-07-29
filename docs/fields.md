@@ -94,6 +94,7 @@ When you access the attribute of your sharded counter field on your model, you g
      - Note that this causes your model instance to be re-saved.
 * `.reset()`: Resets the counter to 0.
     - This is done by changing the value of the shards, not by deleting them.  So you can continue to use your counter afterwards without having to call `populate()` again first.
+* `.shard_count()`: Gives the number of `CounterShard` objects which are being used to store the counter.
 
 ### Callback function
 
