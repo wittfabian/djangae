@@ -89,11 +89,19 @@ For running the tests, you just need to run:
 
     $ ./runtests.sh
 
-On the first run this will download the App Engine SDK, pip install a bunch of stuff locally (into a folder, no virtualenv needed), download the Django tests and run them.  Subsequent runs will just run the tests. If you want to run the tests on a specific Django version, simply do:
+On the first run this will download the App Engine SDK, pip install a bunch of stuff locally (into a folder, no virtualenv needed), download the Django tests and run them.  Subsequent runs will just run the tests. If you want to run the tests on a specific Django version, you can switch the installed version by doing:
 
-    $ DJANGO_VERSION=1.8 ./runtests.sh
+    $ DJANGO_VERSION=1.8 ./runtests.sh --install_deps
 
 Currently the default is 1.8. TravisCI runs on 1.8 and 1.9 currently.
+
+If you want to run the tests on a specific App Engine SDK version, then you can switch the installed version by doing:
+
+    $ SDK_VERSION=1.9.35 ./runtests.sh --install_sdk
+
+Note that this also re-installs the dependencies, so will reset the Django version to the default of 1.8.
+
+
 
 You can run specific tests in the usual way by doing:
 

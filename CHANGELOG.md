@@ -4,6 +4,11 @@
 
 - ALLOWED_HOSTS is now set to ("*",) by default as App Engine deals with routing and this prevents
   users being confused when their deployed app returns 400 responses.
+- Added version string to `__init__`.
+- Added an `--install_deps` flag to the `runtests.sh` script to allow triggering of dependency installation without having to delete the SDK folder.
+- Added an `--install_sdk` flag to both the `runtests.sh` script and to the `install_deps.py` script in the bundled 'testapp'.
+- The `count()` method on `ShardedCounterField` is deprecated because its function was ambiguous or misleading and was often mistakenly used instead of `value()`. It is replaced with a `shard_count()` method.
+
 
 ### Bug fixes:
 
@@ -15,6 +20,9 @@
 - Fixed a bug where making a projection query on time or datetime fields will return truncated values without microseconds
 - Fixed a test which could intermittently fail (`test_ordering_on_sparse_field`).
 - Fixed a bug where an empty upload_to argument to FileField would result in a broken "./" folder in Cloud Storage.
+- Fixed an issue where pre-created users may not have been able to log in if the email address associated with their Google account differed in case to the email address saved in their pre-created User object.
+- Made configuration changes to the bundled 'testapp' to allow the `runserver` command to work.
+- Fixed a bug in the `install_deps.py` script in the bundled 'testapp' where it would always re-install the App Engine SDK, even if it already existed.
 
 ### Documentation:
 
@@ -45,6 +53,7 @@
 - Alias DatastorePaginator -> Paginator, and DatastorePage -> Page to be more like Django
 - Moved `ContentType` patching to `djangae.contrib.contenttypes`. `DJANGAE_SIMULATE_CONTENTTYPES` setting has been removed, add `djangae.contrib.contenttypes` to `INSTALLED_APPS` instead. `djangae.contrib.contenttypes` needs to be after `django.contrib.contenttypes` in the `INSTALLED_APPS` order.
 - Allow customization of which user data is synced in gauth `AuthenticationMiddleware`.
+- Allow passing `on_change` callback run when ShardedCounter is changed.
 
 ### Bug fixes:
 

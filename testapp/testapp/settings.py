@@ -169,6 +169,11 @@ DJANGAE_ADDITIONAL_TEST_APPS = ["djangae"] + TO_TEST
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
+        'OPTIONS': {
+            'context_processors': [
+                'django.contrib.auth.context_processors.auth'
+            ]
+        }
     },
 ]
 
