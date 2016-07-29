@@ -1,16 +1,18 @@
 import random
+import warnings
 
 from django.core.exceptions import ImproperlyConfigured
 from django.db import models
 from google.appengine.datastore.datastore_rpc import BaseConnection
 from google.appengine.datastore.datastore_stub_util import _MAX_EG_PER_TXN
 
+from djangae.db import transaction
 from djangae.fields.related import (
     RelatedSetField,
     RelatedIteratorManagerBase,
     ReverseRelatedObjectsDescriptor,
 )
-from djangae.db import transaction
+from djangae.utils import DjangaeDeprecation
 
 
 MAX_ENTITIES_PER_GET = BaseConnection.MAX_GET_KEYS
@@ -25,6 +27,14 @@ class RelatedShardManager(RelatedIteratorManagerBase, models.Manager):
         model manager with the usual queryset methods (the same as for RelatedSetField) but with
         the additional increment()/decrement()/reset() methods for the counting.
     """
+
+    def count(self):
+        warnings.warn(
+            "RelatedShardManager.count is deprecated. Use 'shard_count()' for the "
+            "number of shards or 'value()' for the total counter value.",
+            DjangaeDeprecation, 2
+        )
+        return super(RelatedShardManager, self).count()
 
     def increment(self, step=1):
         if step < 0:
@@ -42,16 +52,17 @@ class RelatedShardManager(RelatedIteratorManagerBase, models.Manager):
         shards = self.all().values_list('count', flat=True)
         return sum(shards)
 
+    def shard_count(self):
+        """ Return the number of shard objects. """
+        return super(RelatedShardManager, self).count()
+
     def reset(self):
         """ Reset the counter to 0. """
         # This is not transactional because (1) that wouldn't work with > 24 shards, and (2) if
         # there are other threads doing increments/decrements at the same time then it doesn't make
         # any difference if they happen before or after our increment/decrement anyway.
-        value = self.value()
-        if value > 0:
-            self.decrement(value)
-        elif value < 0:
-            self.increment(abs(value))
+        value = -self.value()
+        self._update_or_create_shard(value, is_reset=True)
 
     def clear(self):
         # Override the default `clear` method of the parent class, as that only clears the list of
@@ -84,7 +95,7 @@ class RelatedShardManager(RelatedIteratorManagerBase, models.Manager):
                 models.Model.save(new_instance) # avoid custom save method, which might do DB lookups
                 total_to_create -= num_to_create
 
-    def _update_or_create_shard(self, step):
+    def _update_or_create_shard(self, step, is_reset=False):
         """ Find or create a random shard and alter its `count` by the given step. """
         shard_index = random.randint(0, self.field.shard_count - 1)
         # Converting the set to a list introduces some randomness in the ordering, but that's fine
@@ -103,12 +114,17 @@ class RelatedShardManager(RelatedIteratorManagerBase, models.Manager):
                 new_instance_shard_pks.add(new_shard.pk)
                 setattr(self.instance, self.field.attname, new_instance_shard_pks)
                 models.Model.save(new_instance) # avoid custom save method, which might do DB lookups
+                shard = new_shard
         else:
             with transaction.atomic():
                 from djangae.models import CounterShard
                 shard = CounterShard.objects.get(pk=shard_pk)
                 shard.count += step
                 shard.save()
+
+        # if the ShardedCounter has on_change callback, run it now
+        if self.field.on_change:
+            self.field.on_change(self.instance, step, is_reset=is_reset)
 
     def _create_shard(self, count):
         from djangae.models import CounterShard
@@ -154,6 +170,9 @@ class ShardedCounterField(RelatedSetField):
                 "ShardedCounterField.shard_count cannot be more than the Datastore is capable of "
                 "fetching in a single Get operation (%d)" % MAX_ENTITIES_PER_GET
             )
+
+        self.on_change = kwargs.pop("on_change", None)
+
         kwargs.setdefault("related_name", "+")
         super(ShardedCounterField, self).__init__('djangae.CounterShard', **kwargs)
 

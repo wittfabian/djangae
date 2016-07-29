@@ -1,16 +1,16 @@
 import os
 import sys
 
+
 def fix_path():
     current_folder = os.path.abspath(os.path.dirname(__file__))
     lib_path = os.path.join(current_folder, "libs")
-    djangae_path = os.path.abspath(os.path.join(current_folder, os.pardir))
 
     if lib_path not in sys.path:
         sys.path.insert(0, lib_path)
 
-    if djangae_path not in sys.path:
-        sys.path.insert(0, djangae_path)
+    # Djangae exists in the parent directory, but the dev_appserver sandbox won't let us access it
+    # there, so it's just symlinked into the 'testapp' directory, and we don't need to add it here.
 
     # Adds Django and Django tests
     base_django_path = os.path.join(current_folder, "submodules", "django")

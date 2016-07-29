@@ -48,18 +48,7 @@ class AuthenticationMiddleware(DjangoMiddleware):
     def sync_user_data(self, django_user, google_user):
         # Now make sure we update is_superuser and is_staff appropriately
         is_superuser = users.is_current_user_admin()
-        resave = False
 
         if is_superuser != django_user.is_superuser:
             django_user.is_superuser = django_user.is_staff = is_superuser
-            resave = True
-
-        # for users which already exist, we want to verify that their email is still correct
-        # users are already authenticated with their user_id, so we can save their real email
-        # not the lowercased version
-        if django_user.email != google_user.email():
-            django_user.email = google_user.email()
-            resave = True
-
-        if resave:
-            django_user.save()
+            django_user.save(update_fields=['is_superuser', 'is_staff'])

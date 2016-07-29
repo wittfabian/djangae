@@ -94,6 +94,22 @@ When you access the attribute of your sharded counter field on your model, you g
      - Note that this causes your model instance to be re-saved.
 * `.reset()`: Resets the counter to 0.
     - This is done by changing the value of the shards, not by deleting them.  So you can continue to use your counter afterwards without having to call `populate()` again first.
+* `.shard_count()`: Gives the number of `CounterShard` objects which are being used to store the counter.
+
+### Callback function
+
+If you want to perform some actions after a sharded counter was changed you can provide `on_change` argument with a function to call.
+
+```your_field = ShardedCounterField(on_change=your_callback_function)```
+
+The callback function takes two arguments: `instance`, `step` and optional `is_reset`, where instance is the instance of the object with the `ShardedCounterField`, `step` informs us how much the counter was changed and `is_reset` lets us know if the counter was reset.
+
+```python
+def your_callback_function(instance, step, is_reset=False):
+    ...
+```
+
+The function will be called every time you run `increment`, `decrement` and `reset`.
 
 
 ### Additional notes:

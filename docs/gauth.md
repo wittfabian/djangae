@@ -3,7 +3,6 @@
 Djangae includes two applications to aid authentication and user management with
 App Engine. Each provides both an abstract class, to extend if you're defining your own custom User model, or a concrete version to use in place of `'django.contrib.auth.models.User'`.  Also provided are custom authentication backends which delegate to the App Engine users API and a middleware to handle the link between the Django's user object and App Engine's (amongst other things).
 
-The only minor difference between Djangae Gauth and Django Auth is that Djangae overrides `normalize_email` to lowercase whole email, not just the domain part like Django does. See rationale behind this decision in [issue #481 on Github](https://github.com/potatolondon/djangae/issues/481).
 
 ## Using the Datastore
 
@@ -86,7 +85,7 @@ and replace `'djangae.contrib.gauth.middleware.AuthenticationMiddleware'` with y
 
 You can add users to the database before they have logged in.  If you've set `DJANGAE_CREATE_UNKNOWN_USER` to `False` then **only** users who already exist in the database can log in.
 
-Users are keyed by their Google User ID, which is stored in the `username` field.  However, it is impossible to know what a user's Google User ID will be until they have logged in.  Therefore, pre-created users who have not yet logged in are keyed by their email address.  To create a user who has not yet logged in you can either:
+Users are keyed by their Google User ID, which is stored in the `username` field.  However, it is impossible to know what a user's Google User ID will be until they have logged in.  Therefore, pre-created users who have not yet logged in are keyed by their email address (case insensitively).  To create a user who has not yet logged in you can either:
 
 * Create the user via the Django admin, leaving the `username` field (labelled _"User ID"_) blank.  Or...
 * Create the user via the remote shell with `get_user_model().objects.pre_create_google_user("user@example.com")`.
