@@ -11,6 +11,9 @@ from djangae.forms.fields import (
 )
 from django.utils import six
 
+from djangae.fields.iterable import IsEmptyLookup, ContainsLookup, OverlapLookup
+
+
 class RelatedIteratorRel(ForeignObjectRel):
     def __init__(self, field, to, related_name=None, limit_choices_to=None, on_delete=models.DO_NOTHING):
         self.field = field
@@ -115,7 +118,7 @@ class RelatedIteratorManagerBase(object):
         self.reverse = reverse
 
         if reverse:
-            self.core_filters = {'%s__exact' % self.field.column: instance.pk}
+            self.core_filters = {'%s__contains' % self.field.column: instance.pk}
         else:
             self.core_filters = {'pk__in': field.value_from_object(instance)}
 
@@ -253,6 +256,21 @@ class ReverseRelatedObjectsDescriptor(object):
 from abc import ABCMeta
 
 
+class RelatedContainsLookup(ContainsLookup):
+    def get_prep_lookup(self):
+        # If this is an instance, then we want to lookup based on the PK
+        if isinstance(self.rhs, models.Model):
+            self.rhs = self.rhs.pk
+        return super(RelatedContainsLookup, self).get_prep_lookup()
+
+
+class RelatedOverlapLookup(OverlapLookup):
+    def get_prep_lookup(self):
+        # Transform any instances to primary keys
+        self.rhs = [ x.pk if isinstance(x, models.Model) else x for x in self.rhs ]
+        return super(RelatedContainsLookup, self).get_prep_lookup()
+
+
 class RelatedIteratorField(ForeignObject):
 
     __metaclass__ = ABCMeta
@@ -286,11 +304,51 @@ class RelatedIteratorField(ForeignObject):
             kwargs.update({
                 'on_delete': models.DO_NOTHING,
             })
+        elif django.VERSION[1] == 8:
+            # in Django 1.8 ForeignObject uses get_lookup_constraint instead
+            # of get_lookup. We want to override it (but only for Django 1.8)
+            self.get_lookup_constraint = self._get_lookup_constraint
 
         from_fields = ['self']
         to_fields = [None]
 
         super(RelatedIteratorField, self).__init__(to, from_fields=from_fields, to_fields=to_fields, **kwargs)
+
+    def _get_lookup_constraint(self, constraint_class, alias, targets, sources, lookups, raw_value):
+        from django.core import exceptions
+        from django.db.models.sql.where import AND
+
+        root_constraint = constraint_class()
+
+        # we need some checks from ForeignObject.get_lookup_constraint
+        # before we could check the lookups.
+        assert len(targets) == len(sources)
+        if len(lookups) > 1:
+            raise exceptions.FieldError(
+                '%s does not support nested lookups' % self.__class__.__name__
+            )
+
+        lookup_type = lookups[0]
+        target = targets[0]
+        source = sources[0]
+
+        # use custom Lookups when applicable
+        if lookup_type in ['isempty', 'overlap', 'contains']:
+            if lookup_type == 'isempty':
+                root_constraint.add(IsEmptyLookup(target.get_col(alias, source), raw_value), AND)
+            elif lookup_type == 'overlap':
+                root_constraint.add(RelatedOverlapLookup(target.get_col(alias, source), raw_value), AND)
+            elif lookup_type == 'contains':
+                root_constraint.add(RelatedContainsLookup(target.get_col(alias, source), raw_value), AND)
+            return root_constraint
+        elif lookup_type in ('in', 'exact', 'isnull'):
+            raise TypeError(
+                "%s doesn't allow exact, in or isnull. Use contains, overlap or isempty respectively"
+                % self.__class__.__name__
+            )
+
+        return super(RelatedIteratorField, self).get_lookup_constraint(
+                constraint_class, alias, targets, sources, lookups, raw_value)
 
     def deconstruct(self):
         name, path, args, kwargs = super(RelatedIteratorField, self).deconstruct()
@@ -373,6 +431,23 @@ class RelatedIteratorField(ForeignObject):
                 initial = initial()
             defaults['initial'] = [i._get_pk_val() for i in initial]
         return super(RelatedIteratorField, self).formfield(**defaults)
+
+    def get_lookup(self, lookup_name):
+        if lookup_name == 'isempty':
+            return IsEmptyLookup
+        elif lookup_name == 'overlap':
+            return OverlapLookup
+        elif lookup_name == 'contains':
+            return RelatedContainsLookup
+        elif lookup_name in ('in', 'exact', 'isnull'):
+            raise TypeError("RelatedIteratorFields don't allow exact, in or isnull. Use contains, overlap or isempty respectively")
+
+        return super(RelatedIteratorField, self).get_lookup(lookup_name)
+
+
+RelatedIteratorField.register_lookup(RelatedContainsLookup)
+RelatedIteratorField.register_lookup(OverlapLookup)
+RelatedIteratorField.register_lookup(IsEmptyLookup)
 
 
 class RelatedSetField(RelatedIteratorField):

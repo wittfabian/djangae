@@ -304,7 +304,8 @@ class CustomPermissionsUserModelBackendTest(TestCase):
         super(CustomPermissionsUserModelBackendTest, self).setUp()
 
         GaeDatastoreUser.objects = GaeDatastoreUser._default_manager
-        GaeDatastoreUser._base_manager = GaeDatastoreUser._default_manager
+        GaeDatastoreUser.base_manager_name = 'objects'
+
         self.user = GaeDatastoreUser.objects.create(
             username='test1',
             email='test@example.com',

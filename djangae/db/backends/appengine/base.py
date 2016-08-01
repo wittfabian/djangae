@@ -162,10 +162,16 @@ class DatabaseOperations(BaseDatabaseOperations):
         return name
 
     def date_trunc_sql(self, lookup_type, field_name):
-        return None
+        return ''
 
     def datetime_trunc_sql(self, lookup_type, field_name, tzname):
-        return '%s'
+        return '', []
+
+    def datetime_extract_sql(self, lookup_name, sql, tzname):
+        return '', []
+
+    def date_extract_sql(self, lookup_name, sql):
+        return '', []
 
     def get_db_converters(self, expression):
         converters = super(DatabaseOperations, self).get_db_converters(expression)
@@ -226,7 +232,7 @@ class DatabaseOperations(BaseDatabaseOperations):
         return value
 
     def sql_flush(self, style, tables, seqs, allow_cascade=False):
-        return [ FlushCommand(table, self.connection) for table in tables ]
+        return [FlushCommand(table, self.connection) for table in tables]
 
     def prep_lookup_key(self, model, value, field):
         if isinstance(value, basestring):
@@ -531,10 +537,20 @@ class DatabaseWrapper(BaseDatabaseWrapper):
 
     operators = {
         'exact': '= %s',
+        'iexact': 'iexact %s',
+        'contains': 'contains %s',
+        'icontains': 'icontains %s',
+        'regex': 'regex %s',
+        'iregex': 'iregex %s',
         'gt': '> %s',
         'gte': '>= %s',
         'lt': '< %s',
-        'lte': '<= %s'
+        'lte': '<= %s',
+        'startswith': 'startswith %s',
+        'endswith': 'endswith %s',
+        'istartswith': 'istartswith %s',
+        'iendswith': 'iendswith %s',
+        'isnull': 'isnull %s'
     }
 
     Database = Database

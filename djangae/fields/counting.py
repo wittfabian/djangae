@@ -80,7 +80,7 @@ class RelatedShardManager(RelatedIteratorManagerBase, models.Manager):
                 # We must re-fetch the instance to ensure that we do this atomically, but we must
                 # also update self.instance so that the calling code which is referencing
                 # self.instance also gets the updated list of shard PKs
-                new_instance = self.instance._default_manager.get(pk=self.instance.pk)
+                new_instance = self.instance.__class__._default_manager.get(pk=self.instance.pk)
                 new_instance_shard_pks = getattr(new_instance, self.field.attname, set())
                 # Re-check / update the number to create based on the refreshed instance from the DB
                 total_to_create = self.field.shard_count - len(new_instance_shard_pks)
@@ -109,7 +109,7 @@ class RelatedShardManager(RelatedIteratorManagerBase, models.Manager):
                 # also update self.instance so that the calling code which is referencing
                 # self.instance also gets the updated list of shard PKs
                 new_shard = self._create_shard(count=step)
-                new_instance = self.instance._default_manager.get(pk=self.instance.pk)
+                new_instance = self.instance.__class__._default_manager.get(pk=self.instance.pk)
                 new_instance_shard_pks = getattr(new_instance, self.field.attname, set())
                 new_instance_shard_pks.add(new_shard.pk)
                 setattr(self.instance, self.field.attname, new_instance_shard_pks)

@@ -237,7 +237,11 @@ class BlobstoreStorage(Storage, BlobstoreUploadMixin):
             url = get_serving_url(self._get_blobinfo(name))
             return re.sub("http://", "//", url)
         except (NotImageError, BlobKeyRequiredError, TransformationError):
-            return None
+            # Django doesn't expect us to return None from this function, and in fact
+            # relies on the "truthiness" of the return value when accessing .url on an
+            # unsaved fieldfile. We just return the name which is effectively what Django
+            # does in its default storage.
+            return name
 
     def created_time(self, name):
         return self._get_blobinfo(name).creation

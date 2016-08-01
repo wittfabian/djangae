@@ -21,7 +21,7 @@ from django.forms import ModelForm
 from django.test import RequestFactory
 from django.utils.safestring import SafeText
 from django.forms.models import modelformset_factory
-from google.appengine.api.datastore_errors import EntityNotFoundError, BadValueError, TransactionFailedError
+from google.appengine.api.datastore_errors import EntityNotFoundError, TransactionFailedError
 from google.appengine.datastore import datastore_rpc
 from google.appengine.api import datastore
 from google.appengine.ext import deferred
@@ -32,13 +32,14 @@ from django.template import Template, Context
 
 # DJANGAE
 from djangae.contrib import sleuth
+from djangae.fields import CharField
 from djangae.test import inconsistent_db, TestCase
 from django.db import IntegrityError, NotSupportedError
 from djangae.db.backends.appengine.commands import FlushCommand
 from djangae.db import constraints
 from djangae.db.constraints import UniqueMarker, UniquenessMixin
 from djangae.db.unique_utils import _unique_combinations, unique_identifiers_from_entity
-from djangae.db.backends.appengine.indexing import add_special_index
+from djangae.db.backends.appengine.indexing import add_special_index, IExactIndexer, get_indexer
 from djangae.db.backends.appengine import indexing
 from djangae.db.utils import entity_matches_query, decimal_to_string, normalise_field_value
 from djangae.db.caching import disable_cache
@@ -231,6 +232,7 @@ class ModelWithUniquesAndOverride(models.Model):
 
 class SpecialIndexesModel(models.Model):
     name = models.CharField(max_length=255, primary_key=True)
+    nickname = CharField(blank=True)
     sample_list = ListField(models.CharField)
 
     def __unicode__(self):
@@ -1170,7 +1172,7 @@ class ConstraintTests(TestCase):
         )
 
         # Without a custom mixin, Django can't construct a unique validation query for a list field
-        self.assertRaises(BadValueError, instance1.full_clean)
+        self.assertRaises(ValueError, instance1.full_clean)
         UniqueModel.__bases__ = (UniquenessMixin,) + UniqueModel.__bases__
         instance1.full_clean()
         instance1.save()
@@ -1229,7 +1231,7 @@ class EdgeCaseTests(TestCase):
     def setUp(self):
         super(EdgeCaseTests, self).setUp()
 
-        add_special_index(TestUser, "username", "iexact")
+        add_special_index(TestUser, "username", IExactIndexer(), "iexact")
 
         self.u1 = TestUser.objects.create(username="A", email="test@example.com", last_login=datetime.datetime.now().date(), id=1)
         self.u2 = TestUser.objects.create(username="B", email="test@example.com", last_login=datetime.datetime.now().date(), id=2)
@@ -1568,7 +1570,7 @@ class EdgeCaseTests(TestCase):
         user = TestUser.objects.get(username__iexact="a")
         self.assertEqual("A", user.username)
 
-        add_special_index(IntegerModel, "integer_field", "iexact")
+        add_special_index(IntegerModel, "integer_field", IExactIndexer(), "iexact")
         IntegerModel.objects.create(integer_field=1000)
         integer_model = IntegerModel.objects.get(integer_field__iexact=str(1000))
         self.assertEqual(integer_model.integer_field, 1000)
@@ -1577,7 +1579,7 @@ class EdgeCaseTests(TestCase):
         self.assertEqual("A", user.username)
 
     def test_iexact_containing_underscores(self):
-        add_special_index(TestUser, "username", "iexact")
+        add_special_index(TestUser, "username", IExactIndexer(), "iexact")
         user = TestUser.objects.create(username="A_B", email="test@example.com")
         results = TestUser.objects.filter(username__iexact=user.username.lower())
         self.assertEqual(list(results), [user])
@@ -1677,14 +1679,14 @@ class EdgeCaseTests(TestCase):
         obj = TestFruit.objects.create(name='pear')
         indexes = ['icontains', 'contains', 'iexact', 'iendswith', 'endswith', 'istartswith', 'startswith']
         for index in indexes:
-            add_special_index(TestFruit, 'color', index)
+            add_special_index(TestFruit, 'color', get_indexer(TestFruit._meta.get_field("color"), index), index)
         obj.save()
 
     def test_special_indexes_for_unusually_long_values(self):
         obj = TestFruit.objects.create(name='pear', color='1234567890-=!@#$%^&*()_+qQWERwertyuiopasdfghjklzxcvbnm')
         indexes = ['icontains', 'contains', 'iexact', 'iendswith', 'endswith', 'istartswith', 'startswith']
         for index in indexes:
-            add_special_index(TestFruit, 'color', index)
+            add_special_index(TestFruit, 'color', get_indexer(TestFruit._meta.get_field("color"), index), index)
         obj.save()
 
         qry = TestFruit.objects.filter(color__contains='1234567890-=!@#$%^&*()_+qQWERwertyuiopasdfghjklzxcvbnm')
@@ -1888,6 +1890,14 @@ class TestSpecialIndexers(TestCase):
             qry = self.qry.filter(name__icontains=name)
             self.assertEqual(len(qry), len([x for x in self.names if name.lower() in x.lower()]))
 
+    def test_contains_lookup_on_charfield_subclass(self):
+        """ Test that the __contains lookup also works on subclasses of the Django CharField, e.g.
+            the custom Djangae CharField.
+        """
+        instance = SpecialIndexesModel.objects.create(name="whatever", nickname="Voldemort")
+        query = SpecialIndexesModel.objects.filter(nickname__contains="demo")
+        self.assertEqual(list(query), [instance])
+
     def test_endswith_lookup_and_iendswith_lookup(self):
         tests = self.names + ['a', 'A', 'aa']
         for name in tests:
@@ -1916,14 +1926,40 @@ class TestSpecialIndexers(TestCase):
             self.assertEqual(len(qry), len([x for x in self.names if re.search(pattern, x, flags=re.I)]))
 
             # Check that the same works for ListField and SetField too
-            qry = self.qry.filter(sample_list__regex=pattern)
+            qry = self.qry.filter(sample_list__item__regex=pattern)
             expected = [sample_list for sample_list in self.lists if any([bool(re.search(pattern, x)) for x in sample_list])]
             self.assertEqual(len(qry), len(expected))
 
-            qry = self.qry.filter(sample_list__iregex=pattern)
+            qry = self.qry.filter(sample_list__item__iregex=pattern)
             expected = [sample_list for sample_list in self.lists if any([bool(re.search(pattern, x, flags=re.I)) for x in sample_list])]
             self.assertEqual(len(qry), len(expected))
 
+    def test_item_contains_item_icontains_lookup(self):
+        tests = ['O', 'la', 'ola']
+        for text in tests:
+            qry = self.qry.filter(sample_list__item__contains=text)
+            self.assertEqual(len(qry), 1)
+
+            qry = self.qry.filter(sample_list__item__icontains=text)
+            self.assertEqual(len(qry), 1)
+
+    def test_item_startswith_item_istartswith_lookup(self):
+        tests = ['O', 'ola', 'Ola']
+        for text in tests:
+            qry = self.qry.filter(sample_list__item__startswith=text)
+            self.assertEqual(len(qry), 1)
+
+            qry = self.qry.filter(sample_list__item__istartswith=text)
+            self.assertEqual(len(qry), 1)
+
+    def test_item_endswith_item_iendswith_lookup(self):
+        tests = ['a', 'la', 'Ola']
+        for text in tests:
+            qry = self.qry.filter(sample_list__item__endswith=text)
+            self.assertEqual(len(qry), 1)
+
+            qry = self.qry.filter(sample_list__item__iendswith=text)
+            self.assertEqual(len(qry), 1)
 
 
 class NamespaceTests(TestCase):

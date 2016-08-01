@@ -9,7 +9,6 @@ from google.appengine.api.memcache import Client
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 from django.core.cache.backends.base import default_key_func
-from django.utils.functional import lazy
 
 from djangae.db import utils
 from djangae.db.unique_utils import unique_identifiers_from_entity, _format_value_for_identifier
@@ -106,7 +105,7 @@ class KeyPrefixedClient(Client):
             )
 
     def delete_multi_async(self, keys, seconds=0, key_prefix='', namespace=None, rpc=None):
-        keys = [ default_key_func(x, KEY_PREFIX, VERSION) for x in keys ]
+        keys = [default_key_func(x, KEY_PREFIX, VERSION) for x in keys]
 
         if self.sync_mode:
             # We don't call up, because delete_multi calls delete_multi_async
