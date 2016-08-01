@@ -5,14 +5,14 @@
 These allows you to store a list/set of values (strings, floats, integers dates) in a single field.
 This is often useful when structuring data for a non-relational database. [See example usage](fields.md#example-usages).
 
-```ListField(item_field_type, **kwargs)```
+### ListField(item_field_type, **kwargs)
 
 
 * `item_field_type`: An instance of a Django model field which defines the data type and validation for each item in the list.
 * `ordering`: A callable which allows the items in the list to be automatically sorted.
 
 
-```SetField(item_field_type, **kwargs)```
+### SetField(item_field_type, **kwargs)
 
 * `item_field_type`: An instance of a Django model field which defines the data type and validation for each item in the list.
 
@@ -37,7 +37,7 @@ Querying ListField and SetField is very similar to querying the PostgreSQL Array
 
 There are a few custom lookups for ListField and SetField
 
-**Note: Before Djangae 0.9.7 the syntax of these lookups was different (isnull vs isempty, exact vs contains, in vs overlap)**
+*Note: Before Djangae 0.9.7 the syntax of these lookups was different (isnull vs isempty, exact vs contains, in vs overlap)*
 
 #### contains
 
