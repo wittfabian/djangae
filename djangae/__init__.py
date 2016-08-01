@@ -11,6 +11,6 @@ from .patches import json
 json.patch()
 
 __title__ = 'Djangae'
-__version__ = '0.9.6'
+__version__ = '0.9.7-alpha'
 
 VERSION = __version__
