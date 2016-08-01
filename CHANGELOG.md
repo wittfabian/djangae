@@ -1,4 +1,19 @@
-## v0.9.6 (in development)
+## v0.9.7 (in development)
+
+### New features & improvements:
+
+- Made a slight efficiency improvement so that `my_queryset.filter(pk__in=other_queryset)` will use `other_queryset.values_list('pk')` rather than fetching the full objects.
+
+### Bug fixes:
+
+-
+
+### Documentation:
+
+-
+
+
+## v0.9.6 (release date: 1st August 2016)
 
 ### New features & improvements:
 
@@ -8,8 +23,10 @@
 - Added an `--install_deps` flag to the `runtests.sh` script to allow triggering of dependency installation without having to delete the SDK folder.
 - Added an `--install_sdk` flag to both the `runtests.sh` script and to the `install_deps.py` script in the bundled 'testapp'.
 - The `count()` method on `ShardedCounterField` is deprecated because its function was ambiguous or misleading and was often mistakenly used instead of `value()`. It is replaced with a `shard_count()` method.
-- Made a slight efficiency improvement so that `my_queryset.filter(pk__in=other_queryset)` will use `other_queryset.values_list('pk')` rather than fetching the full objects.
-
+- It is now possible to have a per-app djangaeidx.yaml file which can be distributed. The indexes in this file
+  are combined in memory with the ones from the project root's djangaeidx.yaml. This means that a user of your app
+  will not be required to run queries to generate indexes or manually add them to their project file.
+- Made a small performance improvement to avoid checking for changes to djangaeindx.yaml files when on production.
 
 ### Bug fixes:
 
@@ -29,6 +46,7 @@
 
 - Added documentation for:
     - Creating users for gauth.
+    - djangaeidx.yaml.
 - Improved documentation for:
     - Installation
     - Transactions
