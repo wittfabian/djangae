@@ -31,6 +31,51 @@ Both fields also accept the following standard Django model field kwargs:
 
 Djangae makes some effort to provide a sensible form field for `ListField`/`SetField`, but you may find that in some cases you need to customise or change this behaviour to suit your usage.
 
+### Querying ListField and SetField
+
+Querying ListField and SetField is very similar to querying the PostgreSQL ArrayField which exists in recent Django versions.
+
+There are a few custom lookups for ListField and SetField
+
+**Note: Before Djangae 0.9.7 the syntax of these lookups was different (isnull vs isempty, exact vs contains, in vs overlap)**
+
+#### contains
+
+The `contains` lookup is used when you want to return instances where the specified field contains a particular value:
+
+```
+>>> Post.objects.create(name="First", tags=["one", "two"])
+>>> Post.objects.create(name="Second", tags=["two", "three"])
+
+>>> Post.objects.filter(tags__contains="one")
+>>> [<Post: First>]
+```
+
+#### isempty
+
+The `isempty` lookup returns instances where the specified field has no entries:
+
+```
+>>> Post.objects.create(name="First", tags=["one", "two"])
+>>> Post.objects.create(name="Second", tags=[])
+
+>>> Post.objects.filter(tags__isempty=True)
+>>> [<Post: Second>]
+```
+
+#### overlap
+
+The `overlap` lookup returns instances where the specified field contains one or more of the passed values:
+
+```
+>>> Post.objects.create(name="First", tags=["one", "two"])
+>>> Post.objects.create(name="Second", tags=["two", "three"])
+
+>>> Post.objects.filter(tags__overlap=["one", "two"])
+>>> [<Post: First>, <Post: Second>]
+>>> Post.objects.filter(tags__overlap=["one"])
+>>> [<Post: First>]
+```
 
 ## RelatedSetField
 
