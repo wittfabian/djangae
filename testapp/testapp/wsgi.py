@@ -13,7 +13,12 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "testapp.settings")
 from fix_path import fix_path
 fix_path()
 
-from django.core.wsgi import get_wsgi_application
+
+from djangae.sandbox import allow_modules_context
+
+with allow_modules_context():
+    from django.core.wsgi import get_wsgi_application
+
 from djangae.wsgi import DjangaeApplication
 
 application = DjangaeApplication(get_wsgi_application())
