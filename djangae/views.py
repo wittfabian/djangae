@@ -79,3 +79,13 @@ def internalupload(request):
     except Exception:
         logging.exception("DJANGAE UPLOAD FAILED: The internal upload handler couldn't retrieve the blob info key.")
         return HttpResponseServerError()
+
+
+def clearsessions(request):
+    engine = import_module(settings.SESSION_ENGINE)
+    try:
+        engine.SessionStore.clear_expired()
+    except NotImplementedError:
+        logging.exception("Session engine '%s' doesn't support clearing "
+                          "expired sessions.\n" % settings.SESSION_ENGINE)
+    return HttpResponse("Ok.")
