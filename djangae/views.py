@@ -82,6 +82,8 @@ def internalupload(request):
 
 
 def clearsessions(request):
+    if not environment.is_in_cron():
+        return HttpResponse(status=403)
     engine = import_module(settings.SESSION_ENGINE)
     try:
         engine.SessionStore.clear_expired()
