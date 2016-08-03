@@ -5,10 +5,12 @@
 - Added support for Django 1.10.
 - Changed the querying of `ListField` and `SetField`, which now works similiarly to PostgreSQL ArrayField. `isnull` lookup has been replaced with `isempty`, `exact` with `contains` and `in` with `overlap`. This is a breaking change, so stick to Djangae 0.9.6 or update your code.
 - Made a slight efficiency improvement so that `my_queryset.filter(pk__in=other_queryset)` will use `other_queryset.values_list('pk')` rather than fetching the full objects.
+- Added clearsessions view.
 
 ### Bug fixes:
 
 - Fixed a circular import in djangae.db.utils
+- Fixed sandbox problem with non-final django versions in the testapp.
 
 ### Documentation:
 
