@@ -504,7 +504,7 @@ class DatabaseIntrospection(BaseDatabaseIntrospection):
 
 
 class DatabaseSchemaEditor(BaseDatabaseSchemaEditor):
-    def column_sql(self, model, field):
+    def column_sql(self, model, field, include_default=False):
         return "", {}
 
     def create_model(self, model):
@@ -518,6 +518,15 @@ class DatabaseSchemaEditor(BaseDatabaseSchemaEditor):
         pass
 
     def remove_field(self, from_model, field):
+        pass
+
+    def add_field(self, model, field):
+        pass
+        
+    def alter_index_together(self, model, old_index_together, new_index_together):
+        pass
+        
+    def delete_model(self, model):
         pass
 
 
