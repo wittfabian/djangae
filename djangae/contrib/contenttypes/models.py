@@ -43,6 +43,9 @@ class SimulatedContentTypeManager(models.Manager):
                 if model not in self._store.queried_models:
                     conn.queries.append("select * from {}".format(ContentType._meta.db_table))
                     break
+        
+        if not hasattr(self._store, "queried_models"):
+            self._store.queried_models = set()
 
         self._store.queried_models |= set(models or [])
 
