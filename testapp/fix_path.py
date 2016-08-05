@@ -37,3 +37,10 @@ def fix_path():
 
         simplejson_path = os.path.join(appengine_path, "lib", "simplejson")
         sys.path.insert(0, simplejson_path)
+
+    # Frustratingly, `import google` imports from the App Engine SDK, so if you install
+    # any other google libraries (e.g. protobuf, gcloud) into your libs folder, they won't be found
+    # unless we manually force it like this.
+    if os.path.exists(os.path.join(lib_path, "google")):
+        import google
+        google.__path__.append(os.path.join(lib_path, "google"))

@@ -28,6 +28,7 @@ FEATURED_SDK_REPO = "https://storage.googleapis.com/appengine-sdks/featured/"
 DEPRECATED_SDK_REPO = "https://storage.googleapis.com/appengine-sdks/deprecated/%s/" % APPENGINE_SDK_VERSION.replace('.', '')
 
 DJANGO_VERSION = os.environ.get("DJANGO_VERSION", "1.8")
+USE_GCLOUD = os.environ.get("USE_GCLOUD", False)
 
 
 if any([x in DJANGO_VERSION for x in ['master', 'a', 'b', 'rc']]):
@@ -43,7 +44,7 @@ if __name__ == '__main__':
 
         # If we're going to install the App Engine SDK then we can just wipe the entire TARGET_DIR
         if os.path.exists(TARGET_DIR):
-            shutil.rmtree(TARGET_DIR)
+            shutil.rmtree(TARGET_DIR, ignore_errors=True)
 
         print('Downloading the AppEngine SDK...')
 
@@ -72,12 +73,18 @@ if __name__ == '__main__':
             path = os.path.join(TARGET_DIR, name)
             if path == APPENGINE_TARGET_DIR:
                 continue
-            shutil.rmtree(path)
+            shutil.rmtree(path, ignore_errors=True)
 
     print("Running pip...")
     args = ["pip", "install", "--no-deps", "-r", REQUIREMENTS_FILE, "-t", TARGET_DIR, "-I"]
     p = subprocess.Popen(args)
     p.wait()
+
+    if USE_GCLOUD:
+        print("Installing gcloud library")
+        args = ["pip", "install", "gcloud", "protobuf", "--upgrade", "-t", TARGET_DIR, "-I"]
+        p = subprocess.Popen(args)
+        p.wait()
 
     print("Installing Django {}".format(DJANGO_VERSION))
     args = ["pip", "install", "--no-deps", DJANGO_FOR_PIP, "-t", TARGET_DIR, "-I", "--no-use-wheel"]

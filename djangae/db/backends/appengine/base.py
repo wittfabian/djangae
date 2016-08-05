@@ -522,10 +522,10 @@ class DatabaseSchemaEditor(BaseDatabaseSchemaEditor):
 
     def add_field(self, model, field):
         pass
-        
+
     def alter_index_together(self, model, old_index_together, new_index_together):
         pass
-        
+
     def delete_model(self, model):
         pass
 
@@ -538,6 +538,21 @@ class DatabaseFeatures(BaseDatabaseFeatures):
     autocommits_when_autocommit_is_off = True
     uses_savepoints = False
     allows_auto_pk_0 = False
+
+
+class AppEngineClient(object):
+
+    def get_multi(self, keys, missing=None, deferred=None, transaction=None):
+        return datastore.Get(keys)
+
+    def put_multi(self, entities):
+        return datastore.Put(entities)
+
+    def delete_multi(self, keys):
+        datastore.Delete(keys)
+
+    def query(self, **kwargs):
+        return datastore.Query(**kwargs)
 
 
 class DatabaseWrapper(BaseDatabaseWrapper):
@@ -575,6 +590,17 @@ class DatabaseWrapper(BaseDatabaseWrapper):
         self.validation = BaseDatabaseValidation(self)
         self.autocommit = True
 
+        try:
+            from gcloud import datastore
+            from oauth2client.client import GoogleCredentials
+            credentials = GoogleCredentials.get_application_default()
+
+            self.client = datastore.Client(credentials=credentials)
+            self.gcloud_datastore = datastore
+        except ImportError:
+            self.gcloud_datastore = None
+            self.client = AppEngineClient()
+
     def is_usable(self):
         return True
 
@@ -603,3 +629,37 @@ class DatabaseWrapper(BaseDatabaseWrapper):
 
     def schema_editor(self, *args, **kwargs):
         return DatabaseSchemaEditor(self, *args, **kwargs)
+
+
+    # Datastore specific API
+
+    def make_entity(self, key=None, exclude_from_indexes=None, **data):
+        if self.gcloud:
+            ret = self.gcloud.Entity(
+                key=key,
+                exclude_from_indexes=exclude_from_indexes or []
+            )
+        else:
+            ret = datastore.Entity(
+                kind=key.kind(),
+                name=key.name(),
+                id=key.id(),
+                namespace=key.namespace()
+            )
+        return ret
+
+    def get_multi(self, keys):
+        return self.client.get_multi(keys)
+
+    def put_multi(self, entities):
+        return self.client.put_multi(entities)
+
+    def delete_multi(self, keys):
+        return self.client.delete_multi(keys)
+
+    def query(self, **kwargs):
+        return self.client.query(**kwargs)
+
+    def multi_query(self, queries):
+        from . import meta_queries
+        return meta_queries.AsyncMultiQuery(queries)
