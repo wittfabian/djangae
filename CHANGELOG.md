@@ -9,8 +9,9 @@
 
 ### Bug fixes:
 
-- Fixed a circular import in djangae.db.utils
+- Fixed a circular import in djangae.db.utils.
 - Fixed sandbox problem with non-final django versions in the testapp.
+- Fixed a bug where the console URL stored in a mapreduce job's status entity was incorrect.
 
 ### Documentation:
 
@@ -45,7 +46,6 @@
 - Fixed an issue where pre-created users may not have been able to log in if the email address associated with their Google account differed in case to the email address saved in their pre-created User object.
 - Made configuration changes to the bundled 'testapp' to allow the `runserver` command to work.
 - Fixed a bug in the `install_deps.py` script in the bundled 'testapp' where it would always re-install the App Engine SDK, even if it already existed.
-- Fixed a bug where the console URL stored in a mapreduce job's status entity was incorrect.
 
 ### Documentation:
 
