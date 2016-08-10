@@ -80,7 +80,7 @@ class CharField(models.CharField):
 
     def __init__(self, max_length=_MAX_STRING_LENGTH, *args, **kwargs):
         assert max_length <= _MAX_STRING_LENGTH, \
-            "%ss max_length must not be grater than %d bytes." % (self.__class__.__name__, _MAX_STRING_LENGTH)
+            "%ss max_length must not be greater than %d bytes." % (self.__class__.__name__, _MAX_STRING_LENGTH)
 
         super(CharField, self).__init__(max_length=max_length, *args, **kwargs)
         self.validators = [validators.MaxBytesValidator(limit_value=max_length)]
