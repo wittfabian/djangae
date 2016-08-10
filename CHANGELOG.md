@@ -1,4 +1,22 @@
-## v0.9.7 (in development)
+## v0.9.8 (in development)
+
+### New features & improvements:
+
+- 
+-
+
+### Bug fixes:
+
+- 
+-
+
+### Documentation:
+
+-
+- 
+
+
+## v0.9.7 (release date: 11th August 2016)
 
 ### New features & improvements:
 
