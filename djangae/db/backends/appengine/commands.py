@@ -756,7 +756,7 @@ class SelectCommand(object):
         """
             This exists solely for django-debug-toolbar compatibility.
         """
-        return str(self).lower()
+        return unicode(self).lower()
 
 
 class FlushCommand(object):
@@ -928,7 +928,7 @@ class InsertCommand(object):
         """
             This exists solely for django-debug-toolbar compatibility.
         """
-        return str(self).lower()
+        return unicode(self).lower()
 
     def __unicode__(self):
         try:
@@ -1059,7 +1059,7 @@ class DeleteCommand(object):
         """
             This exists solely for django-debug-toolbar compatibility.
         """
-        return str(self).lower()
+        return unicode(self).lower()
 
 
 class UpdateCommand(object):
@@ -1074,7 +1074,7 @@ class UpdateCommand(object):
         """
             This exists solely for django-debug-toolbar compatibility.
         """
-        return str(self).lower()
+        return unicode(self).lower()
 
     def _update_entity(self, key):
         markers_to_acquire = []
