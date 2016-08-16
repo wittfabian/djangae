@@ -163,6 +163,7 @@ class SimulatedContentTypeManager(models.Manager):
             return self.get(id=new_id)
 
     def get_or_create(self, **kwargs):
+        from django.contrib.contenttypes.models import ContentType
         try:
             del kwargs["defaults"]
             return self.get(**kwargs)
@@ -180,6 +181,8 @@ class SimulatedContentTypeManager(models.Manager):
         return [ct for ct in self.all() if _condition(ct)]
 
     def all(self, **kwargs):
+        self._repopulate_if_necessary()
+        
         result = []
 
         for ct in self._store.content_types.keys():
