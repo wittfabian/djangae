@@ -175,13 +175,13 @@ class SimulatedContentTypeManager(models.Manager):
 
     def get_or_create(self, **kwargs):
         ContentType = self._get_model()
-        original_kwargs = kwargs
+        defaults = kwargs.pop("defaults", None)
         try:
-            if "defaults" in kwargs:
-                del kwargs["defaults"]
             return self.get(**kwargs), False
         except ContentType.DoesNotExist:
-            return self.create(**original_kwargs), True
+            if defaults:
+                kwargs.update(**defaults)
+            return self.create(**kwargs), True
 
     def filter(self, **kwargs):
         self._repopulate_if_necessary()
@@ -196,7 +196,7 @@ class SimulatedContentTypeManager(models.Manager):
 
     def all(self, **kwargs):
         self._repopulate_if_necessary()
-        
+
         result = []
 
         for ct in self._store.content_types.keys():
