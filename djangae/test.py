@@ -42,11 +42,14 @@ def inconsistent_db(probability=0, connection='default'):
 
 def _get_queued_tasks(stub, queue_name=None, flush=True):
     tasks = []
+    queues = stub.GetQueues()
 
-    for queue in stub.GetQueues():
+    if queue_name is not None:
+        queues = filter(lambda q: queue_name == q['name'], queues)
+
+    for queue in queues:
         for task in stub.GetTasks(queue['name']):
-            if queue_name is None or queue_name == queue['name']:
-                tasks.append(task)
+            tasks.append(task)
 
         if flush:
             stub.FlushQueue(queue["name"])
