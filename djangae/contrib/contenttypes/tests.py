@@ -67,5 +67,5 @@ class SimulatedContentTypesTests(TestCase):
         self.assertTrue(created)
         
     def test_filter_contenttypes(self):
-        self.assertTrue(len(ContentType.objects.all()) > 1)
-        self.assertEqual(1, len(ContentType.objects.filter(app_label=DummyModel._meta.app_label)))
+        original_count = len(ContentType.objects.all())
+        self.assertTrue(original_count > len(ContentType.objects.filter(app_label=DummyModel._meta.app_label)))
