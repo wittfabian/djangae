@@ -2,7 +2,7 @@
 
 ### New features & improvements:
 
--
+- Cleaned up and refactored internal implementation of SimulatedContentTypeManager. Now also allows patching ContentType manager in migrations. 
 -
 
 ### Bug fixes:
