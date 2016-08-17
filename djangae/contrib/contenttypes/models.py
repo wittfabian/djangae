@@ -6,7 +6,6 @@ import django
 from django.db import router, connections, models
 from django.apps import apps
 from django.utils.encoding import smart_text
-from django.utils import six
 from djangae.crc64 import CRC64
 
 
@@ -21,7 +20,7 @@ class SimulatedContentTypeManager(models.Manager):
         crc = CRC64()
         crc.append(app_label)
         crc.append(model)
-        return crc.fini() - (2 ** 63) #GAE integers are signed so we shift down
+        return crc.fini() - (2 ** 63)  # GAE integers are signed so we shift down
 
     def _get_opts(self, model, for_concrete_model):
         if for_concrete_model:
@@ -59,7 +58,7 @@ class SimulatedContentTypeManager(models.Manager):
         self._update_queries(models)
 
         if not hasattr(self._store, "content_types"):
-            all_models = [ (x._meta.app_label, x._meta.model_name, x) for x in apps.get_models() ]
+            all_models = [(x._meta.app_label, x._meta.model_name, x) for x in apps.get_models()]
 
             self._update_queries([(x[0], x[1]) for x in all_models])
 
@@ -90,7 +89,7 @@ class SimulatedContentTypeManager(models.Manager):
         for_concrete_model = kwargs.get("for_concrete_models", True)
 
         self._update_queries(
-            [ (self._get_opts(x, for_concrete_model).app_label, self._get_opts(x, for_concrete_model).model_name) for x in models ]
+            [(self._get_opts(x, for_concrete_model).app_label, self._get_opts(x, for_concrete_model).model_name) for x in models]
         )
         ret = {}
         for model in models:
