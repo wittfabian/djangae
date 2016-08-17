@@ -7,13 +7,13 @@
 
 ### Bug fixes:
 
-- 
+- Fixed an issue where Django Debug Toolbar would get a `UnicodeDecodeError` if a query contained a non-ascii character.
 -
 
 ### Documentation:
 
 -
-- 
+-
 
 
 ## v0.9.7 (release date: 11th August 2016)
