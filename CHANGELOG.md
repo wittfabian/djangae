@@ -8,7 +8,7 @@
 ### Bug fixes:
 
 - Fixed an issue where Django Debug Toolbar would get a `UnicodeDecodeError` if a query contained a non-ascii character.
-- Fixed an issue where getting and flushing a specific TaskQueue using the test stub would flush all task queues.
+- Fixed an issue where getting and flushing a specific TaskQueue using the test stub (including when using `djangae.test.TestCase.process_task_queues`) would flush all task queues.
 -
 
 ### Documentation:
