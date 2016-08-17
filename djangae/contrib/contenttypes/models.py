@@ -173,15 +173,17 @@ class SimulatedContentTypeManager(models.Manager):
 
     def get_or_create(self, **kwargs):
         ContentType = self._get_model()
+        original_kwargs = kwargs
         try:
             if "defaults" in kwargs:
                 del kwargs["defaults"]
             return self.get(**kwargs), False
         except ContentType.DoesNotExist:
-            raise NotImplementedError("You can't manually create simulated content types")
+            return self.create(**original_kwargs), True
 
     def filter(self, **kwargs):
         self._repopulate_if_necessary()
+
         def _condition(ct):
             for attr, val in kwargs.items():
                 if getattr(ct, attr) != val:
