@@ -54,7 +54,7 @@ class SimulatedContentTypeManager(models.Manager):
                 if model not in self._store.queried_models:
                     conn.queries.append("select * from {}".format(ContentType._meta.db_table))
                     break
-        
+
         if not hasattr(self._store, "queried_models"):
             self._store.queried_models = set()
 
@@ -161,9 +161,11 @@ class SimulatedContentTypeManager(models.Manager):
             return result
 
     def create(self, **kwargs):
-        ContentType = self._get_model()
         self._repopulate_if_necessary()
-        logging.warning("Created simulated content type, this will not persist and will remain thread-local")
+        logging.warning(
+            "Created simulated content type, this will not persist and will remain only on this "
+            "app instance"
+        )
         new_id = self._get_id(kwargs["app_label"], kwargs["model"])
         kwargs["id"] = new_id
         if "pk" in kwargs:
