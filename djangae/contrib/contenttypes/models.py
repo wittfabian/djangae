@@ -16,6 +16,18 @@ class SimulatedContentTypeManager(models.Manager):
 
     _store = threading.local()
 
+    def __init__(self, model=None, *args, **kwargs):
+        super(SimulatedContentTypeManager, self).__init__(*args, **kwargs)
+        self.model = model
+
+    def _get_model(self):
+        """ If we're in a migration, then the 'fake' model class will be passed
+            into __init__   and we'll use that.  Otherwise we'll use the 'real'
+            ContentType class.
+        """
+        from django.contrib.contenttypes.models import ContentType
+        return self.model or ContentType
+
     def _get_id(self, app_label, model):
         crc = CRC64()
         crc.append(app_label)
@@ -34,7 +46,7 @@ class SimulatedContentTypeManager(models.Manager):
             This is just to satisfy the contenttypes tests which check that queries are executed at certain
             times. It's a bit hacky but it works for that purpose.
         """
-        from django.contrib.contenttypes.models import ContentType
+        ContentType = self._get_model()
         conn = connections[router.db_for_write(ContentType)]
 
         if getattr(conn, "use_debug_cursor", getattr(conn, "force_debug_cursor", False)):
@@ -107,11 +119,11 @@ class SimulatedContentTypeManager(models.Manager):
         try:
             return self._store.content_types[id]
         except KeyError:
-            from django.contrib.contenttypes.models import ContentType
+            ContentType = self._get_model()
             raise ContentType.DoesNotExist()
 
     def get(self, **kwargs):
-        from django.contrib.contenttypes.models import ContentType
+        ContentType = self._get_model()
         self._repopulate_if_necessary()
 
         if "pk" in kwargs:
@@ -142,14 +154,14 @@ class SimulatedContentTypeManager(models.Manager):
         if dic["id"] in self._store.constructed_instances:
             return self._store.constructed_instances[dic["id"]]
         else:
-            from django.contrib.contenttypes.models import ContentType
+            ContentType = self._get_model()
             result = ContentType(**dic)
             result.save = new.instancemethod(disable_save, ContentType, result)
             self._store.constructed_instances[dic["id"]] = result
             return result
 
     def create(self, **kwargs):
-        from django.contrib.contenttypes.models import ContentType
+        ContentType = self._get_model()
         try:
             return self.get(**kwargs)
         except ContentType.DoesNotExist:
@@ -162,7 +174,7 @@ class SimulatedContentTypeManager(models.Manager):
             return self.get(id=new_id)
 
     def get_or_create(self, **kwargs):
-        from django.contrib.contenttypes.models import ContentType
+        ContentType = self._get_model()
         try:
             del kwargs["defaults"]
             return self.get(**kwargs)
