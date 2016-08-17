@@ -162,16 +162,14 @@ class SimulatedContentTypeManager(models.Manager):
 
     def create(self, **kwargs):
         ContentType = self._get_model()
-        try:
-            return self.get(**kwargs)
-        except ContentType.DoesNotExist:
-            logging.warning("Created simulated content type, this will not persist and will remain thread-local")
-            new_id = self._get_id(kwargs["app_label"], kwargs["model"])
-            kwargs["id"] = new_id
-            if "pk" in kwargs:
-                del kwargs["pk"]
-            self._store.content_types[new_id] = kwargs
-            return self.get(id=new_id)
+        self._repopulate_if_necessary()
+        logging.warning("Created simulated content type, this will not persist and will remain thread-local")
+        new_id = self._get_id(kwargs["app_label"], kwargs["model"])
+        kwargs["id"] = new_id
+        if "pk" in kwargs:
+            del kwargs["pk"]
+        self._store.content_types[new_id] = kwargs
+        return self.get(id=new_id)
 
     def get_or_create(self, **kwargs):
         ContentType = self._get_model()
