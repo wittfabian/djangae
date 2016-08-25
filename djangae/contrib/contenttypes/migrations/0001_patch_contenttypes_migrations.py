@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
-from __future__ import unicode_literals
+import os
+from importlib import import_module
 
 from django.db import migrations
+from django.db.migrations.loader import MigrationLoader
 from django.db.migrations.operations.base import Operation
 from djangae.contrib.contenttypes.models import SimulatedContentTypeManager
 
@@ -20,20 +22,39 @@ class PatchMigrationsOperation(Operation):
         contenttype.managers[0] = ('objects', SimulatedContentTypeManager(model=contenttype))
 
 
-def get_installed_app_labels():
+def get_installed_app_labels_with_migrations():
     """ Get the app labels, because settings.INSTALLED_APPS doesn't necessarily give us the labels. 
         Remove django.contrib.contenttypes because we want it to run before us. 
         Return list of tuples like ('admin', '__first__') 
     """
     from django.apps import apps
-    app_labels = [app.label for app in apps.get_app_configs() if app.label != 'contenttypes']
-    return [(x, '__first__') for x in app_labels]
-    
+    apps_with_migrations = []
+    for app in apps.get_app_configs():
+        if app.label == 'contenttypes': continue # Ignore the contenttypes app
+
+        migrations_module = MigrationLoader.migrations_module(app.label)
+        try:
+            module = import_module(migrations_module)
+        except ImportError:
+            continue
+
+        if not hasattr(module, "__path__"):
+            continue
+
+        # Make sure there are python files in the migration folder
+        has_files = bool(x for x in os.listdir(module.__path__[0]) if x.endswith(".py"))
+        if not has_files:
+            continue
+
+        apps_with_migrations.append(app.label)
+
+    return [(x, '__first__') for x in apps_with_migrations]
+
 
 class Migration(migrations.Migration):
 
-    run_before = get_installed_app_labels()
-    
+    run_before = get_installed_app_labels_with_migrations()
+
     dependencies = [
         ('contenttypes', '__first__')
     ]
