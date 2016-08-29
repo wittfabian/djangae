@@ -1,17 +1,15 @@
 import os
 import re
-from optparse import make_option
-
-from django.core.management.commands.runserver import BaseRunserverCommand
-from django.conf import settings
-
 from datetime import datetime
 
+from django.conf import settings
+from django.core.management.commands import runserver
 from google.appengine.tools.devappserver2 import shutdown
 from google.appengine.tools.sdk_update_checker import (
     GetVersionObject,
     _VersionList
 )
+
 
 DJANGAE_RUNSERVER_IGNORED_FILES_REGEXES = getattr(settings, "DJANGAE_RUNSERVER_IGNORED_FILES_REGEXES", [])
 DJANGAE_RUNSERVER_IGNORED_DIR_REGEXES = getattr(settings, "DJANGAE_RUNSERVER_IGNORED_DIR_REGEXES", [])
@@ -51,7 +49,7 @@ def skip_ignored_dirs(dirs):
     )
 
 
-class Command(BaseRunserverCommand):
+class Command(runserver.Command):
     """
     Overrides the default Django runserver command.
 
@@ -94,28 +92,23 @@ class Command(BaseRunserverCommand):
         'default_gcs_bucket_name',
     ]
 
-    def __new__(cls, *args, **kwargs):
-        # We need to dynamically populate the `option_list` attribute
-        # in order to Django allow extra parameters that we're going to pass
-        # to GAE's `dev_appserver.py`
-        instance = BaseRunserverCommand.__new__(cls, *args, **kwargs)
-        sandbox_options = cls._get_sandbox_options()
-        for option in sandbox_options:
-            if option in cls.WHITELISTED_DEV_APPSERVER_OPTIONS:
-                instance.option_list += (
-                    make_option('--%s' % option, action='store', dest=option),
-                )
-        return instance
+    def add_arguments(self, parser):
+        super(Command, self).add_arguments(parser)
 
-    @classmethod
-    def _get_sandbox_options(cls):
+        sandbox_options = self._get_sandbox_options()
+
+        # Extra parameters that we're going to pass to GAE's `dev_appserver.py`.
+        for option in sandbox_options:
+            if option in self.WHITELISTED_DEV_APPSERVER_OPTIONS:
+                parser.add_argument('--%s' % option, action='store', dest=option)
+
+    @staticmethod
+    def _get_sandbox_options():
         # We read the options from Djangae's sandbox
         from djangae import sandbox
         return [option for option in dir(sandbox._OPTIONS) if not option.startswith('_')]
 
     def handle(self, addrport='', *args, **options):
-        from djangae import sandbox
-
         self.gae_options = {}
         sandbox_options = self._get_sandbox_options()
 
