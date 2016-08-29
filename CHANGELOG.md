@@ -2,18 +2,18 @@
 
 ### New features & improvements:
 
-- 
+-
 -
 
 ### Bug fixes:
 
-- 
+- Fixed `./manage.py runserver` not working with Django 1.10 and removed a RemovedInDjango110Warning message at startup.
 -
 
 ### Documentation:
 
 -
-- 
+-
 
 
 ## v0.9.7 (release date: 11th August 2016)
