@@ -42,8 +42,10 @@ def get_installed_app_labels_with_migrations():
         if not hasattr(module, "__path__"):
             continue
 
-        # Make sure there are python files in the migration folder
-        has_files = any(x for x in os.listdir(module.__path__[0]) if x.endswith(".py"))
+        # Make sure there are python files in the migration folder (other than the init file)
+        has_files = any(
+            x for x in os.listdir(module.__path__[0]) if x.endswith(".py") and x != "__init__.py"
+        )
         if not has_files:
             continue
 
