@@ -23,14 +23,15 @@ class PatchMigrationsOperation(Operation):
 
 
 def get_installed_app_labels_with_migrations():
-    """ Get the app labels, because settings.INSTALLED_APPS doesn't necessarily give us the labels. 
-        Remove django.contrib.contenttypes because we want it to run before us. 
-        Return list of tuples like ('admin', '__first__') 
+    """ Get the app labels, because settings.INSTALLED_APPS doesn't necessarily give us the labels.
+        Remove django.contrib.contenttypes because we want it to run before us.
+        Return list of tuples like ('admin', '__first__')
     """
     from django.apps import apps
     apps_with_migrations = []
     for app in apps.get_app_configs():
-        if app.label == 'contenttypes': continue # Ignore the contenttypes app
+        if app.label == 'contenttypes':
+            continue  # Ignore the contenttypes app
 
         migrations_module = MigrationLoader.migrations_module(app.label)
         try:
