@@ -43,7 +43,7 @@ def get_installed_app_labels_with_migrations():
             continue
 
         # Make sure there are python files in the migration folder
-        has_files = bool(x for x in os.listdir(module.__path__[0]) if x.endswith(".py"))
+        has_files = any(x for x in os.listdir(module.__path__[0]) if x.endswith(".py"))
         if not has_files:
             continue
 
