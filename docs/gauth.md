@@ -94,7 +94,9 @@ Users are keyed by their Google User ID, which is stored in the `username` field
 
 When using pre-created Users you should be careful using `get_or_create`. The line:
 
-```User.objects.get_or_create(email=email)```
+```
+User.objects.get_or_create(email=email)
+```
 
 will result in error, if the pre-created user already exists with the email that is case-sensitive-different, but case-insensitive-equal to the provided value.
 
@@ -102,7 +104,9 @@ For instance, if you have pre-created user with email: `JOHN@gmail.com` and you 
 
 To avoid the problem, when using `get_or_create`, you should use `email_lower` instead like this:
 
-```User.objects.get_or_create(email_lower=email.lower(), defaults={"email": email})```
+```
+User.objects.get_or_create(email_lower=email.lower(), defaults={"email": email})
+```
 
 
 ## Username/password authentication
