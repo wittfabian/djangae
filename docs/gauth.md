@@ -94,7 +94,7 @@ Users are keyed by their Google User ID, which is stored in the `username` field
 
 When using pre-created Users you should be careful using `get_or_create`. The line:
 
-```
+```python
 User.objects.get_or_create(email=email)
 ```
 
@@ -104,7 +104,7 @@ For instance, if you have pre-created user with email: `JOHN@gmail.com` and you 
 
 To avoid the problem, when using `get_or_create`, you should use `email_lower` instead like this:
 
-```
+```python
 User.objects.get_or_create(email_lower=email.lower(), defaults={"email": email})
 ```
 
