@@ -11,12 +11,17 @@ from djangae.test import TestCase
 
 class ChecksTestCase(TestCase):
     def test_deferred_builtin_on(self):
+        # Read and parse app.yaml
         app_yaml_path = os.path.join(get_application_root(), "app.yaml")
         with open(app_yaml_path, 'r') as f:
             app_yaml = yaml.load(f.read())
         builtins = app_yaml.get('builtins', [])
+
+        # Switch on deferred builtin
         builtins.append({'deferred': 'on'})
         app_yaml['builtins'] = builtins
+
+        # Write to temporary app.yaml
         temp_app_yaml_dir = tempfile.mkdtemp()
         temp_app_yaml_path = os.path.join(temp_app_yaml_dir, "app.yaml")
         temp_app_yaml = file(temp_app_yaml_path, 'w')
