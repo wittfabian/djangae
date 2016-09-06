@@ -121,7 +121,13 @@ class Command(runserver.Command):
         super(Command, self).handle(addrport=addrport, *args, **options)
 
     def run(self, *args, **options):
+        # These options are Django options which need to have corresponding args
+        # passed down to the dev_appserver
         self.use_reloader = options.get("use_reloader")
+        self.use_threading = options.get("use_threading")
+
+        # We force the option to false here because we use the dev_appserver reload
+        # capabilities, not Django's reloading
         options["use_reloader"] = False
         return super(Command, self).run(*args, **options)
 
@@ -201,7 +207,9 @@ class Command(runserver.Command):
         if current_version >= _VersionList('1.9.19'):
             sandbox._OPTIONS.external_port = None
 
+        # Apply equivalent options for Django args
         sandbox._OPTIONS.automatic_restart = self.use_reloader
+        sandbox._OPTIONS.threadsafe_override = self.use_threading
 
         if sandbox._OPTIONS.host == "127.0.0.1" and os.environ["HTTP_HOST"].startswith("localhost"):
             hostname = "localhost"

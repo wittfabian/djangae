@@ -11,6 +11,7 @@
 - Fixed an issue where getting and flushing a specific TaskQueue using the test stub (including when using `djangae.test.TestCase.process_task_queues`) would flush all task queues.
 - Fixed a bug in our forced contenttypes migration
 - Fixed `./manage.py runserver` not working with Django 1.10 and removed a RemovedInDjango110Warning message at startup.
+- Restore `--nothreading` functionality to runserver (this went away when we dropped support for the old dev_appserver)
 
 ### Documentation:
 
