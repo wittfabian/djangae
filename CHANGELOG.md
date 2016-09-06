@@ -10,6 +10,7 @@
 - Fixed an issue where Django Debug Toolbar would get a `UnicodeDecodeError` if a query contained a non-ascii character.
 - Fixed an issue where getting and flushing a specific TaskQueue using the test stub (including when using `djangae.test.TestCase.process_task_queues`) would flush all task queues.
 - Fixed a bug in our forced contenttypes migration
+- Fixed `./manage.py runserver` not working with Django 1.10 and removed a RemovedInDjango110Warning message at startup.
 
 ### Documentation:
 
