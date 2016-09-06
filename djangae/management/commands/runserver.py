@@ -249,7 +249,7 @@ class Command(runserver.Command):
 
                 # Because the dispatcher is a singleton, we need to set the threadsafe override here
                 # depending on what was passed to the runserver command. This entire file really needs rebuilding
-                # we have way to many hacks in here!
+                # we have way too many hacks in here!
                 self._dispatcher._module_to_threadsafe_override[
                     configuration.modules[0].module_name
                 ] = options.threadsafe_override
