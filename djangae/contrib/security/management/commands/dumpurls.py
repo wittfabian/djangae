@@ -1,10 +1,7 @@
-import inspect
 import functools
-from optparse import make_option
 
 from django.conf import settings
-from django.core.management.base import BaseCommand, CommandError
-from django.contrib.admindocs.views import simplify_regex
+from django.core.management.base import BaseCommand
 from djangae.contrib.security.commands_utils import (
     extract_views_from_urlpatterns,
     display_as_table,
