@@ -121,7 +121,13 @@ class Command(runserver.Command):
         super(Command, self).handle(addrport=addrport, *args, **options)
 
     def run(self, *args, **options):
+        # These options are Django options which need to have corresponding args
+        # passed down to the dev_appserver
         self.use_reloader = options.get("use_reloader")
+        self.use_threading = options.get("use_threading")
+
+        # We force the option to false here because we use the dev_appserver reload
+        # capabilities, not Django's reloading
         options["use_reloader"] = False
         return super(Command, self).run(*args, **options)
 
@@ -201,7 +207,9 @@ class Command(runserver.Command):
         if current_version >= _VersionList('1.9.19'):
             sandbox._OPTIONS.external_port = None
 
+        # Apply equivalent options for Django args
         sandbox._OPTIONS.automatic_restart = self.use_reloader
+        sandbox._OPTIONS.threadsafe_override = self.use_threading
 
         if sandbox._OPTIONS.host == "127.0.0.1" and os.environ["HTTP_HOST"].startswith("localhost"):
             hostname = "localhost"
@@ -238,6 +246,13 @@ class Command(runserver.Command):
                 self._dispatcher._configuration = configuration
                 self._dispatcher._port = options.port
                 self._dispatcher._host = options.host
+
+                # Because the dispatcher is a singleton, we need to set the threadsafe override here
+                # depending on what was passed to the runserver command. This entire file really needs rebuilding
+                # we have way too many hacks in here!
+                self._dispatcher._module_to_threadsafe_override[
+                    configuration.modules[0].module_name
+                ] = options.threadsafe_override
 
                 self._dispatcher.request_data = request_data
                 request_data._dispatcher = self._dispatcher
