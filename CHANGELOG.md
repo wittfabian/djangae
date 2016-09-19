@@ -2,8 +2,8 @@
 
 ### New features & improvements:
 
-- Cleaned up and refactored internal implementation of SimulatedContentTypeManager. Now also allows patching ContentType manager in migrations. 
--
+- Cleaned up and refactored internal implementation of SimulatedContentTypeManager. Now also allows patching ContentType manager in migrations.
+- Add ability to specify GAE target instance for remote command with `--app_id` flag
 
 ### Bug fixes:
 
