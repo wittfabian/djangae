@@ -70,7 +70,9 @@ class EmailBackend(BaseEmailBackend):
     def _do_send(self, message):
         try:
             message.send()
-        except (aeemail.Error, apiproxy_errors.Error):
+        except (aeemail.Error, apiproxy_errors.Error) as e:
+            if isinstance(e, InvalidSenderError):
+                logging.error("Invalid 'from' address: %s", message.sender)
             if not self.fail_silently:
                 raise
             return False
