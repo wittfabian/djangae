@@ -4,6 +4,7 @@
 
 - Cleaned up and refactored internal implementation of SimulatedContentTypeManager. Now also allows patching ContentType manager in migrations.
 - Add ability to specify GAE target instance for remote command with `--app_id` flag
+- When App Engine raises an `InvalidSenderError` when trying to send an email, Djangae now logs the 'from' address which is invalid (App Engine doesn't include it in the error).
 
 ### Bug fixes:
 
