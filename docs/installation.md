@@ -14,7 +14,7 @@ Alternatively, you can also follow this guide:
 1. At the top of your `settings.py`, insert the following line to setup some default settings: 
 
 ```python
-from djangae.settings_base import *`
+from djangae.settings_base import *
 ```
 
 In `app.yaml` add the following handlers:
