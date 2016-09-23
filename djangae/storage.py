@@ -86,6 +86,16 @@ def _get_from_cache(blob_key_or_info):
     with CACHE_LOCK:
         return KEY_CACHE.get(blob_key_or_info)
 
+def _get_or_create_cached_serving_url(blob_key_or_info):
+    cached_value = _get_from_cache(blob_key_or_info)
+    if cached_value:
+        blob_key, info = cached_value
+    else:
+        info = cloudstorage.stat(blob_key_or_info)
+        info.size = info.st_size
+        blob_key = create_gs_key('/gs{0}'.format(blob_key_or_info))
+        _add_to_cache(blob_key_or_info, blob_key, info)
+    return (blob_key, info)
 
 def serve_file(request, blob_key_or_info, as_download=False, content_type=None, filename=None, offset=None, size=None):
     """
@@ -111,14 +121,7 @@ def serve_file(request, blob_key_or_info, as_download=False, content_type=None, 
     if info == None:
         # Lack of blobstore_info means this is a Google Cloud Storage file
         if has_cloudstorage:
-            cached_value = _get_from_cache(blob_key_or_info)
-            if cached_value:
-                blob_key, info = cached_value
-            else:
-                info = cloudstorage.stat(blob_key_or_info)
-                info.size = info.st_size
-                blob_key = create_gs_key('/gs{0}'.format(blob_key_or_info))
-                _add_to_cache(blob_key_or_info, blob_key, info)
+            blob_key, info = _get_or_create_cached_serving_url(blob_key_or_info)
         else:
             raise ImportError("To serve a Cloud Storage file you need to install cloudstorage")
 
@@ -298,8 +301,12 @@ class CloudStorage(Storage, BlobstoreUploadMixin):
             self.write_options['x-goog-acl'] = google_acl
 
     def url(self, filename):
-        quoted_filename = urllib.quote(self._add_bucket(filename))
-        return '{0}{1}'.format(self.api_url, quoted_filename)
+        url = get_serving_url(self._get_blobkey(filename))
+        return re.sub("http://", "//", url)
+
+    def _get_blobkey(self, name):
+        blob_key, info = _get_or_create_cached_serving_url(self._add_bucket(name))
+        return blob_key
 
     def _open(self, name, mode='r'):
         # Handle 'rb' as 'r'.

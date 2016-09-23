@@ -14,6 +14,7 @@
 - Fixed `./manage.py runserver` not working with Django 1.10 and removed a RemovedInDjango110Warning message at startup.
 - Restore `--nothreading` functionality to runserver (this went away when we dropped support for the old dev_appserver)
 - Fixed a bug where the `dumpurls` command had stopped working due to subtle import changes.
+- Utilise `get_serving_url` to get the correct url for serving images from Cloud Storage
 
 ### Documentation:
 
