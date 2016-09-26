@@ -1,18 +1,29 @@
 # coding: utf-8
+# STANDARD LIB
+from unittest import skipIf
 import httplib
 import os
 import urlparse
-from unittest import skipIf
 
+# THIRD PARTY
+from django.core.files.base import File, ContentFile
+from django.db import models
+from django.test.utils import override_settings
 from google.appengine.api import urlfetch
 from google.appengine.api.images import TransformationError
 
-from django.core.files.base import File, ContentFile
-from django.test.utils import override_settings
-
+# DJANGAE
 from djangae.contrib import sleuth
+from djangae.db import transaction
 from djangae.storage import BlobstoreStorage, CloudStorage, has_cloudstorage
 from djangae.test import TestCase
+
+
+class ModelWithImage(models.Model):
+    class Meta:
+        app_label = "djangae"
+
+    image = models.ImageField()
 
 
 @skipIf(not has_cloudstorage, "Cloud Storage not available")
@@ -90,6 +101,26 @@ class CloudStorageTests(TestCase):
             open_func.calls[0].kwargs['options'],
             {'x-goog-acl': 'public-read'},
         )
+
+    @override_settings(
+        CLOUD_STORAGE_BUCKET='test_bucket',
+        DEFAULT_FILE_STORAGE='djangae.storage.CloudStorage'
+    )
+    def test_access_url_inside_transaction(self):
+        """ Regression test.  Make sure that accessing the `url` of an ImageField can be done
+            inside a transaction without causing the error:
+            "BadRequestError: cross-groups transaction need to be explicitly specified (xg=True)"
+        """
+        instance = ModelWithImage(
+            image=ContentFile('content', name='my_file')
+        )
+        instance.save()
+        with sleuth.watch('djangae.storage.get_serving_url') as get_serving_url_watcher:
+            with transaction.atomic():
+                instance.refresh_from_db()
+                instance.image.url  # Access the `url` attribute to cause death
+                instance.save()
+            self.assertTrue(get_serving_url_watcher.called)
 
 
 class BlobstoreStorageTests(TestCase):
