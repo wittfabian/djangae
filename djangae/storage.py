@@ -237,7 +237,9 @@ class BlobstoreStorage(Storage, BlobstoreUploadMixin):
         try:
             # Return a protocol-less URL, because django can't/won't pass
             # down an argument saying whether it should be secure or not
-            url = get_serving_url(self._get_blobinfo(name))
+            with transaction.non_atomic():
+                # This causes a Datastore lookup which we don't want to interfere with transactions
+                url = get_serving_url(self._get_blobinfo(name))
             return re.sub("http://", "//", url)
         except (NotImageError, BlobKeyRequiredError, TransformationError):
             # Django doesn't expect us to return None from this function, and in fact
@@ -301,7 +303,9 @@ class CloudStorage(Storage, BlobstoreUploadMixin):
             self.write_options['x-goog-acl'] = google_acl
 
     def url(self, filename):
-        url = get_serving_url(self._get_blobkey(filename))
+        with transaction.non_atomic():
+            # This causes a Datastore lookup which we don't want to interfere with transactions
+            url = get_serving_url(self._get_blobkey(filename))
         return re.sub("http://", "//", url)
 
     def _get_blobkey(self, name):
