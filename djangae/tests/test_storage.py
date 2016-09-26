@@ -1,15 +1,17 @@
 # coding: utf-8
+# STANDARD LIB
+from unittest import skipIf
 import httplib
 import os
 import urlparse
-from unittest import skipIf
 
+# THIRD PARTY
+from django.core.files.base import File, ContentFile
+from django.test.utils import override_settings
 from google.appengine.api import urlfetch
 from google.appengine.api.images import TransformationError
 
-from django.core.files.base import File, ContentFile
-from django.test.utils import override_settings
-
+# DJANGAE
 from djangae.contrib import sleuth
 from djangae.storage import BlobstoreStorage, CloudStorage, has_cloudstorage
 from djangae.test import TestCase
