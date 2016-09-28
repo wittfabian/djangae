@@ -44,6 +44,7 @@ def _get_known_count(query_id):
         return ret
     return 0
 
+
 def _store_marker(query_id, page_number, marker_value):
     """
         For a model and query id, stores the marker value for previously
@@ -68,7 +69,7 @@ def _get_marker(query_id, page_number):
     counter = page_number - 1
     pages_skipped = 0
 
-    while counter > 0   :
+    while counter > 0:
         cache_key = _marker_cache_key(query_id, counter)
         ret = cache.get(cache_key)
 
@@ -98,10 +99,16 @@ class Paginator(paginator.Paginator):
         return paginated sets on the appengine datastore
     """
 
-    def __init__(self, object_list, per_page, readahead=10,
-                allow_empty_first_page=True, **kwargs):
+    def __init__(
+        self,
+        object_list,
+        per_page,
+        readahead=10,
+        allow_empty_first_page=True,
+        **kwargs
+    ):
         if not object_list.ordered:
-            object_list.order_by("pk") # Just order by PK by default
+            object_list.order_by("pk")  # Just order by PK by default
 
         self.original_orderings = extract_ordering(object_list.query)
         self.field_required = _field_name_for_ordering(self.original_orderings[:])
@@ -111,7 +118,12 @@ class Paginator(paginator.Paginator):
         try:
             object_list.model._meta.get_field(self.field_required)
         except models.FieldDoesNotExist:
-            raise PaginationOrderingRequired("No pagination ordering specified for {}. Field required: {}".format(self.original_orderings, self.field_required))
+            raise PaginationOrderingRequired(
+                "No pagination ordering specified for {}. Field required: {}".format(
+                    self.original_orderings,
+                    self.field_required,
+                )
+            )
 
         # Wipe out the existing ordering
         object_list = object_list.order_by()
@@ -125,8 +137,12 @@ class Paginator(paginator.Paginator):
             object_list = object_list.order_by(self.field_required)
 
         self.queryset_id = queryset_identifier(object_list)
-        super(Paginator, self).__init__(object_list, per_page, allow_empty_first_page=allow_empty_first_page, **kwargs)
-
+        super(Paginator, self).__init__(
+            object_list,
+            per_page,
+            allow_empty_first_page=allow_empty_first_page,
+            **kwargs
+        )
 
     @property
     def count(self):
@@ -163,7 +179,7 @@ class Paginator(paginator.Paginator):
                 qs = self.object_list.all().filter(**{"{}__lt".format(self.field_required): marker_value})
             else:
                 qs = self.object_list.all().filter(**{"{}__gt".format(self.field_required): marker_value})
-            bottom = pages * self.per_page # We have to skip the pages here
+            bottom = pages * self.per_page  # We have to skip the pages here
             top = bottom + self.per_page
         else:
             qs = self.object_list
