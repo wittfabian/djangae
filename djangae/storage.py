@@ -86,7 +86,7 @@ def _get_from_cache(blob_key_or_info):
     with CACHE_LOCK:
         return KEY_CACHE.get(blob_key_or_info)
 
-def _get_or_create_cached_serving_url(blob_key_or_info):
+def _get_or_create_cached_blob_key_and_info(blob_key_or_info):
     cached_value = _get_from_cache(blob_key_or_info)
     if cached_value:
         blob_key, info = cached_value
@@ -121,7 +121,7 @@ def serve_file(request, blob_key_or_info, as_download=False, content_type=None, 
     if info == None:
         # Lack of blobstore_info means this is a Google Cloud Storage file
         if has_cloudstorage:
-            blob_key, info = _get_or_create_cached_serving_url(blob_key_or_info)
+            blob_key, info = _get_or_create_cached_blob_key_and_info(blob_key_or_info)
         else:
             raise ImportError("To serve a Cloud Storage file you need to install cloudstorage")
 
@@ -315,7 +315,7 @@ class CloudStorage(Storage, BlobstoreUploadMixin):
             return '{0}{1}'.format(self.api_url, quoted_filename)
 
     def _get_blobkey(self, name):
-        blob_key, info = _get_or_create_cached_serving_url(self._add_bucket(name))
+        blob_key, info = _get_or_create_cached_blob_key_and_info(self._add_bucket(name))
         return blob_key
 
     def _open(self, name, mode='r'):
