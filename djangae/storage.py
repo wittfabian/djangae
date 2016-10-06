@@ -303,10 +303,16 @@ class CloudStorage(Storage, BlobstoreUploadMixin):
             self.write_options['x-goog-acl'] = google_acl
 
     def url(self, filename):
-        with transaction.non_atomic():
-            # This causes a Datastore lookup which we don't want to interfere with transactions
-            url = get_serving_url(self._get_blobkey(filename))
-        return re.sub("http://", "//", url)
+        try:
+            # Return a protocol-less URL, because django can't/won't pass
+            # down an argument saying whether it should be secure or not
+            with transaction.non_atomic():
+                # This causes a Datastore lookup which we don't want to interfere with transactions
+                url = get_serving_url(self._get_blobkey(filename))
+            return re.sub("http://", "//", url)
+        except (TransformationError):
+            quoted_filename = urllib.quote(self._add_bucket(filename))
+            return '{0}{1}'.format(self.api_url, quoted_filename)
 
     def _get_blobkey(self, name):
         blob_key, info = _get_or_create_cached_serving_url(self._add_bucket(name))
