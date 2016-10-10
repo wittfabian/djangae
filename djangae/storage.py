@@ -312,7 +312,7 @@ class CloudStorage(Storage, BlobstoreUploadMixin):
             return re.sub("http://", "//", url)
         except (TransformationError):
             # Sometimes TransformationError will be thrown if you call get_serving_url on video files
-            # this is probably a bug in App Engine but it'll probably never be fixed even if we report it :(
+            # this is probably a bug in App Engine
             # Probably related to this: https://code.google.com/p/googleappengine/issues/detail?id=8601
             quoted_filename = urllib.quote(self._add_bucket(filename))
             return '{0}{1}'.format(self.api_url, quoted_filename)
