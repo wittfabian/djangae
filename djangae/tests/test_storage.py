@@ -26,6 +26,13 @@ class ModelWithImage(models.Model):
     image = models.ImageField()
 
 
+class ModelWithTextFile(models.Model):
+    class Meta:
+        app_label = "djangae"
+
+    text_file = models.FileField()
+
+
 @skipIf(not has_cloudstorage, "Cloud Storage not available")
 class CloudStorageTests(TestCase):
 
@@ -121,6 +128,26 @@ class CloudStorageTests(TestCase):
                 instance.image.url  # Access the `url` attribute to cause death
                 instance.save()
             self.assertTrue(get_serving_url_watcher.called)
+
+    @override_settings(
+        CLOUD_STORAGE_BUCKET='test_bucket',
+        DEFAULT_FILE_STORAGE='djangae.storage.CloudStorage'
+    )
+    def test_get_non_image_url(self):
+        """ Regression test. Make sure that if the file is not an image
+            we still get a file's urls without throwing a
+            TransformationError.
+        """
+        instance = ModelWithTextFile(
+            text_file=ContentFile('content', name='my_file')
+        )
+        instance.save()
+        with sleuth.watch('urllib.quote') as urllib_quote_watcher:
+            with sleuth.detonate('djangae.storage.get_serving_url', TransformationError):
+                instance.refresh_from_db()
+                instance.text_file.url
+                instance.save()
+                self.assertTrue(urllib_quote_watcher.called)
 
 
 class BlobstoreStorageTests(TestCase):

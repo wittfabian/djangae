@@ -86,7 +86,7 @@ def _get_from_cache(blob_key_or_info):
     with CACHE_LOCK:
         return KEY_CACHE.get(blob_key_or_info)
 
-def _get_or_create_cached_serving_url(blob_key_or_info):
+def _get_or_create_cached_blob_key_and_info(blob_key_or_info):
     cached_value = _get_from_cache(blob_key_or_info)
     if cached_value:
         blob_key, info = cached_value
@@ -121,7 +121,7 @@ def serve_file(request, blob_key_or_info, as_download=False, content_type=None, 
     if info == None:
         # Lack of blobstore_info means this is a Google Cloud Storage file
         if has_cloudstorage:
-            blob_key, info = _get_or_create_cached_serving_url(blob_key_or_info)
+            blob_key, info = _get_or_create_cached_blob_key_and_info(blob_key_or_info)
         else:
             raise ImportError("To serve a Cloud Storage file you need to install cloudstorage")
 
@@ -303,13 +303,22 @@ class CloudStorage(Storage, BlobstoreUploadMixin):
             self.write_options['x-goog-acl'] = google_acl
 
     def url(self, filename):
-        with transaction.non_atomic():
-            # This causes a Datastore lookup which we don't want to interfere with transactions
-            url = get_serving_url(self._get_blobkey(filename))
-        return re.sub("http://", "//", url)
+        try:
+            # Return a protocol-less URL, because django can't/won't pass
+            # down an argument saying whether it should be secure or not
+            with transaction.non_atomic():
+                # This causes a Datastore lookup which we don't want to interfere with transactions
+                url = get_serving_url(self._get_blobkey(filename))
+            return re.sub("http://", "//", url)
+        except (TransformationError):
+            # Sometimes TransformationError will be thrown if you call get_serving_url on video files
+            # this is probably a bug in App Engine but it'll probably never be fixed even if we report it :(
+            # Probably related to this: https://code.google.com/p/googleappengine/issues/detail?id=8601
+            quoted_filename = urllib.quote(self._add_bucket(filename))
+            return '{0}{1}'.format(self.api_url, quoted_filename)
 
     def _get_blobkey(self, name):
-        blob_key, info = _get_or_create_cached_serving_url(self._add_bucket(name))
+        blob_key, info = _get_or_create_cached_blob_key_and_info(self._add_bucket(name))
         return blob_key
 
     def _open(self, name, mode='r'):
