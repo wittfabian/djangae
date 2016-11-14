@@ -17,6 +17,7 @@
 - Utilise `get_serving_url` to get the correct url for serving images from Cloud Storage.
 - Fixed a side effect of that ^ introduction of `get_serving_url` which would add an entity group to any transaction in which it was called (due to the Datastore read done by `get_serving_url`).
 - Fixed fetching url for non images after introduction of `get_serving_url` call inside CloudStorage url method.
+- Fixed fetching url for files after introduction of `get_serving_url` call inside BlobstoreStorage url method when file is bigger than 32MB.
 
 ### Documentation:
 
