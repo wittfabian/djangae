@@ -10,7 +10,7 @@ from django.core.files.base import File, ContentFile
 from django.db import models
 from django.test.utils import override_settings
 from google.appengine.api import urlfetch
-from google.appengine.api.images import TransformationError
+from google.appengine.api.images import TransformationError, LargeImageError
 
 # DJANGAE
 from djangae.contrib import sleuth
@@ -195,4 +195,9 @@ class BlobstoreStorageTests(TestCase):
     def test_transformation_error(self):
         storage = BlobstoreStorage()
         with sleuth.detonate('djangae.storage.get_serving_url', TransformationError):
+            self.assertEqual('thing', storage.url('thing'))
+
+    def test_large_image_error(self):
+        storage = BlobstoreStorage()
+        with sleuth.detonate('djangae.storage.get_serving_url', LargeImageError):
             self.assertEqual('thing', storage.url('thing'))
