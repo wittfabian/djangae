@@ -29,6 +29,7 @@ from google.appengine.api.images import (
     NotImageError,
     BlobKeyRequiredError,
     TransformationError,
+    LargeImageError,
 )
 from google.appengine.ext.blobstore import (
     BlobInfo,
@@ -241,7 +242,7 @@ class BlobstoreStorage(Storage, BlobstoreUploadMixin):
                 # This causes a Datastore lookup which we don't want to interfere with transactions
                 url = get_serving_url(self._get_blobinfo(name))
             return re.sub("http://", "//", url)
-        except (NotImageError, BlobKeyRequiredError, TransformationError):
+        except (NotImageError, BlobKeyRequiredError, TransformationError, LargeImageError):
             # Django doesn't expect us to return None from this function, and in fact
             # relies on the "truthiness" of the return value when accessing .url on an
             # unsaved fieldfile. We just return the name which is effectively what Django
