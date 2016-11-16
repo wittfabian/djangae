@@ -18,6 +18,9 @@ from djangae.db.unique_utils import unique_identifiers_from_entity
 from djangae.db.constraints import UniqueMarker
 from djangae.db.caching import disable_cache
 
+
+logger = logging.getLogger(__name__)
+
 ACTION_TYPES = [
     ('check', 'Check'),  # Verify all models unique contraint markers exist and are assigned to it.
     ('repair', 'Repair'),  # Recreate any missing markers
@@ -239,7 +242,7 @@ class CleanMapper(RawMapperMixin, MapReduceTask):
             try:
                 instance = model.objects.using(alias).get(pk=instance_id)
             except model.DoesNotExist:
-                logging.info("Deleting unique marker %s because the associated instance no longer exists", entity.key().id_or_name())
+                logger.info("Deleting unique marker %s because the associated instance no longer exists", entity.key().id_or_name())
                 datastore.Delete(entity)
                 return
 
@@ -248,5 +251,5 @@ class CleanMapper(RawMapperMixin, MapReduceTask):
             identifiers = unique_identifiers_from_entity(model, instance_entity, ignore_pk=True)
             identifier_keys = [datastore.Key.from_path(UniqueMarker.kind(), i, namespace=entity["instance"].namespace()) for i in identifiers]
             if entity.key() not in identifier_keys:
-                logging.info("Deleting unique marker %s because the it no longer represents the associated instance state", entity.key().id_or_name())
+                logger.info("Deleting unique marker %s because the it no longer represents the associated instance state", entity.key().id_or_name())
                 datastore.Delete(entity)
