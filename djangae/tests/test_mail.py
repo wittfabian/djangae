@@ -42,7 +42,7 @@ class EmailBackendTests(TestCase):
             include the invalid address in its error message, so we have to log it in Djangae.
         """
         invalid_from_address = "larry@google.com"
-        with sleuth.watch("djangae.mail.logging.error") as log_err:
+        with sleuth.watch("djangae.mail.logger.error") as log_err:
             # The SDK doesn't raise InvalidSenderError, so we have to force it to blow up
             with sleuth.detonate("djangae.mail.aeemail.EmailMessage.send", InvalidSenderError):
                 try:
