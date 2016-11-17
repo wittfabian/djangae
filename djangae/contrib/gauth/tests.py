@@ -282,6 +282,38 @@ class MiddlewareTests(TestCase):
         # and so with pre-creation required, authentication should have failed
         self.assertTrue(isinstance(request.user, AnonymousUser))
 
+    @override_settings(DJANGAE_CREATE_UNKNOWN_USER=True)
+    def test_user_email_update(self):
+        """ Users can alter their Google account's primary email address. Make sure that we update
+            it on the Django model.
+        """
+        email = 'User@example.com'
+        user = users.User(email, _user_id='111111111100000000001')
+
+        User = get_user_model()
+        request = HttpRequest()
+        SessionMiddleware().process_request(request)  # Make the damn sessions work
+        request.session[BACKEND_SESSION_KEY] = 'djangae.contrib.gauth.datastore.backends.AppEngineUserAPIBackend'
+        middleware = AuthenticationMiddleware()
+
+        with sleuth.switch('djangae.contrib.gauth.middleware.users.get_current_user', lambda: user):
+            middleware.process_request(request)
+
+        self.assertEqual(1, User.objects.count())
+        django_user = request.user
+        self.assertEqual(email, django_user.email)
+
+        new_email = 'User-Updated@example2.com'
+        user = users.User(new_email, _user_id=user.user_id())
+
+        with sleuth.switch('djangae.contrib.gauth.middleware.users.get_current_user', lambda: user):
+            middleware.process_request(request)
+
+        self.assertEqual(1, User.objects.count())
+        django_user = request.user
+        self.assertEqual(new_email, django_user.email)
+        self.assertEqual(new_email.lower(), django_user.email_lower)
+
 
 @override_settings(
     AUTH_USER_MODEL='djangae.GaeDatastoreUser',
