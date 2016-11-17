@@ -18,7 +18,7 @@
 - Fixed a side effect of that ^ introduction of `get_serving_url` which would add an entity group to any transaction in which it was called (due to the Datastore read done by `get_serving_url`).
 - Fixed fetching url for non images after introduction of `get_serving_url` call inside CloudStorage url method.
 - Fixed fetching url for files after introduction of `get_serving_url` call inside BlobstoreStorage url method when file is bigger than 32MB.
-- Fixed auth middleware to update user email address if it gets changed
+- Fixed gauth middleware to update user email address if it gets changed
 
 ### Documentation:
 
