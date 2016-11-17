@@ -11,6 +11,9 @@ from google.appengine.datastore.datastore_rpc import BaseConnection
 from djangae.contrib.consistency.caches import get_caches
 
 
+logger = logging.getLogger(__name__)
+
+
 DEFAULT_CONFIG = {
     "cache_on_creation": True,
     "cache_on_modification": False,
@@ -43,7 +46,7 @@ def improve_queryset_consistency(queryset):
         # Note that this is imperfect because not all of the objects from recent_pks will
         # necessarily match the query, so we might limit more than necessary.
         imposed_limit = max_existing_pks + (queryset.query.low_mark or 0)
-        logging.info("Limiting queryset for %s to %d", queryset.model, imposed_limit)
+        logger.info("Limiting queryset for %s to %d", queryset.model, imposed_limit)
         queryset = queryset.all()[:imposed_limit]
 
     pks = list(queryset.all().values_list('pk', flat=True)) # this may include recently-created objects
@@ -128,7 +131,7 @@ def object_matches_a_check(obj, checks):
                 else:
                     return True
             except AttributeError:
-                logging.error("Invalid filter for model %s, %s", obj.__class__, check)
+                logger.error("Invalid filter for model %s, %s", obj.__class__, check)
                 raise
     return False
 

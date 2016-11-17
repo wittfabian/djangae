@@ -9,6 +9,9 @@ from django.utils.encoding import smart_text
 from djangae.crc64 import CRC64
 
 
+logger = logging.getLogger(__name__)
+
+
 class SimulatedContentTypeManager(models.Manager):
     """
         Simulates content types without actually hitting the datastore.
@@ -162,7 +165,7 @@ class SimulatedContentTypeManager(models.Manager):
 
     def create(self, **kwargs):
         self._repopulate_if_necessary()
-        logging.warning(
+        logger.warning(
             "Created simulated content type, this will not persist and will remain only on this "
             "app instance"
         )
