@@ -19,6 +19,8 @@
 - Fixed fetching url for non images after introduction of `get_serving_url` call inside CloudStorage url method.
 - Fixed fetching url for files after introduction of `get_serving_url` call inside BlobstoreStorage url method when file is bigger than 32MB.
 - Fixed gauth middleware to update user email address if it gets changed
+- Don't add entities to memcache if DJANGAE_CACHE_ENABLED=False
+- Fix bug where entities could still be fetched from memcache with DJANGAE_CACHE_ENABLED=False when saving in a transaction or deleting them
 
 ### Documentation:
 
