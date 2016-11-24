@@ -4,6 +4,9 @@ from datetime import datetime
 
 from django.conf import settings
 from django.core.management.commands import runserver
+
+from djangae.sandbox import WHITELISTED_DEV_APPSERVER_OPTIONS
+
 from google.appengine.tools.devappserver2 import shutdown
 from google.appengine.tools.sdk_update_checker import (
     GetVersionObject,
@@ -58,40 +61,6 @@ class Command(runserver.Command):
     dev_appserver that emulates the live environment your application
     will be deployed to.
     """
-    # We use this list to prevent user using certain dev_appserver options that
-    # might collide with some Django settings.
-    WHITELISTED_DEV_APPSERVER_OPTIONS = [
-        'A',
-        'admin_host',
-        'admin_port',
-        'auth_domain',
-        'storage_path',
-        'log_level',
-        'max_module_instances',
-        'use_mtime_file_watcher',
-        'appidentity_email_address',
-        'appidentity_private_key_path',
-        'blobstore_path',
-        'datastore_path',
-        'clear_datastore',
-        'datastore_consistency_policy',
-        'require_indexes',
-        'auto_id_policy',
-        'logs_path',
-        'show_mail_body',
-        'enable_sendmail',
-        'prospective_search_path',
-        'clear_prospective_search',
-        'search_indexes_path',
-        'clear_search_indexes',
-        'enable_task_running',
-        'allow_skipped_files',
-        'api_port',
-        'dev_appserver_log_level',
-        'skip_sdk_update_check',
-        'default_gcs_bucket_name',
-    ]
-
     def add_arguments(self, parser):
         super(Command, self).add_arguments(parser)
 
@@ -99,7 +68,7 @@ class Command(runserver.Command):
 
         # Extra parameters that we're going to pass to GAE's `dev_appserver.py`.
         for option in sandbox_options:
-            if option in self.WHITELISTED_DEV_APPSERVER_OPTIONS:
+            if option in WHITELISTED_DEV_APPSERVER_OPTIONS:
                 parser.add_argument('--%s' % option, action='store', dest=option)
 
     @staticmethod
