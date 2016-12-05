@@ -41,6 +41,13 @@ class SimulatedContentTypesTests(TestCase):
         self.assertEqual(by_id.model, DummyModel._meta.model_name)
         self.assertEqual(by_id.app_label, DummyModel._meta.app_label)
 
+    def test_ids_are_positive(self):
+        # actually testing SimulatedContentTypeManager._get_id provide correct ids
+        # cf. https://github.com/potatolondon/djangae/issues/791
+        # there are enough real content-types to test that
+        for ct in ContentType.objects.all():
+            self.assertGreater(ct.id, 0)
+
     def test_create_contenttype(self):
         ct = ContentType.objects.create(app_label='test', model='test')
         self.assertEqual(ct.app_label, 'test')
