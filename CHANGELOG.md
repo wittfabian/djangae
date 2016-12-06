@@ -1,29 +1,38 @@
-## v0.9.8 (in development)
+## v0.9.9 (in development)
 
 ### New features & improvements:
 
-- Cleaned up and refactored internal implementation of SimulatedContentTypeManager. Now also allows patching ContentType manager in migrations.
+-
+
+### Bug fixes:
+
+-
+
+### Documentation:
+
+-
+
+## v0.9.8 (release date: 6th December 2016)
+
+### New features & improvements:
+
+- Cleaned up and refactored internal implementation of `SimulatedContentTypeManager`. Now also allows patching `ContentType` manager in migrations.
 - Add ability to specify GAE target instance for remote command with `--app_id` flag
 - When App Engine raises an `InvalidSenderError` when trying to send an email, Djangae now logs the 'from' address which is invalid (App Engine doesn't include it in the error).
 
 ### Bug fixes:
 
 - Fixed an issue where Django Debug Toolbar would get a `UnicodeDecodeError` if a query contained a non-ascii character.
-- Fixed an issue where getting and flushing a specific TaskQueue using the test stub (including when using `djangae.test.TestCase.process_task_queues`) would flush all task queues.
+- Fixed an issue where getting and flushing a specific `TaskQueue` using the test stub (including when using `djangae.test.TestCase.process_task_queues`) would flush all task queues.
 - Fixed a bug in our forced contenttypes migration
 - Fixed `./manage.py runserver` not working with Django 1.10 and removed a RemovedInDjango110Warning message at startup.
 - Restore `--nothreading` functionality to runserver (this went away when we dropped support for the old dev_appserver)
 - Fixed a bug where the `dumpurls` command had stopped working due to subtle import changes.
 - Utilise `get_serving_url` to get the correct url for serving images from Cloud Storage.
 - Fixed a side effect of that ^ introduction of `get_serving_url` which would add an entity group to any transaction in which it was called (due to the Datastore read done by `get_serving_url`).
-- Fixed fetching url for non images after introduction of `get_serving_url` call inside CloudStorage url method.
-- Fixed fetching url for files after introduction of `get_serving_url` call inside BlobstoreStorage url method when file is bigger than 32MB.
-- Fixed gauth middleware to update user email address if it gets changed
-
-### Documentation:
-
--
--
+- Fixed fetching url for non images after introduction of `get_serving_url` call inside `CloudStorage` url method.
+- Fixed fetching url for files after introduction of `get_serving_url` call inside `BlobstoreStorage` url method when file is bigger than 32MB.
+- Fixed `gauth` middleware to update user email address if it gets changed
 
 
 ## v0.9.7 (release date: 11th August 2016)
