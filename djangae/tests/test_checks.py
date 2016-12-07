@@ -2,8 +2,8 @@ import os
 import tempfile
 
 import yaml
-from mock import patch
 
+from djangae.contrib import sleuth
 from djangae.checks import check_deferred_builtin
 from djangae.environment import get_application_root
 from djangae.test import TestCase
@@ -27,9 +27,7 @@ class ChecksTestCase(TestCase):
         temp_app_yaml = file(temp_app_yaml_path, 'w')
         yaml.dump(app_yaml, temp_app_yaml)
 
-        with patch('djangae.checks.get_application_root') as mock_app_root:
-            mock_app_root.return_value = temp_app_yaml_dir
-
+        with sleuth.switch('djangae.checks.get_application_root', lambda : temp_app_yaml_dir) as mock_app_root:
             warnings = check_deferred_builtin()
             self.assertEqual(len(warnings), 1)
             self.assertEqual(warnings[0].id, 'djangae.W001')

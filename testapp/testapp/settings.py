@@ -49,7 +49,6 @@ INSTALLED_APPS = [
     'djangae.contrib.mappers',
     'djangae.contrib.pagination',
     'djangae.contrib.uniquetool',
-    'mock',
     'testapp'
 ]
 
