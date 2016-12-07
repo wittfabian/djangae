@@ -6,6 +6,9 @@ from djangae import utils
 from djangae.storage import UniversalNewLineBlobReader
 
 
+logger = logging.getLogger(__name__)
+
+
 class DjangoInputReader(input_readers.InputReader):
 
     REQUIRED_PARAMS = ('model',)
@@ -54,7 +57,7 @@ class DjangoInputReader(input_readers.InputReader):
 
         # Grab the input parameters for the split
         params = input_readers._get_params(mapper_spec)
-        logging.info("Params: %r", params)
+        logger.info("Params: %r", params)
 
         db = params['db']
         # Unpickle the query
@@ -75,7 +78,7 @@ class DjangoInputReader(input_readers.InputReader):
 
         pk_range = last_id - first_id
 
-        logging.info("Query range: %s - %s = %s", first_id, last_id, pk_range)
+        logger.info("Query range: %s - %s = %s", first_id, last_id, pk_range)
 
         if pk_range < shard_count or shard_count == 1:
             return [DjangoInputReader(first_id-1, last_id, params['model'], db=db)]
@@ -98,7 +101,7 @@ class DjangoInputReader(input_readers.InputReader):
             if shard_end_id > last_id:
                 shard_end_id = last_id
 
-            logging.info("Creating shard: %s - %s", shard_start_id, shard_end_id)
+            logger.info("Creating shard: %s - %s", shard_start_id, shard_end_id)
             reader = DjangoInputReader(shard_start_id, shard_end_id, params['model'], db=db)
             reader.shard_id = shard_id
             readers.append(reader)

@@ -34,7 +34,8 @@ from djangae.db import constraints, utils
 from djangae.db.backends.appengine import caching
 from djangae.db.unique_utils import query_is_unique
 
-DJANGAE_LOG = logging.getLogger("djangae")
+
+logger = logging.getLogger(__name__)
 
 OPERATORS_MAP = {
     'exact': '=',
@@ -746,7 +747,7 @@ class SelectCommand(object):
             return result
         except:
             # We never want this to cause things to die
-            logging.exception("Unable to translate query to string")
+            logger.exception("Unable to translate query to string")
             return "QUERY TRANSLATION ERROR"
 
     def __repr__(self):
@@ -946,7 +947,7 @@ class InsertCommand(object):
             return result
         except:
             # We never want this to cause things to die
-            logging.info("InsertCommand is unable to translate query to string")
+            logger.info("InsertCommand is unable to translate query to string")
             return u"QUERY TRANSLATION ERROR"
 
     def __repr__(self):
@@ -1179,7 +1180,7 @@ class UpdateCommand(object):
                 except:
                     # We ignore the exception because raising will rollback the transaction causing
                     # an inconsistent state
-                    logging.exception("Unable to update the context cache")
+                    logger.exception("Unable to update the context cache")
                     pass
 
             # Return true to indicate update success

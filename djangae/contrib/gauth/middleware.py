@@ -1,6 +1,6 @@
 from django.contrib.auth import authenticate, login, logout, get_user, BACKEND_SESSION_KEY, load_backend
 from django.contrib.auth.middleware import AuthenticationMiddleware as DjangoMiddleware
-from django.contrib.auth.models import AnonymousUser
+from django.contrib.auth.models import AnonymousUser, BaseUserManager
 from djangae.contrib.gauth.common.backends import BaseAppEngineUserAPIBackend
 
 from google.appengine.api import users
@@ -47,8 +47,19 @@ class AuthenticationMiddleware(DjangoMiddleware):
 
     def sync_user_data(self, django_user, google_user):
         # Now make sure we update is_superuser and is_staff appropriately
+        changed_fields = []
+
         is_superuser = users.is_current_user_admin()
 
         if is_superuser != django_user.is_superuser:
             django_user.is_superuser = django_user.is_staff = is_superuser
-            django_user.save(update_fields=['is_superuser', 'is_staff'])
+            changed_fields += ['is_superuser', 'is_staff']
+
+        email = BaseUserManager.normalize_email(google_user.email())  # Normalizes the domain only.
+
+        if email != django_user.email:
+            django_user.email = email
+            changed_fields += ['email', 'email_lower']
+
+        if changed_fields:
+            django_user.save(update_fields=changed_fields)

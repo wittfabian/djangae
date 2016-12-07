@@ -25,8 +25,12 @@ Then run your management command specifying the `remote` sandbox.  Note that the
 
     ./manage.py --sandbox=remote shell
 
-
 This will use your **local** Python code, but all database operations will be performed on the remote Datastore.
+
+Additionally, you can specify the application to run commands against by providing an `--app_id`. Eg
+
+  ./manage.py --sandbox=remote --app_id=myapp shell  # Starts a remote shell with the "myapp" instance
+
 
 ### Deferring Tasks Remotely
 
@@ -36,6 +40,3 @@ App Engine tasks are stored in the Datastore, so when you are in the remote shel
     >>> from my_code import my_function
     >>> from google.appengine.ext.deferred import defer
     >>> defer(my_function, arg1, arg2, _queue="queue_name")
-
-
-

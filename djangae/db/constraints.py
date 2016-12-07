@@ -1,5 +1,4 @@
 import datetime
-import logging
 
 from django.conf import settings
 from django.core.exceptions import NON_FIELD_ERRORS
@@ -10,9 +9,6 @@ from google.appengine.ext import db
 from .unique_utils import unique_identifiers_from_entity
 from .utils import key_exists
 from djangae.db.backends.appengine.dbapi import IntegrityError, NotSupportedError
-
-
-DJANGAE_LOG = logging.getLogger("djangae")
 
 
 def has_active_unique_constraints(model_or_instance):
