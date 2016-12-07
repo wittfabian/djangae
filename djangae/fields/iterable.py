@@ -68,7 +68,7 @@ class OverlapLookup(Lookup):
         if not isinstance(self.rhs, (list, set)):
             raise ValueError("__overlap takes a list or set as a value")
 
-        return super(OverlapLookup, self).get_prep_lookup()
+        return [self.lhs.output_field.get_prep_lookup(self.lookup_name, v) for v in self.rhs]
 
 
 class IterableTransform(Transform):
