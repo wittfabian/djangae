@@ -440,6 +440,18 @@ class RelatedListFieldModelTests(TestCase):
         thing.related_list.field.save_form_data(thing, [])
         self.assertNotEqual(before_list.all(), thing.related_list.all())
 
+    def test_filtering_on_iterable_fields(self):
+        related1 = ISOther.objects.create()
+        related2 = ISOther.objects.create()
+        related3 = ISOther.objects.create()
+        thing = ISModel.objects.create(related_list=[related1, related2])
+        # filtering using __contains lookup with ListField:
+        qry = ISModel.objects.filter(related_list__contains=related1)
+        self.assertEqual(sorted(x.pk for x in qry), [thing.pk])
+        # filtering using __overlap lookup with ListField:
+        qry = ISModel.objects.filter(related_list__overlap=[related2, related3])
+        self.assertEqual(sorted(x.pk for x in qry), [thing.pk])
+
     def test_saving_forms(self):
         class TestForm(forms.ModelForm):
             class Meta:
