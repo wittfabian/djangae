@@ -436,7 +436,7 @@ class RelatedIteratorField(ForeignObject):
         if lookup_name == 'isempty':
             return IsEmptyLookup
         elif lookup_name == 'overlap':
-            return OverlapLookup
+            return RelatedOverlapLookup
         elif lookup_name == 'contains':
             return RelatedContainsLookup
         elif lookup_name in ('in', 'exact', 'isnull'):
@@ -446,7 +446,7 @@ class RelatedIteratorField(ForeignObject):
 
 
 RelatedIteratorField.register_lookup(RelatedContainsLookup)
-RelatedIteratorField.register_lookup(OverlapLookup)
+RelatedIteratorField.register_lookup(RelatedOverlapLookup)
 RelatedIteratorField.register_lookup(IsEmptyLookup)
 
 
