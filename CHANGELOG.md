@@ -8,6 +8,7 @@
 
 - Fixed a minor bug where entities were still added to memcache (but not fetched from it) with `DJANGAE_CACHE_ENABLED=False`.  This fix now allows disabling the cache to be a successful workaround for https://code.google.com/p/googleappengine/issues/detail?id=7876.
 - Fixed a bug where entities could still be fetched from memcache with `DJANGAE_CACHE_ENABLED=False` when saving in a transaction or deleting them.
+- Fixed overlap filtering on RelatedListField and RelatedSetField (Thanks Grzes!)
 
 ### Documentation:
 
