@@ -2,7 +2,7 @@
 
 ### New features & improvements:
 
--
+- Implemented weak (memcache) locking to contrib.locking
 
 ### Bug fixes:
 
