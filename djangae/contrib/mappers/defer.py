@@ -1,5 +1,12 @@
+# STANDARD LIB
+import logging
+
+# THIRD PARTY
 from google.appengine.ext.deferred import defer
 from google.appengine.runtime import DeadlineExceededError
+
+
+logger = logging.getLogger(__name__)
 
 
 class Redefer(Exception):
@@ -7,12 +14,17 @@ class Redefer(Exception):
 
 
 def _process_shard(model, instance_ids, callback):
-    for instance in model.objects.filter(pk__in=instance_ids):
+    logger.debug(
+        "Processing shard for model %s, PKs %s to %s",
+        model.__name__, instance_ids[0], instance_ids[-1]
+    )
     for instance in model.objects.filter(pk__in=instance_ids).iterator():
         callback(instance)
+    logger.debug("Done processing shard.")
 
 
 def _shard(model, query, callback, shard_size, queue, offset_pk=1):
+    logger.debug("Sharding PKs for model %s into tasks on queue %s", model.__name__, queue)
     keys_queryset = model.objects.all()
     keys_queryset.query = query
     keys_queryset = keys_queryset.order_by("pk")
@@ -26,6 +38,10 @@ def _shard(model, query, callback, shard_size, queue, offset_pk=1):
             ids = list(keys_queryset.filter(pk__gt=offset_pk)[:shard_size])
             if not ids:
                 # We're done!
+                logger.debug(
+                    "Finished sharding PKs for model %s into tasks on queue %s.",
+                    model.__name__, queue
+                )
                 return
 
             # Fire off the first shard
@@ -36,6 +52,7 @@ def _shard(model, query, callback, shard_size, queue, offset_pk=1):
             offset_pk = ids[-1]
 
             if shards_deferred >= max_shards_to_defer_in_this_task:
+                logger.debug("Redeferring. Offset PK: %s", offset_pk)
                 raise Redefer()
 
         except (DeadlineExceededError, Redefer):
@@ -69,4 +86,7 @@ def defer_iteration(queryset, callback, shard_size=500, _queue="default", _targe
         shard size. The shards will work in parallel and will not be sequential.
     """
     # We immediately defer the _shard function so that we don't hold up execution
-    defer(_shard, queryset.model, queryset.query, callback, shard_size, _queue, _queue=_queue, _target=_target)
+    defer(
+        _shard, queryset.model, queryset.query, callback, shard_size, _queue,
+        _queue=_queue, _target=_target
+    )
