@@ -2,31 +2,45 @@ from google.appengine.ext.deferred import defer
 from google.appengine.runtime import DeadlineExceededError
 
 
+class Redefer(Exception):
+    pass
+
+
 def _process_shard(model, instance_ids, callback):
     for instance in model.objects.filter(pk__in=instance_ids):
+    for instance in model.objects.filter(pk__in=instance_ids).iterator():
         callback(instance)
 
 
-def _shard(model, query, callback, shard_size, queue, offset=0):
+def _shard(model, query, callback, shard_size, queue, offset_pk=1):
     keys_queryset = model.objects.all()
     keys_queryset.query = query
+    keys_queryset = keys_queryset.order_by("pk")
     keys_queryset = keys_queryset.values_list("pk", flat=True)
 
-    # Keep iterating until we are done, or we only have 10 seconds to spare!
+    # Keep iterating until we are done, or until we might be hitting the task deadline
+    shards_deferred = 0
+    max_shards_to_defer_in_this_task = 250  # number which we think we can safely do in 10 minutes
     while True:
         try:
-            ids = list(keys_queryset.all()[offset:offset+shard_size])
+            ids = list(keys_queryset.filter(pk__gt=offset_pk)[:shard_size])
             if not ids:
                 # We're done!
                 return
 
             # Fire off the first shard
             defer(_process_shard, model, ids, callback, _queue=queue)
+            shards_deferred += 1
 
-            # Increment the offset
-            offset += shard_size
-        except DeadlineExceededError:
-            # If we run out of time, then defer this function again, continuing from the offset
+            # Set the offset to the last pk
+            offset_pk = ids[-1]
+
+            if shards_deferred >= max_shards_to_defer_in_this_task:
+                raise Redefer()
+
+        except (DeadlineExceededError, Redefer):
+            # If we run out of time, or have done enough shards that we might be running out of
+            # time, then defer this function again, continuing from the offset.
             defer(
                 _shard,
                 model,
@@ -34,9 +48,10 @@ def _shard(model, query, callback, shard_size, queue, offset=0):
                 callback,
                 shard_size,
                 queue,
-                offset=offset,
+                offset_pk=offset_pk,
                 _queue=queue
             )
+            return
 
 
 def defer_iteration(queryset, callback, shard_size=500, _queue="default", _target=None):
@@ -53,6 +68,5 @@ def defer_iteration(queryset, callback, shard_size=500, _queue="default", _targe
         tasks are receiving DeadlineExceededErrors you probably need to reduce the
         shard size. The shards will work in parallel and will not be sequential.
     """
-
     # We immediately defer the _shard function so that we don't hold up execution
     defer(_shard, queryset.model, queryset.query, callback, shard_size, _queue, _queue=_queue, _target=_target)
