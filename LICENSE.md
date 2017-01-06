@@ -1,3 +1,5 @@
+# BSD 3-Clause License
+
 Copyright (c) Luke Benstead 2014, Potato London Ltd. 2014-, and all contributors.
 All rights reserved.
 
