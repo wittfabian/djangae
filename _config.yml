@@ -1,0 +1,8 @@
+title: Djangae
+description: The best way to run Django on Google App Engine
+google_analytics: UA-40029116-11
+show_downloads: true
+theme: jekyll-theme-cayman
+
+gems:
+  - jekyll-mentions
