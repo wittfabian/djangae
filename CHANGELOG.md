@@ -11,8 +11,7 @@
 - Fixed a bug where entities could still be fetched from memcache with `DJANGAE_CACHE_ENABLED=False` when saving in a transaction or deleting them.
 - Fixed overlap filtering on RelatedListField and RelatedSetField (Thanks Grzes!)
 - Fixed various issues with `djangae.contrib.mappers.defer_iteration`, so that it no longers gets stuck deferring tasks or hitting memory limit errors when uses on large querysets.
-- Fixed reverse lookups with the SimulatedContentTypesManager
-- Fixed validation problems when using simulated contenttypes when IDs would be too large for an AutoField
+- Fixed an issue where having a ForeignKey to a ContentType would cause an issue when querying due to the large IDs produced by djangae.contrib.contenttypes's SimulatedContentTypesManager.
 
 ### Documentation:
 
