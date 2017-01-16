@@ -18,12 +18,17 @@ class ContentTypesConfig(AppConfig):
             from django.db import models
             from django.contrib.contenttypes import models as django_models
             if not isinstance(django_models.ContentType.objects, SimulatedContentTypeManager):
-                django_models.ContentType.objects = SimulatedContentTypeManager()
+                django_models.ContentType.objects = SimulatedContentTypeManager(django_models.ContentType)
                 django_models.ContentType.objects.auto_created = True
 
                 # Really force the default manager to use the Simulated one
                 meta = django_models.ContentType._meta
-                meta.local_managers[0] = SimulatedContentTypeManager()
+                if hasattr(meta, "local_managers"):
+                    # Django >= 1.10
+                    meta.local_managers[0] = SimulatedContentTypeManager()
+                else:
+                    django_models.ContentType._default_manager = SimulatedContentTypeManager(django_models.ContentType)
+
                 meta._expire_cache()
 
                 # Our generated IDs take up a 64 bit range (signed) but aren't auto
