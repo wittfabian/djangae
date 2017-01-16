@@ -12,6 +12,10 @@ class DummyModel(models.Model):
     pass
 
 
+class RelatedToContentType(models.Model):
+    content_type = models.ForeignKey(ContentType)
+
+
 class SimulatedContentTypesTests(TestCase):
 
     def test_contenttypes_patch_is_applied(self):
@@ -41,12 +45,24 @@ class SimulatedContentTypesTests(TestCase):
         self.assertEqual(by_id.model, DummyModel._meta.model_name)
         self.assertEqual(by_id.app_label, DummyModel._meta.app_label)
 
-    def test_ids_are_positive(self):
-        # actually testing SimulatedContentTypeManager._get_id provide correct ids
-        # cf. https://github.com/potatolondon/djangae/issues/791
-        # there are enough real content-types to test that
-        for ct in ContentType.objects.all():
-            self.assertGreater(ct.id, 0)
+    def test_negative_ids_work(self):
+        # This app_label, model combination happens to create a negative ID, which we (ab)use here
+        ct, created = ContentType.objects.get_or_create(app_label='djangae', model='computedfieldmodel')
+        self.assertTrue(ct.id < 0) # Make sure it's a negative ID, or this test is pointless
+
+        related = RelatedToContentType.objects.create(content_type=ct)
+        self.assertTrue(related.content_type_id < 0)
+
+        reloaded = related.content_type
+        self.assertEqual(ct.id, reloaded.id)
+
+    def test_large_content_type_ids(self):
+        # IDs greater than > 32 bit need to work (which means patching the AutoField in ContentType to BigAutoField)
+        ct = ContentType.objects.create(app_label='test', model='MyModel')
+        related = RelatedToContentType.objects.create(content_type=ct)
+        related = RelatedToContentType.objects.filter(content_type=ct).first()
+        self.assertEqual(related.content_type_id, ct.pk)
+        self.assertEqual(related.content_type, ct)
 
     def test_create_contenttype(self):
         ct = ContentType.objects.create(app_label='test', model='test')
