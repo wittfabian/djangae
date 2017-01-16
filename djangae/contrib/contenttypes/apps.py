@@ -13,6 +13,12 @@ class ContentTypesConfig(AppConfig):
     label = "djangae_contenttypes"
 
     def ready(self):
+        """ Patch the ContentTypes app so that:
+            * The ContentType's manager is our SimulatedContentTypeManager.
+            * The ContentType's PK field is BigIntegerField, so that ForeignKeys which point to it
+              will acccept our large (signed 64 bit) IDs.
+            * The update_contenttypes management function is replaced with our alternative version.
+        """
         if django_update_contenttypes != update_contenttypes:
             post_migrate.disconnect(django_update_contenttypes)
             from django.db import models

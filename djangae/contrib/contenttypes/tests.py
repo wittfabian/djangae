@@ -46,6 +46,7 @@ class SimulatedContentTypesTests(TestCase):
         self.assertEqual(by_id.app_label, DummyModel._meta.app_label)
 
     def test_negative_ids_work(self):
+        """ Test that having ContentType objects with negative IDs does not cause problems. """
         # This app_label, model combination happens to create a negative ID, which we (ab)use here
         ct, created = ContentType.objects.get_or_create(app_label='djangae', model='computedfieldmodel')
         self.assertTrue(ct.id < 0) # Make sure it's a negative ID, or this test is pointless
@@ -57,9 +58,14 @@ class SimulatedContentTypesTests(TestCase):
         self.assertEqual(ct.id, reloaded.id)
 
     def test_large_content_type_ids(self):
+        """ Test that having ContentType objects with large (signed 64-bit int) IDs does not
+            cause problems when other models have foreign keys to those ContentTypes.
+            (Our SimulatedContentTypeManager creates signed 64-bit IDs.)
+        """
         # IDs greater than > 32 bit need to work (which means patching the AutoField in ContentType to BigAutoField)
         ct = ContentType.objects.create(app_label='test', model='MyModel')
         related = RelatedToContentType.objects.create(content_type=ct)
+        # Refetch from the DB to clear FK cache attributes:
         related = RelatedToContentType.objects.filter(content_type=ct).first()
         self.assertEqual(related.content_type_id, ct.pk)
         self.assertEqual(related.content_type, ct)
