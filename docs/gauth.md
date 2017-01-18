@@ -143,6 +143,6 @@ url(r'^gauth/', include(djangae.contrib.gauth.urls))
 
 Use this URL to add "Switch account" functionality for user:
 
-```
-<a href="{% url 'djangae_switch_accounts' %}">Switch account</a>
-```
+{% raw %}
+    <a href="{% url 'djangae_switch_accounts' %}">Switch account</a>
+{% endraw %}
