@@ -1,22 +1,46 @@
 import time
-from django.core.cache import cache
+from datetime import datetime
 
+from google.appengine.api import memcache
 
 class MemcacheLock(object):
-    def __init__(self, identifier):
+    def __init__(self, identifier, cache):
         self.identifier = identifier
+        self._cache = cache
 
     @classmethod
     def acquire(cls, identifier, wait=True, steal_after_ms=None):
-        # Slightly misusing steal_after_ms here as it's actually used as the expiry time
-        # for when the lock is set.
-        acquired = cache.add(identifier, 1, steal_after_ms)
+        cache = memcache.Client()
+
+        def expired(value):
+            if not value:
+                # No value? We're fine
+                return True
+
+            return (datetime.utcnow() - value).total_seconds() * 1000 > steal_after_ms
+
+        acquired = cache.add(identifier, datetime.utcnow())
         if acquired:
-            return cls(identifier)
+            # We set the key so we have the lock
+            return cls(identifier, cache)
+        elif not wait:
+            return None
         else:
-            while wait and not acquired:
+            while True:
+                # We are waiting for a while
+                to_set = datetime.utcnow()
+
+                # Use compare-and-set to atomically set our new timestamp
+                # if the lock has expired
+                stored = cache.gets(identifier)
+                if expired(stored):
+                    if cache.cas(identifier, to_set):
+                        break
+
                 time.sleep(0.1)
-                acquired = cache.add(identifier, 1, steal_after_ms)
+
+            return cls(identifier, cache)
 
     def release(self):
+        cache = self._cache
         cache.delete(self.identifier)
