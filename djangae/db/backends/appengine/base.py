@@ -43,6 +43,9 @@ from .commands import (
 from djangae.db.backends.appengine import dbapi as Database
 
 
+logger = logging.getLogger(__name__)
+
+
 class Connection(object):
     """ Dummy connection class """
     def __init__(self, wrapper, params):
@@ -470,7 +473,7 @@ class DatabaseCreation(BaseDatabaseCreation):
         assert not self.testbed
 
         if args:
-            logging.warning("'keepdb' argument is not currently supported on the AppEngine backend")
+            logger.warning("'keepdb' argument is not currently supported on the AppEngine backend")
 
         # We allow users to disable scattered IDs in tests. This primarily for running Django tests that
         # assume implicit ordering (yeah, annoying)
@@ -504,7 +507,7 @@ class DatabaseIntrospection(BaseDatabaseIntrospection):
 
 
 class DatabaseSchemaEditor(BaseDatabaseSchemaEditor):
-    def column_sql(self, model, field):
+    def column_sql(self, model, field, include_default=False):
         return "", {}
 
     def create_model(self, model):
@@ -518,6 +521,15 @@ class DatabaseSchemaEditor(BaseDatabaseSchemaEditor):
         pass
 
     def remove_field(self, from_model, field):
+        pass
+
+    def add_field(self, model, field):
+        pass
+
+    def alter_index_together(self, model, old_index_together, new_index_together):
+        pass
+
+    def delete_model(self, model):
         pass
 
 

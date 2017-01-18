@@ -255,7 +255,7 @@ _OPTIONS = None
 _CONFIG = None
 
 @contextlib.contextmanager
-def activate(sandbox_name, add_sdk_to_path=False, new_env_vars=None, **overrides):
+def activate(sandbox_name, add_sdk_to_path=False, new_env_vars=None, app_id=None, **overrides):
     """Context manager for command-line scripts started outside of dev_appserver.
 
     :param sandbox_name: str, one of 'local', 'remote' or 'test'
@@ -363,7 +363,10 @@ def activate(sandbox_name, add_sdk_to_path=False, new_env_vars=None, **overrides
 
         setattr(options, option, overrides[option])
 
-    configuration = application_configuration.ApplicationConfiguration(options.config_paths)
+    if app_id:
+        configuration = application_configuration.ApplicationConfiguration(options.config_paths, app_id=app_id)
+    else:
+        configuration = application_configuration.ApplicationConfiguration(options.config_paths)
 
     # Enable built-in libraries from app.yaml without enabling the full sandbox.
     module = configuration.modules[0]
@@ -430,6 +433,41 @@ def allow_mode_write():
         stubs.FakeFile._allowed_dirs = original_dirs
 
 
+class allow_modules_context():
+
+    def __enter__(self):
+        import sys
+        import subprocess
+        import os
+        import tempfile
+        import select
+        # Clear the meta_path so google does not screw our imports, make a copy
+        # of the old one
+        self.old_meta_path = sys.meta_path
+        sys.meta_path = []
+        self.patch_modules = [os, tempfile, select, subprocess]
+
+        import copy
+        self.environ = copy.copy(os.environ)
+
+        for mod in self.patch_modules:
+            _system = reload(mod)
+            mod.__dict__.update(_system.__dict__)
+
+        # We have to maintain the environment, or bad things happen
+        os.environ = self.environ # This gets monkey patched by GAE
+
+    def __exit__(self, *exc):
+        # Restore the original path
+        sys.meta_path = self.old_meta_path
+        # Reload the original modules
+        for mod in self.patch_modules:
+            _system = reload(mod)
+            mod.__dict__.update(_system.__dict__)
+        # Put the original os back, again
+        os.environ = self.environ
+
+
 def allow_modules(func, *args):
     """
         dev_appserver likes to kill your imports with meta_path madness so you
@@ -439,38 +477,6 @@ def allow_modules(func, *args):
         it is a bit hacky
     """
     def _wrapped(*args, **kwargs):
-        import sys
-
-        import subprocess
-        import os
-        import tempfile
-        import select
-        # Clear the meta_path so google does not screw our imports, make a copy
-        # of the old one
-        old_meta_path = sys.meta_path
-        sys.meta_path = []
-        patch_modules = [os, tempfile, select, subprocess]
-
-        import copy
-        environ = copy.copy(os.environ)
-
-        for mod in patch_modules:
-            _system = reload(mod)
-            mod.__dict__.update(_system.__dict__)
-
-        # We have to maintain the environment, or bad things happen
-        os.environ = environ # This gets monkey patched by GAE
-
-        try:
+        with allow_modules_context():
             return func(*args, **kwargs)
-        finally:
-            # Restore the original path
-            sys.meta_path = old_meta_path
-            # Reload the original modules
-            for mod in patch_modules:
-                _system = reload(mod)
-                mod.__dict__.update(_system.__dict__)
-            # Put the original os back, again
-            os.environ = environ
-
     return _wrapped

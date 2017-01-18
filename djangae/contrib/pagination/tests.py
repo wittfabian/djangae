@@ -8,16 +8,20 @@ from djangae.contrib.pagination import (
     PaginationOrderingRequired
 )
 
-from .paginator import queryset_identifier, _get_marker
+from .paginator import (
+    queryset_identifier,
+    _get_marker,
+)
+
 
 @paginated_model(orderings=[
-    "first_name", # single field declared as a string
-    ("last_name",), # single field declared as a tuple
+    "first_name",  # single field declared as a string
+    ("last_name",),  # single field declared as a tuple
     ("first_name", "last_name"),
     ("first_name", "-last_name"),
     ("created",),
     ("-created",),
-    "pk", # it's possible to order by the model pk
+    "pk",  # it's possible to order by the model pk
 ])
 class TestUser(models.Model):
     first_name = models.CharField(max_length=200)
@@ -132,7 +136,7 @@ class DatastorePaginatorTests(TestCase):
         paginator = Paginator(TestUser.objects.all().order_by("first_name"), 2, readahead=4)
 
         all_markers = list(TestUser.objects.all().order_by("first_name").values_list(paginator.field_required, flat=True))
-        expected_markers = [ None, all_markers[1] ]
+        expected_markers = [None, all_markers[1]]
 
         paginator.page(1)
 
@@ -145,37 +149,37 @@ class DatastorePaginatorTests(TestCase):
         self.assertEqual(expected_markers, actual_markers)
 
     def test_pages_correct(self):
-        paginator = Paginator(TestUser.objects.all().order_by("first_name"), 1) # 1 item per page
+        paginator = Paginator(TestUser.objects.all().order_by("first_name"), 1)  # 1 item per page
 
         self.assertEqual("A", paginator.page(1).object_list[0].first_name)
         self.assertEqual("A", paginator.page(2).object_list[0].first_name)
         self.assertEqual("B", paginator.page(3).object_list[0].first_name)
         self.assertEqual("B", paginator.page(4).object_list[0].first_name)
 
-        paginator = Paginator(TestUser.objects.all().order_by("first_name", "last_name"), 1) # 1 item per page
+        paginator = Paginator(TestUser.objects.all().order_by("first_name", "last_name"), 1)  # 1 item per page
         self.assertEqual(self.u1, paginator.page(1).object_list[0])
         self.assertEqual(self.u2, paginator.page(2).object_list[0])
         self.assertEqual(self.u3, paginator.page(3).object_list[0])
         self.assertEqual(self.u4, paginator.page(4).object_list[0])
 
-        paginator = Paginator(TestUser.objects.all().order_by("first_name", "-last_name"), 1) # 1 item per page
+        paginator = Paginator(TestUser.objects.all().order_by("first_name", "-last_name"), 1)  # 1 item per page
         self.assertEqual(self.u2, paginator.page(1).object_list[0])
         self.assertEqual(self.u1, paginator.page(2).object_list[0])
         self.assertEqual(self.u4, paginator.page(3).object_list[0])
         self.assertEqual(self.u3, paginator.page(4).object_list[0])
 
-        paginator = Paginator(TestUser.objects.all().order_by("-first_name"), 1) # 1 item per page
+        paginator = Paginator(TestUser.objects.all().order_by("-first_name"), 1)  # 1 item per page
         self.assertEqual(self.u4, paginator.page(1).object_list[0])
         self.assertEqual(self.u3, paginator.page(2).object_list[0])
         self.assertEqual(self.u2, paginator.page(3).object_list[0])
         self.assertEqual(self.u1, paginator.page(4).object_list[0])
 
         with self.assertRaises(PaginationOrderingRequired):
-            paginator = Paginator(TestUser.objects.all().order_by("-first_name", "last_name"), 1) # 1 item per page
+            paginator = Paginator(TestUser.objects.all().order_by("-first_name", "last_name"), 1)  # 1 item per page
             list(paginator.page(1).object_list)
 
-        # test paging when last page has less than per_page objects
-        paginator = Paginator(TestUser.objects.all().order_by("first_name"), 3) # 3 items per page
+        # Test paging when last page has less than per_page objects
+        paginator = Paginator(TestUser.objects.all().order_by("first_name"), 3)  # 3 items per page
         self.assertEqual(
             sorted([self.u1.pk, self.u2.pk, self.u3.pk]),
             sorted([x.pk for x in paginator.page(1).object_list])

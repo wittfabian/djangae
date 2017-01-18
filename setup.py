@@ -15,7 +15,7 @@ EXTRAS = {
 
 setup(
     name=NAME,
-    version='0.9.7-alpha',
+    version='0.9.9-alpha',
     packages=PACKAGES,
 
     # metadata for upload to PyPI
@@ -31,7 +31,7 @@ setup(
         'Framework :: Django :: 1.9',
         'Framework :: Django :: 1.10',
         'Intended Audience :: Developers',
-        'License :: OSI Approved :: MIT License',
+        'License :: OSI Approved :: BSD 3-Clause License',
         'Operating System :: OS Independent',
         'Programming Language :: Python',
     ],

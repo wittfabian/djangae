@@ -90,6 +90,24 @@ Users are keyed by their Google User ID, which is stored in the `username` field
 * Create the user via the Django admin, leaving the `username` field (labelled _"User ID"_) blank.  Or...
 * Create the user via the remote shell with `get_user_model().objects.pre_create_google_user("user@example.com")`.
 
+## `get_or_create` with pre-created Users
+
+When using pre-created Users you should be careful using `get_or_create`. The line:
+
+```python
+User.objects.get_or_create(email=email)
+```
+
+will result in error, if the pre-created user already exists with the email that is case-sensitive-different, but case-insensitive-equal to the provided value.
+
+For instance, if you have pre-created user with email: `JOHN@gmail.com` and you have `get_or_create` with email `John@gmail.com`, you will end up trying to create a new user and failing because both versions (`JOHN@gmail.com` and `John@gmail.com`) have the same case-insensitive value.
+
+To avoid the problem, when using `get_or_create`, you should use `email_lower` instead like this:
+
+```python
+User.objects.get_or_create(email_lower=email.lower(), defaults={"email": email})
+```
+
 
 ## Username/password authentication
 
@@ -125,6 +143,6 @@ url(r'^gauth/', include(djangae.contrib.gauth.urls))
 
 Use this URL to add "Switch account" functionality for user:
 
-```html
+```
 <a href="{% url 'djangae_switch_accounts' %}">Switch account</a>
 ```

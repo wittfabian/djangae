@@ -14,6 +14,7 @@ from djangae.fields import iterable
 from djangae.sandbox import allow_mode_write
 
 
+logger = logging.getLogger(__name__)
 _project_special_indexes = {}
 _app_special_indexes = {}
 _last_loaded_times = {}
@@ -136,7 +137,7 @@ def load_special_indexes():
                 ).setdefault(field_name, []).extend(values)
 
     _indexes_loaded = True
-    logging.debug("Loaded special indexes for %d models", len(_merged_indexes()))
+    logger.debug("Loaded special indexes for %d models", len(_merged_indexes()))
 
 
 def special_index_exists(model_class, field_name, index_type):

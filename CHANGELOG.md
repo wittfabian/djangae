@@ -1,14 +1,60 @@
-## v0.9.7 (in development)
+## v0.9.9 (in development)
+
+### New features & improvements:
+
+- System check for deferred builtin which should always be switched off.
+- Implemented weak (memcache) locking to contrib.locking
+
+### Bug fixes:
+
+- Fixed a minor bug where entities were still added to memcache (but not fetched from it) with `DJANGAE_CACHE_ENABLED=False`.  This fix now allows disabling the cache to be a successful workaround for https://code.google.com/p/googleappengine/issues/detail?id=7876.
+- Fixed a bug where entities could still be fetched from memcache with `DJANGAE_CACHE_ENABLED=False` when saving in a transaction or deleting them.
+- Fixed overlap filtering on RelatedListField and RelatedSetField (Thanks Grzes!)
+- Fixed various issues with `djangae.contrib.mappers.defer_iteration`, so that it no longers gets stuck deferring tasks or hitting memory limit errors when uses on large querysets.
+- Fixed an issue where having a ForeignKey to a ContentType would cause an issue when querying due to the large IDs produced by djangae.contrib.contenttypes's SimulatedContentTypesManager.
+
+### Documentation:
+
+- Improved documentation for `djangae.contrib.mappers.defer_iteration`.
+
+
+## v0.9.8 (release date: 6th December 2016)
+
+### New features & improvements:
+
+- Cleaned up and refactored internal implementation of `SimulatedContentTypeManager`. Now also allows patching `ContentType` manager in migrations.
+- Add ability to specify GAE target instance for remote command with `--app_id` flag
+- When App Engine raises an `InvalidSenderError` when trying to send an email, Djangae now logs the 'from' address which is invalid (App Engine doesn't include it in the error).
+
+### Bug fixes:
+
+- Fixed an issue where Django Debug Toolbar would get a `UnicodeDecodeError` if a query contained a non-ascii character.
+- Fixed an issue where getting and flushing a specific `TaskQueue` using the test stub (including when using `djangae.test.TestCase.process_task_queues`) would flush all task queues.
+- Fixed a bug in our forced contenttypes migration
+- Fixed `./manage.py runserver` not working with Django 1.10 and removed a RemovedInDjango110Warning message at startup.
+- Restore `--nothreading` functionality to runserver (this went away when we dropped support for the old dev_appserver)
+- Fixed a bug where the `dumpurls` command had stopped working due to subtle import changes.
+- Utilise `get_serving_url` to get the correct url for serving images from Cloud Storage.
+- Fixed a side effect of that ^ introduction of `get_serving_url` which would add an entity group to any transaction in which it was called (due to the Datastore read done by `get_serving_url`).
+- Fixed fetching url for non images after introduction of `get_serving_url` call inside `CloudStorage` url method.
+- Fixed fetching url for files after introduction of `get_serving_url` call inside `BlobstoreStorage` url method when file is bigger than 32MB.
+- Fixed `gauth` middleware to update user email address if it gets changed
+
+
+## v0.9.7 (release date: 11th August 2016)
 
 ### New features & improvements:
 
 - Added support for Django 1.10.
-- Changed the querying of `ListField` and `SetField`, which now works similiarly to PostgreSQL ArrayField. `isnull` lookup has been replaced with `isempty`, `exact` with `contains` and `in` with `overlap`. This is a breaking change, so stick to Djangae 0.9.6 or update your code. 
+- Changed the querying of `ListField` and `SetField`, which now works similiarly to PostgreSQL ArrayField. `isnull` lookup has been replaced with `isempty`, `exact` with `contains` and `in` with `overlap`. This is a breaking change, so stick to Djangae 0.9.6 or update your code.
 - Made a slight efficiency improvement so that `my_queryset.filter(pk__in=other_queryset)` will use `other_queryset.values_list('pk')` rather than fetching the full objects.
+- Added clearsessions view.
 
 ### Bug fixes:
 
--
+- Fixed a circular import in djangae.db.utils.
+- Fixed sandbox problem with non-final django versions in the testapp.
+- Fixed a bug where the console URL stored in a mapreduce job's status entity was incorrect.
 
 ### Documentation:
 

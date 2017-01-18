@@ -10,7 +10,6 @@ from django.apps import apps
 from django.conf import settings
 from django.db.backends.utils import format_number
 from django.db import IntegrityError
-from django.db.models.query import QuerySet
 from django.utils import timezone
 from google.appengine.api import datastore
 from google.appengine.api.datastore import Key, Query
@@ -21,9 +20,6 @@ except ImportError:
 
 #DJANGAE
 from djangae.utils import memoized
-from djangae.db.backends.appengine.indexing import special_indexes_for_column, get_indexer
-from djangae.db.backends.appengine.dbapi import CouldBeSupportedError
-from djangae.db.backends.appengine import POLYMODEL_CLASS_ATTRIBUTE
 
 
 def make_timezone_naive(value):
@@ -162,6 +158,9 @@ def get_field_from_column(model, column):
     return None
 
 def django_instance_to_entity(connection, model, fields, raw, instance, check_null=True):
+    from djangae.db.backends.appengine.indexing import special_indexes_for_column, get_indexer
+    from djangae.db.backends.appengine import POLYMODEL_CLASS_ATTRIBUTE
+
     # uses_inheritance = False
     inheritance_root = get_top_concrete_parent(model)
     db_table = get_datastore_kind(inheritance_root)
@@ -342,6 +341,8 @@ def entity_matches_query(entity, query):
         Return True if the entity would potentially be returned by the datastore
         query
     """
+    from djangae.db.backends.appengine.dbapi import CouldBeSupportedError
+
     OPERATORS = {
         "=": lambda x, y: x == y,
         "<": lt,

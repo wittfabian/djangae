@@ -268,7 +268,7 @@ class RelatedOverlapLookup(OverlapLookup):
     def get_prep_lookup(self):
         # Transform any instances to primary keys
         self.rhs = [ x.pk if isinstance(x, models.Model) else x for x in self.rhs ]
-        return super(RelatedContainsLookup, self).get_prep_lookup()
+        return super(RelatedOverlapLookup, self).get_prep_lookup()
 
 
 class RelatedIteratorField(ForeignObject):
@@ -436,7 +436,7 @@ class RelatedIteratorField(ForeignObject):
         if lookup_name == 'isempty':
             return IsEmptyLookup
         elif lookup_name == 'overlap':
-            return OverlapLookup
+            return RelatedOverlapLookup
         elif lookup_name == 'contains':
             return RelatedContainsLookup
         elif lookup_name in ('in', 'exact', 'isnull'):
@@ -446,7 +446,7 @@ class RelatedIteratorField(ForeignObject):
 
 
 RelatedIteratorField.register_lookup(RelatedContainsLookup)
-RelatedIteratorField.register_lookup(OverlapLookup)
+RelatedIteratorField.register_lookup(RelatedOverlapLookup)
 RelatedIteratorField.register_lookup(IsEmptyLookup)
 
 
