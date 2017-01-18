@@ -26,8 +26,12 @@ class Lock(object):
             lock = DatastoreLock.objects.acquire(
                 identifier, wait=wait, steal_after_ms=steal_after_ms
             )
+        elif kind == LOCK_KINDS.WEAK:
+            lock = MemcacheLock.acquire(
+                identifier, wait=wait, steal_after_ms=steal_after_ms
+            )
         else:
-            lock = MemcacheLock.acquire()
+            raise Exception("Unsupported kind")
 
         if lock is None:
             return None

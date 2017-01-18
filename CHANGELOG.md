@@ -3,7 +3,7 @@
 ### New features & improvements:
 
 - System check for deferred builtin which should always be switched off.
--
+- Implemented weak (memcache) locking to contrib.locking
 
 ### Bug fixes:
 
