@@ -9,6 +9,7 @@ from djangae.test import TestCase
 from .lock import Lock, lock, LockAcquisitionError
 from .kinds import LOCK_KINDS
 from .models import DatastoreLock
+from .memcache import MemcacheLock
 from .views import cleanup_locks
 
 
@@ -96,6 +97,7 @@ class DatastoreLocksTestCase(TestCase):
 
 class MemcacheLocksTestCase(TestCase):
     """ Tests for the implementation of the WEAK kind of lock (MemcacheLock). """
+
     def test_acquire_and_release(self):
         # If we try to acquire the same lock twice then the second one should fail
         lock = Lock.acquire("my_lock", kind=LOCK_KINDS.WEAK)
@@ -107,6 +109,21 @@ class MemcacheLocksTestCase(TestCase):
         lock.release()
         lock_again = Lock.acquire("my_lock", kind=LOCK_KINDS.WEAK, wait=False)
         self.assertTrue(isinstance(lock_again, Lock))
+
+    def test_context_manager_steal(self):
+        """ If the lock is already acquired, but is older than our limit then the context manager
+            should steal it.
+        """
+        def do_context():
+            with lock('x', wait=True, steal_after_ms=10, kind=LOCK_KINDS.WEAK):
+                return True
+
+        MemcacheLock.acquire('x') # Acquire the lock
+
+        # If we don't wait, then the lock can't be acquired
+        self.assertFalse(MemcacheLock.acquire('x', wait=False))
+
+        self.assertTrue(do_context()) # Should succeed eventually
 
     def test_context_manager_no_wait(self):
         """ If the lock is already acquired, then our context manager with wait=False should raise
