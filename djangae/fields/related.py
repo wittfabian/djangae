@@ -1,4 +1,5 @@
 import django
+import copy
 from django import forms
 from django.db import router, models
 from django.db.models.query import QuerySet
@@ -116,15 +117,72 @@ class RelatedIteratorManagerBase(object):
         self.instance = instance
         self.field = field
         self.reverse = reverse
+        self.ordered = field.retain_underlying_order
 
         if reverse:
             self.core_filters = {'%s__contains' % self.field.column: instance.pk}
         else:
             self.core_filters = {'pk__in': field.value_from_object(instance)}
 
+    def get_prefetch_queryset(self, instances, queryset=None):
+        if not queryset:
+            queryset = self.field.related.to.objects.all()
+
+        matchers = {}
+        related_ids = set()
+        for instance in instances:
+            for related_id in getattr(instance, self.field.attname):
+                related_ids.add(related_id)
+                matchers.setdefault(related_id, []).append(instance.pk)
+
+        queryset = queryset.filter(pk__in=related_ids)
+
+        def duplicator(queryset):
+            """
+                We have to duplicate the related objects for each source instance that
+                was passed in so we can convince Django to do the right thing when merging
+            """
+            for related_thing in queryset:
+                for i, matcher in enumerate(matchers[related_thing.pk]):
+                    if i == 0:
+                        # Optimisation to prevent unnecessary extra copy
+                        ret = related_thing
+                    else:
+                        ret = copy.copy(related_thing)
+
+                    # Set an id so we can fetch things out in the lambdas below
+                    ret._prefetch_instance_id = matcher
+                    yield ret
+
+        return (
+            duplicator(queryset),
+            lambda inst: inst._prefetch_instance_id,
+            lambda obj: obj.pk,
+            False,
+            self.field.name # Use the field name as the cache name
+        )
+
     def get_queryset(self):
         db = self._db or router.db_for_read(self.instance.__class__, instance=self.instance)
-        if self.field.default == list and not self.reverse:
+
+        if (hasattr(self.instance, "_prefetched_objects_cache") and
+            self.field.name in self.instance._prefetched_objects_cache):
+
+            qs = self.instance._prefetched_objects_cache[self.field.name]
+
+            if self.ordered:
+                lookup = {}
+                for item in qs._result_cache:
+                    lookup[item.pk] = item
+
+                # If this is a ListField make sure the result set retains the right order
+                qs._result_cache = []
+                for pk in getattr(self.instance, self.field.attname):
+                    qs._result_cache.append(lookup[pk])
+                return qs
+            else:
+                return qs
+        elif self.ordered and not self.reverse:
             values = self.field.value_from_object(self.instance)
             qcls = OrderedQuerySet(self.model, using=db)
             qcls.ordered_pks = values[:]
@@ -278,6 +336,7 @@ class RelatedIteratorField(ForeignObject):
     requires_unique_target = False
     generate_reverse_relation = True
     empty_strings_allowed = False
+    retain_underlying_order = False
 
     def __init__(self, to, limit_choices_to=None, related_name=None, on_delete=models.DO_NOTHING, **kwargs):
         # Make sure that we do nothing on cascade by default
@@ -505,6 +564,7 @@ class RelatedSetField(RelatedIteratorField):
 
 
 class RelatedListField(RelatedIteratorField):
+    retain_underlying_order = True
 
     def db_type(self, connection):
         return 'list'
