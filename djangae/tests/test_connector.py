@@ -474,7 +474,7 @@ class BackendTests(TestCase):
 
     def test_exclude_nullable_field(self):
         instance = ModelWithNullableCharField.objects.create(some_id=999) # Create a nullable thing
-        instance2 = ModelWithNullableCharField.objects.create(some_id=999, field1="test") # Create a nullable thing
+        ModelWithNullableCharField.objects.create(some_id=999, field1="test") # Create a nullable thing
         self.assertItemsEqual([instance], ModelWithNullableCharField.objects.filter(some_id=999).exclude(field1="test").all())
 
         instance.field1 = "bananas"
@@ -1067,7 +1067,7 @@ class ConstraintTests(TestCase):
                 raise AssertionError()
             return datastore.Put(*args, **kwargs)
 
-        with sleuth.switch("djangae.db.backends.appengine.commands.datastore.Put", wrapped_put) as put_mock:
+        with sleuth.switch("djangae.db.backends.appengine.commands.datastore.Put", wrapped_put):
             with self.assertRaises(Exception):
                 instance.save()
 
@@ -1094,7 +1094,7 @@ class ConstraintTests(TestCase):
                 raise AssertionError()
             return datastore.Put(*args, **kwargs)
 
-        with sleuth.switch("djangae.db.backends.appengine.commands.datastore.Put", wrapped_put) as put_mock:
+        with sleuth.switch("djangae.db.backends.appengine.commands.datastore.Put", wrapped_put):
             with self.assertRaises(Exception):
                 ModelWithUniques.objects.create(name="One")
 
