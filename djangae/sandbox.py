@@ -18,6 +18,14 @@ _SCRIPT_NAME = 'dev_appserver.py'
 _API_SERVER = None
 
 
+# This is a temporary workaround for the issue with 1.9.49 version where
+# version is set to [0, 0, 0] instead of [1, 9, 49]. This could be removed
+# after this: https://code.google.com/p/googleappengine/issues/detail?id=13439
+# issue is resolved. If that is done, we should remove all references to
+# TEMP_1_9_49_VERSION_NO here and in djangae/management/command/runserver.
+TEMP_1_9_49_VERSION_NO = [0, 0, 0]
+
+
 class Filter(object):
     def filter(self, record):
         if record.funcName == '__StarSchemaQueryPlan' and record.module == 'datastore_sqlite_stub':
@@ -97,10 +105,12 @@ def _create_dispatcher(configuration, options):
 
     # External port is a new flag introduced in 1.9.19
     current_version = _VersionList(GetVersionObject()['release'])
-    if current_version >= _VersionList('1.9.19'):
+    if current_version >= _VersionList('1.9.19') or \
+            current_version == TEMP_1_9_49_VERSION_NO:
         dispatcher_args.append(options.external_port)
 
-    if current_version >= _VersionList('1.9.22'):
+    if current_version >= _VersionList('1.9.22') or \
+            current_version == TEMP_1_9_49_VERSION_NO:
         dispatcher_args.insert(8, None) # Custom config setting
 
     _create_dispatcher.singleton = dispatcher.Dispatcher(*dispatcher_args)
