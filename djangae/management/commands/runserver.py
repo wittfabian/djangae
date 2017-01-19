@@ -52,7 +52,10 @@ def skip_ignored_dirs(*args, **kwargs):
     # here to make sure that this explicitly fail if there is another change in
     # the number of arguments with new SDK versions.
     current_version = _VersionList(GetVersionObject()['release'])
-    if current_version == sandbox.TEMP_CURRENT_VERSION:
+    if current_version == sandbox.TEMP_1_9_49_VERSION_NO:
+        current_version = _VersionList('1.9.49')
+
+    if current_version >= _VersionList('1.9.49'):
         dirpath, dirs, skip_files_re = args
     else:
         dirs = args[0]
@@ -219,7 +222,7 @@ class Command(runserver.Command):
         # External port is a new flag introduced in 1.9.19
         current_version = _VersionList(GetVersionObject()['release'])
         if current_version >= _VersionList('1.9.19') or \
-                current_version == sandbox.TEMP_CURRENT_VERSION:
+                current_version == sandbox.TEMP_1_9_49_VERSION_NO:
             sandbox._OPTIONS.external_port = None
 
         # Apply equivalent options for Django args
