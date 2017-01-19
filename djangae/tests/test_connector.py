@@ -2063,3 +2063,32 @@ class TestHelperTests(TestCase):
         self.process_task_queues()
 
         self.assertNumTasksEquals(0) #No tasks
+
+
+class Zoo(models.Model):
+    pass
+
+
+class Enclosure(models.Model):
+    zoo = models.ForeignKey(Zoo)
+
+
+class Animal(models.Model):
+    enclosure = models.ForeignKey(Enclosure)
+
+
+class CascadeDeletionTests(TestCase):
+    def test_deleting_more_than_30_items(self):
+        zoo = Zoo.objects.create()
+
+        for i in xrange(40):
+            enclosure = Enclosure.objects.create(zoo=zoo)
+            for i in xrange(2):
+                Animal.objects.create(enclosure=enclosure)
+
+        self.assertEqual(Animal.objects.count(), 80)
+
+        zoo.delete()
+
+        self.assertEqual(Enclosure.objects.count(), 0)
+        self.assertEqual(Animal.objects.count(), 0)

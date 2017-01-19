@@ -161,6 +161,13 @@ class DatabaseOperations(BaseDatabaseOperations):
         'PositiveIntegerField': (0, MAXINT-1),
     }
 
+    def bulk_batch_size(self, field, objs):
+        # This value is used in cascade deletions, and also on bulk insertions
+        # Bulk insertions really need to be limited to 25 elsewhere (so that they can be done)
+        # transactionally, so setting to 30 doesn't matter but for cascade deletions
+        # (which explode to thing_id__in=[]) we need to limit to MAX_ALLOWABLE_QUERIES
+        return datastore.MAX_ALLOWABLE_QUERIES
+
     def quote_name(self, name):
         return name
 
