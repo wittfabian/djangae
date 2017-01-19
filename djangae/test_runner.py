@@ -60,12 +60,20 @@ DJANGO_TESTS_WHICH_USE_SELECT_RELATED = {
     'model_inheritance.tests.ModelInheritanceDataTests.test_select_related_works_on_parent_model_fields'
 }
 
+# These tests expect a certain number of queries to run, because they hardcode the expected
+# batchsize and due to datastore limitations (e.g. MAX_ALLOWABLE_QUERIES) we need more queries
+# (we test the bulk delete behaviour in djangae.tests.test_connector.CascadeDeletionTests instead).
+DJANGO_TESTS_WHICH_COUNT_QUERIES = {
+    'delete.tests.DeletionTests.test_bulk',
+    'delete.tests.DeletionTests.test_large_delete_related'
+}
 
 DJANGO_TESTS_TO_SKIP = DJANGO_TESTS_WHICH_REQUIRE_ZERO_PKS.union(
     DJANGO_TESTS_WHICH_REQUIRE_AUTH_USER).union(
     DJANGO_TESTS_WHICH_HAVE_BUGS).union(
     DJANGO_TESTS_WHICH_EXPECT_SQL_PARAMS).union(
-    DJANGO_TESTS_WHICH_USE_SELECT_RELATED
+    DJANGO_TESTS_WHICH_USE_SELECT_RELATED).union(
+    DJANGO_TESTS_WHICH_COUNT_QUERIES
 )
 
 def init_testbed():
