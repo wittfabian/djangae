@@ -125,8 +125,11 @@ class RelatedIteratorManagerBase(object):
             self.core_filters = {'pk__in': field.value_from_object(instance)}
 
     def get_prefetch_queryset(self, instances, queryset=None):
+        related_model = (
+            self.field.related_model if hasattr(self.field, "related_model") else self.field.related.to
+        )
         if not queryset:
-            queryset = self.field.related.to.objects.all()
+            queryset = related_model.objects.all()
 
         matchers = {}
         related_ids = set()
