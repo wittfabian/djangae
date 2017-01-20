@@ -463,6 +463,12 @@ class BackendTests(TestCase):
 
             self.assertEqual(1, get_mock.call_count)
 
+    def test_gae_query_display(self):
+        # Shouldn't raise any exceptions:
+        representation = str(TestUser.objects.filter(username='test').query)
+        self.assertTrue('test' in representation)
+        self.assertTrue('username' in representation)
+
     def test_range_behaviour(self):
         IntegerModel.objects.create(integer_field=5)
         IntegerModel.objects.create(integer_field=10)
