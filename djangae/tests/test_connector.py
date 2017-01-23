@@ -745,6 +745,13 @@ class BackendTests(TestCase):
         expected = [(t, dt)]
         self.assertItemsEqual(result, expected)
 
+    def test_filter_with_empty_q(self):
+        t1 = TestUser.objects.create(username='foo', field2='bar')
+        condition = Q() | Q(username='foo')
+        self.assertEqual(t1, TestUser.objects.filter(condition).first())
+
+        condition = Q()
+        self.assertEqual(t1, TestUser.objects.filter(condition).first())
 
 class ModelFormsetTest(TestCase):
     def test_reproduce_index_error(self):
