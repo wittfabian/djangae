@@ -534,11 +534,18 @@ class InstanceListFieldTests(TestCase):
         # Extra one to make sure we're filtering properly
         Tag.objects.create(name="unused")
 
-        for i in xrange(2):
+        for i in xrange(3):
             Post.objects.create(content="Bananas", ordered_tags=tags)
 
-        posts = list(Post.objects.prefetch_related('ordered_tags').all())
-        self.assertNumQueries(0, list, posts[0].tags.all())
+        with self.assertNumQueries(2):
+            # 1 query on Posts + 1 query on Tags
+            posts = list(Post.objects.prefetch_related('ordered_tags').all())
+
+        with self.assertNumQueries(0):
+            posts[0].tags.all()
+            posts[1].tags.all()
+            posts[2].tags.all()
+
         self.assertEqual(posts[0].ordered_tags.all()[0].name, "1")
         self.assertEqual(posts[0].ordered_tags.all()[1].name, "2")
         self.assertEqual(posts[0].ordered_tags.all()[2].name, "3")
