@@ -1,9 +1,6 @@
 from django.apps import AppConfig
 from django.utils.translation import ugettext_lazy as _
 from django.core.exceptions import ImproperlyConfigured
-from django.core import checks
-
-from djangae.checks import check_deferred_builtin
 
 
 class DjangaeConfig(AppConfig):
@@ -46,4 +43,6 @@ class DjangaeConfig(AppConfig):
                     # Django CT comes after Djangae CT
                     raise contenttype_configuration_error
 
-        checks.register(check_deferred_builtin)
+        from django.core import checks
+        from djangae import checks
+
