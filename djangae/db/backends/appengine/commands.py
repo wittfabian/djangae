@@ -753,6 +753,9 @@ class SelectCommand(object):
     def __repr__(self):
         return self.__unicode__().encode("utf-8")
 
+    def __mod__(self, params):
+        return repr(self)
+
     def lower(self):
         """
             This exists solely for django-debug-toolbar compatibility.
