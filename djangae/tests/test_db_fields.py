@@ -469,6 +469,16 @@ class RelatedListFieldModelTests(TestCase):
         self.assertEqual([related.pk], instance.related_list_ids)
 
 
+class Post(models.Model):
+    content = models.TextField()
+    tags = RelatedSetField('Tag', related_name='posts')
+    ordered_tags = RelatedListField('Tag')
+
+
+class Tag(models.Model):
+    name = models.CharField()
+
+
 class RelatedSetFieldModelTests(TestCase):
 
     def test_can_update_related_field_from_form(self):
@@ -478,6 +488,15 @@ class RelatedSetFieldModelTests(TestCase):
         thing.related_list.field.save_form_data(thing, set())
         thing.save()
         self.assertNotEqual(before_set.all(), thing.related_things.all())
+
+    def test_prefetch_related(self):
+        tag = Tag.objects.create(name="Apples")
+
+        for i in xrange(2):
+            Post.objects.create(content="Bananas", tags={tag})
+
+        posts = list(Post.objects.prefetch_related('tags').all())
+        self.assertNumQueries(0, list, posts[0].tags.all())
 
     def test_saving_forms(self):
         class TestForm(forms.ModelForm):
@@ -504,6 +523,32 @@ class InstanceListFieldTests(TestCase):
         # Does the to_python need to return ordered list? SetField test only passes because the set
         # happens to order it correctly
         self.assertItemsEqual([i1, i2], ISModel._meta.get_field("related_list").to_python("[1, 2]"))
+
+    def test_prefetch_related(self):
+        tags = [
+            Tag.objects.create(name="1"),
+            Tag.objects.create(name="2"),
+            Tag.objects.create(name="3")
+        ]
+
+        # Extra one to make sure we're filtering properly
+        Tag.objects.create(name="unused")
+
+        for i in xrange(3):
+            Post.objects.create(content="Bananas", ordered_tags=tags)
+
+        with self.assertNumQueries(2):
+            # 1 query on Posts + 1 query on Tags
+            posts = list(Post.objects.prefetch_related('ordered_tags').all())
+
+        with self.assertNumQueries(0):
+            posts[0].tags.all()
+            posts[1].tags.all()
+            posts[2].tags.all()
+
+        self.assertEqual(posts[0].ordered_tags.all()[0].name, "1")
+        self.assertEqual(posts[0].ordered_tags.all()[1].name, "2")
+        self.assertEqual(posts[0].ordered_tags.all()[2].name, "3")
 
     def test_default_on_delete_does_nothing(self):
         child = ISOther.objects.create(pk=1)
@@ -650,7 +695,7 @@ class InstanceListFieldTests(TestCase):
         other = ISOther.objects.create(name="one")
         other1 = ISOther.objects.create(name="two")
         other2 = ISOther.objects.create(name="one")
-        other3 = ISOther.objects.create(name="three")
+        ISOther.objects.create(name="three")
         main.related_list.add(other, other1, other2, other1, other2,)
         main.save()
         self.assertItemsEqual([other, other2, other2], main.related_list.filter(name="one"))
