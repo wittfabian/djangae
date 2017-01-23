@@ -13,6 +13,7 @@
 - Fixed overlap filtering on RelatedListField and RelatedSetField (Thanks Grzes!)
 - Fixed various issues with `djangae.contrib.mappers.defer_iteration`, so that it no longers gets stuck deferring tasks or hitting memory limit errors when uses on large querysets.
 - Fixed an issue where having a ForeignKey to a ContentType would cause an issue when querying due to the large IDs produced by djangae.contrib.contenttypes's SimulatedContentTypesManager.
+- Fix a problem with query parsing which would throw a NotSupportedError on Django 1.8 if you used an empty Q() object in a filter
 
 ### Documentation:
 
