@@ -3,8 +3,8 @@ from itertools import chain
 
 # DJANGAE
 from djangae.db import transaction
-from djangae.contrib.gauth.common.backends import BaseAppEngineUserAPIBackend
-from djangae.contrib.gauth.datastore.permissions import get_permission_choices
+from djangae.contrib.gauth.backends import BaseAppEngineUserAPIBackend
+from djangae.contrib.gauth_datastore.permissions import get_permission_choices
 
 
 class AppEngineUserAPIBackend(BaseAppEngineUserAPIBackend):

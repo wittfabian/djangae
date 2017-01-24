@@ -1,1 +1,1 @@
-default_app_config = 'djangae.contrib.gauth.datastore.apps.GAuthDatastoreConfig'
+default_app_config = 'djangae.contrib.gauth_datastore.apps.GAuthDatastoreConfig'

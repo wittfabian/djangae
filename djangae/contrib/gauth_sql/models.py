@@ -1,7 +1,7 @@
 from django.contrib.auth.models import PermissionsMixin
 from django.utils.translation import ugettext_lazy as _
 
-from djangae.contrib.gauth.common.models import GaeAbstractBaseUser
+from djangae.contrib.gauth.models import GaeAbstractBaseUser
 
 
 class GaeAbstractUser(GaeAbstractBaseUser, PermissionsMixin):
