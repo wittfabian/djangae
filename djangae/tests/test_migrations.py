@@ -11,6 +11,7 @@ from google.appengine.api import datastore
 # DJANGAE
 from djangae.contrib import sleuth
 from djangae.db.migrations import operations
+from djangae.db.migrations.mapper_library import shard_query
 from djangae.db.migrations.constants import MIGRATION_TASK_MARKER_KIND
 from djangae.test import TestCase
 
@@ -405,3 +406,21 @@ class MigrationOperationTests(TestCase):
         entities = self.get_entities()
         self.assertEqual(len(entities), 2)
         self.assertTrue(all(entity.get("is_tickled") for entity in entities))
+
+    def test_query_sharding(self):
+        ns1 = settings.DATABASES["default"]["NAMESPACE"]
+
+        for x in xrange(20):
+            TestModel.objects.create()
+
+        qry = datastore.Query(TestModel._meta.db_table, namespace=ns1)
+        shards = shard_query(qry, 1)
+
+        self.assertEqual(1, len(shards))
+        shards = shard_query(qry, 20)
+
+        self.assertEqual(20, len(shards))
+        shards = shard_query(qry, 50)
+
+        # We can't create 50 shards if there are only 20 objects
+        self.assertEqual(20, len(shards))
