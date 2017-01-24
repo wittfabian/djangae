@@ -30,6 +30,7 @@ class Group(models.Model):
     objects = GroupManager()
 
     class Meta:
+        db_table = 'djangae_group'
         verbose_name = _('group')
         verbose_name_plural = _('groups')
 
@@ -153,6 +154,7 @@ class GaeDatastoreUser(GaeAbstractBaseUser, PermissionsMixin):
     """
 
     class Meta:
+        db_table = 'djangae_gaedatastoreuser'
         swappable = 'AUTH_USER_MODEL'
         verbose_name = _('user')
         verbose_name_plural = _('users')
