@@ -16,7 +16,7 @@ You can serve files directly from cloudstorage with the key or you can use the i
 
 ### Example usage
 
-Images in this model will be publicly accesqsible and stored in main bucket of application.
+Images in this model will be publicly accessible and stored in main bucket of application.
 
 Allowed storage permission levels are defined in [docs -  XML column](https://cloud.google.com/storage/docs/access-control?hl=en#predefined-acl).
 

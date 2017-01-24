@@ -1,4 +1,5 @@
 import django
+import copy
 from django import forms
 from django.db import router, models
 from django.db.models.query import QuerySet
@@ -10,6 +11,9 @@ from djangae.forms.fields import (
     GenericRelationFormfield
 )
 from django.utils import six
+
+from djangae.fields.iterable import IsEmptyLookup, ContainsLookup, OverlapLookup
+
 
 class RelatedIteratorRel(ForeignObjectRel):
     def __init__(self, field, to, related_name=None, limit_choices_to=None, on_delete=models.DO_NOTHING):
@@ -113,15 +117,75 @@ class RelatedIteratorManagerBase(object):
         self.instance = instance
         self.field = field
         self.reverse = reverse
+        self.ordered = field.retain_underlying_order
 
         if reverse:
-            self.core_filters = {'%s__exact' % self.field.column: instance.pk}
+            self.core_filters = {'%s__contains' % self.field.column: instance.pk}
         else:
             self.core_filters = {'pk__in': field.value_from_object(instance)}
 
+    def get_prefetch_queryset(self, instances, queryset=None):
+        related_model = (
+            self.field.related_model if hasattr(self.field, "related_model") else self.field.related.to
+        )
+        if not queryset:
+            queryset = related_model.objects.all()
+
+        matchers = {}
+        related_ids = set()
+        for instance in instances:
+            for related_id in getattr(instance, self.field.attname):
+                related_ids.add(related_id)
+                matchers.setdefault(related_id, []).append(instance.pk)
+
+        queryset = queryset.filter(pk__in=related_ids)
+
+        def duplicator(queryset):
+            """
+                We have to duplicate the related objects for each source instance that
+                was passed in so we can convince Django to do the right thing when merging
+            """
+            for related_thing in queryset:
+                for i, matcher in enumerate(matchers[related_thing.pk]):
+                    if i == 0:
+                        # Optimisation to prevent unnecessary extra copy
+                        ret = related_thing
+                    else:
+                        ret = copy.copy(related_thing)
+
+                    # Set an id so we can fetch things out in the lambdas below
+                    ret._prefetch_instance_id = matcher
+                    yield ret
+
+        return (
+            duplicator(queryset),
+            lambda inst: inst._prefetch_instance_id,
+            lambda obj: obj.pk,
+            False,
+            self.field.name # Use the field name as the cache name
+        )
+
     def get_queryset(self):
         db = self._db or router.db_for_read(self.instance.__class__, instance=self.instance)
-        if self.field.default == list and not self.reverse:
+
+        if (hasattr(self.instance, "_prefetched_objects_cache") and
+            self.field.name in self.instance._prefetched_objects_cache):
+
+            qs = self.instance._prefetched_objects_cache[self.field.name]
+
+            if self.ordered:
+                lookup = {}
+                for item in qs._result_cache:
+                    lookup[item.pk] = item
+
+                # If this is a ListField make sure the result set retains the right order
+                qs._result_cache = []
+                for pk in getattr(self.instance, self.field.attname):
+                    qs._result_cache.append(lookup[pk])
+                return qs
+            else:
+                return qs
+        elif self.ordered and not self.reverse:
             values = self.field.value_from_object(self.instance)
             qcls = OrderedQuerySet(self.model, using=db)
             qcls.ordered_pks = values[:]
@@ -253,6 +317,21 @@ class ReverseRelatedObjectsDescriptor(object):
 from abc import ABCMeta
 
 
+class RelatedContainsLookup(ContainsLookup):
+    def get_prep_lookup(self):
+        # If this is an instance, then we want to lookup based on the PK
+        if isinstance(self.rhs, models.Model):
+            self.rhs = self.rhs.pk
+        return super(RelatedContainsLookup, self).get_prep_lookup()
+
+
+class RelatedOverlapLookup(OverlapLookup):
+    def get_prep_lookup(self):
+        # Transform any instances to primary keys
+        self.rhs = [ x.pk if isinstance(x, models.Model) else x for x in self.rhs ]
+        return super(RelatedOverlapLookup, self).get_prep_lookup()
+
+
 class RelatedIteratorField(ForeignObject):
 
     __metaclass__ = ABCMeta
@@ -260,6 +339,7 @@ class RelatedIteratorField(ForeignObject):
     requires_unique_target = False
     generate_reverse_relation = True
     empty_strings_allowed = False
+    retain_underlying_order = False
 
     def __init__(self, to, limit_choices_to=None, related_name=None, on_delete=models.DO_NOTHING, **kwargs):
         # Make sure that we do nothing on cascade by default
@@ -286,11 +366,51 @@ class RelatedIteratorField(ForeignObject):
             kwargs.update({
                 'on_delete': models.DO_NOTHING,
             })
+        elif django.VERSION[1] == 8:
+            # in Django 1.8 ForeignObject uses get_lookup_constraint instead
+            # of get_lookup. We want to override it (but only for Django 1.8)
+            self.get_lookup_constraint = self._get_lookup_constraint
 
         from_fields = ['self']
         to_fields = [None]
 
         super(RelatedIteratorField, self).__init__(to, from_fields=from_fields, to_fields=to_fields, **kwargs)
+
+    def _get_lookup_constraint(self, constraint_class, alias, targets, sources, lookups, raw_value):
+        from django.core import exceptions
+        from django.db.models.sql.where import AND
+
+        root_constraint = constraint_class()
+
+        # we need some checks from ForeignObject.get_lookup_constraint
+        # before we could check the lookups.
+        assert len(targets) == len(sources)
+        if len(lookups) > 1:
+            raise exceptions.FieldError(
+                '%s does not support nested lookups' % self.__class__.__name__
+            )
+
+        lookup_type = lookups[0]
+        target = targets[0]
+        source = sources[0]
+
+        # use custom Lookups when applicable
+        if lookup_type in ['isempty', 'overlap', 'contains']:
+            if lookup_type == 'isempty':
+                root_constraint.add(IsEmptyLookup(target.get_col(alias, source), raw_value), AND)
+            elif lookup_type == 'overlap':
+                root_constraint.add(RelatedOverlapLookup(target.get_col(alias, source), raw_value), AND)
+            elif lookup_type == 'contains':
+                root_constraint.add(RelatedContainsLookup(target.get_col(alias, source), raw_value), AND)
+            return root_constraint
+        elif lookup_type in ('in', 'exact', 'isnull'):
+            raise TypeError(
+                "%s doesn't allow exact, in or isnull. Use contains, overlap or isempty respectively"
+                % self.__class__.__name__
+            )
+
+        return super(RelatedIteratorField, self).get_lookup_constraint(
+                constraint_class, alias, targets, sources, lookups, raw_value)
 
     def deconstruct(self):
         name, path, args, kwargs = super(RelatedIteratorField, self).deconstruct()
@@ -374,6 +494,23 @@ class RelatedIteratorField(ForeignObject):
             defaults['initial'] = [i._get_pk_val() for i in initial]
         return super(RelatedIteratorField, self).formfield(**defaults)
 
+    def get_lookup(self, lookup_name):
+        if lookup_name == 'isempty':
+            return IsEmptyLookup
+        elif lookup_name == 'overlap':
+            return RelatedOverlapLookup
+        elif lookup_name == 'contains':
+            return RelatedContainsLookup
+        elif lookup_name in ('in', 'exact', 'isnull'):
+            raise TypeError("RelatedIteratorFields don't allow exact, in or isnull. Use contains, overlap or isempty respectively")
+
+        return super(RelatedIteratorField, self).get_lookup(lookup_name)
+
+
+RelatedIteratorField.register_lookup(RelatedContainsLookup)
+RelatedIteratorField.register_lookup(RelatedOverlapLookup)
+RelatedIteratorField.register_lookup(IsEmptyLookup)
+
 
 class RelatedSetField(RelatedIteratorField):
 
@@ -430,6 +567,7 @@ class RelatedSetField(RelatedIteratorField):
 
 
 class RelatedListField(RelatedIteratorField):
+    retain_underlying_order = True
 
     def db_type(self, connection):
         return 'list'

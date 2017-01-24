@@ -44,8 +44,8 @@ The main utility is the `lock` object, which can be used as a function decorator
 * `steal_after_ms` - if passed, then any existing lock which is older than this value will be ignored.
 * `kind` - which kind of lock implementation to use.
     - LOCK_KINDS.WEAK is not guaranteed to be robust, but can be used for situations where avoiding
-      simultaneous code execution is preferable but not critical.
-    - LOCK_KINDS.STRONG is for where prevention of simultaneous code execution is *required*.
+      simultaneous code execution is preferable but not critical (uses memcache).
+    - LOCK_KINDS.STRONG is for where prevention of simultaneous code execution is *required* (uses the datastore).
 
 
 ### Usage Examples

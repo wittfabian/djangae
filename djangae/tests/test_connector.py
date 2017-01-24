@@ -21,7 +21,7 @@ from django.forms import ModelForm
 from django.test import RequestFactory
 from django.utils.safestring import SafeText
 from django.forms.models import modelformset_factory
-from google.appengine.api.datastore_errors import EntityNotFoundError, BadValueError, TransactionFailedError
+from google.appengine.api.datastore_errors import EntityNotFoundError, TransactionFailedError
 from google.appengine.datastore import datastore_rpc
 from google.appengine.api import datastore
 from google.appengine.ext import deferred
@@ -32,13 +32,15 @@ from django.template import Template, Context
 
 # DJANGAE
 from djangae.contrib import sleuth
+from djangae.fields import CharField
 from djangae.test import inconsistent_db, TestCase
 from django.db import IntegrityError, NotSupportedError
 from djangae.db.backends.appengine.commands import FlushCommand
 from djangae.db import constraints
 from djangae.db.constraints import UniqueMarker, UniquenessMixin
 from djangae.db.unique_utils import _unique_combinations, unique_identifiers_from_entity
-from djangae.db.backends.appengine.indexing import add_special_index
+from djangae.db.backends.appengine.indexing import add_special_index, IExactIndexer, get_indexer
+from djangae.db.backends.appengine import indexing
 from djangae.db.utils import entity_matches_query, decimal_to_string, normalise_field_value
 from djangae.db.caching import disable_cache
 from djangae.fields import SetField, ListField, RelatedSetField
@@ -230,6 +232,7 @@ class ModelWithUniquesAndOverride(models.Model):
 
 class SpecialIndexesModel(models.Model):
     name = models.CharField(max_length=255, primary_key=True)
+    nickname = CharField(blank=True)
     sample_list = ListField(models.CharField)
 
     def __unicode__(self):
@@ -460,6 +463,12 @@ class BackendTests(TestCase):
 
             self.assertEqual(1, get_mock.call_count)
 
+    def test_gae_query_display(self):
+        # Shouldn't raise any exceptions:
+        representation = str(TestUser.objects.filter(username='test').query)
+        self.assertTrue('test' in representation)
+        self.assertTrue('username' in representation)
+
     def test_range_behaviour(self):
         IntegerModel.objects.create(integer_field=5)
         IntegerModel.objects.create(integer_field=10)
@@ -471,7 +480,7 @@ class BackendTests(TestCase):
 
     def test_exclude_nullable_field(self):
         instance = ModelWithNullableCharField.objects.create(some_id=999) # Create a nullable thing
-        instance2 = ModelWithNullableCharField.objects.create(some_id=999, field1="test") # Create a nullable thing
+        ModelWithNullableCharField.objects.create(some_id=999, field1="test") # Create a nullable thing
         self.assertItemsEqual([instance], ModelWithNullableCharField.objects.filter(some_id=999).exclude(field1="test").all())
 
         instance.field1 = "bananas"
@@ -646,7 +655,7 @@ class BackendTests(TestCase):
         entity.update(values)
         datastore.Put(entity)
 
-        # Ok, we can get all 3 instances
+        # Ok, we can get all 4 instances
         self.assertEqual(TestFruit.objects.count(), 4)
 
         # Sorted list. No exception should be raised
@@ -654,12 +663,14 @@ class BackendTests(TestCase):
         with sleuth.watch('djangae.db.backends.appengine.commands.utils.django_ordering_comparison') as compare:
             all_names = ['a', 'b', 'c', 'd']
             fruits = list(
-                TestFruit.objects.filter(name__in=all_names).order_by('color')
+                TestFruit.objects.filter(name__in=all_names).order_by('color', 'name')
             )
             # Make sure troubled code got triggered
             # ie. with all() it doesn't
             self.assertTrue(compare.called)
 
+        # Test the ordering of the results.  The ones with a color of None should come back first,
+        # and of the ones with color=None, they should be ordered by name
         # Missing one (None) as first
         expected_fruits = [
             ('c', None), ('d', None), ('a', 'a'), ('b', 'b'),
@@ -721,6 +732,18 @@ class BackendTests(TestCase):
         key = datastore.Key.from_path(DurationModel._meta.db_table, durations_as_3.pk, namespace=DEFAULT_NAMESPACE)
         entity = datastore.Get(key)
         self.assertTrue(isinstance(entity['duration_field'], (int, long)))
+
+    def test_datetime_and_time_fields_precision_for_projection_queries(self):
+        """
+        The returned datetime and time values should include microseconds.
+        See issue #707.
+        """
+        t = datetime.time(22, 13, 50, 541022)
+        dt = datetime.datetime(2016, 5, 27, 18, 40, 12, 927371)
+        NullDate.objects.create(time=t, datetime=dt)
+        result = NullDate.objects.all().values_list('time', 'datetime')
+        expected = [(t, dt)]
+        self.assertItemsEqual(result, expected)
 
 
 class ModelFormsetTest(TestCase):
@@ -1050,7 +1073,7 @@ class ConstraintTests(TestCase):
                 raise AssertionError()
             return datastore.Put(*args, **kwargs)
 
-        with sleuth.switch("djangae.db.backends.appengine.commands.datastore.Put", wrapped_put) as put_mock:
+        with sleuth.switch("djangae.db.backends.appengine.commands.datastore.Put", wrapped_put):
             with self.assertRaises(Exception):
                 instance.save()
 
@@ -1077,7 +1100,7 @@ class ConstraintTests(TestCase):
                 raise AssertionError()
             return datastore.Put(*args, **kwargs)
 
-        with sleuth.switch("djangae.db.backends.appengine.commands.datastore.Put", wrapped_put) as put_mock:
+        with sleuth.switch("djangae.db.backends.appengine.commands.datastore.Put", wrapped_put):
             with self.assertRaises(Exception):
                 ModelWithUniques.objects.create(name="One")
 
@@ -1155,7 +1178,7 @@ class ConstraintTests(TestCase):
         )
 
         # Without a custom mixin, Django can't construct a unique validation query for a list field
-        self.assertRaises(BadValueError, instance1.full_clean)
+        self.assertRaises(ValueError, instance1.full_clean)
         UniqueModel.__bases__ = (UniquenessMixin,) + UniqueModel.__bases__
         instance1.full_clean()
         instance1.save()
@@ -1214,7 +1237,7 @@ class EdgeCaseTests(TestCase):
     def setUp(self):
         super(EdgeCaseTests, self).setUp()
 
-        add_special_index(TestUser, "username", "iexact")
+        add_special_index(TestUser, "username", IExactIndexer(), "iexact")
 
         self.u1 = TestUser.objects.create(username="A", email="test@example.com", last_login=datetime.datetime.now().date(), id=1)
         self.u2 = TestUser.objects.create(username="B", email="test@example.com", last_login=datetime.datetime.now().date(), id=2)
@@ -1553,7 +1576,7 @@ class EdgeCaseTests(TestCase):
         user = TestUser.objects.get(username__iexact="a")
         self.assertEqual("A", user.username)
 
-        add_special_index(IntegerModel, "integer_field", "iexact")
+        add_special_index(IntegerModel, "integer_field", IExactIndexer(), "iexact")
         IntegerModel.objects.create(integer_field=1000)
         integer_model = IntegerModel.objects.get(integer_field__iexact=str(1000))
         self.assertEqual(integer_model.integer_field, 1000)
@@ -1562,7 +1585,7 @@ class EdgeCaseTests(TestCase):
         self.assertEqual("A", user.username)
 
     def test_iexact_containing_underscores(self):
-        add_special_index(TestUser, "username", "iexact")
+        add_special_index(TestUser, "username", IExactIndexer(), "iexact")
         user = TestUser.objects.create(username="A_B", email="test@example.com")
         results = TestUser.objects.filter(username__iexact=user.username.lower())
         self.assertEqual(list(results), [user])
@@ -1662,14 +1685,14 @@ class EdgeCaseTests(TestCase):
         obj = TestFruit.objects.create(name='pear')
         indexes = ['icontains', 'contains', 'iexact', 'iendswith', 'endswith', 'istartswith', 'startswith']
         for index in indexes:
-            add_special_index(TestFruit, 'color', index)
+            add_special_index(TestFruit, 'color', get_indexer(TestFruit._meta.get_field("color"), index), index)
         obj.save()
 
     def test_special_indexes_for_unusually_long_values(self):
         obj = TestFruit.objects.create(name='pear', color='1234567890-=!@#$%^&*()_+qQWERwertyuiopasdfghjklzxcvbnm')
         indexes = ['icontains', 'contains', 'iexact', 'iendswith', 'endswith', 'istartswith', 'startswith']
         for index in indexes:
-            add_special_index(TestFruit, 'color', index)
+            add_special_index(TestFruit, 'color', get_indexer(TestFruit._meta.get_field("color"), index), index)
         obj.save()
 
         qry = TestFruit.objects.filter(color__contains='1234567890-=!@#$%^&*()_+qQWERwertyuiopasdfghjklzxcvbnm')
@@ -1698,6 +1721,35 @@ class EdgeCaseTests(TestCase):
             origin="New Zealand"
         ).distinct("color").values_list("color", flat=True)
         self.assertEqual(sorted(nz_colours), ["Green", "Red"])
+
+    def test_empty_key_lookups_work_correctly(self):
+        t1 = TestFruit.objects.create(name="Kiwi", origin="New Zealand", color="Green")
+        TestFruit.objects.create(name="Apple", origin="New Zealand", color="Green")
+
+        self.assertEqual(t1,
+            TestFruit.objects.exclude(name="Apple").exclude(name="").get(name="Kiwi")
+        )
+        self.assertFalse(TestFruit.objects.filter(name="", color="Green"))
+        self.assertTrue(TestFruit.objects.filter(Q(name="") | Q(name="Kiwi")).filter(color="Green"))
+        self.assertFalse(TestFruit.objects.filter(name="", color__gt="A"))
+        self.assertEqual(4, TestFruit.objects.exclude(name="").count())
+
+    def test_additional_indexes_respected(self):
+        project, additional = indexing._project_special_indexes.copy(), indexing._app_special_indexes.copy()
+
+        try:
+            indexing._project_special_indexes = {}
+            indexing._app_special_indexes = {
+                TestFruit._meta.db_table: { "name": ["iexact"] }
+            }
+
+            t1 = TestFruit.objects.create(name="Kiwi", origin="New Zealand", color="Green")
+            self.assertEqual(t1, TestFruit.objects.filter(name__iexact="kiwi").get())
+            self.assertFalse(indexing._project_special_indexes) # Nothing was added
+        finally:
+            indexing._project_special_indexes = project
+            indexing._app_special_indexes = additional
+
 
 
 class BlobstoreFileUploadHandlerTest(TestCase):
@@ -1844,6 +1896,14 @@ class TestSpecialIndexers(TestCase):
             qry = self.qry.filter(name__icontains=name)
             self.assertEqual(len(qry), len([x for x in self.names if name.lower() in x.lower()]))
 
+    def test_contains_lookup_on_charfield_subclass(self):
+        """ Test that the __contains lookup also works on subclasses of the Django CharField, e.g.
+            the custom Djangae CharField.
+        """
+        instance = SpecialIndexesModel.objects.create(name="whatever", nickname="Voldemort")
+        query = SpecialIndexesModel.objects.filter(nickname__contains="demo")
+        self.assertEqual(list(query), [instance])
+
     def test_endswith_lookup_and_iendswith_lookup(self):
         tests = self.names + ['a', 'A', 'aa']
         for name in tests:
@@ -1872,14 +1932,40 @@ class TestSpecialIndexers(TestCase):
             self.assertEqual(len(qry), len([x for x in self.names if re.search(pattern, x, flags=re.I)]))
 
             # Check that the same works for ListField and SetField too
-            qry = self.qry.filter(sample_list__regex=pattern)
+            qry = self.qry.filter(sample_list__item__regex=pattern)
             expected = [sample_list for sample_list in self.lists if any([bool(re.search(pattern, x)) for x in sample_list])]
             self.assertEqual(len(qry), len(expected))
 
-            qry = self.qry.filter(sample_list__iregex=pattern)
+            qry = self.qry.filter(sample_list__item__iregex=pattern)
             expected = [sample_list for sample_list in self.lists if any([bool(re.search(pattern, x, flags=re.I)) for x in sample_list])]
             self.assertEqual(len(qry), len(expected))
 
+    def test_item_contains_item_icontains_lookup(self):
+        tests = ['O', 'la', 'ola']
+        for text in tests:
+            qry = self.qry.filter(sample_list__item__contains=text)
+            self.assertEqual(len(qry), 1)
+
+            qry = self.qry.filter(sample_list__item__icontains=text)
+            self.assertEqual(len(qry), 1)
+
+    def test_item_startswith_item_istartswith_lookup(self):
+        tests = ['O', 'ola', 'Ola']
+        for text in tests:
+            qry = self.qry.filter(sample_list__item__startswith=text)
+            self.assertEqual(len(qry), 1)
+
+            qry = self.qry.filter(sample_list__item__istartswith=text)
+            self.assertEqual(len(qry), 1)
+
+    def test_item_endswith_item_iendswith_lookup(self):
+        tests = ['a', 'la', 'Ola']
+        for text in tests:
+            qry = self.qry.filter(sample_list__item__endswith=text)
+            self.assertEqual(len(qry), 1)
+
+            qry = self.qry.filter(sample_list__item__iendswith=text)
+            self.assertEqual(len(qry), 1)
 
 
 class NamespaceTests(TestCase):
@@ -1983,3 +2069,32 @@ class TestHelperTests(TestCase):
         self.process_task_queues()
 
         self.assertNumTasksEquals(0) #No tasks
+
+
+class Zoo(models.Model):
+    pass
+
+
+class Enclosure(models.Model):
+    zoo = models.ForeignKey(Zoo)
+
+
+class Animal(models.Model):
+    enclosure = models.ForeignKey(Enclosure)
+
+
+class CascadeDeletionTests(TestCase):
+    def test_deleting_more_than_30_items(self):
+        zoo = Zoo.objects.create()
+
+        for i in xrange(40):
+            enclosure = Enclosure.objects.create(zoo=zoo)
+            for i in xrange(2):
+                Animal.objects.create(enclosure=enclosure)
+
+        self.assertEqual(Animal.objects.count(), 80)
+
+        zoo.delete()
+
+        self.assertEqual(Enclosure.objects.count(), 0)
+        self.assertEqual(Animal.objects.count(), 0)

@@ -29,6 +29,7 @@ from google.appengine.api.images import (
     NotImageError,
     BlobKeyRequiredError,
     TransformationError,
+    LargeImageError,
 )
 from google.appengine.ext.blobstore import (
     BlobInfo,
@@ -86,6 +87,16 @@ def _get_from_cache(blob_key_or_info):
     with CACHE_LOCK:
         return KEY_CACHE.get(blob_key_or_info)
 
+def _get_or_create_cached_blob_key_and_info(blob_key_or_info):
+    cached_value = _get_from_cache(blob_key_or_info)
+    if cached_value:
+        blob_key, info = cached_value
+    else:
+        info = cloudstorage.stat(blob_key_or_info)
+        info.size = info.st_size
+        blob_key = create_gs_key('/gs{0}'.format(blob_key_or_info))
+        _add_to_cache(blob_key_or_info, blob_key, info)
+    return (blob_key, info)
 
 def serve_file(request, blob_key_or_info, as_download=False, content_type=None, filename=None, offset=None, size=None):
     """
@@ -111,14 +122,7 @@ def serve_file(request, blob_key_or_info, as_download=False, content_type=None, 
     if info == None:
         # Lack of blobstore_info means this is a Google Cloud Storage file
         if has_cloudstorage:
-            cached_value = _get_from_cache(blob_key_or_info)
-            if cached_value:
-                blob_key, info = cached_value
-            else:
-                info = cloudstorage.stat(blob_key_or_info)
-                info.size = info.st_size
-                blob_key = create_gs_key('/gs{0}'.format(blob_key_or_info))
-                _add_to_cache(blob_key_or_info, blob_key, info)
+            blob_key, info = _get_or_create_cached_blob_key_and_info(blob_key_or_info)
         else:
             raise ImportError("To serve a Cloud Storage file you need to install cloudstorage")
 
@@ -234,10 +238,16 @@ class BlobstoreStorage(Storage, BlobstoreUploadMixin):
         try:
             # Return a protocol-less URL, because django can't/won't pass
             # down an argument saying whether it should be secure or not
-            url = get_serving_url(self._get_blobinfo(name))
+            with transaction.non_atomic():
+                # This causes a Datastore lookup which we don't want to interfere with transactions
+                url = get_serving_url(self._get_blobinfo(name))
             return re.sub("http://", "//", url)
-        except (NotImageError, BlobKeyRequiredError, TransformationError):
-            return None
+        except (NotImageError, BlobKeyRequiredError, TransformationError, LargeImageError):
+            # Django doesn't expect us to return None from this function, and in fact
+            # relies on the "truthiness" of the return value when accessing .url on an
+            # unsaved fieldfile. We just return the name which is effectively what Django
+            # does in its default storage.
+            return name
 
     def created_time(self, name):
         return self._get_blobinfo(name).creation
@@ -294,14 +304,36 @@ class CloudStorage(Storage, BlobstoreUploadMixin):
             self.write_options['x-goog-acl'] = google_acl
 
     def url(self, filename):
-        quoted_filename = urllib.quote(self._add_bucket(filename))
-        return '{0}{1}'.format(self.api_url, quoted_filename)
+        try:
+            # Return a protocol-less URL, because django can't/won't pass
+            # down an argument saying whether it should be secure or not
+            with transaction.non_atomic():
+                # This causes a Datastore lookup which we don't want to interfere with transactions
+                url = get_serving_url(self._get_blobkey(filename))
+            return re.sub("http://", "//", url)
+        except (TransformationError):
+            # Sometimes TransformationError will be thrown if you call get_serving_url on video files
+            # this is probably a bug in App Engine
+            # Probably related to this: https://code.google.com/p/googleappengine/issues/detail?id=8601
+            quoted_filename = urllib.quote(self._add_bucket(filename))
+            return '{0}{1}'.format(self.api_url, quoted_filename)
+
+    def _get_blobkey(self, name):
+        blob_key, info = _get_or_create_cached_blob_key_and_info(self._add_bucket(name))
+        return blob_key
 
     def _open(self, name, mode='r'):
         # Handle 'rb' as 'r'.
         mode = mode[:1]
         fp = cloudstorage.open(self._add_bucket(name), mode=mode)
         return File(fp)
+
+    def get_valid_name(self, name):
+        # App Engine doesn't properly deal with "./" and a blank upload_to argument
+        # on a filefield results in ./filename so we must remove it if it's there.
+        if name.startswith("./"):
+            name = name.replace("./", "", 1)
+        return name
 
     def _add_bucket(self, name):
         safe_name = urllib.quote(name.encode('utf-8'))
@@ -312,6 +344,8 @@ class CloudStorage(Storage, BlobstoreUploadMixin):
         return mimetypes.guess_type(name)[0] or DEFAULT_CONTENT_TYPE
 
     def _save(self, name, content):
+        name = self.get_valid_name(name) #Make sure the name is valid
+
         kwargs = {
             'content_type': self._content_type_for_name(name),
             'options': self.write_options,

@@ -1,17 +1,15 @@
 import os
 import re
-from optparse import make_option
-
-from django.core.management.commands.runserver import BaseRunserverCommand
-from django.conf import settings
-
 from datetime import datetime
 
+from django.conf import settings
+from django.core.management.commands import runserver
 from google.appengine.tools.devappserver2 import shutdown
 from google.appengine.tools.sdk_update_checker import (
     GetVersionObject,
     _VersionList
 )
+
 
 DJANGAE_RUNSERVER_IGNORED_FILES_REGEXES = getattr(settings, "DJANGAE_RUNSERVER_IGNORED_FILES_REGEXES", [])
 DJANGAE_RUNSERVER_IGNORED_DIR_REGEXES = getattr(settings, "DJANGAE_RUNSERVER_IGNORED_DIR_REGEXES", [])
@@ -21,7 +19,7 @@ if DJANGAE_RUNSERVER_IGNORED_DIR_REGEXES:
     DJANGAE_RUNSERVER_IGNORED_DIR_REGEXES = [re.compile(regex) for regex in DJANGAE_RUNSERVER_IGNORED_DIR_REGEXES]
 
 
-def ignore_file(filename):
+def ignore_file(filename, *args, **kwargs):
     """ Replacement for devappserver2.watchter_common.ignore_file
         - to be monkeypatched into place.
     """
@@ -35,7 +33,7 @@ def ignore_file(filename):
     )
 
 
-def skip_ignored_dirs(dirs):
+def skip_ignored_dirs(*args, **kwargs):
     """ Replacement for devappserver2.watchter_common.skip_ignored_dirs
     - to be monkeypatched into place.
     """
@@ -43,7 +41,24 @@ def skip_ignored_dirs(dirs):
     # Also note that `dirs` is a list of dir *names* not dir *paths*, which means that we can't
     # differentiate between /foo/bar and /moo/bar because we just get 'bar'. But allowing that
     # would require a whole load more monkey patching.
+    from djangae import sandbox
     from google.appengine.tools.devappserver2 import watcher_common
+
+    # since version 1.9.49 (which is incorrectly marked as [0, 0, 0] for now, until
+    # https://code.google.com/p/googleappengine/issues/detail?id=13439 will be fixed,
+    # skip_ignored_dirs have three arguments instead of one. To preserve
+    # backwards compatibilty we check version here and use args to fetch one
+    # or three arguments depending on version. We do not do any further error handling
+    # here to make sure that this explicitly fail if there is another change in
+    # the number of arguments with new SDK versions.
+    current_version = _VersionList(GetVersionObject()['release'])
+    if current_version == sandbox.TEMP_1_9_49_VERSION_NO:
+        current_version = _VersionList('1.9.49')
+
+    if current_version >= _VersionList('1.9.49'):
+        dirpath, dirs, skip_files_re = args
+    else:
+        dirs = args[0]
     watcher_common._remove_pred(dirs, lambda d: d.startswith(watcher_common._IGNORED_PREFIX))
     watcher_common._remove_pred(
         dirs,
@@ -51,7 +66,7 @@ def skip_ignored_dirs(dirs):
     )
 
 
-class Command(BaseRunserverCommand):
+class Command(runserver.Command):
     """
     Overrides the default Django runserver command.
 
@@ -94,28 +109,23 @@ class Command(BaseRunserverCommand):
         'default_gcs_bucket_name',
     ]
 
-    def __new__(cls, *args, **kwargs):
-        # We need to dynamically populate the `option_list` attribute
-        # in order to Django allow extra parameters that we're going to pass
-        # to GAE's `dev_appserver.py`
-        instance = BaseRunserverCommand.__new__(cls, *args, **kwargs)
-        sandbox_options = cls._get_sandbox_options()
-        for option in sandbox_options:
-            if option in cls.WHITELISTED_DEV_APPSERVER_OPTIONS:
-                instance.option_list += (
-                    make_option('--%s' % option, action='store', dest=option),
-                )
-        return instance
+    def add_arguments(self, parser):
+        super(Command, self).add_arguments(parser)
 
-    @classmethod
-    def _get_sandbox_options(cls):
+        sandbox_options = self._get_sandbox_options()
+
+        # Extra parameters that we're going to pass to GAE's `dev_appserver.py`.
+        for option in sandbox_options:
+            if option in self.WHITELISTED_DEV_APPSERVER_OPTIONS:
+                parser.add_argument('--%s' % option, action='store', dest=option)
+
+    @staticmethod
+    def _get_sandbox_options():
         # We read the options from Djangae's sandbox
         from djangae import sandbox
         return [option for option in dir(sandbox._OPTIONS) if not option.startswith('_')]
 
     def handle(self, addrport='', *args, **options):
-        from djangae import sandbox
-
         self.gae_options = {}
         sandbox_options = self._get_sandbox_options()
 
@@ -128,7 +138,13 @@ class Command(BaseRunserverCommand):
         super(Command, self).handle(addrport=addrport, *args, **options)
 
     def run(self, *args, **options):
+        # These options are Django options which need to have corresponding args
+        # passed down to the dev_appserver
         self.use_reloader = options.get("use_reloader")
+        self.use_threading = options.get("use_threading")
+
+        # We force the option to false here because we use the dev_appserver reload
+        # capabilities, not Django's reloading
         options["use_reloader"] = False
         return super(Command, self).run(*args, **options)
 
@@ -205,10 +221,13 @@ class Command(BaseRunserverCommand):
 
         # External port is a new flag introduced in 1.9.19
         current_version = _VersionList(GetVersionObject()['release'])
-        if current_version >= _VersionList('1.9.19'):
+        if current_version >= _VersionList('1.9.19') or \
+                current_version == sandbox.TEMP_1_9_49_VERSION_NO:
             sandbox._OPTIONS.external_port = None
 
+        # Apply equivalent options for Django args
         sandbox._OPTIONS.automatic_restart = self.use_reloader
+        sandbox._OPTIONS.threadsafe_override = self.use_threading
 
         if sandbox._OPTIONS.host == "127.0.0.1" and os.environ["HTTP_HOST"].startswith("localhost"):
             hostname = "localhost"
@@ -245,6 +264,13 @@ class Command(BaseRunserverCommand):
                 self._dispatcher._configuration = configuration
                 self._dispatcher._port = options.port
                 self._dispatcher._host = options.host
+
+                # Because the dispatcher is a singleton, we need to set the threadsafe override here
+                # depending on what was passed to the runserver command. This entire file really needs rebuilding
+                # we have way too many hacks in here!
+                self._dispatcher._module_to_threadsafe_override[
+                    configuration.modules[0].module_name
+                ] = options.threadsafe_override
 
                 self._dispatcher.request_data = request_data
                 request_data._dispatcher = self._dispatcher

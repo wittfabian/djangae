@@ -1,10 +1,10 @@
-# STANDARD LIB
+#STANDARD LIB
 import datetime
 import decimal
 import warnings
 import logging
 
-# LIBRARIES
+#LIBRARIES
 from django.conf import settings
 from django.utils import timezone
 
@@ -22,7 +22,7 @@ from google.appengine.api.datastore_types import Blob, Text
 from google.appengine.datastore import datastore_stub_util
 from google.appengine.api import datastore, datastore_errors
 
-# DJANGAE
+#DJANGAE
 from djangae.db.utils import (
     decimal_to_string,
     make_timezone_naive,
@@ -41,6 +41,9 @@ from .commands import (
 )
 
 from djangae.db.backends.appengine import dbapi as Database
+
+
+logger = logging.getLogger(__name__)
 
 
 class Connection(object):
@@ -158,14 +161,27 @@ class DatabaseOperations(BaseDatabaseOperations):
         'PositiveIntegerField': (0, MAXINT-1),
     }
 
+    def bulk_batch_size(self, field, objs):
+        # This value is used in cascade deletions, and also on bulk insertions
+        # Bulk insertions really need to be limited to 25 elsewhere (so that they can be done)
+        # transactionally, so setting to 30 doesn't matter but for cascade deletions
+        # (which explode to thing_id__in=[]) we need to limit to MAX_ALLOWABLE_QUERIES
+        return datastore.MAX_ALLOWABLE_QUERIES
+
     def quote_name(self, name):
         return name
 
     def date_trunc_sql(self, lookup_type, field_name):
-        return None
+        return ''
 
     def datetime_trunc_sql(self, lookup_type, field_name, tzname):
-        return '%s'
+        return '', []
+
+    def datetime_extract_sql(self, lookup_name, sql, tzname):
+        return '', []
+
+    def date_extract_sql(self, lookup_name, sql):
+        return '', []
 
     def get_db_converters(self, expression):
         converters = super(DatabaseOperations, self).get_db_converters(expression)
@@ -226,7 +242,7 @@ class DatabaseOperations(BaseDatabaseOperations):
         return value
 
     def sql_flush(self, style, tables, seqs, allow_cascade=False):
-        return [ FlushCommand(table, self.connection) for table in tables ]
+        return [FlushCommand(table, self.connection) for table in tables]
 
     def prep_lookup_key(self, model, value, field):
         if isinstance(value, basestring):
@@ -464,7 +480,7 @@ class DatabaseCreation(BaseDatabaseCreation):
         assert not self.testbed
 
         if args:
-            logging.warning("'keepdb' argument is not currently supported on the AppEngine backend")
+            logger.warning("'keepdb' argument is not currently supported on the AppEngine backend")
 
         # We allow users to disable scattered IDs in tests. This primarily for running Django tests that
         # assume implicit ordering (yeah, annoying)
@@ -499,7 +515,7 @@ class DatabaseIntrospection(BaseDatabaseIntrospection):
 
 class DatabaseSchemaEditor(BaseDatabaseSchemaEditor):
     def column_sql(self, model, field, include_default=False):
-        return None, {}
+        return "", {}
 
     def create_model(self, model):
         """ Don't do anything when creating tables """
@@ -512,6 +528,15 @@ class DatabaseSchemaEditor(BaseDatabaseSchemaEditor):
         pass
 
     def remove_field(self, from_model, field):
+        pass
+
+    def add_field(self, model, field):
+        pass
+
+    def alter_index_together(self, model, old_index_together, new_index_together):
+        pass
+
+    def delete_model(self, model):
         pass
 
 
@@ -531,10 +556,20 @@ class DatabaseWrapper(BaseDatabaseWrapper):
 
     operators = {
         'exact': '= %s',
+        'iexact': 'iexact %s',
+        'contains': 'contains %s',
+        'icontains': 'icontains %s',
+        'regex': 'regex %s',
+        'iregex': 'iregex %s',
         'gt': '> %s',
         'gte': '>= %s',
         'lt': '< %s',
-        'lte': '<= %s'
+        'lte': '<= %s',
+        'startswith': 'startswith %s',
+        'endswith': 'endswith %s',
+        'istartswith': 'istartswith %s',
+        'iendswith': 'iendswith %s',
+        'isnull': 'isnull %s'
     }
 
     Database = Database

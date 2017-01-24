@@ -4,7 +4,6 @@ import logging
 import copy
 import decimal
 import json
-import contextlib
 
 from functools import partial
 from itertools import chain, groupby
@@ -15,7 +14,7 @@ from django.db import DatabaseError
 from django.db import IntegrityError
 
 from google.appengine.api import datastore, datastore_errors, memcache
-from google.appengine.datastore import datastore_rpc, datastore_stub_util
+from google.appengine.datastore import datastore_stub_util
 from google.appengine.api.datastore import Query
 from google.appengine.ext import db
 
@@ -26,25 +25,17 @@ from djangae.db.utils import (
     django_instance_to_entity,
     MockInstance,
     has_concrete_parents,
-    get_field_from_column
+    get_field_from_column,
+    ensure_datetime,
 )
 
 from djangae.db.backends.appengine import POLYMODEL_CLASS_ATTRIBUTE
 from djangae.db import constraints, utils
 from djangae.db.backends.appengine import caching
 from djangae.db.unique_utils import query_is_unique
-from djangae.db.backends.appengine import transforms
 
-DATE_TRANSFORMS = {
-    "year": transforms.year_transform,
-    "month": transforms.month_transform,
-    "day": transforms.day_transform,
-    "hour": transforms.hour_transform,
-    "minute": transforms.minute_transform,
-    "second": transforms.second_transform
-}
 
-DJANGAE_LOG = logging.getLogger("djangae")
+logger = logging.getLogger(__name__)
 
 OPERATORS_MAP = {
     'exact': '=',
@@ -107,15 +98,6 @@ def field_conv_day_only(value):
     return datetime(value.year, value.month, value.day, 0, 0)
 
 
-def ensure_datetime(value):
-    """
-        Painfully, sometimes the Datastore returns dates as datetime objects, and sometimes
-        it returns them as unix timestamps in microseconds!!
-    """
-    if isinstance(value, long):
-        return datetime.fromtimestamp(value / 1000000)
-    return value
-
 def coerce_unicode(value):
     if isinstance(value, str):
         try:
@@ -128,21 +110,6 @@ def coerce_unicode(value):
 
     # The SDK raises BadValueError for unicode sub-classes like SafeText.
     return unicode(value)
-
-
-FILTER_CMP_FUNCTION_MAP = {
-    'exact': lambda a, b: a == b,
-    'iexact': lambda a, b: a.lower() == b.lower(),
-    'gt': lambda a, b: a > b,
-    'lt': lambda a, b: a < b,
-    'gte': lambda a, b: a >= b,
-    'lte': lambda a, b: a <= b,
-    'isnull': lambda a, b: (b and (a is None)) or (a is not None),
-    'in': lambda a, b: a in b,
-    'startswith': lambda a, b: a.startswith(b),
-    'range': lambda a, b: b[0] < a < b[1], #I'm assuming that b is a tuple
-    'year': lambda a, b: field_conv_year_only(a) == b,
-}
 
 
 def log_once(logging_call, text, args):
@@ -213,7 +180,7 @@ class QueryByKeys(object):
             key = self.queries_by_key.keys()[0]
             result = caching.get_from_cache_by_key(key)
             if result is not None:
-                results = [ result ]
+                results = [result]
                 cache = False # Don't update cache, we just got it from there
 
         if results is None:
@@ -301,7 +268,7 @@ class QueryByKeys(object):
         return iter_results(results)
 
     def Count(self, limit, offset):
-        return len([ x for x in self.Run(limit, offset) ])
+        return len([x for x in self.Run(limit, offset)])
 
 
 class NoOpQuery(object):
@@ -427,7 +394,7 @@ class SelectCommand(object):
         self.query = normalize_query(self.query)
 
         self.original_query = query
-        self.keys_only = (keys_only or [x.field for x in query.select] == [ query.model._meta.pk ])
+        self.keys_only = (keys_only or [x.field for x in query.select] == [query.model._meta.pk])
 
         # MultiQuery doesn't support keys_only
         if self.query.where and len(self.query.where.children) > 1:
@@ -502,7 +469,7 @@ class SelectCommand(object):
             )
 
             # This deals with the oddity that the root of the tree may well be a leaf
-            filters = [ and_branch ] if and_branch.is_leaf else and_branch.children
+            filters = [and_branch] if and_branch.is_leaf else and_branch.children
 
             for filter_node in filters:
                 lookup = "{} {}".format(filter_node.column, filter_node.operator)
@@ -531,7 +498,7 @@ class SelectCommand(object):
                 # If there is already a value for this lookup, we need to make the
                 # value a list and append the new entry
                 if lookup in query and not isinstance(query[lookup], (list, tuple)) and query[lookup] != value:
-                    query[lookup] = [ query[lookup ] ] + [ value ]
+                    query[lookup] = [query[lookup] ] + [value]
                 else:
                     # If the value is a list, we can't just assign it to the query
                     # which will treat each element as its own value. So in this
@@ -539,7 +506,7 @@ class SelectCommand(object):
                     # which we could throw ourselves, but the datastore might start supporting
                     # list values in lookups.. you never know!
                     if isinstance(value, (list, tuple)):
-                        query[lookup] = [ value ]
+                        query[lookup] = [value]
                     else:
                         # Common case: just add the raw where constraint
                         query[lookup] = value
@@ -573,7 +540,6 @@ class SelectCommand(object):
         # we need to make sure that we grab more than we were asked for otherwise we could filter
         # out too many! These are again limited back to the original request limit
         # while we're processing the results later
-
         # Apply the namespace before excluding
         excluded_pks = [
             datastore.Key.from_path(x.kind(), x.id_or_name(), namespace=self.namespace)
@@ -665,7 +631,7 @@ class SelectCommand(object):
                         except ValueError:
                             continue
                     return arg
-                elif arg in [ x.column for x in model_fields ]:
+                elif arg in [x.column for x in model_fields]:
                     # Column value
                     return result.get(arg)
 
@@ -774,24 +740,27 @@ class SelectCommand(object):
                 result += u" " + u" ".join([
                     u"WHERE",
                     u" OR ".join([
-                        u" AND ".join( [ u"{} {}".format(k, v) for k, v in x.iteritems() ])
+                        u" AND ".join( [u"{} {}".format(k, v) for k, v in x.iteritems()])
                         for x in qry["where"]
                     ])
                 ])
             return result
         except:
             # We never want this to cause things to die
-            logging.exception("Unable to translate query to string")
+            logger.exception("Unable to translate query to string")
             return "QUERY TRANSLATION ERROR"
 
     def __repr__(self):
         return self.__unicode__().encode("utf-8")
 
+    def __mod__(self, params):
+        return repr(self)
+
     def lower(self):
         """
             This exists solely for django-debug-toolbar compatibility.
         """
-        return str(self).lower()
+        return unicode(self).lower()
 
 
 class FlushCommand(object):
@@ -963,7 +932,7 @@ class InsertCommand(object):
         """
             This exists solely for django-debug-toolbar compatibility.
         """
-        return str(self).lower()
+        return unicode(self).lower()
 
     def __unicode__(self):
         try:
@@ -981,7 +950,7 @@ class InsertCommand(object):
             return result
         except:
             # We never want this to cause things to die
-            logging.info("InsertCommand is unable to translate query to string")
+            logger.info("InsertCommand is unable to translate query to string")
             return u"QUERY TRANSLATION ERROR"
 
     def __repr__(self):
@@ -1029,7 +998,7 @@ class DeleteCommand(object):
         self.select.execute()
 
         constraints_enabled = constraints.has_active_unique_constraints(self.model)
-        keys = [ x.key() for x in self.select.results ]
+        keys = [x.key() for x in self.select.results]
 
         def wipe_polymodel_from_entity(entity, db_table):
             """
@@ -1094,7 +1063,7 @@ class DeleteCommand(object):
         """
             This exists solely for django-debug-toolbar compatibility.
         """
-        return str(self).lower()
+        return unicode(self).lower()
 
 
 class UpdateCommand(object):
@@ -1109,7 +1078,7 @@ class UpdateCommand(object):
         """
             This exists solely for django-debug-toolbar compatibility.
         """
-        return str(self).lower()
+        return unicode(self).lower()
 
     def _update_entity(self, key):
         markers_to_acquire = []
@@ -1214,7 +1183,7 @@ class UpdateCommand(object):
                 except:
                     # We ignore the exception because raising will rollback the transaction causing
                     # an inconsistent state
-                    logging.exception("Unable to update the context cache")
+                    logger.exception("Unable to update the context cache")
                     pass
 
             # Return true to indicate update success

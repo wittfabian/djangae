@@ -51,7 +51,7 @@ def preprocess_node(node, negated):
 
                         bridge = WhereNode()
                         bridge.connector = "OR"
-                        bridge.children = [ lhs, rhs ]
+                        bridge.children = [lhs, rhs]
 
                         new_children.append(bridge)
                     else:
@@ -84,7 +84,7 @@ def preprocess_node(node, negated):
                 rhs.value = child.value[1]
 
                 child.column = child.operator = child.value = None
-                child.children = [ lhs, rhs ]
+                child.children = [lhs, rhs]
 
                 assert not child.is_leaf
         elif node.negated:
@@ -133,7 +133,7 @@ def normalize_query(query):
                 for grandchild in child.children:
                     new_node = WhereNode()
                     new_node.negated = True
-                    new_node.children = [ grandchild ]
+                    new_node.children = [grandchild]
                     new_grandchildren.append(new_node)
                 child.children = new_grandchildren
                 child.connector = 'OR'
@@ -182,13 +182,13 @@ def normalize_query(query):
     if where.connector != 'OR':
         new_node = WhereNode()
         new_node.connector = 'OR'
-        new_node.children = [ where ]
+        new_node.children = [where]
         query._where = new_node
 
     all_pks = True
     for and_branch in query.where.children:
         if and_branch.is_leaf:
-            children = [ and_branch ]
+            children = [and_branch]
         else:
             children = and_branch.children
 

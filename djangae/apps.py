@@ -8,6 +8,9 @@ class DjangaeConfig(AppConfig):
     verbose_name = _("Djangae")
 
     def ready(self):
+        from .patches import json
+        json.patch()
+
         from djangae.db.backends.appengine.caching import reset_context
         from djangae.db.migrations.signals import check_migrations
         from django.core.signals import request_finished, request_started
@@ -48,3 +51,7 @@ class DjangaeConfig(AppConfig):
                     # Raise error if User is using both Django and Djangae CT, but
                     # Django CT comes after Djangae CT
                     raise contenttype_configuration_error
+
+        from django.core import checks
+        from djangae import checks
+

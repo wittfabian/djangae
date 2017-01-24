@@ -18,6 +18,14 @@ _SCRIPT_NAME = 'dev_appserver.py'
 _API_SERVER = None
 
 
+# This is a temporary workaround for the issue with 1.9.49 version where
+# version is set to [0, 0, 0] instead of [1, 9, 49]. This could be removed
+# after this: https://code.google.com/p/googleappengine/issues/detail?id=13439
+# issue is resolved. If that is done, we should remove all references to
+# TEMP_1_9_49_VERSION_NO here and in djangae/management/command/runserver.
+TEMP_1_9_49_VERSION_NO = [0, 0, 0]
+
+
 class Filter(object):
     def filter(self, record):
         if record.funcName == '__StarSchemaQueryPlan' and record.module == 'datastore_sqlite_stub':
@@ -97,10 +105,12 @@ def _create_dispatcher(configuration, options):
 
     # External port is a new flag introduced in 1.9.19
     current_version = _VersionList(GetVersionObject()['release'])
-    if current_version >= _VersionList('1.9.19'):
+    if current_version >= _VersionList('1.9.19') or \
+            current_version == TEMP_1_9_49_VERSION_NO:
         dispatcher_args.append(options.external_port)
 
-    if current_version >= _VersionList('1.9.22'):
+    if current_version >= _VersionList('1.9.22') or \
+            current_version == TEMP_1_9_49_VERSION_NO:
         dispatcher_args.insert(8, None) # Custom config setting
 
     _create_dispatcher.singleton = dispatcher.Dispatcher(*dispatcher_args)
@@ -255,7 +265,7 @@ _OPTIONS = None
 _CONFIG = None
 
 @contextlib.contextmanager
-def activate(sandbox_name, add_sdk_to_path=False, new_env_vars=None, **overrides):
+def activate(sandbox_name, add_sdk_to_path=False, new_env_vars=None, app_id=None, **overrides):
     """Context manager for command-line scripts started outside of dev_appserver.
 
     :param sandbox_name: str, one of 'local', 'remote' or 'test'
@@ -363,7 +373,10 @@ def activate(sandbox_name, add_sdk_to_path=False, new_env_vars=None, **overrides
 
         setattr(options, option, overrides[option])
 
-    configuration = application_configuration.ApplicationConfiguration(options.config_paths)
+    if app_id:
+        configuration = application_configuration.ApplicationConfiguration(options.config_paths, app_id=app_id)
+    else:
+        configuration = application_configuration.ApplicationConfiguration(options.config_paths)
 
     # Enable built-in libraries from app.yaml without enabling the full sandbox.
     module = configuration.modules[0]
@@ -430,6 +443,41 @@ def allow_mode_write():
         stubs.FakeFile._allowed_dirs = original_dirs
 
 
+class allow_modules_context():
+
+    def __enter__(self):
+        import sys
+        import subprocess
+        import os
+        import tempfile
+        import select
+        # Clear the meta_path so google does not screw our imports, make a copy
+        # of the old one
+        self.old_meta_path = sys.meta_path
+        sys.meta_path = []
+        self.patch_modules = [os, tempfile, select, subprocess]
+
+        import copy
+        self.environ = copy.copy(os.environ)
+
+        for mod in self.patch_modules:
+            _system = reload(mod)
+            mod.__dict__.update(_system.__dict__)
+
+        # We have to maintain the environment, or bad things happen
+        os.environ = self.environ # This gets monkey patched by GAE
+
+    def __exit__(self, *exc):
+        # Restore the original path
+        sys.meta_path = self.old_meta_path
+        # Reload the original modules
+        for mod in self.patch_modules:
+            _system = reload(mod)
+            mod.__dict__.update(_system.__dict__)
+        # Put the original os back, again
+        os.environ = self.environ
+
+
 def allow_modules(func, *args):
     """
         dev_appserver likes to kill your imports with meta_path madness so you
@@ -439,38 +487,6 @@ def allow_modules(func, *args):
         it is a bit hacky
     """
     def _wrapped(*args, **kwargs):
-        import sys
-
-        import subprocess
-        import os
-        import tempfile
-        import select
-        # Clear the meta_path so google does not screw our imports, make a copy
-        # of the old one
-        old_meta_path = sys.meta_path
-        sys.meta_path = []
-        patch_modules = [os, tempfile, select, subprocess]
-
-        import copy
-        environ = copy.copy(os.environ)
-
-        for mod in patch_modules:
-            _system = reload(mod)
-            mod.__dict__.update(_system.__dict__)
-
-        # We have to maintain the environment, or bad things happen
-        os.environ = environ # This gets monkey patched by GAE
-
-        try:
+        with allow_modules_context():
             return func(*args, **kwargs)
-        finally:
-            # Restore the original path
-            sys.meta_path = old_meta_path
-            # Reload the original modules
-            for mod in patch_modules:
-                _system = reload(mod)
-                mod.__dict__.update(_system.__dict__)
-            # Put the original os back, again
-            os.environ = environ
-
     return _wrapped

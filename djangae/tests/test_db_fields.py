@@ -8,6 +8,7 @@ from django.db.utils import IntegrityError
 from django.core.exceptions import ValidationError
 
 # DJANGAE
+from djangae.contrib import sleuth
 from djangae.db import transaction
 from djangae.fields import (
     ComputedCharField,
@@ -59,6 +60,24 @@ class ModelWithCounter(models.Model):
 class ModelWithManyCounters(models.Model):
     counter1 = ShardedCounterField()
     counter2 = ShardedCounterField()
+
+    class Meta:
+        app_label = "djangae"
+
+
+def update_denormalized_counter(instance, step, is_reset=False):
+    instance.denormalized_counter += step
+
+    if is_reset:
+        instance.reset_count += 1
+
+    instance.save()
+
+
+class ModelWithCountersWithCallback(models.Model):
+    counter = ShardedCounterField(on_change=update_denormalized_counter)
+    denormalized_counter = models.IntegerField(default=0)
+    reset_count = models.IntegerField(default=0)
 
     class Meta:
         app_label = "djangae"
@@ -177,7 +196,6 @@ class ShardedCounterTest(TestCase):
         instance.counter.increment(2)
         self.assertEqual(instance.counter.value(), 5)
 
-
     def test_decrement_step(self):
         """ Test the behvaviour of decrementing in steps of more than 1. """
         instance = ModelWithCounter.objects.create()
@@ -237,7 +255,6 @@ class ShardedCounterTest(TestCase):
         instance = ModelWithCounter.objects.get()
         self.assertEqual(instance.counter.all().count(), DEFAULT_SHARD_COUNT)
 
-
     def test_label_reference_is_saved(self):
         """ Test that each CounterShard which the field creates is saved with the label of the
             model and field to which it belongs.
@@ -265,6 +282,47 @@ class ShardedCounterTest(TestCase):
         self.assertEqual(instance.counter1.value(), 0)
         self.assertEqual(instance.counter2.value(), 1)
 
+    def test_count_issues_deprecation_warning(self):
+        """ The RelatedShardManager should warn you when using the deprecated `count()` method
+            because its purpose is unclear.
+        """
+        instance = ModelWithCounter.objects.create()
+        self.assertEqual(instance.counter.value(), 0)
+        with sleuth.watch("djangae.fields.counting.warnings.warn") as warn:
+            instance.counter.count()
+            self.assertTrue(warn.called)
+
+    def test_shard_count(self):
+        """ The shard_count() method should return the number of CounterShard objects. """
+        instance = ModelWithCounter.objects.create()
+        self.assertEqual(instance.counter.shard_count(), 0)
+        instance.counter.populate()
+        self.assertEqual(instance.counter.shard_count(), 24)  # The default shard count is 24
+
+    def test_on_change_callback_called(self):
+        """ Test that if ShardedCounter has on_change callback specified, it
+            will be called after any change to the counter.
+        """
+        instance = ModelWithCountersWithCallback.objects.create()
+        self.assertEquals(instance.denormalized_counter, 0)
+
+        # callback called after increment
+        instance.counter.increment(5)
+        instance.refresh_from_db()
+        self.assertEquals(instance.denormalized_counter, 5)
+
+        # after decrement
+        instance.counter.decrement(1)
+        instance.refresh_from_db()
+        self.assertEquals(instance.denormalized_counter, 4)
+
+        # and reset
+        self.assertEquals(instance.reset_count, 0)
+        instance.counter.reset()
+        instance.refresh_from_db()
+        self.assertEquals(instance.denormalized_counter, 0)
+        self.assertEquals(instance.reset_count, 1)
+
 
 class IterableFieldTests(TestCase):
     def test_filtering_on_iterable_fields(self):
@@ -275,29 +333,29 @@ class IterableFieldTests(TestCase):
             list_field=['A', 'B', 'C', 'H', 'I', 'J'],
             set_field=set(['A', 'B', 'C', 'H', 'I', 'J']))
 
-        # filtering using exact lookup with ListField:
-        qry = IterableFieldModel.objects.filter(list_field='A')
+        # filtering using __contains lookup with ListField:
+        qry = IterableFieldModel.objects.filter(list_field__contains='A')
         self.assertEqual(sorted(x.pk for x in qry), sorted([list1.pk, list2.pk]))
-        qry = IterableFieldModel.objects.filter(list_field='H')
-        self.assertEqual(sorted(x.pk for x in qry), [list2.pk,])
+        qry = IterableFieldModel.objects.filter(list_field__contains='H')
+        self.assertEqual(sorted(x.pk for x in qry), [list2.pk])
 
-        # filtering using exact lookup with SetField:
-        qry = IterableFieldModel.objects.filter(set_field='A')
+        # filtering using __contains lookup with SetField:
+        qry = IterableFieldModel.objects.filter(set_field__contains='A')
         self.assertEqual(sorted(x.pk for x in qry), sorted([list1.pk, list2.pk]))
-        qry = IterableFieldModel.objects.filter(set_field='H')
-        self.assertEqual(sorted(x.pk for x in qry), [list2.pk,])
+        qry = IterableFieldModel.objects.filter(set_field__contains='H')
+        self.assertEqual(sorted(x.pk for x in qry), [list2.pk])
 
-        # filtering using in lookup with ListField:
-        qry = IterableFieldModel.objects.filter(list_field__in=['A', 'B', 'C'])
-        self.assertEqual(sorted(x.pk for x in qry), sorted([list1.pk, list2.pk,]))
-        qry = IterableFieldModel.objects.filter(list_field__in=['H', 'I', 'J'])
-        self.assertEqual(sorted(x.pk for x in qry), sorted([list2.pk,]))
-
-        # filtering using in lookup with SetField:
-        qry = IterableFieldModel.objects.filter(set_field__in=set(['A', 'B']))
+        # filtering using __overlap lookup with ListField:
+        qry = IterableFieldModel.objects.filter(list_field__overlap=['A', 'B', 'C'])
         self.assertEqual(sorted(x.pk for x in qry), sorted([list1.pk, list2.pk]))
-        qry = IterableFieldModel.objects.filter(set_field__in=set(['H']))
-        self.assertEqual(sorted(x.pk for x in qry), [list2.pk,])
+        qry = IterableFieldModel.objects.filter(list_field__overlap=['H', 'I', 'J'])
+        self.assertEqual(sorted(x.pk for x in qry), sorted([list2.pk]))
+
+        # filtering using __overlap lookup with SetField:
+        qry = IterableFieldModel.objects.filter(set_field__overlap=set(['A', 'B']))
+        self.assertEqual(sorted(x.pk for x in qry), sorted([list1.pk, list2.pk]))
+        qry = IterableFieldModel.objects.filter(set_field__overlap=['H'])
+        self.assertEqual(sorted(x.pk for x in qry), [list2.pk])
 
     def test_empty_iterable_fields(self):
         """ Test that an empty set field always returns set(), not None """
@@ -324,7 +382,7 @@ class IterableFieldTests(TestCase):
         instance = IterableFieldModel.objects.get(pk=instance.pk)
         self.assertEqual(["One"], instance.list_field)
 
-        results = IterableFieldModel.objects.filter(list_field="One")
+        results = IterableFieldModel.objects.filter(list_field__contains="One")
         self.assertEqual([instance], list(results))
 
         self.assertEqual([1, 2], ListField(models.IntegerField).to_python("[1, 2]"))
@@ -346,16 +404,16 @@ class IterableFieldTests(TestCase):
     def test_empty_list_queryable_with_is_null(self):
         instance = IterableFieldModel.objects.create()
 
-        self.assertTrue(IterableFieldModel.objects.filter(set_field__isnull=True).exists())
+        self.assertTrue(IterableFieldModel.objects.filter(set_field__isempty=True).exists())
 
         instance.set_field.add(1)
         instance.save()
 
-        self.assertFalse(IterableFieldModel.objects.filter(set_field__isnull=True).exists())
-        self.assertTrue(IterableFieldModel.objects.filter(set_field__isnull=False).exists())
+        self.assertFalse(IterableFieldModel.objects.filter(set_field__isempty=True).exists())
+        self.assertTrue(IterableFieldModel.objects.filter(set_field__isempty=False).exists())
 
-        self.assertFalse(IterableFieldModel.objects.exclude(set_field__isnull=False).exists())
-        self.assertTrue(IterableFieldModel.objects.exclude(set_field__isnull=True).exists())
+        self.assertFalse(IterableFieldModel.objects.exclude(set_field__isempty=False).exists())
+        self.assertTrue(IterableFieldModel.objects.exclude(set_field__isempty=True).exists())
 
     def test_saving_forms(self):
         class TestForm(forms.ModelForm):
@@ -382,6 +440,18 @@ class RelatedListFieldModelTests(TestCase):
         thing.related_list.field.save_form_data(thing, [])
         self.assertNotEqual(before_list.all(), thing.related_list.all())
 
+    def test_filtering_on_iterable_fields(self):
+        related1 = ISOther.objects.create()
+        related2 = ISOther.objects.create()
+        related3 = ISOther.objects.create()
+        thing = ISModel.objects.create(related_list=[related1, related2])
+        # filtering using __contains lookup with ListField:
+        qry = ISModel.objects.filter(related_list__contains=related1)
+        self.assertEqual(sorted(x.pk for x in qry), [thing.pk])
+        # filtering using __overlap lookup with ListField:
+        qry = ISModel.objects.filter(related_list__overlap=[related2, related3])
+        self.assertEqual(sorted(x.pk for x in qry), [thing.pk])
+
     def test_saving_forms(self):
         class TestForm(forms.ModelForm):
             class Meta:
@@ -399,6 +469,16 @@ class RelatedListFieldModelTests(TestCase):
         self.assertEqual([related.pk], instance.related_list_ids)
 
 
+class Post(models.Model):
+    content = models.TextField()
+    tags = RelatedSetField('Tag', related_name='posts')
+    ordered_tags = RelatedListField('Tag')
+
+
+class Tag(models.Model):
+    name = models.CharField()
+
+
 class RelatedSetFieldModelTests(TestCase):
 
     def test_can_update_related_field_from_form(self):
@@ -408,6 +488,15 @@ class RelatedSetFieldModelTests(TestCase):
         thing.related_list.field.save_form_data(thing, set())
         thing.save()
         self.assertNotEqual(before_set.all(), thing.related_things.all())
+
+    def test_prefetch_related(self):
+        tag = Tag.objects.create(name="Apples")
+
+        for i in xrange(2):
+            Post.objects.create(content="Bananas", tags={tag})
+
+        posts = list(Post.objects.prefetch_related('tags').all())
+        self.assertNumQueries(0, list, posts[0].tags.all())
 
     def test_saving_forms(self):
         class TestForm(forms.ModelForm):
@@ -434,6 +523,32 @@ class InstanceListFieldTests(TestCase):
         # Does the to_python need to return ordered list? SetField test only passes because the set
         # happens to order it correctly
         self.assertItemsEqual([i1, i2], ISModel._meta.get_field("related_list").to_python("[1, 2]"))
+
+    def test_prefetch_related(self):
+        tags = [
+            Tag.objects.create(name="1"),
+            Tag.objects.create(name="2"),
+            Tag.objects.create(name="3")
+        ]
+
+        # Extra one to make sure we're filtering properly
+        Tag.objects.create(name="unused")
+
+        for i in xrange(3):
+            Post.objects.create(content="Bananas", ordered_tags=tags)
+
+        with self.assertNumQueries(2):
+            # 1 query on Posts + 1 query on Tags
+            posts = list(Post.objects.prefetch_related('ordered_tags').all())
+
+        with self.assertNumQueries(0):
+            posts[0].tags.all()
+            posts[1].tags.all()
+            posts[2].tags.all()
+
+        self.assertEqual(posts[0].ordered_tags.all()[0].name, "1")
+        self.assertEqual(posts[0].ordered_tags.all()[1].name, "2")
+        self.assertEqual(posts[0].ordered_tags.all()[2].name, "3")
 
     def test_default_on_delete_does_nothing(self):
         child = ISOther.objects.create(pk=1)
@@ -580,7 +695,7 @@ class InstanceListFieldTests(TestCase):
         other = ISOther.objects.create(name="one")
         other1 = ISOther.objects.create(name="two")
         other2 = ISOther.objects.create(name="one")
-        other3 = ISOther.objects.create(name="three")
+        ISOther.objects.create(name="three")
         main.related_list.add(other, other1, other2, other1, other2,)
         main.save()
         self.assertItemsEqual([other, other2, other2], main.related_list.filter(name="one"))
@@ -606,7 +721,7 @@ class InstanceSetFieldTests(TestCase):
         self.assertEqual({other.pk}, main.related_things_ids)
         self.assertEqual(list(ISOther.objects.filter(pk__in=main.related_things_ids)), list(main.related_things.all()))
 
-        self.assertItemsEqual([main], ISModel.objects.filter(related_things=other).all())
+        self.assertItemsEqual([main], ISModel.objects.filter(related_things__contains=other).all())
         self.assertItemsEqual([main], list(other.ismodel_set.all()))
 
         main.related_things.remove(other)
@@ -686,8 +801,8 @@ class InstanceSetFieldTests(TestCase):
     def test_querying_with_isnull(self):
         obj = ISModel.objects.create()
 
-        self.assertItemsEqual([obj], ISModel.objects.filter(related_things__isnull=True))
-        self.assertItemsEqual([obj], ISModel.objects.filter(related_things_ids__isnull=True))
+        self.assertItemsEqual([obj], ISModel.objects.filter(related_things__isempty=True))
+        self.assertItemsEqual([obj], ISModel.objects.filter(related_things_ids__isempty=True))
 
 
 class TestGenericRelationField(TestCase):

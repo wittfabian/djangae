@@ -1,19 +1,14 @@
 import datetime
-import logging
-import contextlib
 
+from django.conf import settings
 from django.core.exceptions import NON_FIELD_ERRORS
-
-from google.appengine.ext import db
-from google.appengine.api.datastore import Key, Delete
+from google.appengine.api.datastore import Key, Delete, MAX_ALLOWABLE_QUERIES
 from google.appengine.datastore.datastore_rpc import TransactionOptions
+from google.appengine.ext import db
 
 from .unique_utils import unique_identifiers_from_entity
 from .utils import key_exists
 from djangae.db.backends.appengine.dbapi import IntegrityError, NotSupportedError
-from django.conf import settings
-
-DJANGAE_LOG = logging.getLogger("djangae")
 
 
 def has_active_unique_constraints(model_or_instance):
@@ -37,7 +32,6 @@ def has_active_unique_constraints(model_or_instance):
                 return True
 
     return not getattr(settings, "DJANGAE_DISABLE_CONSTRAINT_CHECKS", False)
-
 
 
 class KeyProperty(db.Property):
@@ -96,7 +90,7 @@ def _acquire_identifiers(identifiers, entity_key):
             fields_and_values = identifier_key.name().split("|")
             table_name = fields_and_values[0]
             fields_and_values = fields_and_values[1:]
-            fields = [ x.split(":")[0] for x in fields_and_values ]
+            fields = [x.split(":")[0] for x in fields_and_values]
             raise IntegrityError("Unique constraint violation for kind {} on fields: {}".format(table_name, ", ".join(fields)))
         elif existing_marker.instance != entity_key:
             markers_to_create.append(UniqueMarker(
@@ -218,7 +212,7 @@ class UniquenessMixin(object):
                 # we conditionally build a __in lookup if the value is an iterable.
                 lookup = str(field_name)
                 if isinstance(lookup_value, (list, set, tuple)):
-                    lookup = "%s__in" % lookup
+                    lookup = "%s__overlap" % lookup
 
                 lookup_kwargs[lookup] = lookup_value
                 ##########################################################################
@@ -234,13 +228,13 @@ class UniquenessMixin(object):
             # a unique combination
             #######################################################
 
-            if len([x for x in lookup_kwargs if x.endswith("__in") ]) > 1:
+            if len([x for x in lookup_kwargs if x.endswith("__in")]) > 1:
                 raise NotSupportedError("You cannot currently have two list fields in a unique combination")
 
             # Split IN queries into multiple lookups if they are too long
             lookups = []
             for k, v in lookup_kwargs.iteritems():
-                if k.endswith("__in") and len(v) > 30:
+                if (k.endswith("__in") or k.endswith("__overlap")) and len(v) > MAX_ALLOWABLE_QUERIES:
                     v = list(v)
                     while v:
                         new_lookup = lookup_kwargs.copy()
@@ -250,7 +244,7 @@ class UniquenessMixin(object):
                     break
             else:
                 # Otherwise just use the one lookup
-                lookups = [ lookup_kwargs ]
+                lookups = [lookup_kwargs]
 
             for lookup_kwargs in lookups:
                 qs = model_class._default_manager.filter(**lookup_kwargs).values_list("pk", flat=True)

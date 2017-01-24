@@ -9,7 +9,6 @@ from google.appengine.api.memcache import Client
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 from django.core.cache.backends.base import default_key_func
-from django.utils.functional import lazy
 
 from djangae.db import utils
 from djangae.db.unique_utils import unique_identifiers_from_entity, _format_value_for_identifier
@@ -106,7 +105,7 @@ class KeyPrefixedClient(Client):
             )
 
     def delete_multi_async(self, keys, seconds=0, key_prefix='', namespace=None, rpc=None):
-        keys = [ default_key_func(x, KEY_PREFIX, VERSION) for x in keys ]
+        keys = [default_key_func(x, KEY_PREFIX, VERSION) for x in keys]
 
         if self.sync_mode:
             # We don't call up, because delete_multi calls delete_multi_async
@@ -216,6 +215,9 @@ def _get_entity_from_memcache_by_key(key):
 
 
 def add_entities_to_cache(model, entities, situation, namespace, skip_memcache=False):
+    if not CACHE_ENABLED:
+        return None
+
     # Don't cache on Get if we are inside a transaction, even in the context
     # This is because transactions don't see the current state of the datastore
     # We can still cache in the context on Put() but not in memcache
@@ -258,6 +260,9 @@ def remove_entities_from_cache_by_key(keys, namespace, memcache_only=False):
         Given an iterable of datastore.Keys objects, remove the corresponding entities from caches,
         both context and memcache, or just memcache if specified.
     """
+    if not CACHE_ENABLED:
+        return None
+
     context = get_context()
     if not memcache_only:
         for key in keys:

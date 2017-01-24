@@ -38,7 +38,7 @@ class DjangaeMapperPipeline(MapperPipeline):
             )
         self.fill(self.outputs.job_id, mapreduce_id)
         self.set_status(console_url="%s/detail?mapreduce_id=%s" % (
-            (parameters.config.BASE_PATH, mapreduce_id)))
+            (BASE_PATH, mapreduce_id)))
 
     def callback(self):
         """

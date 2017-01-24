@@ -26,7 +26,7 @@ class SQLCompiler(compiler.SQLCompiler):
         if name.startswith("__") and name.endswith("__"):
             name, order = get_order_dir(name, default_order)
             descending = True if order == 'DESC' else False
-            return [ (OrderBy(Value('__scatter__'), descending=descending), False) ]
+            return [(OrderBy(Value('__scatter__'), descending=descending), False)]
 
         return super(SQLCompiler, self).find_ordering_name(
             name,
@@ -62,7 +62,7 @@ class SQLInsertCompiler(SQLCompiler, compiler.SQLInsertCompiler):
         from djangae.db.utils import get_concrete_fields
 
         # Always pass down all the fields on an insert
-        return [ (InsertCommand(
+        return [(InsertCommand(
             self.connection, self.query.model, self.query.objs,
             list(self.query.fields) + list(get_concrete_fields(self.query.model, ignore_leaf=True)),
             self.query.raw), tuple())

@@ -1,8 +1,83 @@
-## v0.9.6 (in development)
+## v0.9.9 (in development)
 
 ### New features & improvements:
 
--
+- System check for deferred builtin which should always be switched off.
+- Implemented weak (memcache) locking to contrib.locking
+- The `disable_cache` decorator now wraps the returned function with functools.wraps
+- `prefetch_related()` now works on RelatedListField and RelatedSetField
+
+### Bug fixes:
+
+- Fixed a minor bug where entities were still added to memcache (but not fetched from it) with `DJANGAE_CACHE_ENABLED=False`.  This fix now allows disabling the cache to be a successful workaround for https://code.google.com/p/googleappengine/issues/detail?id=7876.
+- Fixed a bug where entities could still be fetched from memcache with `DJANGAE_CACHE_ENABLED=False` when saving in a transaction or deleting them.
+- Fixed overlap filtering on RelatedListField and RelatedSetField (Thanks Grzes!)
+- Fixed various issues with `djangae.contrib.mappers.defer_iteration`, so that it no longers gets stuck deferring tasks or hitting memory limit errors when uses on large querysets.
+- Fixed an issue where having a ForeignKey to a ContentType would cause an issue when querying due to the large IDs produced by djangae.contrib.contenttypes's SimulatedContentTypesManager.
+- Cascade deletions will now correctly batch object collection within the datastore query limits, fixing errors on deletion.
+
+### Documentation:
+
+- Improved documentation for `djangae.contrib.mappers.defer_iteration`.
+
+
+## v0.9.8 (release date: 6th December 2016)
+
+### New features & improvements:
+
+- Cleaned up and refactored internal implementation of `SimulatedContentTypeManager`. Now also allows patching `ContentType` manager in migrations.
+- Add ability to specify GAE target instance for remote command with `--app_id` flag
+- When App Engine raises an `InvalidSenderError` when trying to send an email, Djangae now logs the 'from' address which is invalid (App Engine doesn't include it in the error).
+
+### Bug fixes:
+
+- Fixed an issue where Django Debug Toolbar would get a `UnicodeDecodeError` if a query contained a non-ascii character.
+- Fixed an issue where getting and flushing a specific `TaskQueue` using the test stub (including when using `djangae.test.TestCase.process_task_queues`) would flush all task queues.
+- Fixed a bug in our forced contenttypes migration
+- Fixed `./manage.py runserver` not working with Django 1.10 and removed a RemovedInDjango110Warning message at startup.
+- Restore `--nothreading` functionality to runserver (this went away when we dropped support for the old dev_appserver)
+- Fixed a bug where the `dumpurls` command had stopped working due to subtle import changes.
+- Utilise `get_serving_url` to get the correct url for serving images from Cloud Storage.
+- Fixed a side effect of that ^ introduction of `get_serving_url` which would add an entity group to any transaction in which it was called (due to the Datastore read done by `get_serving_url`).
+- Fixed fetching url for non images after introduction of `get_serving_url` call inside `CloudStorage` url method.
+- Fixed fetching url for files after introduction of `get_serving_url` call inside `BlobstoreStorage` url method when file is bigger than 32MB.
+- Fixed `gauth` middleware to update user email address if it gets changed
+
+
+## v0.9.7 (release date: 11th August 2016)
+
+### New features & improvements:
+
+- Added support for Django 1.10.
+- Changed the querying of `ListField` and `SetField`, which now works similiarly to PostgreSQL ArrayField. `isnull` lookup has been replaced with `isempty`, `exact` with `contains` and `in` with `overlap`. This is a breaking change, so stick to Djangae 0.9.6 or update your code.
+- Made a slight efficiency improvement so that `my_queryset.filter(pk__in=other_queryset)` will use `other_queryset.values_list('pk')` rather than fetching the full objects.
+- Added clearsessions view.
+
+### Bug fixes:
+
+- Fixed a circular import in djangae.db.utils.
+- Fixed sandbox problem with non-final django versions in the testapp.
+- Fixed a bug where the console URL stored in a mapreduce job's status entity was incorrect.
+
+### Documentation:
+
+- Added documentation about querying `ListField` and `SetField`.
+
+
+## v0.9.6 (release date: 1st August 2016)
+
+### New features & improvements:
+
+- ALLOWED_HOSTS is now set to ("*",) by default as App Engine deals with routing and this prevents
+  users being confused when their deployed app returns 400 responses.
+- Added version string to `__init__`.
+- Added an `--install_deps` flag to the `runtests.sh` script to allow triggering of dependency installation without having to delete the SDK folder.
+- Added an `--install_sdk` flag to both the `runtests.sh` script and to the `install_deps.py` script in the bundled 'testapp'.
+- The `count()` method on `ShardedCounterField` is deprecated because its function was ambiguous or misleading and was often mistakenly used instead of `value()`. It is replaced with a `shard_count()` method.
+- It is now possible to have a per-app djangaeidx.yaml file which can be distributed. The indexes in this file
+  are combined in memory with the ones from the project root's djangaeidx.yaml. This means that a user of your app
+  will not be required to run queries to generate indexes or manually add them to their project file.
+- Made a small performance improvement to avoid checking for changes to djangaeindx.yaml files when on production.
 
 ### Bug fixes:
 
@@ -10,10 +85,28 @@
 - Fixed a bug where the IntegrityError for a unique constraint violation could mention the wrong field(s).
 - Changed the default value of `DJANGAE_CREATE_UNKNOWN_USER` to `True` to match the original behaviour.
 - Fixed a bug where simulate contenttypes was required even on a SQL database
+- Fixed a bug where filtering on an empty PK would result in an inequality filter being used
+- Fixed a bug where making a projection query on time or datetime fields will return truncated values without microseconds
+- Fixed a test which could intermittently fail (`test_ordering_on_sparse_field`).
+- Fixed a bug where an empty upload_to argument to FileField would result in a broken "./" folder in Cloud Storage.
+- Fixed an issue where pre-created users may not have been able to log in if the email address associated with their Google account differed in case to the email address saved in their pre-created User object.
+- Made configuration changes to the bundled 'testapp' to allow the `runserver` command to work.
+- Fixed a bug in the `install_deps.py` script in the bundled 'testapp' where it would always re-install the App Engine SDK, even if it already existed.
 
 ### Documentation:
 
--
+- Added documentation for:
+    - Creating users for gauth.
+    - djangaeidx.yaml.
+- Improved documentation for:
+    - Installation
+    - Transactions
+    - JSONField
+    - RelatedSetField
+    - Running management commands locally and remotely
+- Fixed incorrect documentation for:
+    - The restrictions on projection queries.
+- Removed "experimental" flag from the "namespaces" feature of the Datastore DB backend.
 
 ## v0.9.5 (release date: 6th June 2016)
 
@@ -29,6 +122,8 @@
 - Add tasks utility functions to djangae.environment.
 - Alias DatastorePaginator -> Paginator, and DatastorePage -> Page to be more like Django
 - Moved `ContentType` patching to `djangae.contrib.contenttypes`. `DJANGAE_SIMULATE_CONTENTTYPES` setting has been removed, add `djangae.contrib.contenttypes` to `INSTALLED_APPS` instead. `djangae.contrib.contenttypes` needs to be after `django.contrib.contenttypes` in the `INSTALLED_APPS` order.
+- Allow customization of which user data is synced in gauth `AuthenticationMiddleware`.
+- Allow passing `on_change` callback run when ShardedCounter is changed.
 
 ### Bug fixes:
 
@@ -44,6 +139,7 @@ filenames properly.
 - Fix for `RelatedIterator` that fails when related iterated fields model is set as string.
 - Ensure `MapReduceTask `uses the db returned by the application router(s) unless explicitly passed.
 - Fixed bug with `__iexact` indexer where values containing underscores would not be correctly indexed.  (Existing objects will need to be re-saved to be correctly indexed.)
+- Allow running Djangae tests with non-stable, non-master version of Django.
 
 ### Documentation:
 
@@ -100,6 +196,7 @@ If you're still using Django 1.7 in your project:
 - `djangae.contrib.gauth` now always add users with their emails lowercased
 - Provided limited options for `on_delete` on `RelatedSetField` and `RelatedListField`
 - Renamed `AppEngineUserAPI` to `AppEngineUserAPIBackend`
+- Moved checks verifying csrf, csp and template loader configuration from djangae-scaffold into Djangae.
 
 ### Bug fixes:
 - Special indexing now works on fields that are primary keys too
