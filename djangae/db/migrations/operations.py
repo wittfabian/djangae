@@ -43,7 +43,7 @@ class BaseEntityMapperOperation(Operation, DjangaeMigration):
         # that unless we print a blank line our first print statement is on the same line
         print ""   # yay
 
-        self._set_identifider(app_label, schema_editor, from_state, to_state)
+        self._set_identifier(app_label, schema_editor, from_state, to_state)
         self._set_map_kind(app_label, schema_editor, from_state, to_state)
         self._pre_map_hook(app_label, schema_editor, from_state, to_state)
         self.namespace = schema_editor.connection.settings_dict.get("NAMESPACE")
@@ -108,13 +108,13 @@ class BaseEntityMapperOperation(Operation, DjangaeMigration):
         """
         pass
 
-    def _set_identifider(self, app_label, schema_editor, from_state, to_state):
+    def _set_identifier(self, app_label, schema_editor, from_state, to_state):
         """ Set self.identifier, which must be a string which uniquely identifies this operation
             across the entire site.  It must be able to fit in a Datastore string property.
             This will likely need to use app_label combined with values passed to __init__.
         """
         raise NotImplementedError(
-            "Subclasses of EntityMapperOperation must implement _set_identifider"
+            "Subclasses of EntityMapperOperation must implement _set_identifier"
         )
 
     def _set_map_kind(self, app_label, schema_editor, from_state, to_state):
@@ -138,7 +138,7 @@ class AddFieldData(BaseEntityMapperOperation):
         self.name = name
         self.field = field
 
-    def _set_identifider(self, app_label, schema_editor, from_state, to_state):
+    def _set_identifier(self, app_label, schema_editor, from_state, to_state):
         identifier = "%s.%s.%s:%s" % (
             app_label, self.model_name, self.__class__.__name__, self.name
         )
@@ -173,7 +173,7 @@ class RemoveFieldData(BaseEntityMapperOperation):
         self.name = name
         self.field = field
 
-    def _set_identifider(self, app_label, schema_editor, from_state, to_state):
+    def _set_identifier(self, app_label, schema_editor, from_state, to_state):
         identifier = "%s.%s.%s:%s" % (
             app_label, self.model_name, self.__class__.__name__, self.name
         )
@@ -209,7 +209,7 @@ class CopyFieldData(BaseEntityMapperOperation):
         self.from_column_name = from_column_name
         self.to_column_name = to_column_name
 
-    def _set_identifider(self, app_label, schema_editor, from_state, to_state):
+    def _set_identifier(self, app_label, schema_editor, from_state, to_state):
         identifier = "%s.%s.%s:%s.%s" % (
             app_label, self.model_name, self.__class__.__name__,
             self.from_column_name, self.to_column_name
@@ -241,7 +241,7 @@ class DeleteModelData(BaseEntityMapperOperation):
     def __init__(self, model_name):
         self.model_name = model_name
 
-    def _set_identifider(self, app_label, schema_editor, from_state, to_state):
+    def _set_identifier(self, app_label, schema_editor, from_state, to_state):
         identifier = "%s.%s:%s" % (
             app_label, self.model_name, self.__class__.__name__
         )
@@ -273,7 +273,7 @@ class CopyModelData(BaseEntityMapperOperation):
         self.to_model_name = to_model_name
         self.overwrite_existing = overwrite_existing
 
-    def _set_identifider(self, app_label, schema_editor, from_state, to_state):
+    def _set_identifier(self, app_label, schema_editor, from_state, to_state):
         identifier = "%s.%s.%s:%s.%s" % (
             app_label, self.model_name, self.__class__.__name__,
             self.to_app_label, self.to_model_name
@@ -323,7 +323,7 @@ class CopyModelDataToNamespace(BaseEntityMapperOperation):
         self.to_model_name = to_model_name
         self.overwrite_existing = overwrite_existing
 
-    def _set_identifider(self, app_label, schema_editor, from_state, to_state):
+    def _set_identifier(self, app_label, schema_editor, from_state, to_state):
         to_app_label = self.to_app_label or app_label
         to_model_name = self.to_model_name or self.model_name
         identifier = "%s.%s.%s:%s.%s.%s" % (
@@ -384,7 +384,7 @@ class MapFunctionOnEntities(BaseEntityMapperOperation):
         self.model_name = model_name
         self.function = function
 
-    def _set_identifider(self, app_label, schema_editor, from_state, to_state):
+    def _set_identifier(self, app_label, schema_editor, from_state, to_state):
         identifier = "%s.%s.%s:%s" % (
             app_label, self.model_name, self.__class__.__name__, self.function.__name__
         )
