@@ -8,6 +8,7 @@
 import cPickle
 import logging
 
+from datetime import datetime
 from django.conf import settings
 from google.appengine.api import datastore, datastore_errors
 from google.appengine.ext import deferred
@@ -163,6 +164,8 @@ class ShardedTaskMarker(datastore.Entity):
         self[ShardedTaskMarker.QUEUED_KEY] = []
         self[ShardedTaskMarker.RUNNING_KEY] = []
         self[ShardedTaskMarker.FINISHED_KEY] = []
+        self["time_started"] = None
+        self["time_finished"] = None
         self["query"] = cPickle.dumps(query)
         self["is_finished"] = False
 
@@ -185,6 +188,9 @@ class ShardedTaskMarker(datastore.Entity):
                 not self[ShardedTaskMarker.RUNNING_KEY] and
                 self[ShardedTaskMarker.FINISHED_KEY]
             )
+
+            if self["is_finished"]:
+                self["time_finished"] = datetime.utcnow()
 
         datastore.Put(self)
 
@@ -288,6 +294,7 @@ def start_mapping(identifier, query, operation, operation_method=None):
         else:
             # No shards, then there is nothing to do!
             marker["is_finished"] = True
+        marker["time_started"] = datetime.utcnow()
         marker.put()
         if not marker["is_finished"]:
             deferred.defer(marker.begin_processing, operation, operation_method, _transactional=True)
