@@ -6,6 +6,7 @@
 - Implemented weak (memcache) locking to contrib.locking
 - The `disable_cache` decorator now wraps the returned function with functools.wraps
 - `prefetch_related()` now works on RelatedListField and RelatedSetField
+- Add migration support for the datastore (experimental)
 
 ### Bug fixes:
 
