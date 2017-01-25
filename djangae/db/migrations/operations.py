@@ -5,8 +5,7 @@ import time
 # THIRD PARTY
 from django.db import DataError
 from django.db.migrations.operations.base import Operation
-from django.utils import timezone
-from google.appengine.api.datastore import Delete, Entity, Get, Key, Put, RunInTransaction
+from google.appengine.api.datastore import Delete, Query, Get, Key, Put, RunInTransaction
 from google.appengine.api import datastore_errors
 
 # DJANGAE
@@ -15,7 +14,7 @@ from djangae.db.backends.appengine.commands import reserve_id
 # TODO: replace me with a real mapper library.  MUST implemented functions as described though.
 from . import mapper_library
 
-from .constants import MIGRATION_TASK_MARKER_KIND, TASK_RECHECK_INTERVAL
+from .constants import TASK_RECHECK_INTERVAL
 from .utils import do_with_retry, clone_entity
 
 
@@ -49,58 +48,34 @@ class BaseEntityMapperOperation(Operation, DjangaeMigration):
         self._pre_map_hook(app_label, schema_editor, from_state, to_state)
         self.namespace = schema_editor.connection.settings_dict.get("NAMESPACE")
 
-        task_marker = self._get_task_marker()
-        if task_marker is not None:
-            self._wait_until_task_finished(task_marker)
+        if mapper_library.is_mapper_running(self.identifier, self.namespace):
+            self._wait_until_task_finished()
             return
 
         print "Deferring migration operation task for %s" % self.identifier
-        task_marker = self._start_task()
-        self._wait_until_task_finished(task_marker)
+        self._start_task()
 
     def database_backwards(self, app_label, schema_editor, from_state, to_state):
         raise NotImplementedError("Erm...?  Help?!")
 
-    def _get_task_marker_key(self):
-        return Key.from_path(MIGRATION_TASK_MARKER_KIND, self.identifier, namespace=self.namespace)
-
-    def _get_task_marker(self):
-        """ Get the unique identifier entity for this marker from the Dastastore, if it exists. """
-        try:
-            return Get(self._get_task_marker_key())
-        except datastore_errors.EntityNotFoundError:
-            return None
-
-    def _wait_until_task_finished(self, task_marker):
-        if task_marker.get('is_finished'):
+    def _wait_until_task_finished(self):
+        if mapper_library.is_mapper_finished(self.identifier, self.namespace):
             print "Task for migration operation '%s' already finished. Skipping." % self.identifier
             return
-        while not task_marker.get('is_finished'):
+
+        while mapper_library.is_mapper_running(self.identifier, self.namespace):
             print "Waiting for migration operation '%s' to complete." % self.identifier
             time.sleep(TASK_RECHECK_INTERVAL)
-            task_marker = Get(task_marker.key())
-            if task_marker is None:
-                raise Exception("Task marker for operation '%s' disappeared." % self.identifier)
+
         print "Migration operation '%s' completed!" % self.identifier
 
     def _start_task(self):
+        assert not mapper_library.is_mapper_running(self.identifier, self.namespace), "Migration started by separate thread?"
 
-        def txn():
-            task_marker = self._get_task_marker()
-            assert task_marker is None, "Migration started by separate thread?"
-
-            task_marker = Entity(
-                MIGRATION_TASK_MARKER_KIND, namespace=self.namespace, name=self.identifier
-            )
-            task_marker['start_time'] = timezone.now()
-            task_marker['is_finished'] = False
-            Put(task_marker)
-            mapper_library.start_mapping(
-                task_marker.key(), self.map_kind, self.namespace, self
-            )
-            return task_marker
-
-        return RunInTransaction(txn)
+        query = Query(self.map_kind, namespace=self.namespace)
+        return mapper_library.start_mapping(
+            self.identifier, query, self, operation_method="_wrapped_map_entity"
+        )
 
     def _wrapped_map_entity(self, entity):
         """ Wrapper for self._map_entity which removes the entity from Djangae's cache. """

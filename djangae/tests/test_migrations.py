@@ -11,8 +11,7 @@ from google.appengine.api import datastore
 # DJANGAE
 from djangae.contrib import sleuth
 from djangae.db.migrations import operations
-from djangae.db.migrations.mapper_library import shard_query
-from djangae.db.migrations.constants import MIGRATION_TASK_MARKER_KIND
+from djangae.db.migrations.mapper_library import shard_query, ShardedTaskMarker
 from djangae.test import TestCase
 
 
@@ -59,7 +58,7 @@ class MigrationOperationTests(TestCase):
         # the standard flush only cleans out models
         super(MigrationOperationTests, self).setUp()
         query = datastore.Query(
-            MIGRATION_TASK_MARKER_KIND,
+            ShardedTaskMarker.KIND,
             namespace=settings.DATABASES['default'].get('NAMESPACE', ''),
             keys_only=True
         ).Run()
@@ -100,6 +99,8 @@ class MigrationOperationTests(TestCase):
         """ If we run one of our custom operations, then it should create the task marker in the DB
             and defer a task, then set the marker to 'is_finished' when done.
         """
+        TestModel.objects.create()
+
         operation = operations.AddFieldData(
             "testmodel", "new_field", models.CharField(max_length=100, default="squirrel")
         )
@@ -108,7 +109,9 @@ class MigrationOperationTests(TestCase):
         # Now check that the task marker has been created.
         # Usefully, calling database_forwards() on the operation will have caused it to set the
         # `identifier` attribute on itself, meaning we can now just call _get_task_marker()
-        task_marker = operation._get_task_marker()
+        task_marker = datastore.Get(
+            [ShardedTaskMarker.get_key(operation.identifier, operation.namespace)]
+        )[0]
         if task_marker is None:
             self.fail("Migration operation did not create its task marker")
 
@@ -117,7 +120,9 @@ class MigrationOperationTests(TestCase):
         self.process_task_queues()
 
         # Now check that the task marker has been marked as finished
-        task_marker = operation._get_task_marker()
+        task_marker = datastore.Get(
+            [ShardedTaskMarker.get_key(operation.identifier, operation.namespace)]
+        )[0]
         self.assertTrue(task_marker["is_finished"])
         self.assertNumTasksEquals(0)
 
@@ -125,12 +130,16 @@ class MigrationOperationTests(TestCase):
         """ If we run an operation, and then try to run it again before the task has finished
             processing, then it should not trigger a second task.
         """
+        TestModel.objects.create()
+        
         operation = operations.AddFieldData(
             "testmodel", "new_field", models.CharField(max_length=100, default="squirrel")
         )
         self.start_operation(operation)
 
-        task_marker = operation._get_task_marker()
+        task_marker = datastore.Get(
+            ShardedTaskMarker.get_key(operation.identifier, operation.namespace)
+        )
         self.assertFalse(task_marker["is_finished"])
 
         # We expect there to be a task queued for processing the operation
@@ -151,11 +160,15 @@ class MigrationOperationTests(TestCase):
         with sleuth.watch("djangae.db.migrations.operations.AddFieldData._start_task") as start:
             self.start_operation(operation)
             self.assertTrue(start.called)
-        task_marker = operation._get_task_marker()
+        task_marker = datastore.Get(
+            ShardedTaskMarker.get_key(operation.identifier, operation.namespace)
+        )
         self.assertFalse(task_marker["is_finished"])
         self.assertNumTasksEquals(1)
         self.process_task_queues()
-        task_marker = operation._get_task_marker()
+        task_marker = datastore.Get(
+            ShardedTaskMarker.get_key(operation.identifier, operation.namespace)
+        )
         self.assertTrue(task_marker["is_finished"])
 
         # Run the operation again.  It should see that's it's finished and just return immediately.
@@ -410,17 +423,16 @@ class MigrationOperationTests(TestCase):
     def test_query_sharding(self):
         ns1 = settings.DATABASES["default"]["NAMESPACE"]
 
-        for x in xrange(20):
-            TestModel.objects.create()
+        for x in xrange(1, 21):
+            TestModel.objects.create(pk=x)
 
         qry = datastore.Query(TestModel._meta.db_table, namespace=ns1)
         shards = shard_query(qry, 1)
-
         self.assertEqual(1, len(shards))
+
         shards = shard_query(qry, 20)
-
         self.assertEqual(20, len(shards))
-        shards = shard_query(qry, 50)
 
+        shards = shard_query(qry, 50)
         # We can't create 50 shards if there are only 20 objects
         self.assertEqual(20, len(shards))
