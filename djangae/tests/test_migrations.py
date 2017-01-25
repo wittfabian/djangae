@@ -57,12 +57,17 @@ class MigrationOperationTests(TestCase):
         # We need to clean out the migration task markers from the Datastore between each test, as
         # the standard flush only cleans out models
         super(MigrationOperationTests, self).setUp()
-        query = datastore.Query(
-            ShardedTaskMarker.KIND,
-            namespace=settings.DATABASES['default'].get('NAMESPACE', ''),
-            keys_only=True
-        ).Run()
-        datastore.Delete([x for x in query])
+        namespaces = set()
+        namespaces.add(settings.DATABASES['default'].get('NAMESPACE', ''))
+        namespaces.add(settings.DATABASES.get('ns1', {}).get('NAMESPACE', ''))
+
+        for namespace in namespaces:
+            query = datastore.Query(
+                ShardedTaskMarker.KIND,
+                namespace=namespace,
+                keys_only=True
+            ).Run()
+            datastore.Delete([x for x in query])
 
     def start_operation(self, operation, detonate=True):
         # Make a from_state and a to_state to pass to the operation, these can just be the
@@ -131,7 +136,7 @@ class MigrationOperationTests(TestCase):
             processing, then it should not trigger a second task.
         """
         TestModel.objects.create()
-        
+
         operation = operations.AddFieldData(
             "testmodel", "new_field", models.CharField(max_length=100, default="squirrel")
         )
@@ -153,6 +158,8 @@ class MigrationOperationTests(TestCase):
         """ If we re-trigger an operation which has already been run and finished, it should simply
             return without starting a new task or updating the task marker.
         """
+        TestModel.objects.create()
+
         operation = operations.AddFieldData(
             "testmodel", "new_field", models.CharField(max_length=100, default="squirrel")
         )
@@ -177,7 +184,9 @@ class MigrationOperationTests(TestCase):
             self.start_operation(operation, detonate=False)
             self.assertFalse(start.called)
         self.assertNumTasksEquals(0)
-        task_marker = operation._get_task_marker()
+        task_marker = datastore.Get(
+            ShardedTaskMarker.get_key(operation.identifier, operation.namespace)
+        )
         self.assertTrue(task_marker["is_finished"])
 
     def test_addfielddata(self):

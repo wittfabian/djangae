@@ -48,7 +48,7 @@ class BaseEntityMapperOperation(Operation, DjangaeMigration):
         self._pre_map_hook(app_label, schema_editor, from_state, to_state)
         self.namespace = schema_editor.connection.settings_dict.get("NAMESPACE")
 
-        if mapper_library.is_mapper_running(self.identifier, self.namespace):
+        if mapper_library.mapper_exists(self.identifier, self.namespace):
             self._wait_until_task_finished()
             return
 

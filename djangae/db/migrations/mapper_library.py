@@ -100,7 +100,7 @@ def shard_query(query, shard_count):
         if keys[0] != min_id:
             keys.insert(0, min_id)
 
-        if keys[-1] != max_id:
+        if keys[-1] != max_id or min_id == max_id:
             keys.append(max_id)
 
     shards = _generate_shards(keys, shard_count)
@@ -273,7 +273,9 @@ def start_mapping(identifier, query, operation, operation_method=None):
         marker_key = ShardedTaskMarker.get_key(identifier, query._Query__namespace)
         try:
             datastore.Get(marker_key)
-            raise ValueError("Task with this identifier already exists")
+
+            # If the marker already exists, don't do anything - just return
+            return
         except datastore_errors.EntityNotFoundError:
             pass
 
@@ -293,6 +295,18 @@ def start_mapping(identifier, query, operation, operation_method=None):
         return marker_key
 
     return datastore.RunInTransaction(txn)
+
+
+def mapper_exists(identifier, namespace):
+    try:
+        datastore.Get(ShardedTaskMarker.get_key(identifier, namespace))
+        return True
+    except datastore_errors.EntityNotFoundError:
+        return False
+
+
+def is_mapper_finished(identifier, namespace):
+    return mapper_exists(identifier, namespace) and not is_mapper_running(identifier, namespace)
 
 
 def is_mapper_running(identifier, namespace):
