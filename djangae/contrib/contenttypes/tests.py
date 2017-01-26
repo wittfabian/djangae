@@ -33,6 +33,11 @@ class SimulatedContentTypesTests(TestCase):
         self.assertEqual(ct.model, DummyModel._meta.model_name)
         self.assertEqual(ct.app_label, DummyModel._meta.app_label)
 
+    def test_get_for_model_not_concrete(self):
+        ct = ContentType.objects.get_for_model(DummyModel, for_concrete_model=False)
+        self.assertEqual(ct.model, DummyModel._meta.model_name)
+        self.assertEqual(ct.app_label, DummyModel._meta.app_label)
+
     def test_get_by_natural_key(self):
         ct = ContentType.objects.get_by_natural_key(
             DummyModel._meta.app_label, DummyModel._meta.model_name)
