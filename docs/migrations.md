@@ -1,33 +1,48 @@
 # Migrations
 
-Imagine banter here about:
+    **Djangae Migration support is highly-experimental, please test your migrations thoroughly before running on production data**
 
-* How the concept(s) of migrations are generally different, i.e.:
-  - Migrations on the Datastore do not move data from state A to state B in a transaction, they move it gradually while the application is still running.
-  - This is great because you don't have to take your site down.
-  - This is a pain because you have to think about your migrations carefully.
-* How migrations on the Datastore are often not necessary (e.g. for adding a new model, or adding a new field), unless you need to:
-  - Get rid of the old data.
-  - Query on a newly-added field.
-  - Move data, e.g. renaming a field.
-* How the Django migration operations (AddModel, AddField, etc) will deliberately be no-ops, becase we can't decide for you whether you want to actually do a data migration.
-* Ergo... if you want to do a data migration, Djangae provides a bunch of custom migration operations which you can put into custom migrations to do what you want.
-* You will still need to include Django's auto-generated migration files in your 'migrations' folder(s), because without them the Djangae migrations will not be given the correct state of the models.
-* You MUST NOT put djangae operations in the same migration file as Django operations.
-* Note that if you run an operation and then change the parameters of an operation, it will be treated as a new operation and if the migration in which it resides is run again, the operation will be run (again).
-* The entity-based operations work directly with the underlying Datastore entities, and therefore do not update any `auto_now` or `auto_now_add` values.
-* When using the `CopyModelData` operation, be aware that it is simply copying the data with no regard for any differences there may be between the two models.
+Migrations are generally required on SQL databases to change table structures to reflect changes in your models. Although using a
+non-relational datastore removes the need for schema migrations, data migrations are still sometimes necessary. It's common to
+take care of these data migrations "on-the-fly" by writing code to manipulate the data during the normal usage of the app (for example in an overridden `save()` method) however there are times when it would be useful to run a data migration on all the entities in a table.
 
-## Reference Guide For How To Do Each Kind of Migration
+Djangae has support for running these kinds of migrations by using the normal Django migrations infrastructure. It provides a series of
+custom migration operations which will run tasks on the App Engine task queue to update the required entities.
 
+One thing to consider is that this migrations only work if the migration file is deployed. The process of running a Djangae migration would be:
+
+1. Write a migration file which uses Djangae migration operations
+2. Deploy the code to App Engine and make that version live
+3. Run the migration using the remote sandbox (e.g. `manage.py --sandbox=remote migrate`)
+
+    **Note: It is a current limitation that you cannot run a migration while it's on a non-default version, this will hopefully be fixed by allowing a version to be specified to the remote sandbox**
+
+There are a few important things to understand about Djangae's migrations:
+
+1. Migrations run on the entity-level, not the Django model instance level. Custom `save()` code will not be called - this is the equivalent of running SQL queries directly on a relational database
+2. Djangae data migrations are not transactional as a whole, if something goes wrong the migration might only run on some entities
+3. An operation may run more than once per entity. If there is an error while a task shard is processing, then that shard will retry, and will run the operation again on all of the entities in that shard. Be sure that running the same migration operation twice on the same entity will not break anything.
+4. If an error occurs, you'll need to deploy code to fix it, otherwise the migration will be "stuck". If one entity causes an error, the shard will restart from the beginning, if that same entity repeatedly causes an error then the data migration will never complete. You should watch the error logs while a migration is running and if an error repeatedly happens you will need to fix it locally then redeploy.
+
+   **Note: Before writing a Djangae migration, consider if it's even necessary. For example, if you're just adding a new field but never querying on it directly, then just add a default to the model field and this will be populated as your instances are saved during the normal running of the app. If you need to query on the new field then you may need to run a Djangae migration so that field is indexed on all entities**
+
+## Writing Data Migrations
+
+It is important that you do not mix Django migration operations and Djangae migration operations in the same migration file. The reason for this is that if a migration is interrupted and subsequently repeated, any complete Djangae migrations will be skipped but Django ones will retry.
+
+It's important to note that any Django migration operations (e.g. AddField, AddModel) that happen on the datastore will be no-ops, but you still need to include any Django-generated migrations so that the Djangae migrations have access to the latest model state.
+
+## Migration Operations
+
+This section summarizes the different migration operations available in Djangae and the steps that must be taken for them to work properly.
 
 ### Add Field
 
 **Steps**
 
-1. `django...AddField`.
+1. Run the normal `django...AddField` operation
 2. Deploy new model code.
-3. `djangae...AddFieldData` (optional).
+3. Run the `djangae...AddFieldData` operation to populate the new field (optional).
 4. Deploy code which queries on the new field (optional).
 
 
@@ -47,9 +62,9 @@ But if, as recommended, you add the field to your model first, then any new obje
 
 **Steps**
 
-1. `django...RemoveField`.
+1. Run the normal `django...RemoveField` operation.
 2. Deploy new model code.
-3. `djangae...RemoveFieldData` (optional).
+3. Run a `djangae...RemoveFieldData` operation (optional).
 
 
 **Explanation**
@@ -64,7 +79,7 @@ Whether you want to run the `RemoveFieldData` task or not depends on how much da
 
 **Steps**
 
-1. `django...AddField(new_field)`.
+1. Run the normal `django...AddField(new_field)` operation.
 2. Create `save` method to ensure that any value which is saved to the old field is also saved to the new field.
 3. Deploy new code.
 4. `djangae...CopyFieldData(old_field, new_Field)`.
@@ -72,20 +87,15 @@ Whether you want to run the `RemoveFieldData` task or not depends on how much da
 6. `djangae...RemoveFieldData(old_field)` (optional).
 
 
-** Explanation**
+**Explanation**
 
 Renaming a field requires adding a new field, copying the data from the old field, and then removing the old field, but in doing so ensuring that any objects which are created or edited during that process have their (latest) values for the old field copied across.
 
+# Potential Future Improvements / Additions
 
-TODO:
 * Remove model
 * Move/rename model.
 * Move a model to a different namespace.
 * Custom data fiddling.
-
-
-QUESTIONS / DESIGN DECISIONS:
-
 * Do the arguments to the various operations make sense, and are they consistent?  E.g. for CopyFieldData, should it take a field, rather than just the column name?
-* Is `to_model_app_label` a crap kwarg name for CopyModelDataToNamespace?  Should it just be `to_app_label`.
-
+* Should the `to_model_app_label` kwarg for CopyModelDataToNamespace be named better?  Should it just be `to_app_label`?
