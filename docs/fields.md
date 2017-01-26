@@ -5,14 +5,14 @@
 These allows you to store a list/set of values (strings, floats, integers dates) in a single field.
 This is often useful when structuring data for a non-relational database. [See example usage](fields.md#example-usages).
 
-### ListField(item_field_type, **kwargs)
+### `ListField(item_field_type, **kwargs)`
 
 
 * `item_field_type`: An instance of a Django model field which defines the data type and validation for each item in the list.
 * `ordering`: A callable which allows the items in the list to be automatically sorted.
 
 
-### SetField(item_field_type, **kwargs)
+### `SetField(item_field_type, **kwargs)`
 
 * `item_field_type`: An instance of a Django model field which defines the data type and validation for each item in the list.
 
@@ -195,6 +195,8 @@ class MyModelAdmin(admin.ModelAdmin):
     }
 ```
 
+If a JSONField is set to blank=False, then any form submitted value must be a valid JSON object which is not empty (e.g. not `{}` or `[]`) if
+  a JSONField is nullable and blank=True then a None will be saved in the empty case. An empty string is not a valid value for a JSONField.
 
 ## TrueOrNullField
 

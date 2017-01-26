@@ -16,6 +16,7 @@
 - Fixed an issue where having a ForeignKey to a ContentType would cause an issue when querying due to the large IDs produced by djangae.contrib.contenttypes's SimulatedContentTypesManager.
 - Cascade deletions will now correctly batch object collection within the datastore query limits, fixing errors on deletion.
 - Fixed missing `_deferred` attribute in Django models for versions >= 1.10
+- Fixed an error when submitting an empty JSONFormField
 
 ### Documentation:
 
