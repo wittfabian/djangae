@@ -58,7 +58,7 @@ class SimulatedContentTypeManager(models.Manager):
     def _get_opts(self, model, for_concrete_model):
         if for_concrete_model:
             model = model._meta.concrete_model
-        elif model._deferred:
+        elif getattr(model, '_deferred', False) or model is getattr(models, 'DEFERRED', None):
             model = model._meta.proxy_for_model
         return model._meta
 

@@ -15,6 +15,7 @@
 - Fixed various issues with `djangae.contrib.mappers.defer_iteration`, so that it no longers gets stuck deferring tasks or hitting memory limit errors when uses on large querysets.
 - Fixed an issue where having a ForeignKey to a ContentType would cause an issue when querying due to the large IDs produced by djangae.contrib.contenttypes's SimulatedContentTypesManager.
 - Cascade deletions will now correctly batch object collection within the datastore query limits, fixing errors on deletion.
+- Fixed missing `_deferred` attribute in Django models for versions >= 1.10
 
 ### Documentation:
 
