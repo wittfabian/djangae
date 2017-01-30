@@ -17,6 +17,7 @@
 - Cascade deletions will now correctly batch object collection within the datastore query limits, fixing errors on deletion.
 - Fixed missing `_deferred` attribute in Django models for versions >= 1.10
 - Fixed an error when submitting an empty JSONFormField
+- Fixed a bug where an error would be thrown if you loaded an entity with a JSONField that had non-JSON data, now the data is returned unaltered
 
 ### Documentation:
 
