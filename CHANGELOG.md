@@ -5,6 +5,7 @@
 - System check for deferred builtin which should always be switched off.
 - Implemented weak (memcache) locking to contrib.locking
 - The `disable_cache` decorator now wraps the returned function with functools.wraps
+- `prefetch_related()` now works on RelatedListField and RelatedSetField
 
 ### Bug fixes:
 
@@ -14,6 +15,8 @@
 - Fixed various issues with `djangae.contrib.mappers.defer_iteration`, so that it no longers gets stuck deferring tasks or hitting memory limit errors when uses on large querysets.
 - Fixed an issue where having a ForeignKey to a ContentType would cause an issue when querying due to the large IDs produced by djangae.contrib.contenttypes's SimulatedContentTypesManager.
 - Fix a problem with query parsing which would throw a NotSupportedError on Django 1.8 if you used an empty Q() object in a filter
+- Cascade deletions will now correctly batch object collection within the datastore query limits, fixing errors on deletion.
+- Fixed missing `_deferred` attribute in Django models for versions >= 1.10
 
 ### Documentation:
 
@@ -195,6 +198,7 @@ If you're still using Django 1.7 in your project:
 - `djangae.contrib.gauth` now always add users with their emails lowercased
 - Provided limited options for `on_delete` on `RelatedSetField` and `RelatedListField`
 - Renamed `AppEngineUserAPI` to `AppEngineUserAPIBackend`
+- Moved checks verifying csrf, csp and template loader configuration from djangae-scaffold into Djangae.
 
 ### Bug fixes:
 - Special indexing now works on fields that are primary keys too
