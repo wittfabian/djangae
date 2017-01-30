@@ -141,7 +141,11 @@ class IterableFieldModel(models.Model):
 
 
 class JSONFieldModel(models.Model):
-    json_field = JSONField(use_ordered_dict=True)
+    json_field = JSONField(use_ordered_dict=True, blank=True)
+
+
+class NullableJSONFieldModel(models.Model):
+    json_field = JSONField(null=True, blank=True)
 
 
 class JSONFieldWithDefaultModel(models.Model):

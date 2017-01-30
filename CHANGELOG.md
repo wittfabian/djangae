@@ -17,6 +17,7 @@
 - Fix a problem with query parsing which would throw a NotSupportedError on Django 1.8 if you used an empty Q() object in a filter
 - Cascade deletions will now correctly batch object collection within the datastore query limits, fixing errors on deletion.
 - Fixed missing `_deferred` attribute in Django models for versions >= 1.10
+- Fixed an error when submitting an empty JSONFormField
 
 ### Documentation:
 
