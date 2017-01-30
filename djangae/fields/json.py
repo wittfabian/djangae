@@ -94,10 +94,15 @@ class JSONField(models.TextField):
         if value is None or value == '':
             return {}
         elif isinstance(value, six.string_types):
-            if self.use_ordered_dict:
-                res = loads(value, object_pairs_hook=OrderedDict)
-            else:
-                res = loads(value)
+            try:
+                if self.use_ordered_dict:
+                    res = loads(value, object_pairs_hook=OrderedDict)
+                else:
+                    res = loads(value)
+            except ValueError:
+                # If we can't parse as JSON, just return the value as-is
+                return value
+
             if isinstance(res, OrderedDict) and self.use_ordered_dict:
                 return JSONOrderedDict(res)
             elif isinstance(res, dict):
@@ -120,6 +125,7 @@ class JSONField(models.TextField):
         """Convert our JSON object to a string before we save"""
         if value is None and self.null:
             return None
+
         return super(JSONField, self).get_db_prep_save(dumps(value), connection=connection)
 
     def south_field_triple(self):

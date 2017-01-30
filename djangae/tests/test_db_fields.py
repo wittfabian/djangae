@@ -5,6 +5,7 @@ from collections import OrderedDict
 from django import forms
 from django.db import models
 from django.db.utils import IntegrityError
+from django.conf import settings
 from django.core.exceptions import ValidationError
 
 # DJANGAE
@@ -25,6 +26,8 @@ from djangae.fields import (
 from djangae.fields.counting import DEFAULT_SHARD_COUNT
 from djangae.models import CounterShard
 from djangae.test import TestCase
+
+from google.appengine.api import datastore
 
 
 class ComputedFieldModel(models.Model):
@@ -855,6 +858,24 @@ class TestGenericRelationField(TestCase):
 
 
 class JSONFieldModelTests(TestCase):
+
+    def test_invalid_data_in_datastore_doesnt_throw_an_error(self):
+        """
+            If invalid data is found while reading the entity data, then
+            we should silently ignore the error and just return the data as-is
+            rather than converting to list/dict.
+
+            The reason is that if we blow up on load, then there's no way to load the
+            entity (in Django) to repair the data. This is also consistent with the behaviour
+            of Django when (for example) you load a NULL from the database into a field that is
+            non-nullable. The field value will still be None when read.
+        """
+        entity = datastore.Entity(JSONFieldModel._meta.db_table, id=1, namespace=settings.DATABASES["default"]["NAMESPACE"])
+        entity["json_field"] = "bananas"
+        datastore.Put(entity)
+
+        instance = JSONFieldModel.objects.get(pk=1)
+        self.assertEqual(instance.json_field, "bananas")
 
     def test_object_pairs_hook_with_ordereddict(self):
         items = [('first', 1), ('second', 2), ('third', 3), ('fourth', 4)]
