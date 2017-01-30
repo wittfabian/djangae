@@ -106,15 +106,23 @@ class BaseParser(object):
         return "SELECT"
 
     def _prepare_for_transformation(self):
-        from django.db.models.sql.where import NothingNode, WhereNode as DjangoWhereNode
+        from django.db.models.sql.where import NothingNode
         query = self.django_query
+
+        def where_will_always_be_empty(where):
+            if isinstance(where, NothingNode):
+                return True
+
+            if where.connector == 'AND' and any(isinstance(x, NothingNode) for x in where.children):
+                return True
+
+            if where.connector == 'OR' and len(where.children) == 1 and isinstance(where.children[0], NothingNode):
+                return True
+
+            return False
+
         # It could either be a NothingNode, or a WhereNode(AND NothingNode)
-        if (
-                isinstance(query.where, NothingNode) or (
-                isinstance(query.where, DjangoWhereNode) and
-                len(query.where.children) == 1 and
-                isinstance(query.where.children[0], NothingNode)
-                )):
+        if where_will_always_be_empty(query.where):
             # Empty where means return nothing!
             raise EmptyResultSet()
 
