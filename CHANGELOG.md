@@ -6,6 +6,7 @@
 - Implemented weak (memcache) locking to contrib.locking
 - The `disable_cache` decorator now wraps the returned function with functools.wraps
 - `prefetch_related()` now works on RelatedListField and RelatedSetField
+- Added a test for Model.objects.none().filter(pk=xyz) type filters
 
 ### Bug fixes:
 

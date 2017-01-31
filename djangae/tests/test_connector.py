@@ -753,6 +753,11 @@ class BackendTests(TestCase):
         condition = Q()
         self.assertEqual(t1, TestUser.objects.filter(condition).first())
 
+    def test_chaining_none_filter(self):
+        t1 = TestUser.objects.create()
+        self.assertFalse(TestUser.objects.none().filter(pk=t1.pk))
+
+
 class ModelFormsetTest(TestCase):
     def test_reproduce_index_error(self):
         class TestModelForm(ModelForm):
