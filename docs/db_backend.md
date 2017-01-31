@@ -50,7 +50,7 @@ Here is a brief list of hard limitations you may encounter when using the Djanga
 - If unique constraints are enabled, then you are limited to a maximum of 25 unique or unique_together constraints per model (see [Unique Constraint Checking](#unique-constraint-checking)).
 - You are also restricted to altering 12 unique field values on an instance in a single save
 - `select_related` **does nothing**. It is ignored when specified as joins are not possible on the datastore. This can result in slow
-performance on queries which are not designed for the datastore. `prefect_related` works correctly however.
+performance on queries which are not designed for the datastore. `prefetch_related` works correctly however.
 
 There are probably more but the list changes regularly as we improve the datastore backend. If you find another limitation not
 mentioned above please consider sending a documentation PR.

@@ -775,6 +775,10 @@ class BackendTests(TestCase):
             self.assertTrue(watcher.calls[0].kwargs["projection"])
             self.assertFalse("username" in watcher.calls[0].kwargs["projection"])
 
+    def test_chaining_none_filter(self):
+        t1 = TestUser.objects.create()
+        self.assertFalse(TestUser.objects.none().filter(pk=t1.pk))
+
 
 class ModelFormsetTest(TestCase):
     def test_reproduce_index_error(self):
