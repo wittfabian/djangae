@@ -394,7 +394,16 @@ class SelectCommand(object):
         self.query = normalize_query(self.query)
 
         self.original_query = query
-        self.keys_only = (keys_only or [x.field for x in query.select] == [query.model._meta.pk])
+
+        # We enable keys only queries if they have been forced, or, if
+        # someone did only("pk") or someone did values_list("pk") this is a little
+        # inconsistent with other fields which aren't projected if just values(_list) is used
+        self.keys_only = keys_only or (
+            query.deferred_loading[1] is False and
+            len(query.deferred_loading[0]) == 1 and query.model._meta.pk.column in query.deferred_loading[0]
+        ) or (
+            len(query.select) == 1 and query.select[0].field == query.model._meta.pk
+        )
 
         # MultiQuery doesn't support keys_only
         if self.query.where and len(self.query.where.children) > 1:
@@ -427,7 +436,6 @@ class SelectCommand(object):
         self._sanity_check()
 
         queries = []
-
         projection = self._exclude_pk(self.query.columns) or None
 
         query_kwargs = {
