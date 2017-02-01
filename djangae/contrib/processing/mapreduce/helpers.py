@@ -1,13 +1,12 @@
 import cPickle
 import pipeline
+from importlib import import_module
 from mapreduce import context
 from mapreduce.mapper_pipeline import MapperPipeline
 from mapreduce.mapreduce_pipeline import MapreducePipeline
 from mapreduce import pipeline_base
 from mapreduce.model import MapreduceState
 from mapreduce.input_readers import RawDatastoreInputReader, GoogleCloudStorageInputReader
-
-from django.utils.module_loading import import_string
 from djangae.contrib.processing.mapreduce.input_readers import DjangoInputReader
 
 from utils import qualname
@@ -34,26 +33,59 @@ class DynamicPipeline(pipeline_base.PipelineBase):
                 yield pipe
 
 
+def import_callable(dotted_path):
+    module_path = dotted_path.rsplit(".", 1)[0]
+    while module_path:
+        try:
+            module = import_module(module_path)
+            break
+        except ImportError:
+            module_path = module_path.rsplit(".", 1)[0]
+            continue
+    else:
+        raise ImportError("Module not found in path: {}".format(dotted_path))
+
+    remainder = dotted_path[len(module_path):].lstrip(".")
+    remainder_parts = remainder.split(".")
+
+    func = module
+    while remainder_parts:
+        next_step = remainder_parts[0]
+        if not hasattr(func, next_step):
+            raise ImportError("Couldn't find {} in module {}".format(next_step, module))
+        func = getattr(func, next_step)
+        remainder_parts = remainder_parts[1:]
+
+    if not callable(func):
+        raise ImportError("Specified path is not a callable: {}".format(dotted_path))
+
+    return func
+
+
 class CallbackPipeline(pipeline_base.PipelineBase):
     """
         Simply calls the specified function.
         Takes a dotted-path to the callback
     """
-    def run(self, func):
-        func = import_string(func)
-        func()
+    def run(self, func, *args, **kwargs):
+        func = import_callable(func)
+        func(*args, **kwargs)
 
 
 def unpacker(obj):
     params = context.get().mapreduce_spec.mapper.params
-    handler = import_string(params["func"])
+    handler = import_callable(params["func"])
     yield handler(obj, *params["args"], **params["kwargs"])
 
 
-def _do_map(input_reader, processor_func, finalize_func, params, _shards, _output_writer, _output_writer_kwargs, _job_name, *processor_args, **processor_kwargs):
+def _do_map(
+    input_reader, processor_func, finalize_func, params,
+    _shards, _output_writer, _output_writer_kwargs, _job_name, _queue_name,
+    *processor_args, **processor_kwargs):
+
     handler_spec = qualname(unpacker)
     handler_params = {
-        "func": qualname(processor_func),
+        "func": qualname(processor_func) if callable(processor_func) else processor_func,
         "args": processor_args,
         "kwargs": processor_kwargs
     }
@@ -71,17 +103,23 @@ def _do_map(input_reader, processor_func, finalize_func, params, _shards, _outpu
     ))
 
     if finalize_func:
-        pipelines.append(CallbackPipeline(qualname(finalize_func)))
+        processor_kwargs["func"] = qualname(finalize_func) if callable(finalize_func) else finalize_func
+        pipelines.append(
+            CallbackPipeline(
+                *processor_args,
+                **processor_kwargs
+            )
+        )
 
     new_pipeline = DynamicPipeline(pipelines)
-    new_pipeline.start()
+    new_pipeline.start(queue_name=_queue_name)
     return new_pipeline
 
 
 def map_queryset(
     queryset, processor_func, finalize_func=None, _shards=None,
     _output_writer=None, _output_writer_kwargs=None, _job_name=None,
-    *processor_args, **processor_kwargs
+    _queue_name=None, *processor_args, **processor_kwargs
 ):
     """
         Iterates over a queryset with mapreduce calling process_func for
@@ -103,13 +141,14 @@ def map_queryset(
         processor_func, finalize_func, params, _shards, _output_writer,
         _output_writer_kwargs,
         _job_name or "Map task over {}".format(queryset.model),
+        _queue_name=_queue_name,
         *processor_args, **processor_kwargs
     )
 
 
 def map_files(
     processor_func, bucketname, filenames=None, finalize_func=None, _shards=None,
-    _output_writer=None, _output_writer_kwargs=None, _job_name=None,
+    _output_writer=None, _output_writer_kwargs=None, _job_name=None, _queue_name=None,
     *processor_args, **processor_kwargs
 ):
     """
@@ -141,7 +180,11 @@ def map_files(
     )
 
 
-def map_entities(kind_name, processor_func, finalize_func=None, _shards=None, _output_writer=None, _output_writer_kwargs=None, _job_name=None, *processor_args, **processor_kwargs):
+def map_entities(
+    kind_name, namespace, processor_func, finalize_func=None, _shards=None, _output_writer=None,
+    _output_writer_kwargs=None, _job_name=None, _queue_name=None,
+    *processor_args, **processor_kwargs
+):
     """
         Iterates over all entities of a particular kind, calling processor_func
         on each one.
@@ -153,7 +196,10 @@ def map_entities(kind_name, processor_func, finalize_func=None, _shards=None, _o
         Returns the pipeline
     """
     params = {
-        'input_reader': {RawDatastoreInputReader.ENTITY_KIND_PARAM: kind_name},
+        'input_reader': {
+            RawDatastoreInputReader.ENTITY_KIND_PARAM: kind_name,
+            RawDatastoreInputReader.NAMESPACE_PARAM: namespace
+        },
         'output_writer': _output_writer_kwargs or {}
     }
 
@@ -162,11 +208,17 @@ def map_entities(kind_name, processor_func, finalize_func=None, _shards=None, _o
         processor_func, finalize_func, params, _shards, _output_writer,
         _output_writer_kwargs,
         _job_name or "Map task over {}".format(kind_name),
-        *processor_args, **processor_kwargs
+        _queue_name=_queue_name,
+        *processor_args,
+        **processor_kwargs
     )
 
 
-def map_reduce_queryset(queryset, map_func, reduce_func, output_writer, finalize_func=None, shard_count=None, output_writer_kwargs=None, job_name=None):
+def map_reduce_queryset(
+    queryset, map_func, reduce_func, output_writer,
+    finalize_func=None, _shards=None, _output_writer_kwargs=None, _job_name=None, _queue_name=None
+):
+
     """
         Does a complete map-shuffle-reduce over the queryset
 
@@ -178,7 +230,7 @@ def map_reduce_queryset(queryset, map_func, reduce_func, output_writer, finalize
     reduce_func = qualname(reduce_func)
     output_writer = qualname(output_writer)
     pipeline = MapreducePipeline(
-        job_name or "Map task over {}".format(queryset.model),
+        _job_name or "Map task over {}".format(queryset.model),
         map_func,
         reduce_func,
         qualname(DjangoInputReader),
@@ -187,14 +239,19 @@ def map_reduce_queryset(queryset, map_func, reduce_func, output_writer, finalize
             "input_reader": DjangoInputReader.params_from_queryset(queryset),
         },
         reducer_params={
-            "output_writer": output_writer_kwargs
+            "output_writer": _output_writer_kwargs
         },
-        shards=shard_count)
-    pipeline.start()
+        shards=_shards
+    )
+    pipeline.start(queue_name=_queue_name)
     return pipeline
 
 
-def map_reduce_entities(kind_name, map_func, reduce_func, output_writer, finalize_func=None, shard_count=None, output_writer_kwargs=None, job_name=None):
+def map_reduce_entities(
+    kind_name, map_func, reduce_func, output_writer, finalize_func=None,
+    _shards=None, _output_writer_kwargs=None, _job_name=None, _queue_name=None
+):
+
     """
         Does a complete map-shuffle-reduce over the entities
 
@@ -206,7 +263,7 @@ def map_reduce_entities(kind_name, map_func, reduce_func, output_writer, finaliz
     reduce_func = qualname(reduce_func)
     output_writer = qualname(output_writer)
     pipeline = MapreducePipeline(
-        job_name or "Map task over {}".format(kind_name),
+        _job_name or "Map task over {}".format(kind_name),
         map_func,
         reduce_func,
         qualname(RawDatastoreInputReader),
@@ -217,11 +274,11 @@ def map_reduce_entities(kind_name, map_func, reduce_func, output_writer, finaliz
             },
         },
         reducer_params={
-            "output_writer": output_writer_kwargs or {}
+            "output_writer": _output_writer_kwargs or {}
         },
-        shards=shard_count
+        shards=_shards
     )
-    pipeline.start()
+    pipeline.start(queue_name=_queue_name)
     return pipeline
 
 

@@ -12,7 +12,9 @@ from google.appengine.ext import deferred
 
 from djangae.db import transaction
 from djangae.fields import RelatedSetField
-from djangae.contrib.mappers.pipes import MapReduceTask, DjangaeMapperPipeline, PIPELINE_BASE_PATH
+from djangae.contrib.mappers.pipes import MapReduceTask
+from djangae.contrib.processing.mapreduce import map_entities
+from djangae.contrib.processing.mapreduce.utils import qualname
 from djangae.db.utils import django_instance_to_entity
 from djangae.db.unique_utils import unique_identifiers_from_entity
 from djangae.db.constraints import UniqueMarker
@@ -126,23 +128,28 @@ class RawMapperMixin(object):
         return None
 
     def start(self, *args, **kwargs):
-        kwargs['db'] = self.db
-        mapper_parameters = {
-            'entity_kind': self.kind,
-            'keys_only': False,
-            'kwargs': kwargs,
-            'args': args,
-            'namespace': settings.DATABASES.get(self.db, {}).get('NAMESPACE'),
-        }
-        mapper_parameters['_map'] = self.get_relative_path(self.map)
-        pipe = DjangaeMapperPipeline(
-            self.job_name,
-            'djangae.contrib.mappers.thunks.thunk_map',
-            'mapreduce.input_readers.RawDatastoreInputReader',
-            params=mapper_parameters,
-            shards=self.shard_count
+        if 'map' not in self.__class__.__dict__:
+            raise TypeError('No static map method defined on class {cls}'.format(self.__class__))
+
+        if 'finish' in self.__class__.__dict__:
+            finish = self.__class__.finish
+        else:
+            finish = None
+
+        kwargs["db"] = self.db
+
+        return map_entities(
+            self.model._meta.db_table if self.model else self.kind,
+            settings.DATABASES.get(self.db, {}).get('NAMESPACE'),
+            ".".join([qualname(self.__class__), "run_map"]),
+            ".".join([qualname(self.__class__), "finish"]) if finish else None,
+            _output_writer=self.output_writer_spec,
+            _shards=self.shard_count,
+            _job_name=self.job_name,
+            _queue_name=kwargs.pop('queue_name', self.queue_name),
+            *args,
+            **kwargs
         )
-        pipe.start(base_path=PIPELINE_BASE_PATH)
 
 
 class CheckRepairMapper(MapReduceTask):

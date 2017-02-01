@@ -25,14 +25,11 @@ class DjangoInputReader(input_readers.InputReader):
             pk_filters['pk__gt'] = self.pk__gt
         if self.pk__lte is not None:
             pk_filters['pk__lte'] = self.pk__lte
-        if self.db:
-            qs = self.model.objects.using(self.db)
-        else:
-            qs = self.model.objects
-        qs = qs.all()
+
+        qs = self.model.objects.all()
         if self.query is not None:
             qs.query = self.query
-        qs = qs.filter(**pk_filters).order_by('pk')
+        qs = qs.using(self.db).filter(**pk_filters).order_by('pk')
         for model in qs:
             yield model
 
@@ -116,6 +113,7 @@ class DjangoInputReader(input_readers.InputReader):
         """
         return {
             'model': '{}.{}'.format(queryset.model._meta.app_label, queryset.model.__name__),
-            'query': cPickle.dumps(queryset.query)
+            'query': cPickle.dumps(queryset.query),
+            'db': queryset._db
         }
 #
