@@ -26,6 +26,7 @@ urlpatterns = [
     url(r'^_ah/', include(djangae.urls)),
     url(r'^admin/', include(admin.site.urls)),
     url(r'^auth/', include('djangae.contrib.gauth.urls')),
+    url(r'^locking/', include('djangae.contrib.locking.urls')),
     url(r'^$', view_that_defers),
 ]
 

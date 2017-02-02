@@ -21,6 +21,7 @@
 - Fixed an error when submitting an empty JSONFormField
 - Fixed a bug where an error would be thrown if you loaded an entity with a JSONField that had non-JSON data, now the data is returned unaltered
 - Fixed a bug where only("pk") wouldn't perform a keys_only query
+- Dropping the deprecated patterns() from contrib.locking.urls
 
 ### Documentation:
 
