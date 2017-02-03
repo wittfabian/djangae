@@ -126,8 +126,8 @@ class GenericRelationModel(models.Model):
 
 
 class ISModel(models.Model):
-    related_things = RelatedSetField(ISOther)
-    related_list = RelatedListField(ISOther, related_name="ismodel_list")
+    related_things = RelatedSetField(ISOther, max_length=500, blank=True)
+    related_list = RelatedListField(ISOther, related_name="ismodel_list", max_length=500, blank=True)
     limted_related = RelatedSetField(RelationWithoutReverse, limit_choices_to={'name': 'banana'}, related_name="+")
     children = RelatedSetField("self", related_name="+")
 
@@ -728,6 +728,26 @@ class InstanceListFieldTests(TestCase):
         main.save()
         self.assertItemsEqual([other, other2, other2], main.related_list.filter(name="one"))
 
+    def test_max_length_valid(self):
+        main = ISModel.objects.create()
+        other = ISOther.objects.create()
+
+        main.related_list.add(other)
+
+        main.full_clean()
+
+    def test_max_length_list_invalid(self):
+        main = ISModel.objects.create()
+
+        for i in xrange(0, 501):
+            main.related_list.add(ISOther.objects.create())
+
+        self.assertRaisesMessage(
+            ValidationError,
+            "{'related_list': [u'Ensure this value has at most 500 characters (it has 501).']}",
+            main.full_clean,
+        )
+
 
 
 class InstanceSetFieldTests(TestCase):
@@ -831,6 +851,27 @@ class InstanceSetFieldTests(TestCase):
 
         self.assertItemsEqual([obj], ISModel.objects.filter(related_things__isempty=True))
         self.assertItemsEqual([obj], ISModel.objects.filter(related_things_ids__isempty=True))
+
+    def test_max_length_valid(self):
+        main = ISModel.objects.create()
+        other = ISOther.objects.create()
+
+        main.related_things.add(other)
+
+        main.full_clean()
+
+    def test_max_length_list_invalid(self):
+        main = ISModel.objects.create()
+
+        for i in xrange(0, 501):
+            main.related_things.add(ISOther.objects.create())
+
+        self.assertRaisesMessage(
+            ValidationError,
+            "{'related_things': [u'Ensure this value has at most 500 characters (it has 501).']}",
+            main.full_clean,
+        )
+
 
 
 class TestGenericRelationField(TestCase):
