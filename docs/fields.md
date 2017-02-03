@@ -28,6 +28,7 @@ Both fields also accept the following standard Django model field kwargs:
 * `editable`: works as normal.
 * `help_text`: works as normal.
 * `verbose_name`: works as normal.
+* `max_length`: limits the number of items allowed in the list/set.
 
 Djangae makes some effort to provide a sensible form field for `ListField`/`SetField`, but you may find that in some cases you need to customise or change this behaviour to suit your usage.
 
