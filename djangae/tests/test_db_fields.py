@@ -136,8 +136,8 @@ class ISModel(models.Model):
 
 
 class IterableFieldModel(models.Model):
-    set_field = SetField(models.CharField(max_length=1), max_length=500)
-    list_field = ListField(models.CharField(max_length=1), max_length=500)
+    set_field = SetField(models.CharField(max_length=1), blank=True, max_length=500)
+    list_field = ListField(models.CharField(max_length=1), blank=True, max_length=500)
 
     class Meta:
         app_label = "djangae"
@@ -437,10 +437,16 @@ class IterableFieldTests(TestCase):
         self.assertTrue(form.is_valid())
         self.assertTrue(form.save())
 
-    def test_max_length_valid(self):
+    def test_max_length_list_valid(self):
         instance = IterableFieldModel.objects.create()
 
         instance.list_field.append("1")
+
+        instance.full_clean()
+
+    def test_max_length_set_valid(self):
+        instance = IterableFieldModel.objects.create()
+
         instance.set_field.add("1")
 
         instance.full_clean()
@@ -450,11 +456,22 @@ class IterableFieldTests(TestCase):
 
         for i in xrange(0, 501):
             instance.list_field.append(unichr(i))
+
+        self.assertRaisesMessage(
+            ValidationError,
+            "{'list_field': [u'Ensure this value has at most 500 characters (it has 501).']}",
+            instance.full_clean,
+        )
+
+    def test_max_length_set_invalid(self):
+        instance = IterableFieldModel.objects.create()
+
+        for i in xrange(0, 501):
             instance.set_field.add(unichr(i))
 
         self.assertRaisesMessage(
             ValidationError,
-            "{'set_field': [u'Ensure this value has at most 500 characters (it has 501).'], 'list_field': [u'Ensure this value has at most 500 characters (it has 501).']}",
+            "{'set_field': [u'Ensure this value has at most 500 characters (it has 501).']}",
             instance.full_clean,
         )
 
