@@ -7,6 +7,7 @@
 - The `disable_cache` decorator now wraps the returned function with functools.wraps
 - `prefetch_related()` now works on RelatedListField and RelatedSetField
 - Added a test for Model.objects.none().filter(pk=xyz) type filters
+- Use `user.is_authenticate` instead of `user.is_authenticate()` when using Django >= 1.10.
 
 ### Bug fixes:
 
