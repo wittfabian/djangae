@@ -6,7 +6,7 @@ from django import forms
 from django.db import models
 from django.db.utils import IntegrityError
 from django.conf import settings
-from django.core.exceptions import ValidationError
+from django.core.exceptions import ValidationError, ImproperlyConfigured
 
 # DJANGAE
 from djangae.contrib import sleuth
@@ -444,6 +444,24 @@ class IterableFieldTests(TestCase):
         self.assertTrue(form.is_valid())
         self.assertTrue(form.save())
 
+    def test_cannot_have_min_length_and_blank(self):
+        """ Having min_length=X, blank=True doesn't make any sense, especially when you consider
+            that django will skip the min_length check when the value (list/set)is empty.
+        """
+        self.assertRaises(
+            ImproperlyConfigured,
+            ListField,
+            CharField(max_length=100),
+            min_length=1,
+            blank=True
+        )
+        self.assertRaises(
+            ImproperlyConfigured,
+            SetField,
+            CharField(max_length=100),
+            min_length=1,
+            blank=True
+        )
 
     def test_list_field_set_field_min_max_lengths_valid(self):
         """ Test that when the min_legnth and max_length of a ListField and SetField are correct
@@ -527,6 +545,25 @@ class IterableFieldTests(TestCase):
 
 class RelatedIterableFieldTests(TestCase):
     """ Combined tests for common RelatedListField and RelatedSetField tests. """
+
+    def test_cannot_have_min_length_and_blank(self):
+        """ Having min_length=X, blank=True doesn't make any sense, especially when you consider
+            that django will skip the min_length check when the value (list/set)is empty.
+        """
+        self.assertRaises(
+            ImproperlyConfigured,
+            RelatedListField,
+            ISModel,
+            min_length=1,
+            blank=True
+        )
+        self.assertRaises(
+            ImproperlyConfigured,
+            RelatedSetField,
+            ISModel,
+            min_length=1,
+            blank=True
+        )
 
     def test_related_list_field_set_field_min_max_lengths_valid(self):
         """ Test that when the min_legnth and max_length of a ListField and SetField are correct

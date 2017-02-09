@@ -384,6 +384,14 @@ class RelatedIteratorField(ForeignObject):
         min_length = kwargs.pop("min_length", None)
         max_length = kwargs.pop("max_length", None)
 
+        # Check that if there's a min_length that blank is not True.  This is partly because it
+        # doesn't make sense, and partly because if the value (i.e. the list or set) is empty then
+        # Django will skip the validators, thereby skipping the min_length check.
+        if min_length and kwargs.get("blank"):
+            raise ImproperlyConfigured(
+                "Setting blank=True and min_length=%d is contradictory." % min_length
+            )
+
         super(RelatedIteratorField, self).__init__(to, from_fields=from_fields, to_fields=to_fields, **kwargs)
 
         # Now that self.validators has been set up, we can add the min/max legnth validators
