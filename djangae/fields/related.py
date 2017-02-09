@@ -379,10 +379,16 @@ class RelatedIteratorField(ForeignObject):
         from_fields = ['self']
         to_fields = [None]
 
+        # Pop the 'min_length' and 'max_length' from the kwargs, if they're there, as this avoids
+        # 'min_length' causing an error when calling super()
+        min_length = kwargs.pop("min_length", None)
+        max_length = kwargs.pop("max_length", None)
+
         super(RelatedIteratorField, self).__init__(to, from_fields=from_fields, to_fields=to_fields, **kwargs)
 
-        # If we have a max_length kwarg use the MaxItemsValidator
-        max_length = kwargs.get("max_length", None)
+        # Now that self.validators has been set up, we can add the min/max legnth validators
+        if min_length is not None:
+            self.validators.append(MinItemsValidator(min_length))
         if max_length is not None:
             self.validators.append(MaxItemsValidator(max_length))
 

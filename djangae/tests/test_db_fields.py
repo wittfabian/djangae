@@ -126,8 +126,8 @@ class GenericRelationModel(models.Model):
 
 
 class ISModel(models.Model):
-    related_things = RelatedSetField(ISOther, max_length=500, blank=True)
-    related_list = RelatedListField(ISOther, related_name="ismodel_list", max_length=500, blank=True)
+    related_things = RelatedSetField(ISOther)
+    related_list = RelatedListField(ISOther, related_name="ismodel_list")
     limted_related = RelatedSetField(RelationWithoutReverse, limit_choices_to={'name': 'banana'}, related_name="+")
     children = RelatedSetField("self", related_name="+")
 
@@ -136,11 +136,18 @@ class ISModel(models.Model):
 
 
 class IterableFieldModel(models.Model):
-    set_field = SetField(models.CharField(max_length=1), blank=True, max_length=500)
-    list_field = ListField(models.CharField(max_length=1), blank=True, max_length=500)
+    set_field = SetField(models.CharField(max_length=1))
+    list_field = ListField(models.CharField(max_length=1))
 
     class Meta:
         app_label = "djangae"
+
+
+class IterableFieldsWithValidatorsModel(models.Model):
+    set_field = SetField(models.CharField(max_length=100), min_length=2, max_length=3, blank=False)
+    list_field = ListField(models.CharField(max_length=100), min_length=2, max_length=3, blank=False)
+    related_set = RelatedSetField(ISOther, min_length=2, max_length=3, blank=False)
+    related_list = RelatedListField(ISOther, related_name="iterable_list", min_length=2, max_length=3, blank=False)
 
 
 class JSONFieldModel(models.Model):
@@ -437,37 +444,166 @@ class IterableFieldTests(TestCase):
         self.assertTrue(form.is_valid())
         self.assertTrue(form.save())
 
-    def test_max_length_list_valid(self):
-        instance = IterableFieldModel.objects.create()
-        instance.list_field.append("1")
+
+    def test_list_field_set_field_min_max_lengths_valid(self):
+        """ Test that when the min_legnth and max_length of a ListField and SetField are correct
+            that no validation error is rasied.
+        """
+        others = []
+        for x in xrange(2):
+            others.append(ISOther.objects.create())
+        instance = IterableFieldsWithValidatorsModel(
+            related_set=set(others),  # not being tested here
+            related_list=others,  # not being tested here
+            set_field=set(["1", "2"]),
+            list_field=["1", "2"],
+        )
         instance.full_clean()
 
-    def test_max_length_set_valid(self):
-        instance = IterableFieldModel.objects.create()
-        instance.set_field.add("1")
-        instance.full_clean()
-
-    def test_max_length_list_invalid(self):
-        instance = IterableFieldModel.objects.create()
-
-        for i in xrange(0, 501):
-            instance.list_field.append(unichr(i))
-
+    def test_list_field_max_length_invalid(self):
+        others = []
+        for x in xrange(2):
+            others.append(ISOther.objects.create())
+        instance = IterableFieldsWithValidatorsModel(
+            related_set=set(others),  # not being tested here
+            related_list=others,  # not being tested here
+            set_field=set(["1", "2"]),  # not being tested here
+            list_field=["1", "2", "3", "4", "5"],
+        )
         self.assertRaisesMessage(
             ValidationError,
-            "{'list_field': [u'Ensure this field has at most 500 items (it has 501).']}",
+            "{'list_field': [u'Ensure this field has at most 3 items (it has 5).']}",
             instance.full_clean,
         )
 
-    def test_max_length_set_invalid(self):
-        instance = IterableFieldModel.objects.create()
-
-        for i in xrange(0, 501):
-            instance.set_field.add(unichr(i))
-
+    def test_list_field_min_length_invalid(self):
+        others = []
+        for x in xrange(2):
+            others.append(ISOther.objects.create())
+        instance = IterableFieldsWithValidatorsModel(
+            related_set=set(others),  # not being tested here
+            related_list=others,  # not being tested here
+            set_field=set(["1", "2"]),  # not being tested here
+            list_field=["1"],
+        )
         self.assertRaisesMessage(
             ValidationError,
-            "{'set_field': [u'Ensure this field has at most 500 items (it has 501).']}",
+            "{'list_field': [u'Ensure this field has at least 2 items (it has 1).']}",
+            instance.full_clean,
+        )
+
+    def test_set_field_max_length_invalid(self):
+        others = []
+        for x in xrange(2):
+            others.append(ISOther.objects.create())
+        instance = IterableFieldsWithValidatorsModel(
+            related_set=set(others),  # not being tested here
+            related_list=others,  # not being tested here
+            list_field=["1", "2"],  # not being tested here
+            set_field=set(["1", "2", "3", "4", "5"]),
+        )
+        self.assertRaisesMessage(
+            ValidationError,
+            "{'set_field': [u'Ensure this field has at most 3 items (it has 5).']}",
+            instance.full_clean,
+        )
+
+    def test_set_field_min_length_invalid(self):
+        others = []
+        for x in xrange(2):
+            others.append(ISOther.objects.create())
+        instance = IterableFieldsWithValidatorsModel(
+            related_set=set(others),  # not being tested here
+            related_list=others,  # not being tested here
+            list_field=["1", "2"],  # not being tested here
+            set_field=set(["1"]),
+        )
+        self.assertRaisesMessage(
+            ValidationError,
+            "{'set_field': [u'Ensure this field has at least 2 items (it has 1).']}",
+            instance.full_clean,
+        )
+
+
+class RelatedIterableFieldTests(TestCase):
+    """ Combined tests for common RelatedListField and RelatedSetField tests. """
+
+    def test_related_list_field_set_field_min_max_lengths_valid(self):
+        """ Test that when the min_legnth and max_length of a ListField and SetField are correct
+            that no validation error is rasied.
+        """
+        others = []
+        for x in xrange(2):
+            others.append(ISOther.objects.create())
+        instance = IterableFieldsWithValidatorsModel(
+            list_field=["1", "2"],  # not being tested here
+            set_field=set(["1", "2"]),  # not being tested here
+            related_set=set(others),
+            related_list=others,
+        )
+        instance.full_clean()
+
+    def test_related_list_field_max_length_invalid(self):
+        others = []
+        for x in xrange(5):
+            others.append(ISOther.objects.create())
+        instance = IterableFieldsWithValidatorsModel(
+            list_field=["1", "2"],  # not being tested here
+            set_field=set(["1", "2"]),  # not being tested here
+            related_set=set(others[:2]),  # not being tested here
+            related_list=others,
+        )
+        self.assertRaisesMessage(
+            ValidationError,
+            "{'related_list': [u'Ensure this field has at most 3 items (it has 5).']}",
+            instance.full_clean,
+        )
+
+    def test_related_list_field_min_length_invalid(self):
+        others = []
+        for x in xrange(2):
+            others.append(ISOther.objects.create())
+        instance = IterableFieldsWithValidatorsModel(
+            list_field=["1", "2"],  # not being tested here
+            set_field=set(["1", "2"]),  # not being tested here
+            related_set=set(others),
+            related_list=others[:1],
+        )
+        self.assertRaisesMessage(
+            ValidationError,
+            "{'related_list': [u'Ensure this field has at least 2 items (it has 1).']}",
+            instance.full_clean,
+        )
+
+    def test_related_set_field_max_length_invalid(self):
+        others = []
+        for x in xrange(5):
+            others.append(ISOther.objects.create())
+        instance = IterableFieldsWithValidatorsModel(
+            list_field=["1", "2"],  # not being tested here
+            set_field=set(["1", "2"]),  # not being tested here
+            related_list=others[:2],  # not being tested here
+            related_set=set(others),
+        )
+        self.assertRaisesMessage(
+            ValidationError,
+            "{'related_set': [u'Ensure this field has at most 3 items (it has 5).']}",
+            instance.full_clean,
+        )
+
+    def test_related_set_field_min_length_invalid(self):
+        others = []
+        for x in xrange(2):
+            others.append(ISOther.objects.create())
+        instance = IterableFieldsWithValidatorsModel(
+            list_field=["1", "2"],  # not being tested here
+            set_field=set(["1", "2"]),  # not being tested here
+            related_list=others,  # not being tested here
+            related_set=set(others[:1]),
+        )
+        self.assertRaisesMessage(
+            ValidationError,
+            "{'related_set': [u'Ensure this field has at least 2 items (it has 1).']}",
             instance.full_clean,
         )
 
@@ -741,27 +877,6 @@ class InstanceListFieldTests(TestCase):
         main.save()
         self.assertItemsEqual([other, other2, other2], main.related_list.filter(name="one"))
 
-    def test_max_length_valid(self):
-        main = ISModel.objects.create()
-        other = ISOther.objects.create()
-
-        main.related_list.add(other)
-
-        main.full_clean()
-
-    def test_max_length_list_invalid(self):
-        main = ISModel.objects.create()
-
-        for i in xrange(0, 501):
-            main.related_list.add(ISOther.objects.create())
-
-        self.assertRaisesMessage(
-            ValidationError,
-            "{'related_list': [u'Ensure this field has at most 500 items (it has 501).']}",
-            main.full_clean,
-        )
-
-
 
 class InstanceSetFieldTests(TestCase):
 
@@ -864,27 +979,6 @@ class InstanceSetFieldTests(TestCase):
 
         self.assertItemsEqual([obj], ISModel.objects.filter(related_things__isempty=True))
         self.assertItemsEqual([obj], ISModel.objects.filter(related_things_ids__isempty=True))
-
-    def test_max_length_valid(self):
-        main = ISModel.objects.create()
-        other = ISOther.objects.create()
-
-        main.related_things.add(other)
-
-        main.full_clean()
-
-    def test_max_length_list_invalid(self):
-        main = ISModel.objects.create()
-
-        for i in xrange(0, 501):
-            main.related_things.add(ISOther.objects.create())
-
-        self.assertRaisesMessage(
-            ValidationError,
-            "{'related_things': [u'Ensure this field has at most 500 items (it has 501).']}",
-            main.full_clean,
-        )
-
 
 
 class TestGenericRelationField(TestCase):

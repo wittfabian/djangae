@@ -159,10 +159,16 @@ class IterableField(models.Field):
         assert not hasattr(self.item_field_type, 'attname')
         self.item_field_type.set_attributes_from_name('value')
 
+        # Pop the 'min_length' and 'max_length' from the kwargs, if they're there, as this avoids
+        # 'min_length' causing an error when calling super()
+        min_length = kwargs.pop("min_length", None)
+        max_length = kwargs.pop("max_length", None)
+
         super(IterableField, self).__init__(*args, **kwargs)
 
-        # If we have a max_length kwarg use the MaxItemsValidator
-        max_length = kwargs.get("max_length", None)
+        # Now that self.validators has been set up, we can add the min/max legnth validators
+        if min_length is not None:
+            self.validators.append(MinItemsValidator(min_length))
         if max_length is not None:
             self.validators.append(MaxItemsValidator(max_length))
 
