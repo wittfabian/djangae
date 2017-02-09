@@ -1,18 +1,22 @@
-import django
+# STANDARD LIB
 import copy
+
+# THIRD PARTY
 from django import forms
 from django.db import router, models
 from django.db.models.query import QuerySet
 from django.db.models.fields.related import ForeignObject, ForeignObjectRel
 from django.utils.functional import cached_property
 from django.core.exceptions import ImproperlyConfigured, ValidationError
-from django.core.validators import MaxLengthValidator
 from djangae.forms.fields import (
     encode_pk,
     GenericRelationFormfield
 )
 from django.utils import six
+import django
 
+# DJANGAE
+from djangae.core.validators import MinItemsValidator, MaxItemsValidator
 from djangae.fields.iterable import IsEmptyLookup, ContainsLookup, OverlapLookup
 
 
@@ -377,10 +381,10 @@ class RelatedIteratorField(ForeignObject):
 
         super(RelatedIteratorField, self).__init__(to, from_fields=from_fields, to_fields=to_fields, **kwargs)
 
-        # If we have a max_length kwarg use the MaxLengthValidator
+        # If we have a max_length kwarg use the MaxItemsValidator
         max_length = kwargs.get("max_length", None)
         if max_length is not None:
-            self.validators.append(MaxLengthValidator(max_length))
+            self.validators.append(MaxItemsValidator(max_length))
 
     def _get_lookup_constraint(self, constraint_class, alias, targets, sources, lookups, raw_value):
         from django.core import exceptions

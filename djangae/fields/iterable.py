@@ -1,13 +1,17 @@
+# STANDARD LIB
 import copy
 from itertools import chain
 
+# THIRD PARTY
 from django import forms
 from django.db import models
 from django.db.models.lookups import Lookup, Transform
 from django.core.exceptions import ValidationError, ImproperlyConfigured
-from django.core.validators import MaxLengthValidator
-from djangae.forms.fields import ListFormField
 from django.utils.text import capfirst
+
+# DJANGAE
+from djangae.core.validators import MinItemsValidator, MaxItemsValidator
+from djangae.forms.fields import ListFormField
 
 
 class _FakeModel(object):
@@ -157,10 +161,10 @@ class IterableField(models.Field):
 
         super(IterableField, self).__init__(*args, **kwargs)
 
-        # If we have a max_length kwarg use the MaxLengthValidator
+        # If we have a max_length kwarg use the MaxItemsValidator
         max_length = kwargs.get("max_length", None)
         if max_length is not None:
-            self.validators.append(MaxLengthValidator(max_length))
+            self.validators.append(MaxItemsValidator(max_length))
 
     def deconstruct(self):
         name, path, args, kwargs = super(IterableField, self).deconstruct()
