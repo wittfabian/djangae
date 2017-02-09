@@ -7,7 +7,7 @@
 - The `disable_cache` decorator now wraps the returned function with functools.wraps
 - `prefetch_related()` now works on RelatedListField and RelatedSetField
 - Added a test for Model.objects.none().filter(pk=xyz) type filters
-- Added max_length validation support to `ListField`, `SetField`, `RelatedListField` and `RelatedSetField`.
+- Added `max_length` and `min_length` validation support to `ListField`, `SetField`, `RelatedListField` and `RelatedSetField`.
 
 ### Bug fixes:
 
