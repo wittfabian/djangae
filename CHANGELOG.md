@@ -22,7 +22,7 @@
 - Fixed a bug where an error would be thrown if you loaded an entity with a JSONField that had non-JSON data, now the data is returned unaltered
 - Fixed a bug where only("pk") wouldn't perform a keys_only query
 - Dropped the deprecated patterns() from contrib.locking.urls
-- Fixed a bug where search indexes weren't saved when they were generated in the local sandbox
+- Fixed a bug where search indexes weren't saved when they were generated in the local shell
 
 ### Documentation:
 
