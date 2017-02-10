@@ -29,6 +29,7 @@ def _next_key(key):
             namespace=key.namespace()
         )
 
+
 def _mid_key(key1, key2):
     val = key1.id_or_name()
     if isinstance(val, basestring):
@@ -40,8 +41,9 @@ def _mid_key(key1, key2):
             namespace=key1.namespace()
         )
 
+
 def _generate_shards(keys, shard_count):
-    keys = sorted(keys) # Ensure the keys are sorted
+    keys = sorted(keys)  # Ensure the keys are sorted
 
     # Special case single key
     if shard_count == 1:
@@ -76,7 +78,7 @@ def _find_largest_shard(shards):
 
 
 def shard_query(query, shard_count):
-    OVERSAMPLING_MULTIPLIER = 32 # This value is used in Mapreduce
+    OVERSAMPLING_MULTIPLIER = 32  # This value is used in Mapreduce
 
     try:
         query.Order("__key__")
@@ -88,13 +90,13 @@ def shard_query(query, shard_count):
         # No objects, so no shards
         return []
 
-    query.Order("__scatter__") # Order by the scatter property
+    query.Order("__scatter__")  # Order by the scatter property
 
     # Get random keys to shard on
-    keys = [ x.key() for x in query.Get(shard_count * OVERSAMPLING_MULTIPLIER) ]
+    keys = [x.key() for x in query.Get(shard_count * OVERSAMPLING_MULTIPLIER)]
     keys.sort()
 
-    if not keys: # If no keys...
+    if not keys:  # If no keys...
         # Shard on the upper and lower PKs in the query this is *not* efficient
         keys = [min_id, max_id]
     else:
