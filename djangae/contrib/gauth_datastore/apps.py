@@ -4,8 +4,6 @@ from django.contrib.auth.management import create_permissions
 from django.db.models.signals import post_migrate
 
 
-
-
 # This is slightly unnecessary, because if the project is importing this file then it is *probably*
 # using one of the user models defined in here.  But for the sake of not getting things in a twist
 # when switching user models in tests, etc, we still use this conditional bypassing of the call to
@@ -22,7 +20,7 @@ def lazy_permission_creation(**kwargs):
 
 class GAuthDatastoreConfig(AppConfig):
 
-   name = "djangae.contrib.gauth.datastore"
+   name = "djangae.contrib.gauth_datastore"
    verbose_name = "gauth"
 
    def ready(self):
