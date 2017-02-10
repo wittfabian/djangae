@@ -7,6 +7,7 @@
 - The `disable_cache` decorator now wraps the returned function with functools.wraps
 - `prefetch_related()` now works on RelatedListField and RelatedSetField
 - Added a test for Model.objects.none().filter(pk=xyz) type filters
+- Renamed `contrib.gauth.datastore` and `contrib.gauth.sql` to `contrib.gauth_datastore` and `contrib.gauth_sql` respectively.
 
 ### Bug fixes:
 
@@ -203,7 +204,6 @@ If you're still using Django 1.7 in your project:
 - `djangae.contrib.gauth` now always add users with their emails lowercased
 - Provided limited options for `on_delete` on `RelatedSetField` and `RelatedListField`
 - Renamed `AppEngineUserAPI` to `AppEngineUserAPIBackend`
-- Moved checks verifying csrf, csp and template loader configuration from djangae-scaffold into Djangae.
 
 ### Bug fixes:
 - Special indexing now works on fields that are primary keys too
@@ -216,3 +216,4 @@ If you're still using Django 1.7 in your project:
 - Fixed bug when using `RelatedListField` on a form
 - Don't allow ordering by a `TextField`
 - Properly limiting number of results when excludes are used
+- Allow migrations to work on gauth sql User model

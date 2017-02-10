@@ -35,7 +35,7 @@ INSTALLED_APPS = [
     'djangae',
     'django.contrib.admin',
     'django.contrib.auth',
-    'djangae.contrib.gauth.datastore',
+    'djangae.contrib.gauth_datastore',
     'djangae.contrib.security',
     'djangae.contrib.consistency',
     'django.contrib.contenttypes',
@@ -156,7 +156,7 @@ USE_TZ = False
 STATIC_ROOT = BASE_DIR + 'static'
 STATIC_URL = '/static/'
 
-AUTH_USER_MODEL = 'djangae.GaeDatastoreUser'
+AUTH_USER_MODEL = 'gauth_datastore.GaeDatastoreUser'
 GENERATE_SPECIAL_INDEXES_DURING_TESTING = True
 COMPLETE_FLUSH_WHILE_TESTING = True
 DJANGAE_SEQUENTIAL_IDS_IN_TESTS = True
