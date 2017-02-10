@@ -7,6 +7,7 @@
 - The `disable_cache` decorator now wraps the returned function with functools.wraps
 - `prefetch_related()` now works on RelatedListField and RelatedSetField
 - Added a test for Model.objects.none().filter(pk=xyz) type filters
+- Moved checks verifying csrf, csp and template loader configuration from djangae-scaffold into Djangae.
 - Renamed `contrib.gauth.datastore` and `contrib.gauth.sql` to `contrib.gauth_datastore` and `contrib.gauth_sql` respectively.
     - This change requires you to update your settings to reference the new app names.
     - DB table names for Datastore-based models have not changed.  DB table name for the SQL User model has changed, but wasn't entirely usable before anyway.
@@ -27,6 +28,7 @@
 - Fixed a bug where an error would be thrown if you loaded an entity with a JSONField that had non-JSON data, now the data is returned unaltered
 - Fixed a bug where only("pk") wouldn't perform a keys_only query
 - Dropped the deprecated patterns() from contrib.locking.urls
+- Fixed a bug where search indexes weren't saved when they were generated in the local shell
 
 ### Documentation:
 
