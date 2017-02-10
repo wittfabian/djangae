@@ -174,11 +174,12 @@ def _local(devappserver2=None, configuration=None, options=None, wsgi_request_in
         request_data, storage_path, options, configuration)
 
     from .blobstore_service import start_blobstore_service, stop_blobstore_service
-
+    from google.appengine.tools.devappserver2 import api_server
     start_blobstore_service()
     try:
         yield
     finally:
+        api_server.cleanup_stubs()
         os.environ = original_environ
         stop_blobstore_service()
 
