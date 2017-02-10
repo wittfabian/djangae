@@ -10,9 +10,11 @@
 - Moved checks verifying csrf, csp and template loader configuration from djangae-scaffold into Djangae.
 - Renamed `contrib.gauth.datastore` and `contrib.gauth.sql` to `contrib.gauth_datastore` and `contrib.gauth_sql` respectively.
     - This change requires you to update your settings to reference the new app names.
+    - The old names still work for now but will trigger deprecation warnings.
     - DB table names for Datastore-based models have not changed.  DB table name for the SQL User model has changed, but wasn't entirely usable before anyway.
 - Moved everything from `contrib.gauth.common.*` to the parent `contrib.gauth` module.  I.e. removed the `.common` part.
-    - This change requires you to update your settings to reference the paths.
+    - This change requires you to update your application to reference/import from the new paths.
+    - The old paths still work for now but will trigger deprecation warnings.
 
 ### Bug fixes:
 
