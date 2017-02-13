@@ -15,8 +15,14 @@ from google.appengine.ext import deferred
 
 
 def _next_key(key):
+    """
+        Given a key, this returns key + 1. In the case of key names
+        we simply calculate the next alphabetical key
+    """
     val = key.id_or_name()
     if isinstance(val, basestring):
+        # FIXME: This is wrong! If we have key aaa, the next key should be aab
+        # not aaa\0x1
         return datastore.Key.from_path(
             key.kind(),
             val + chr(1),
@@ -31,6 +37,10 @@ def _next_key(key):
 
 
 def _mid_key(key1, key2):
+    """
+        Given two keys, this function returns the key mid-way between them
+        - this needs some thought on how to do this with strings
+    """
     val = key1.id_or_name()
     if isinstance(val, basestring):
         raise NotImplementedError("need to implement key names")
@@ -43,12 +53,24 @@ def _mid_key(key1, key2):
 
 
 def _generate_shards(keys, shard_count):
+    """
+        Given a set of keys with:
+        - The first key being the lowest in the range
+        - The last key being the highest in the range
+        - The other keys being evenly distributed (e.g. __scatter__)
+
+        This function returns a list of [start_key, end_key] shards to cover the range
+
+        This may not return shard_count shards if there aren't enough split points
+    """
     keys = sorted(keys)  # Ensure the keys are sorted
 
     # Special case single key
     if shard_count == 1:
         return [[keys[0], keys[-1]]]
     elif shard_count < len(keys):
+        # If there are more split point keys than we need then We have to calculate a
+        # stride to skip some of the split point keys to return shard_count shards
         index_stride = len(keys) / float(shard_count)
         keys = [keys[int(round(index_stride * i))] for i in range(1, shard_count)]
 
@@ -62,6 +84,8 @@ def _generate_shards(keys, shard_count):
 def _find_largest_shard(shards):
     """
         Given a list of shards, find the one with the largest ID range
+
+        FIXME: Not implemented for key names!
     """
     largest_shard = None
 
@@ -106,6 +130,10 @@ def shard_query(query, shard_count):
         if keys[-1] != max_id or min_id == max_id:
             keys.append(max_id)
 
+    # We generate as many shards as we can, but if it's not enough then we
+    # iterate, splitting the largest shard into two shards until either:
+    # - we hit the desired shard count
+    # - we can't subdivide anymore
     shards = _generate_shards(keys, shard_count)
     while True:
         if len(shards) >= shard_count:
@@ -142,7 +170,7 @@ def shard_query(query, shard_count):
 
     assert len(shards) <= shard_count
 
-    # We shift the end keys by one, so we can
+    # We shift the end keys in each shard by one, so we can
     # do a >= && < query
     for shard in shards:
         shard[1] = _next_key(shard[1])
@@ -307,6 +335,9 @@ def start_mapping(identifier, query, operation, operation_method=None):
 
 
 def mapper_exists(identifier, namespace):
+    """
+        Returns True if the mapper exists, False otherwise
+    """
     try:
         datastore.Get(ShardedTaskMarker.get_key(identifier, namespace))
         return True
@@ -315,10 +346,16 @@ def mapper_exists(identifier, namespace):
 
 
 def is_mapper_finished(identifier, namespace):
+    """
+        Returns True if the mapper exists, and it's not running.
+    """
     return mapper_exists(identifier, namespace) and not is_mapper_running(identifier, namespace)
 
 
 def is_mapper_running(identifier, namespace):
+    """
+        Returns True if the mapper exists, but it's not finished
+    """
     try:
         marker = datastore.Get(ShardedTaskMarker.get_key(identifier, namespace))
         return not marker["is_finished"]
