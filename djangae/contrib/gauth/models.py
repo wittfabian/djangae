@@ -89,6 +89,12 @@ class GaeAbstractBaseUser(AbstractBaseUser):
     class Meta:
         abstract = True
 
+    def clean(self):
+        # Only call up if username is not none. Parent's clean() stringifies
+        # username blindly
+        if self.get_username() is not None:
+            super(GaeAbstractBaseUser, self).clean()
+
     def get_absolute_url(self):
         return "/users/%s/" % urlquote(self.username)
 

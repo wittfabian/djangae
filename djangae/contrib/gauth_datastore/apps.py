@@ -10,8 +10,12 @@ from django.db.models.signals import post_migrate
 # Django's create_permissions() function
 
 def lazy_permission_creation(**kwargs):
-    from .models import PermissionsMixin
-    if issubclass(auth.get_user_model(), PermissionsMixin):
+    """
+        Only run Django's create_permissions function if the user model subclasses
+        *Django's* PermissionsMixin
+    """
+    from django.contrib.auth.models import PermissionsMixin
+    if not issubclass(auth.get_user_model(), PermissionsMixin):
         return
 
     # Call through to Django's create_permissions
