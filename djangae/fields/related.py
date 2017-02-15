@@ -1,5 +1,7 @@
-import django
+# STANDARD LIB
 import copy
+
+# THIRD PARTY
 from django import forms
 from django.db import router, models
 from django.db.models.query import QuerySet
@@ -11,7 +13,10 @@ from djangae.forms.fields import (
     GenericRelationFormfield
 )
 from django.utils import six
+import django
 
+# DJANGAE
+from djangae.core.validators import MinItemsValidator, MaxItemsValidator
 from djangae.fields.iterable import IsEmptyLookup, ContainsLookup, OverlapLookup
 
 
@@ -374,7 +379,26 @@ class RelatedIteratorField(ForeignObject):
         from_fields = ['self']
         to_fields = [None]
 
+        # Pop the 'min_length' and 'max_length' from the kwargs, if they're there, as this avoids
+        # 'min_length' causing an error when calling super()
+        min_length = kwargs.pop("min_length", None)
+        max_length = kwargs.pop("max_length", None)
+
+        # Check that if there's a min_length that blank is not True.  This is partly because it
+        # doesn't make sense, and partly because if the value (i.e. the list or set) is empty then
+        # Django will skip the validators, thereby skipping the min_length check.
+        if min_length and kwargs.get("blank"):
+            raise ImproperlyConfigured(
+                "Setting blank=True and min_length=%d is contradictory." % min_length
+            )
+
         super(RelatedIteratorField, self).__init__(to, from_fields=from_fields, to_fields=to_fields, **kwargs)
+
+        # Now that self.validators has been set up, we can add the min/max legnth validators
+        if min_length is not None:
+            self.validators.append(MinItemsValidator(min_length))
+        if max_length is not None:
+            self.validators.append(MaxItemsValidator(max_length))
 
     def _get_lookup_constraint(self, constraint_class, alias, targets, sources, lookups, raw_value):
         from django.core import exceptions
