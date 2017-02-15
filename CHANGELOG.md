@@ -8,6 +8,14 @@
 - `prefetch_related()` now works on RelatedListField and RelatedSetField
 - Added a test for Model.objects.none().filter(pk=xyz) type filters
 - Added `max_length` and `min_length` validation support to `ListField`, `SetField`, `RelatedListField` and `RelatedSetField`.
+- Moved checks verifying csrf, csp and template loader configuration from djangae-scaffold into Djangae.
+- Renamed `contrib.gauth.datastore` and `contrib.gauth.sql` to `contrib.gauth_datastore` and `contrib.gauth_sql` respectively.
+    - This change requires you to update your settings to reference the new app names.
+    - The old names still work for now but will trigger deprecation warnings.
+    - DB table names for Datastore-based models have not changed.  DB table name for the SQL User model has changed, but wasn't entirely usable before anyway.
+- Moved everything from `contrib.gauth.common.*` to the parent `contrib.gauth` module.  I.e. removed the `.common` part.
+    - This change requires you to update your application to reference/import from the new paths.
+    - The old paths still work for now but will trigger deprecation warnings.
 
 ### Bug fixes:
 
@@ -23,6 +31,7 @@
 - Fixed a bug where an error would be thrown if you loaded an entity with a JSONField that had non-JSON data, now the data is returned unaltered
 - Fixed a bug where only("pk") wouldn't perform a keys_only query
 - Dropped the deprecated patterns() from contrib.locking.urls
+- Fixed a bug where search indexes weren't saved when they were generated in the local shell
 
 ### Documentation:
 
@@ -204,7 +213,6 @@ If you're still using Django 1.7 in your project:
 - `djangae.contrib.gauth` now always add users with their emails lowercased
 - Provided limited options for `on_delete` on `RelatedSetField` and `RelatedListField`
 - Renamed `AppEngineUserAPI` to `AppEngineUserAPIBackend`
-- Moved checks verifying csrf, csp and template loader configuration from djangae-scaffold into Djangae.
 
 ### Bug fixes:
 - Special indexing now works on fields that are primary keys too
@@ -217,3 +225,4 @@ If you're still using Django 1.7 in your project:
 - Fixed bug when using `RelatedListField` on a form
 - Don't allow ordering by a `TextField`
 - Properly limiting number of results when excludes are used
+- Allow migrations to work on gauth sql User model

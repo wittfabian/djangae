@@ -7,13 +7,12 @@ from django.contrib.auth.models import (
     _user_has_module_perms
 )
 from django.db import models
-from django.db.models import signals
 from django.utils.translation import ugettext_lazy as _
 from django.utils.functional import lazy
 
 from djangae.fields import ListField, RelatedSetField
-from djangae.contrib.gauth.common.models import GaeAbstractBaseUser
-from djangae.contrib.gauth.datastore.permissions import get_permission_choices
+from djangae.contrib.gauth.models import GaeAbstractBaseUser
+from djangae.contrib.gauth_datastore.permissions import get_permission_choices
 
 
 @python_2_unicode_compatible
@@ -30,9 +29,9 @@ class Group(models.Model):
     objects = GroupManager()
 
     class Meta:
+        db_table = 'djangae_group'
         verbose_name = _('group')
         verbose_name_plural = _('groups')
-        app_label = "djangae"
 
     def __str__(self):
         return self.name
@@ -154,7 +153,8 @@ class GaeDatastoreUser(GaeAbstractBaseUser, PermissionsMixin):
     """
 
     class Meta:
-        app_label = "djangae"
+        db_table = 'djangae_gaedatastoreuser'
         swappable = 'AUTH_USER_MODEL'
         verbose_name = _('user')
         verbose_name_plural = _('users')
+

@@ -13,8 +13,8 @@ from django.contrib.auth.hashers import make_password
 from google.appengine.api import users
 
 # DJANGAE
-from djangae.contrib.gauth.datastore.models import GaeDatastoreUser, Group, get_permission_choices
-from djangae.contrib.gauth.datastore.backends import AppEngineUserAPIBackend
+from djangae.contrib.gauth_datastore.models import GaeDatastoreUser, Group, get_permission_choices
+from djangae.contrib.gauth_datastore.backends import AppEngineUserAPIBackend
 from djangae.contrib.gauth.middleware import AuthenticationMiddleware
 from djangae.contrib.gauth.settings import AUTHENTICATION_BACKENDS
 from djangae.contrib.gauth.utils import get_switch_accounts_url
@@ -172,7 +172,7 @@ class BackendTests(TestCase):
 
         backend = AppEngineUserAPIBackend()
         google_user = users.User(email, _user_id=user_id)
-        user_class_path = "djangae.contrib.gauth.datastore.models.GaeDatastoreUser.objects.get"
+        user_class_path = "djangae.contrib.gauth_datastore.models.GaeDatastoreUser.objects.get"
         with sleuth.switch(user_class_path, crazy_user_get_patch):
             backend.authenticate(google_user)
 
@@ -189,7 +189,7 @@ class MiddlewareTests(TestCase):
 
         request = HttpRequest()
         SessionMiddleware().process_request(request) # Make the damn sessions work
-        request.session[BACKEND_SESSION_KEY] = 'djangae.contrib.gauth.datastore.backends.AppEngineUserAPIBackend'
+        request.session[BACKEND_SESSION_KEY] = 'djangae.contrib.gauth_datastore.backends.AppEngineUserAPIBackend'
         middleware = AuthenticationMiddleware()
         # Check that we're not logged in already
         user = get_user(request)
@@ -221,7 +221,7 @@ class MiddlewareTests(TestCase):
 
         request = HttpRequest()
         SessionMiddleware().process_request(request)  # Make the damn sessions work
-        request.session[BACKEND_SESSION_KEY] = 'djangae.contrib.gauth.datastore.backends.AppEngineUserAPIBackend'
+        request.session[BACKEND_SESSION_KEY] = 'djangae.contrib.gauth_datastore.backends.AppEngineUserAPIBackend'
         middleware = AuthenticationMiddleware()
 
         with sleuth.switch('djangae.contrib.gauth.middleware.users.get_current_user', lambda: user1):
@@ -246,7 +246,7 @@ class MiddlewareTests(TestCase):
         User = get_user_model()
         request = HttpRequest()
         SessionMiddleware().process_request(request)  # Make the damn sessions work
-        request.session[BACKEND_SESSION_KEY] = 'djangae.contrib.gauth.datastore.backends.AppEngineUserAPIBackend'
+        request.session[BACKEND_SESSION_KEY] = 'djangae.contrib.gauth_datastore.backends.AppEngineUserAPIBackend'
         middleware = AuthenticationMiddleware()
 
         with sleuth.switch('djangae.contrib.gauth.middleware.users.get_current_user', lambda: user1):
@@ -293,7 +293,7 @@ class MiddlewareTests(TestCase):
         User = get_user_model()
         request = HttpRequest()
         SessionMiddleware().process_request(request)  # Make the damn sessions work
-        request.session[BACKEND_SESSION_KEY] = 'djangae.contrib.gauth.datastore.backends.AppEngineUserAPIBackend'
+        request.session[BACKEND_SESSION_KEY] = 'djangae.contrib.gauth_datastore.backends.AppEngineUserAPIBackend'
         middleware = AuthenticationMiddleware()
 
         with sleuth.switch('djangae.contrib.gauth.middleware.users.get_current_user', lambda: user):
@@ -317,7 +317,7 @@ class MiddlewareTests(TestCase):
 
 @override_settings(
     AUTH_USER_MODEL='djangae.GaeDatastoreUser',
-    AUTHENTICATION_BACKENDS=('djangae.contrib.gauth.datastore.backends.AppEngineUserAPIBackend',)
+    AUTHENTICATION_BACKENDS=('djangae.contrib.gauth_datastore.backends.AppEngineUserAPIBackend',)
 )
 class CustomPermissionsUserModelBackendTest(TestCase):
     """
@@ -429,7 +429,7 @@ class CustomPermissionsUserModelBackendTest(TestCase):
 
 @override_settings(
     AUTH_USER_MODEL='djangae.GaeDatastoreUser',
-    AUTHENTICATION_BACKENDS=('djangae.contrib.gauth.datastore.backends.AppEngineUserAPIBackend',)
+    AUTHENTICATION_BACKENDS=('djangae.contrib.gauth_datastore.backends.AppEngineUserAPIBackend',)
 )
 class SwitchAccountsTests(TestCase):
     """ Tests for the switch accounts functionality. """

@@ -1,9 +1,9 @@
 
 AUTHENTICATION_BACKENDS = (
-    'djangae.contrib.gauth.datastore.backends.AppEngineUserAPIBackend',
+    'djangae.contrib.gauth_datastore.backends.AppEngineUserAPIBackend',
 )
 
-AUTH_USER_MODEL = 'djangae.GaeDatastoreUser'
+AUTH_USER_MODEL = 'gauth_datastore.GaeDatastoreUser'
 LOGIN_URL = 'djangae_login_redirect'
 
 # Set this to True to allow unknown Google users to sign in. Matching is done
