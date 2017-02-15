@@ -33,6 +33,7 @@
 - Dropped the deprecated patterns() from contrib.locking.urls
 - Fixed a bug where search indexes weren't saved when they were generated in the local shell
 - Fixed a bug where permissions wouldn't be created when using Django's PermissionsMixin on the datastore (for some reason)
+- Fixed a bug where a user's username would be set to the string 'None' if username was not populated on an admin form
 
 ### Documentation:
 
