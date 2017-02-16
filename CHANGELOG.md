@@ -17,6 +17,7 @@
     - This change requires you to update your application to reference/import from the new paths.
     - The old paths still work for now but will trigger deprecation warnings.
 - Cleaned up the query fetching code to be more readable. Moved where result fetching happens to be inline with other backends, which makes Django Debug Toolbar query profiling output correct
+- Cleaned up app_id handling in --sandbox managment calls
 
 ### Bug fixes:
 
