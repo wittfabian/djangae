@@ -35,6 +35,8 @@
 - Fixed a bug where search indexes weren't saved when they were generated in the local shell
 - Fixed a bug where permissions wouldn't be created when using Django's PermissionsMixin on the datastore (for some reason)
 - Fixed a bug where a user's username would be set to the string 'None' if username was not populated on an admin form
+- Fixed `djangae.contrib.mappers.defer.defer_iteration` to allow inequality filters in querysets
+- Fixed a bug in `djangae.contrib.mappers.defer.defer_iteration` where `_shard` would potentially ignore the first element of the queryset
 
 ### Documentation:
 
