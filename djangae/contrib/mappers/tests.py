@@ -145,3 +145,20 @@ class TestDeferIteration(TestCase):
             sum([(x+1) + 100 for x in xrange(10)]),
             sum(TestNode.objects.values_list("counter", flat=True))
         )
+
+    def test_that_processing_with_inequality_filter_works(self):
+        """ Regression tests: after introducing shards in commit
+        8c3804a8f7ffcd379fcaf6af452a698b4ac6e756 deferring iteration was
+        impossible for querysets containing inequality filters.
+        """
+        queryset = TestNode.objects.filter(counter__lt=11)
+        defer_iteration(queryset, add_onehundred, shard_size=5)
+
+        self.assertTrue(sum(TestNode.objects.values_list("counter", flat=True)))
+
+        self.process_task_queues()
+
+        self.assertEqual(
+            sum([(x+1) + 100 for x in xrange(10)]),
+            sum(TestNode.objects.values_list("counter", flat=True))
+        )
