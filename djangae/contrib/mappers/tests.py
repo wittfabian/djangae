@@ -151,14 +151,16 @@ class TestDeferIteration(TestCase):
         8c3804a8f7ffcd379fcaf6af452a698b4ac6e756 deferring iteration was
         impossible for querysets containing inequality filters.
         """
-        queryset = TestNode.objects.filter(counter__lt=11)
+        queryset = TestNode.objects.filter(counter__lt=1000)
         defer_iteration(queryset, add_onehundred, shard_size=5)
 
-        self.assertTrue(sum(TestNode.objects.values_list("counter", flat=True)))
+        initial_sum = sum(TestNode.objects.filter(counter__lt=1000).values_list("counter", flat=True))
+        num_objects = TestNode.objects.filter(counter__lt=11).count()
+        expected_new_sum = initial_sum + (num_objects * 100)
 
         self.process_task_queues()
 
         self.assertEqual(
-            sum([(x+1) + 100 for x in xrange(10)]),
-            sum(TestNode.objects.values_list("counter", flat=True))
+            sum(TestNode.objects.filter(counter__lt=1000).values_list("counter", flat=True)),
+            expected_new_sum
         )
