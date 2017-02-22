@@ -18,6 +18,7 @@
     - The old paths still work for now but will trigger deprecation warnings.
 - Cleaned up the query fetching code to be more readable. Moved where result fetching happens to be inline with other backends, which makes Django Debug Toolbar query profiling output correct
 - The default GCS bucket name is now cached when first read, saving on RPC calls
+- Updated `AppEngineSecurityMiddleware` to work with Django >= 1.10
 
 
 ### Bug fixes:
