@@ -42,11 +42,13 @@ def switch_accounts(request):
     # will be terminated after logout. This is possibly paranoia.
     user_hash = hashlib.sha1(current_google_user.user_id()).hexdigest()
     previous_user_hash = request.session.get('previous_user')
+    previous_user_already_redirected = request.session.get('previous_user_already_redirected', False)
     if previous_user_hash:
-        if user_hash == previous_user_hash:
+        if user_hash == previous_user_hash and not previous_user_already_redirected:
             # Step 3.a.
             django_logout(request)  # Make sure old Django user session gets flushed.
             request.session['previous_user'] = user_hash # but add the previous_user hash back in
+            request.session['previous_user_already_redirected'] = True
             # We want to create a URL to the logout URL which then goes to the login URL which then
             # goes back to *this* view, which then goes to the final destination
             login_url = iri_to_uri(users.create_login_url(request.get_full_path()))
@@ -55,6 +57,8 @@ def switch_accounts(request):
         else:
             # Step 3.b, or step 2.a.i.
             del request.session['previous_user']
+            if 'previous_user_already_redirected' in request.session:
+                del request.session['previous_user_already_redirected']
             return HttpResponseRedirect(destination)
     else:
         # Step 2:
