@@ -293,7 +293,7 @@ class CloudStorage(Storage, BlobstoreUploadMixin):
     write_options = None
 
     def __init__(self, bucket=None, google_acl=None):
-        if bucket and callable(bucket):
+        if callable(bucket):
             # If the bucket is callable, just store the callable
             self._bucket_calculator = bucket
         else:
