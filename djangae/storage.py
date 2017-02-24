@@ -293,11 +293,14 @@ class CloudStorage(Storage, BlobstoreUploadMixin):
     write_options = None
 
     def __init__(self, bucket=None, google_acl=None):
-        if not bucket:
-            bucket = get_bucket_name()
-        self.bucket = bucket
-        # +2 for the slashes.
-        self._bucket_prefix_len = len(bucket) + 2
+        if bucket and callable(bucket):
+            # If the bucket is callable, just store the callable
+            self._bucket_calculator = bucket
+        else:
+            # Otherwise, store a callable which returns the bucket or
+            # use the get_bucket_name function (default bucket)
+            self._bucket_calculator = (lambda: bucket) if bucket else get_bucket_name
+
         if cloudstorage.common.local_run() and not cloudstorage.common.get_access_token():
             # We do it this way so that the stubs override in tests
             self.api_url = '/_ah/gcs'
@@ -308,6 +311,15 @@ class CloudStorage(Storage, BlobstoreUploadMixin):
         if google_acl:
             # If you don't specify an acl means you get the default permissions.
             self.write_options['x-goog-acl'] = google_acl
+
+    @property
+    def bucket(self):
+        return self._bucket_calculator()
+
+    @property
+    def _bucket_prefix_len(self):
+        # +2 for the slashes.
+        return len(self.bucket) + 2
 
     def url(self, filename):
         try:
