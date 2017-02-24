@@ -154,15 +154,21 @@ def serve_file(request, blob_key_or_info, as_download=False, content_type=None, 
     return response
 
 
+DEFAULT_GCS_BUCKET = None
+
 def get_bucket_name():
     """
         Returns the bucket name for Google Cloud Storage, either from your
         settings or the default app bucket.
     """
+    global DEFAULT_GCS_BUCKET
+
     bucket = getattr(settings, BUCKET_KEY, None)
     if not bucket:
         # No explicit setting, lets try the default bucket for your application.
-        bucket = app_identity.get_default_gcs_bucket_name()
+        bucket = DEFAULT_GCS_BUCKET or app_identity.get_default_gcs_bucket_name()
+        DEFAULT_GCS_BUCKET = bucket
+
     if not bucket:
         from django.core.exceptions import ImproperlyConfigured
         message = '%s not set or no default bucket configured' % BUCKET_KEY
