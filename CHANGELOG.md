@@ -7,6 +7,7 @@
 - The `disable_cache` decorator now wraps the returned function with functools.wraps
 - `prefetch_related()` now works on RelatedListField and RelatedSetField
 - Added a test for Model.objects.none().filter(pk=xyz) type filters
+- Use `user.is_authenticated` instead of `user.is_authenticated()` when using Django >= 1.10.
 - Added `max_length` and `min_length` validation support to `ListField`, `SetField`, `RelatedListField` and `RelatedSetField`.
 - Moved checks verifying csrf, csp and template loader configuration from djangae-scaffold into Djangae.
 - Renamed `contrib.gauth.datastore` and `contrib.gauth.sql` to `contrib.gauth_datastore` and `contrib.gauth_sql` respectively.

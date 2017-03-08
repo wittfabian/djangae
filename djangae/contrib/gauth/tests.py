@@ -11,11 +11,22 @@ from django.test.utils import override_settings
 from django.contrib.auth.models import AnonymousUser
 from django.contrib.auth.hashers import make_password
 from google.appengine.api import users
+from google.appengine.tools.sdk_update_checker import (
+    GetVersionObject,
+    _VersionList,
+)
+
 
 # DJANGAE
 from djangae.contrib.gauth_datastore.models import GaeDatastoreUser, Group, get_permission_choices
 from djangae.contrib.gauth_datastore.backends import AppEngineUserAPIBackend
-from djangae.contrib.gauth.middleware import AuthenticationMiddleware
+from djangae.contrib.gauth.middleware import (
+    AuthenticationMiddleware,
+    # this could be removed after we stop supporting Django version < 1.10.
+    # we should then replace all calls to this function with
+    # `user.is_authenticated`
+    user_is_authenticated
+)
 from djangae.contrib.gauth.settings import AUTHENTICATION_BACKENDS
 from djangae.contrib.gauth.utils import get_switch_accounts_url
 from djangae.contrib import sleuth
@@ -193,7 +204,7 @@ class MiddlewareTests(TestCase):
         middleware = AuthenticationMiddleware()
         # Check that we're not logged in already
         user = get_user(request)
-        self.assertFalse(user.is_authenticated())
+        self.assertFalse(user_is_authenticated(user))
 
         # Check that running the middleware when the Google users API doesn't know the current
         # user still leaves us as an anonymous users.
@@ -202,7 +213,7 @@ class MiddlewareTests(TestCase):
 
         # Check that the middleware successfully logged us in
         user = get_user(request)
-        self.assertFalse(user.is_authenticated())
+        self.assertFalse(user_is_authenticated(user))
 
         # Now check that when the Google users API *does* know who we are, that we are logged in.
         with sleuth.switch('djangae.contrib.gauth.middleware.users.get_current_user', _get_current_user):
@@ -210,7 +221,7 @@ class MiddlewareTests(TestCase):
 
         # Check that the middleware successfully logged us in
         user = get_user(request)
-        self.assertTrue(user.is_authenticated())
+        self.assertTrue(user_is_authenticated(user))
         self.assertEqual(user.email, '1@example.com')
         self.assertEqual(user.username, '111111111100000000001')
 
