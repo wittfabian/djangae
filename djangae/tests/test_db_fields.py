@@ -7,6 +7,7 @@ from django.db import models
 from django.db.utils import IntegrityError
 from django.conf import settings
 from django.core.exceptions import ValidationError, ImproperlyConfigured
+from django.core.validators import EmailValidator
 
 # DJANGAE
 from djangae.contrib import sleuth
@@ -165,6 +166,7 @@ class JSONFieldWithDefaultModel(models.Model):
 class ModelWithCharField(models.Model):
     char_field_with_max = CharField(max_length=10, default='', blank=True)
     char_field_without_max = CharField(default='', blank=True)
+    char_field_as_email = CharField(validators=[EmailValidator(message='failed')], blank=True)
 
 
 class ModelWithCharOrNoneField(models.Model):
@@ -1179,6 +1181,10 @@ class CharFieldModelTests(TestCase):
             u'Ensure this value has at most 1500 bytes (it has 1504).',
             test_instance.full_clean,
          )
+
+    def test_additional_validators_work(self):
+        test_instance = ModelWithCharField(char_field_as_email='bananas')
+        self.assertRaisesMessage(ValidationError, 'failed', test_instance.full_clean)
 
     def test_too_long_max_value_set(self):
         try:
