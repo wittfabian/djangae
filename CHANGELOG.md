@@ -18,6 +18,8 @@
     - The old paths still work for now but will trigger deprecation warnings.
 - Cleaned up the query fetching code to be more readable. Moved where result fetching happens to be inline with other backends, which makes Django Debug Toolbar query profiling output correct
 - Cleaned up app_id handling in --sandbox managment calls
+- The default GCS bucket name is now cached when first read, saving on RPC calls
+- Updated `AppEngineSecurityMiddleware` to work with Django >= 1.10
 
 ### Bug fixes:
 
@@ -36,6 +38,9 @@
 - Fixed a bug where search indexes weren't saved when they were generated in the local shell
 - Fixed a bug where permissions wouldn't be created when using Django's PermissionsMixin on the datastore (for some reason)
 - Fixed a bug where a user's username would be set to the string 'None' if username was not populated on an admin form
+- Fixed `djangae.contrib.mappers.defer.defer_iteration` to allow inequality filters in querysets
+- Fixed a bug in `djangae.contrib.mappers.defer.defer_iteration` where `_shard` would potentially ignore the first element of the queryset
+- Fixed an incompatibility between appstats and the cloud storage backend due to RPC calls being made in the __init__ method
 
 ### Documentation:
 
