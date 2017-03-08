@@ -18,8 +18,8 @@ from google.appengine.tools.sdk_update_checker import (
 
 
 # DJANGAE
-from djangae.contrib.gauth.datastore.models import GaeDatastoreUser, Group, get_permission_choices
-from djangae.contrib.gauth.datastore.backends import AppEngineUserAPIBackend
+from djangae.contrib.gauth_datastore.models import GaeDatastoreUser, Group, get_permission_choices
+from djangae.contrib.gauth_datastore.backends import AppEngineUserAPIBackend
 from djangae.contrib.gauth.middleware import (
     AuthenticationMiddleware,
     # this could be removed after we stop supporting Django version < 1.10.
