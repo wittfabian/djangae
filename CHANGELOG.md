@@ -21,7 +21,6 @@
 - Cleaned up app_id handling in --sandbox management calls
 - The default GCS bucket name is now cached when first read, saving on RPC calls
 - Updated `AppEngineSecurityMiddleware` to work with Django >= 1.10
-- Fixed a bug where it wasn't possible to add validators to djangae.fields.CharField
 
 ### Bug fixes:
 
@@ -43,6 +42,7 @@
 - Fixed `djangae.contrib.mappers.defer.defer_iteration` to allow inequality filters in querysets
 - Fixed a bug in `djangae.contrib.mappers.defer.defer_iteration` where `_shard` would potentially ignore the first element of the queryset
 - Fixed an incompatibility between appstats and the cloud storage backend due to RPC calls being made in the __init__ method
+- Fixed a bug where it wasn't possible to add validators to djangae.fields.CharField
 
 ### Documentation:
 
