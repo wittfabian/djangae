@@ -1235,3 +1235,38 @@ class StringReferenceRelatedSetFieldModelTests(TestCase):
         self.assertTrue(form.is_valid())
         instance = form.save()
         self.assertEqual({related.pk}, instance.related_things_ids)
+
+
+
+class PFPost(models.Model):
+    content = models.TextField()
+    authors = RelatedSetField('Author', related_name='posts')
+
+    class Meta:
+        app_label = "djangae"
+
+class PFAuthor(models.Model):
+    name = models.CharField(max_length=32)
+    awards = RelatedSetField('Awards')
+
+    class Meta:
+        app_label = "djangae"
+
+class PFAwards(models.Model):
+    name = models.CharField(max_length=32)
+
+    class Meta:
+        app_label = "djangae"
+
+
+class RelatedFieldPrefetchTests(TestCase):
+
+    def test_prefetch_related(self):
+        award = PFAwards.objects.create(name="award")
+        author = PFAuthor.objects.create(awards={award})
+        post = PFPost.objects.create(authors={author})
+
+        posts = list(PFPost.objects.all().prefetch_related('authors__awards'))
+
+        with self.assertNumQueries(0):
+            awards = list(posts[0].authors[0].awards)
