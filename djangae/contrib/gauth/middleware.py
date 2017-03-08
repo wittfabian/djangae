@@ -2,7 +2,7 @@ from django import VERSION as django_version
 from django.contrib.auth import authenticate, login, logout, get_user, BACKEND_SESSION_KEY, load_backend
 from django.contrib.auth.middleware import AuthenticationMiddleware as DjangoMiddleware
 from django.contrib.auth.models import AnonymousUser, BaseUserManager
-from djangae.contrib.gauth.common.backends import BaseAppEngineUserAPIBackend
+from djangae.contrib.gauth.backends import BaseAppEngineUserAPIBackend
 
 from google.appengine.api import users
 

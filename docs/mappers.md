@@ -24,8 +24,5 @@ callback function on each Django model instance in the queryset.
 
 * The shard size is the number of instance which it will attempt to process in a single task, and defaults to 500.
     * Depending on how long your callback function is likely to take on each instance, you should reduce the shard size in order that it can safely process that many instances in App Engine's task time limit of 10 minutes.
-* The ordering of the queryset is set to `order_by('pk')`.
-    * This does not guarantee that objects will be processed in this order.
-    * Due to the Datastore's limitations, this creates a restriction that you cannot use an inequality filter other than on the PK field in your queryset.
 * There is no exception handling around the callback function, so an exception is raised when processing one of the instances then that task will fail and be retried, thus re-processing any prior instances in that same shard.
     * Your callback function should be idempotent.

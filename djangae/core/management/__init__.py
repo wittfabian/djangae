@@ -60,11 +60,8 @@ def execute_from_command_line(argv=None, **sandbox_overrides):
     parser.add_argument('args', nargs=argparse.REMAINDER)
     namespace = parser.parse_args(argv[1:])
 
-    # if namespace.application:
-    sandbox_overrides['app_id'] = namespace.app_id
-
     overrides = DJANGO_DEFAULTS
-    overrides.update(sandbox_overrides)
+    overrides.update(sandbox_overrides, app_id=namespace.app_id)
 
     return _execute_from_command_line(namespace.sandbox, ['manage.py'] + namespace.args, **overrides)
 

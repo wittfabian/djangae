@@ -125,14 +125,12 @@ class Cursor(object):
             return []
 
         result = []
-        i = 0
-        while i < size:
+        for i in xrange(size):
             entity = self.fetchone(delete_flag)
             if entity is None:
                 break
 
             result.append(entity)
-            i += 1
 
         return result
 
