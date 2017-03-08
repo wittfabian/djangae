@@ -7,6 +7,7 @@
 - The `disable_cache` decorator now wraps the returned function with functools.wraps
 - `prefetch_related()` now works on RelatedListField and RelatedSetField
 - Added a test for Model.objects.none().filter(pk=xyz) type filters
+- Use `user.is_authenticated` instead of `user.is_authenticated()` when using Django >= 1.10.
 - Added `max_length` and `min_length` validation support to `ListField`, `SetField`, `RelatedListField` and `RelatedSetField`.
 - Moved checks verifying csrf, csp and template loader configuration from djangae-scaffold into Djangae.
 - Renamed `contrib.gauth.datastore` and `contrib.gauth.sql` to `contrib.gauth_datastore` and `contrib.gauth_sql` respectively.
@@ -17,9 +18,10 @@
     - This change requires you to update your application to reference/import from the new paths.
     - The old paths still work for now but will trigger deprecation warnings.
 - Cleaned up the query fetching code to be more readable. Moved where result fetching happens to be inline with other backends, which makes Django Debug Toolbar query profiling output correct
+- Cleaned up app_id handling in --sandbox management calls
 - The default GCS bucket name is now cached when first read, saving on RPC calls
+- Updated `AppEngineSecurityMiddleware` to work with Django >= 1.10
 - Fixed a bug where it wasn't possible to add validators to djangae.fields.CharField
-
 
 ### Bug fixes:
 
