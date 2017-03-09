@@ -482,6 +482,9 @@ class RelatedIteratorField(ForeignObject):
 
         if isinstance(ret, set):
             ret = list(ret)
+
+        ret = [self.rel.to._meta.pk.clean(x, self.rel.to) for x in ret]
+
         return ret
 
     def get_db_prep_lookup(self, *args, **kwargs):

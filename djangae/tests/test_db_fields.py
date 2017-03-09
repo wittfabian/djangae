@@ -104,6 +104,9 @@ class ISOther(models.Model):
     class Meta:
         app_label = "djangae"
 
+class StringPkModel(models.Model):
+    name = models.CharField(max_length=500, primary_key=True)
+
 
 class RelationWithoutReverse(models.Model):
     name = models.CharField(max_length=500)
@@ -143,6 +146,13 @@ class IterableFieldModel(models.Model):
     class Meta:
         app_label = "djangae"
 
+class IterableRelatedModel(models.Model):
+    related_set = RelatedListField(ISOther)
+    related_list = RelatedListField(ISOther)
+
+class IterableRelatedWithNonIntPkModel(models.Model):
+    related_set = RelatedListField(StringPkModel)
+    related_list = RelatedListField(StringPkModel)
 
 class IterableFieldsWithValidatorsModel(models.Model):
     set_field = SetField(models.CharField(max_length=100), min_length=2, max_length=3, blank=False)
@@ -645,6 +655,38 @@ class RelatedIterableFieldTests(TestCase):
             "{'related_set': [u'Ensure this field has at least 2 items (it has 1).']}",
             instance.full_clean,
         )
+
+    def test_model_stores_ids_as_integers_when_saving(self):
+        others = []
+        for x in xrange(2):
+            others.append(ISOther.objects.create())
+
+        instance = IterableRelatedModel(
+            related_set_ids=[str(x.pk) for x in others],
+            related_list_ids=[str(x.pk) for x in others],
+        )
+
+        instance.save()
+        instance.refresh_from_db()
+
+        self.assertEqual(instance.related_set_ids, [int(x.pk) for x in others])
+        self.assertEqual(instance.related_list_ids, [int(x.pk) for x in others])
+
+    def test_model_stores_ids_as_non_integers(self):
+        others = []
+        for x in xrange(2):
+            others.append(StringPkModel.objects.create(name=str(x)))
+
+        instance = IterableRelatedWithNonIntPkModel(
+            related_set_ids=[x.pk for x in others],
+            related_list_ids=[x.pk for x in others],
+        )
+
+        instance.save()
+        instance.refresh_from_db()
+
+        self.assertEqual(instance.related_set_ids, [x.pk for x in others])
+        self.assertEqual(instance.related_list_ids, [x.pk for x in others])
 
 
 class RelatedListFieldModelTests(TestCase):
