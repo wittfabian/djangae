@@ -483,7 +483,7 @@ class RelatedIteratorField(ForeignObject):
         if isinstance(ret, set):
             ret = list(ret)
 
-        ret = [self.rel.model._meta.pk.clean(x, self.rel.model) for x in ret]
+        ret = [self.rel.to._meta.pk.clean(x, self.rel.to) for x in ret]
 
         return ret
 
