@@ -43,6 +43,7 @@
 - Fixed a bug in `djangae.contrib.mappers.defer.defer_iteration` where `_shard` would potentially ignore the first element of the queryset
 - Fixed an incompatibility between appstats and the cloud storage backend due to RPC calls being made in the __init__ method
 - Fixed a bug where it wasn't possible to add validators to djangae.fields.CharField
+- Fixed a bug where entries in `RelatedSetField`s and `RelatedListField`s weren't being converted to the same type as the primary key of the model
 
 ### Documentation:
 
