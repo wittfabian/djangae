@@ -572,15 +572,27 @@ class DatabaseWrapper(BaseDatabaseWrapper):
 
     Database = Database
 
+    client_class = DatabaseClient
+    features_class = DatabaseFeatures
+    introspection_class = DatabaseIntrospection
+    features_class = DatabaseFeatures
+    ops_class = DatabaseOperations
+    creation_class = DatabaseCreation
+    validation_class = BaseDatabaseValidation
+
     def __init__(self, *args, **kwargs):
         super(DatabaseWrapper, self).__init__(*args, **kwargs)
 
-        self.features = DatabaseFeatures(self)
-        self.ops = DatabaseOperations(self)
-        self.client = DatabaseClient(self)
-        self.creation = DatabaseCreation(self)
-        self.introspection = DatabaseIntrospection(self)
-        self.validation = BaseDatabaseValidation(self)
+        if not hasattr(self, "client"):
+            # Django 1.11 creates these automatically, when we call super
+            # These are here for Django <= 1.10
+            self.features = DatabaseFeatures(self)
+            self.ops = DatabaseOperations(self)
+            self.client = DatabaseClient(self)
+            self.creation = DatabaseCreation(self)
+            self.introspection = DatabaseIntrospection(self)
+            self.validation = BaseDatabaseValidation(self)
+
         self.autocommit = True
 
     def is_usable(self):
