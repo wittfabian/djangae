@@ -364,6 +364,8 @@ class RelatedIteratorField(ForeignObject):
                 parent_link=kwargs.get("parent_link"),
                 on_delete=on_delete
             )
+        else:
+            kwargs["limit_choices_to"] = limit_choices_to
 
         from_fields = ['self']
         to_fields = [None]
@@ -376,7 +378,6 @@ class RelatedIteratorField(ForeignObject):
             from_fields,
             to_fields,
             related_name=related_name,
-            limit_choices_to=limit_choices_to,
             **kwargs
         )
 
