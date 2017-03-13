@@ -147,12 +147,12 @@ class IterableFieldModel(models.Model):
         app_label = "djangae"
 
 class IterableRelatedModel(models.Model):
-    related_set = RelatedListField(ISOther)
-    related_list = RelatedListField(ISOther)
+    related_set = RelatedListField(ISOther, related_name="+")
+    related_list = RelatedListField(ISOther, related_name="+")
 
 class IterableRelatedWithNonIntPkModel(models.Model):
-    related_set = RelatedListField(StringPkModel)
-    related_list = RelatedListField(StringPkModel)
+    related_set = RelatedListField(StringPkModel, related_name="+")
+    related_list = RelatedListField(StringPkModel, related_name="+")
 
 class IterableFieldsWithValidatorsModel(models.Model):
     set_field = SetField(models.CharField(max_length=100), min_length=2, max_length=3, blank=False)
@@ -734,7 +734,7 @@ class Post(models.Model):
 
 
 class Tag(models.Model):
-    name = models.CharField()
+    name = models.CharField(max_length=64)
 
 
 class RelatedSetFieldModelTests(TestCase):
