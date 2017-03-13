@@ -624,3 +624,6 @@ class DatabaseWrapper(BaseDatabaseWrapper):
 
     def schema_editor(self, *args, **kwargs):
         return DatabaseSchemaEditor(self, *args, **kwargs)
+
+    def validate_no_broken_transaction(self):
+        pass
