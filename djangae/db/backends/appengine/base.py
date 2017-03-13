@@ -615,7 +615,8 @@ class DatabaseWrapper(BaseDatabaseWrapper):
     def _set_autocommit(self, enabled):
         self.autocommit = enabled
 
-    def create_cursor(self):
+    def create_cursor(self, name=None):
+        self.name = name # Django 1.11 only
         if not self.connection:
             self.connection = self.get_new_connection(self.settings_dict)
 
