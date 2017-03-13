@@ -1,4 +1,4 @@
-from django.db.models.expressions import F
+from django.db.models.expressions import F, Col
 from djangae.db.utils import get_prepared_db_value
 
 
@@ -20,6 +20,10 @@ def evaluate_expression(expression, instance, connection):
 
     if hasattr(expression, 'name'):
         field = instance._meta.get_field(expression.name)
+        return get_prepared_db_value(connection, instance._original, field)
+
+    if isinstance(expression, Col):
+        field = expression.field
         return get_prepared_db_value(connection, instance._original, field)
 
     if hasattr(expression, 'value'):
