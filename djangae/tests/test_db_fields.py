@@ -1240,14 +1240,14 @@ class StringReferenceRelatedSetFieldModelTests(TestCase):
 
 class PFPost(models.Model):
     content = models.TextField()
-    authors = RelatedSetField('Author', related_name='posts')
+    authors = RelatedSetField('PFAuthor', related_name='posts')
 
     class Meta:
         app_label = "djangae"
 
 class PFAuthor(models.Model):
     name = models.CharField(max_length=32)
-    awards = RelatedSetField('Awards')
+    awards = RelatedSetField('PFAwards')
 
     class Meta:
         app_label = "djangae"
@@ -1269,4 +1269,4 @@ class RelatedFieldPrefetchTests(TestCase):
         posts = list(PFPost.objects.all().prefetch_related('authors__awards'))
 
         with self.assertNumQueries(0):
-            awards = list(posts[0].authors[0].awards)
+            awards = list(posts[0].authors.all()[0].awards.all())
