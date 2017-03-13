@@ -104,15 +104,27 @@ if "test" in sys.argv:
 
 INSTALLED_APPS = tuple(INSTALLED_APPS)
 
-MIDDLEWARE_CLASSES = (
-    'djangae.contrib.security.middleware.AppEngineSecurityMiddleware',
-    'django.contrib.sessions.middleware.SessionMiddleware',
-    'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
-    'djangae.contrib.gauth.middleware.AuthenticationMiddleware',
-    'django.contrib.messages.middleware.MessageMiddleware',
-    'django.middleware.clickjacking.XFrameOptionsMiddleware',
-)
+if tuple(django.VERSION[:2]) < (1, 10):
+    MIDDLEWARE_CLASSES = (
+        'djangae.contrib.security.middleware.AppEngineSecurityMiddleware',
+        'django.contrib.sessions.middleware.SessionMiddleware',
+        'django.middleware.common.CommonMiddleware',
+        'django.middleware.csrf.CsrfViewMiddleware',
+        'djangae.contrib.gauth.middleware.AuthenticationMiddleware',
+        'django.contrib.messages.middleware.MessageMiddleware',
+        'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    )
+else:
+    MIDDLEWARE = (
+        'djangae.contrib.security.middleware.AppEngineSecurityMiddleware',
+        'django.contrib.sessions.middleware.SessionMiddleware',
+        'django.middleware.common.CommonMiddleware',
+        'django.middleware.csrf.CsrfViewMiddleware',
+        'djangae.contrib.gauth.middleware.AuthenticationMiddleware',
+        'django.contrib.messages.middleware.MessageMiddleware',
+        'django.middleware.clickjacking.XFrameOptionsMiddleware',
+        'session_csrf.CsrfMiddleware'
+    )
 
 ROOT_URLCONF = 'testapp.urls'
 SITE_ID = 1
