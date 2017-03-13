@@ -354,6 +354,17 @@ class RelatedIteratorField(ForeignObject):
             # of get_lookup. We want to override it (but only for Django 1.8)
             self.get_lookup_constraint = self._get_lookup_constraint
 
+            # Django 1.8 doesn't support the rel_class attribute so we have to pass it up
+            # manually.
+            kwargs["rel"] = self.rel_class(
+                self, to,
+                related_name=related_name,
+                related_query_name=kwargs.get("related_query_name"),
+                limit_choices_to=limit_choices_to,
+                parent_link=kwargs.get("parent_link"),
+                on_delete=on_delete
+            )
+
         from_fields = ['self']
         to_fields = [None]
 
