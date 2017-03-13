@@ -8,6 +8,9 @@ from django.db.models.expressions import Star
 from django.db.models.sql.datastructures import EmptyResultSet
 from django.db.models.query import QuerySet
 
+from django.db.models.sql.query import Query as DjangoQuery
+
+
 try:
     from django.db.models.query import FlatValuesListIterable
 except ImportError:
@@ -209,10 +212,11 @@ class BaseParser(object):
         if not hasattr(node, "lhs"):
             raise NotSupportedError("Attempted probable subquery, these aren't supported on the datastore")
 
-        # Although we do nothing with this. We need to call it as many lookups
-        # perform validation etc.
-        if not hasattr(node.rhs, "_as_sql"): # Don't call on querysets
+        # Don't call on querysets
+        if not hasattr(node.rhs, "_as_sql") and not isinstance(node.rhs, DjangoQuery):
             try:
+                # Although we do nothing with this. We need to call it as many lookups
+                # perform validation etc.
                 node.process_rhs(compiler, connection)
             except EmptyResultSet:
                 if node.lookup_name == 'in':
@@ -251,8 +255,17 @@ class BaseParser(object):
         lhs = field.column
 
         if hasattr(node.rhs, "get_compiler"):
-            # This is a subquery
-            raise NotSupportedError("Attempted to run a subquery on the datastore")
+            if len(node.rhs.select) == 1:
+                # In Django 1.11 this is a values list type query
+                qs = QuerySet(query=node.rhs, using=self.connection.alias)
+
+                # We make the query for the values, but wrap in a list to trick the
+                # was_iter code below. This whole set of if/elif statements needs rethinking!
+                rhs = [list(qs.values_list("pk", flat=True))]
+            else:
+
+                # This is a subquery
+                raise NotSupportedError("Attempted to run a subquery on the datastore")
         elif isinstance(node.rhs, ValuesListQuerySet):
             # We explicitly handle ValuesListQuerySet because of the
             # common case of pk__in=Something.objects.values_list("pk", flat=True)
