@@ -22,6 +22,7 @@
 - Cleaned up app_id handling in --sandbox management calls
 - The default GCS bucket name is now cached when first read, saving on RPC calls
 - Updated `AppEngineSecurityMiddleware` to work with Django >= 1.10
+- Added a test for prefetching via RelatedSetField/RelatedListField. Cleaned up some related code.
 
 ### Bug fixes:
 

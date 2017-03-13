@@ -21,7 +21,7 @@ from djangae.fields.iterable import IsEmptyLookup, ContainsLookup, OverlapLookup
 
 
 class RelatedIteratorRel(ForeignObjectRel):
-    def __init__(self, field, to, related_name=None, limit_choices_to=None, on_delete=models.DO_NOTHING):
+    def __init__(self, field, to, related_name=None, limit_choices_to=None, on_delete=models.DO_NOTHING, **kwargs):
         self.field = field
         if django.VERSION[1] < 9: # Django 1.8 compatibility
             self.to = to
@@ -32,10 +32,7 @@ class RelatedIteratorRel(ForeignObjectRel):
         self.parent_link = None
         self.on_delete = on_delete
         self.symmetrical = False
-
-        if limit_choices_to is None:
-            limit_choices_to = {}
-        self.limit_choices_to = limit_choices_to
+        self.limit_choices_to = {} if limit_choices_to is None else limit_choices_to
         self.multiple = True
 
     def is_hidden(self):
@@ -346,8 +343,52 @@ class RelatedIteratorField(ForeignObject):
     empty_strings_allowed = False
     retain_underlying_order = False
 
+    rel_class = RelatedIteratorRel
+
     def __init__(self, to, limit_choices_to=None, related_name=None, on_delete=models.DO_NOTHING, **kwargs):
         # Make sure that we do nothing on cascade by default
+        self._check_sane_on_delete_value(on_delete)
+
+        from_fields = ['self']
+        to_fields = [None]
+
+        min_length, max_length = self._sanitize_min_and_max_length(kwargs)
+
+        if django.VERSION[1] == 8:
+            # in Django 1.8 ForeignObject uses get_lookup_constraint instead
+            # of get_lookup. We want to override it (but only for Django 1.8)
+            self.get_lookup_constraint = self._get_lookup_constraint
+
+            # Django 1.8 doesn't support the rel_class attribute so we have to pass it up
+            # manually.
+            kwargs["rel"] = self.rel_class(
+                self, to,
+                related_name=related_name,
+                related_query_name=kwargs.get("related_query_name"),
+                limit_choices_to=limit_choices_to,
+                parent_link=kwargs.get("parent_link"),
+                on_delete=on_delete
+            )
+
+            super(RelatedIteratorField, self).__init__(to, from_fields, to_fields, **kwargs)
+        else:
+            super(RelatedIteratorField, self).__init__(
+                to,
+                on_delete,
+                from_fields,
+                to_fields,
+                related_name=related_name,
+                limit_choices_to=limit_choices_to,
+                **kwargs
+            )
+
+        # Now that self.validators has been set up, we can add the min/max legnth validators
+        if min_length is not None:
+            self.validators.append(MinItemsValidator(min_length))
+        if max_length is not None:
+            self.validators.append(MaxItemsValidator(max_length))
+
+    def _check_sane_on_delete_value(self, on_delete):
         if on_delete == models.CASCADE:
             raise ImproperlyConfigured(
                 "on_delete=CASCADE is disabled for iterable fields as this will "
@@ -359,26 +400,7 @@ class RelatedIteratorField(ForeignObject):
                              " (e.g. wipeout the entire list) if you really want to do that "
                              "then use models.SET instead and return an empty list/set")
 
-        kwargs["rel"] = RelatedIteratorRel(
-            self,
-            to,
-            related_name=related_name,
-            limit_choices_to=limit_choices_to,
-            on_delete=on_delete
-        )
-
-        if django.VERSION[1] >= 9:  # Django 1.8 doesn't have on_delete as attribute
-            kwargs.update({
-                'on_delete': models.DO_NOTHING,
-            })
-        elif django.VERSION[1] == 8:
-            # in Django 1.8 ForeignObject uses get_lookup_constraint instead
-            # of get_lookup. We want to override it (but only for Django 1.8)
-            self.get_lookup_constraint = self._get_lookup_constraint
-
-        from_fields = ['self']
-        to_fields = [None]
-
+    def _sanitize_min_and_max_length(self, kwargs):
         # Pop the 'min_length' and 'max_length' from the kwargs, if they're there, as this avoids
         # 'min_length' causing an error when calling super()
         min_length = kwargs.pop("min_length", None)
@@ -392,13 +414,7 @@ class RelatedIteratorField(ForeignObject):
                 "Setting blank=True and min_length=%d is contradictory." % min_length
             )
 
-        super(RelatedIteratorField, self).__init__(to, from_fields=from_fields, to_fields=to_fields, **kwargs)
-
-        # Now that self.validators has been set up, we can add the min/max legnth validators
-        if min_length is not None:
-            self.validators.append(MinItemsValidator(min_length))
-        if max_length is not None:
-            self.validators.append(MaxItemsValidator(max_length))
+        return min_length, max_length
 
     def _get_lookup_constraint(self, constraint_class, alias, targets, sources, lookups, raw_value):
         from django.core import exceptions
