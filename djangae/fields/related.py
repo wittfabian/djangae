@@ -359,7 +359,15 @@ class RelatedIteratorField(ForeignObject):
 
         min_length, max_length = self._sanitize_min_and_max_length(kwargs)
 
-        super(RelatedIteratorField, self).__init__(to, on_delete, from_fields, to_fields, **kwargs)
+        super(RelatedIteratorField, self).__init__(
+            to,
+            on_delete,
+            from_fields,
+            to_fields,
+            related_name=related_name,
+            limit_choices_to=limit_choices_to,
+            **kwargs
+        )
 
         # Now that self.validators has been set up, we can add the min/max legnth validators
         if min_length is not None:
