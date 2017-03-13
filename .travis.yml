@@ -8,8 +8,6 @@ env:
   - DJANGO_VERSION=1.10
   - DJANGO_VERSION=1.11
 matrix:
-  allow_failures:
-    - env: DJANGO_VERSION=1.11
   fast_finish: true
 before_install:
 - pip install codecov
