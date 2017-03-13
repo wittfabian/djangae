@@ -349,6 +349,11 @@ class RelatedIteratorField(ForeignObject):
         # Make sure that we do nothing on cascade by default
         self._check_sane_on_delete_value(on_delete)
 
+        from_fields = ['self']
+        to_fields = [None]
+
+        min_length, max_length = self._sanitize_min_and_max_length(kwargs)
+
         if django.VERSION[1] == 8:
             # in Django 1.8 ForeignObject uses get_lookup_constraint instead
             # of get_lookup. We want to override it (but only for Django 1.8)
@@ -364,22 +369,18 @@ class RelatedIteratorField(ForeignObject):
                 parent_link=kwargs.get("parent_link"),
                 on_delete=on_delete
             )
+
+            super(RelatedIteratorField, self).__init__(to, from_fields, to_fields, **kwargs)
         else:
-            kwargs["limit_choices_to"] = limit_choices_to
-
-        from_fields = ['self']
-        to_fields = [None]
-
-        min_length, max_length = self._sanitize_min_and_max_length(kwargs)
-
-        super(RelatedIteratorField, self).__init__(
-            to,
-            on_delete,
-            from_fields,
-            to_fields,
-            related_name=related_name,
-            **kwargs
-        )
+            super(RelatedIteratorField, self).__init__(
+                to,
+                on_delete,
+                from_fields,
+                to_fields,
+                related_name=related_name,
+                limit_choices_to=limit_choices_to
+                **kwargs
+            )
 
         # Now that self.validators has been set up, we can add the min/max legnth validators
         if min_length is not None:
