@@ -378,7 +378,7 @@ class RelatedIteratorField(ForeignObject):
                 from_fields,
                 to_fields,
                 related_name=related_name,
-                limit_choices_to=limit_choices_to
+                limit_choices_to=limit_choices_to,
                 **kwargs
             )
 
