@@ -30,7 +30,7 @@ def check_session_csrf_enabled(app_configs, **kwargs):
 
     # Django >= 1.10 has a MIDDLEWARE setting, which is None by default. Convert
     # it to a list, it might be a tuple.
-    middleware = list(getattr(settings, 'MIDDLEWARE', []) or [])
+    middleware = list(getattr(settings, 'MIDDLEWARE', []))
     middleware.extend(getattr(settings, 'MIDDLEWARE_CLASSES', []))
 
     if 'session_csrf.CsrfMiddleware' not in middleware:
