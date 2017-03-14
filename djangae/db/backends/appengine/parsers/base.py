@@ -7,7 +7,7 @@ from django.db import NotSupportedError
 from django.db.models.expressions import Star
 from django.db.models.sql.datastructures import EmptyResultSet
 from django.db.models.query import QuerySet
-
+from django.db.models.aggregates import Aggregate
 from django.db.models.sql.query import Query as DjangoQuery
 
 
@@ -230,6 +230,8 @@ class BaseParser(object):
             # as they might be wrapping date fields
             field = node.lhs.target
             operator = convert_rhs_op(node)
+        elif isinstance(node.lhs, Aggregate):
+            raise NotSupportedError("Aggregate filters are not supported on the datastore")
         else:
             field = node.lhs.lhs.target
             operator = convert_rhs_op(node)
