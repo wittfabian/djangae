@@ -35,7 +35,10 @@ DJANGO_TESTS_WHICH_HAVE_BUGS = {
 
     # Fails to recognize deprecation warning is emitted, even though it is... must be
     # something to do with our setup
-    'many_to_one.tests.ManyToOneTests.test_reverse_assignment_deprecation'
+    'many_to_one.tests.ManyToOneTests.test_reverse_assignment_deprecation',
+
+    # https://code.djangoproject.com/ticket/27937 (reported by me!)
+    'model_forms.tests.LimitChoicesToTests.test_limit_choices_to_callable_for_fk_rel',
 }
 
 # This is potentially fixable by us. sql_with_params returns a tuple of
