@@ -2,6 +2,7 @@
 
 ### New features & improvements:
 
+- Added preliminary support for Django 1.11 (not yet released, don't upgrade yet!)
 - The system check for session_csrf now works with the MIDDLEWARE setting when using Django >= 1.10.
 - System check for deferred builtin which should always be switched off.
 - Implemented weak (memcache) locking to contrib.locking
