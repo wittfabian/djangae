@@ -71,6 +71,7 @@ DJANGO_TESTS_WHICH_COUNT_QUERIES = {
 
 DJANGO_TESTS_WHICH_EXPECT_SEQUENTIAL_IDS = {
     'ordering.tests.OrderingTests.test_order_by_pk',
+    'ordering.tests.OrderingTests.test_order_by_fk_attname',
 }
 
 DJANGO_TESTS_TO_SKIP = DJANGO_TESTS_WHICH_REQUIRE_ZERO_PKS.union(
