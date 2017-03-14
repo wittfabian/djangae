@@ -1,6 +1,7 @@
+from django.db import NotSupportedError
 from django.db.models.expressions import F, Col
 from djangae.db.utils import get_prepared_db_value
-
+from django.db.models.aggregates import Aggregate
 
 CONNECTORS = {
     F.ADD: lambda l, r: l + r,
@@ -17,6 +18,9 @@ def evaluate_expression(expression, instance, connection):
 
     if isinstance(expression, (basestring, int, float)):
         return expression
+
+    if isinstance(expression, Aggregate):
+        raise NotSupportedError("Aggregate expressions are not supported on the datastore")
 
     if hasattr(expression, 'name'):
         field = instance._meta.get_field(expression.name)
