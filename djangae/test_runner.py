@@ -193,3 +193,11 @@ class SkipUnsupportedRunner(DjangaeTestSuiteRunner):
             failfast=self.failfast,
             resultclass=SkipUnsupportedTestResult
         ).run(suite)
+
+
+class DjangaeDiscoverRunner(DiscoverRunner):
+    def build_suite(self, *args, **kwargs):
+        suite = super(DjangaeDiscoverRunner, self).build_suite(*args, **kwargs)
+        suite._tests[:] = [bed_wrap(test) for test in suite._tests]
+        return suite
+        
