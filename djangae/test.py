@@ -24,10 +24,6 @@ def inconsistent_db(probability=0, connection='default'):
 
     conn = connections[connection]
 
-    if not hasattr(conn.creation, "testbed") or "datastore_v3" not in conn.creation.testbed._enabled_stubs:
-        raise RuntimeError("Tried to use the inconsistent_db stub when not testing")
-
-
     stub = apiproxy_stub_map.apiproxy.GetStub('datastore_v3')
 
     # Set the probability of the datastore stub
