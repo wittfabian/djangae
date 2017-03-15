@@ -4,9 +4,11 @@ from unittest import TextTestResult
 
 from django.test.runner import DiscoverRunner
 from django.db import NotSupportedError
+from django.conf import settings
 
 from djangae import environment
 
+from google.appengine.datastore import datastore_stub_util
 from google.appengine.ext import testbed
 
 
@@ -77,12 +79,20 @@ DJANGO_TESTS_TO_SKIP = DJANGO_TESTS_WHICH_REQUIRE_ZERO_PKS.union(
 )
 
 def init_testbed():
-    # We don't initialize the datastore stub here, that needs to be done by Django's create_test_db and destroy_test_db.
-    IGNORED_STUBS = [ "init_datastore_v3_stub" ]
+    IGNORED_STUBS = []
+
+    # We allow users to disable scattered IDs in tests. This primarily for running Django tests that
+    # assume implicit ordering (yeah, annoying)
+    use_scattered = not getattr(settings, "DJANGAE_SEQUENTIAL_IDS_IN_TESTS", False)
 
     stub_kwargs = {
         "init_taskqueue_stub": {
             "root_path": environment.get_application_root()
+        },
+        "init_datastore_v3_stub": {
+            "use_sqlite": True,
+            "auto_id_policy": testbed.AUTO_ID_POLICY_SCATTERED if use_scattered else testbed.AUTO_ID_POLICY_SEQUENTIAL,
+            "consistency_policy": datastore_stub_util.PseudoRandomHRConsistencyPolicy(probability=1)
         }
     }
     bed = testbed.Testbed()
