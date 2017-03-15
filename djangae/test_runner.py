@@ -1,3 +1,7 @@
+## The test runner in here is for running the Djangae test suite itself. Projects using Djangae
+## should either use djangae.test.DjangaeDiscoverRunner or if using Nose, use the noseplugin
+## both of which will setup and teardown the App Engine testbed for each test
+
 import unittest
 import os
 from unittest import TextTestResult
@@ -204,10 +208,3 @@ class SkipUnsupportedRunner(DjangaeTestSuiteRunner):
             resultclass=SkipUnsupportedTestResult
         ).run(suite)
 
-
-class DjangaeDiscoverRunner(DiscoverRunner):
-    def build_suite(self, *args, **kwargs):
-        suite = super(DjangaeDiscoverRunner, self).build_suite(*args, **kwargs)
-        suite._tests[:] = [bed_wrap(test) for test in suite._tests]
-        return suite
-        
