@@ -473,34 +473,13 @@ class DatabaseCreation(BaseDatabaseCreation):
         return []
 
     def _create_test_db(self, verbosity, autoclobber, *args):
-        from google.appengine.ext import testbed # Imported lazily to prevent warnings on GAE
-
-        assert not self.testbed
-
         if args:
             logger.warning("'keepdb' argument is not currently supported on the AppEngine backend")
 
-        # We allow users to disable scattered IDs in tests. This primarily for running Django tests that
-        # assume implicit ordering (yeah, annoying)
-        use_scattered = not getattr(settings, "DJANGAE_SEQUENTIAL_IDS_IN_TESTS", False)
-
-        kwargs = {
-            "use_sqlite": True,
-            "auto_id_policy": testbed.AUTO_ID_POLICY_SCATTERED if use_scattered else testbed.AUTO_ID_POLICY_SEQUENTIAL,
-            "consistency_policy": datastore_stub_util.PseudoRandomHRConsistencyPolicy(probability=1)
-        }
-
-        self.testbed = testbed.Testbed()
-        self.testbed.activate()
-        self.testbed.init_datastore_v3_stub(**kwargs)
-        self.testbed.init_memcache_stub()
         get_context().reset()
 
     def _destroy_test_db(self, name, verbosity):
-        if self.testbed:
-            get_context().reset()
-            self.testbed.deactivate()
-            self.testbed = None
+        get_context().reset()
 
 
 class DatabaseIntrospection(BaseDatabaseIntrospection):
