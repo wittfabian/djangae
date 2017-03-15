@@ -816,7 +816,7 @@ class FlushCommand(object):
 def reserve_id(kind, id_or_name, namespace):
     from google.appengine.api.datastore import _GetConnection
     key = datastore.Key.from_path(kind, id_or_name, namespace=namespace)
-    _GetConnection()._async_reserve_keys(None, [key])
+    _GetConnection()._reserve_keys([key])
 
 
 class BulkInsertError(IntegrityError, NotSupportedError):
