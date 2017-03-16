@@ -21,7 +21,7 @@ Add the `remote_api` built-in to app.yaml, and deploy that change.
 
 You also need to ensure that the `application` in app.yaml is set to the application which you wish to connect to.
 
-Then run your management command specifying the `remote` sandbox.  Note that the `--sandbox` argument needs to come before the name of the management command, e.g.:
+Then run your management command specifying the `remote` sandbox.
 
     ./manage.py --sandbox=remote shell
 
