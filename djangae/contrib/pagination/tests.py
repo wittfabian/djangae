@@ -35,6 +35,20 @@ class TestUser(models.Model):
         db_table = "pagination"
         ordering = ("first_name", "last_name")
 
+@paginated_model(orderings=[
+    "name",
+    "pk",  # it's possible to order by the model pk
+])
+class SimpleModelWithoutOrdering(models.Model):
+    name = models.CharField(max_length=200)
+
+    class Meta:
+        db_table = "pagination"
+
+class SimpleModelWithOrdering(SimpleModelWithoutOrdering):
+    class Meta:
+        ordering = ["name"]
+
 
 class PaginatedModelTests(TestCase):
     def test_fields_added_correctly(self):
@@ -147,6 +161,21 @@ class DatastorePaginatorTests(TestCase):
             actual_markers.append(_get_marker(query_id, i)[0])
 
         self.assertEqual(expected_markers, actual_markers)
+
+    def test_ordering_required_exception_is_thrown_when_no_order_specified(self):
+        # The exception should not be thrown when an order is specified
+        query_set = SimpleModelWithoutOrdering.objects.order_by("name")
+        paginator = Paginator(query_set, 25, readahead=10)
+
+        # The exception should not be thrown when the model has a default order
+        query_set = SimpleModelWithOrdering.objects.all()
+        paginator = Paginator(query_set, 25, readahead=10)
+
+        # The exception should be thrown when no order is specified on the model or in the query set
+        query_set = SimpleModelWithoutOrdering.objects.all()
+        with self.assertRaises(PaginationOrderingRequired):
+            paginator = Paginator(query_set, 25, readahead=10)
+
 
     def test_pages_correct(self):
         paginator = Paginator(TestUser.objects.all().order_by("first_name"), 1)  # 1 item per page
