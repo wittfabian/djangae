@@ -23,6 +23,8 @@
 - The default GCS bucket name is now cached when first read, saving on RPC calls
 - Updated `AppEngineSecurityMiddleware` to work with Django >= 1.10
 - Added a test for prefetching via RelatedSetField/RelatedListField. Cleaned up some related code.
+- Allow the sandbox argument to be at any position.
+- Added some tests for the management command code.
 - Added a test to prove that the ordering specified on a model's `_meta` is used for pagination, when no custom order has been specified on the query set.
 
 ### Bug fixes:

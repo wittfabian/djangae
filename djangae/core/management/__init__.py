@@ -48,22 +48,18 @@ def _execute_from_command_line(sandbox_name, argv, **sandbox_overrides):
 def execute_from_command_line(argv=None, **sandbox_overrides):
     """Wraps Django's `execute_from_command_line` to initialize a djangae
     sandbox before running a management command.
-
-    Note: The '--sandbox' arg must come first. All other args are forwarded to
-          Django as normal.
     """
     argv = argv or sys.argv
     parser = argparse.ArgumentParser(prog='manage.py')
     parser.add_argument(
         '--sandbox', default=sandbox.LOCAL, choices=sandbox.SANDBOXES.keys())
     parser.add_argument('--app_id', default=None, help='GAE APPLICATION ID')
-    parser.add_argument('args', nargs=argparse.REMAINDER)
-    namespace = parser.parse_args(argv[1:])
+    namespace, other_args = parser.parse_known_args(argv[1:])
 
     overrides = DJANGO_DEFAULTS
     overrides.update(sandbox_overrides, app_id=namespace.app_id)
 
-    return _execute_from_command_line(namespace.sandbox, ['manage.py'] + namespace.args, **overrides)
+    return _execute_from_command_line(namespace.sandbox, ['manage.py'] + other_args, **overrides)
 
 
 def remote_execute_from_command_line(argv=None, **sandbox_overrides):
