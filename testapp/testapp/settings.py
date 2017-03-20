@@ -25,9 +25,7 @@ SECRET_KEY = '&x$ts1u)tx#5zsi84555$(@mydbz06&q23p8=c6fs1!d4%1a^u'
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-TEMPLATE_DEBUG = True
-
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['*']
 
 # Application definition
 
@@ -104,7 +102,7 @@ if "test" in sys.argv:
 
 INSTALLED_APPS = tuple(INSTALLED_APPS)
 
-MIDDLEWARE_CLASSES = (
+MIDDLEWARE = (
     'djangae.contrib.security.middleware.AppEngineSecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -112,7 +110,13 @@ MIDDLEWARE_CLASSES = (
     'djangae.contrib.gauth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'session_csrf.CsrfMiddleware'
 )
+
+if tuple(django.VERSION[:2]) < (1, 10):
+    MIDDLEWARE_CLASSES = MIDDLEWARE
+
+
 
 ROOT_URLCONF = 'testapp.urls'
 SITE_ID = 1
@@ -172,7 +176,8 @@ TEMPLATES = [
         'OPTIONS': {
             'context_processors': [
                 'django.contrib.auth.context_processors.auth'
-            ]
+            ],
+            'debug': True
         }
     },
 ]

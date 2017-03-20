@@ -551,15 +551,28 @@ class DatabaseWrapper(BaseDatabaseWrapper):
 
     Database = Database
 
+    # These attributes are only used by Django >= 1.11
+    client_class = DatabaseClient
+    features_class = DatabaseFeatures
+    introspection_class = DatabaseIntrospection
+    features_class = DatabaseFeatures
+    ops_class = DatabaseOperations
+    creation_class = DatabaseCreation
+    validation_class = BaseDatabaseValidation
+
     def __init__(self, *args, **kwargs):
         super(DatabaseWrapper, self).__init__(*args, **kwargs)
 
-        self.features = DatabaseFeatures(self)
-        self.ops = DatabaseOperations(self)
-        self.client = DatabaseClient(self)
-        self.creation = DatabaseCreation(self)
-        self.introspection = DatabaseIntrospection(self)
-        self.validation = BaseDatabaseValidation(self)
+        if not hasattr(self, "client"):
+            # Django 1.11 creates these automatically, when we call super
+            # These are here for Django <= 1.10
+            self.features = DatabaseFeatures(self)
+            self.ops = DatabaseOperations(self)
+            self.client = DatabaseClient(self)
+            self.creation = DatabaseCreation(self)
+            self.introspection = DatabaseIntrospection(self)
+            self.validation = BaseDatabaseValidation(self)
+
         self.autocommit = True
 
     def is_usable(self):
@@ -582,7 +595,8 @@ class DatabaseWrapper(BaseDatabaseWrapper):
     def _set_autocommit(self, enabled):
         self.autocommit = enabled
 
-    def create_cursor(self):
+    def create_cursor(self, name=None):
+        self.name = name  # Django >= 1.11
         if not self.connection:
             self.connection = self.get_new_connection(self.settings_dict)
 
@@ -590,3 +604,7 @@ class DatabaseWrapper(BaseDatabaseWrapper):
 
     def schema_editor(self, *args, **kwargs):
         return DatabaseSchemaEditor(self, *args, **kwargs)
+
+    def validate_no_broken_transaction(self):
+        # Override this to do nothing, because it's not relevant to the Datastore
+        pass

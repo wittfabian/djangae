@@ -41,7 +41,7 @@ DJANGO_TESTS_WHICH_HAVE_BUGS = {
 
     # Fails to recognize deprecation warning is emitted, even though it is... must be
     # something to do with our setup
-    'many_to_one.tests.ManyToOneTests.test_reverse_assignment_deprecation'
+    'many_to_one.tests.ManyToOneTests.test_reverse_assignment_deprecation',
 }
 
 # This is potentially fixable by us. sql_with_params returns a tuple of
@@ -74,12 +74,19 @@ DJANGO_TESTS_WHICH_COUNT_QUERIES = {
     'delete.tests.DeletionTests.test_large_delete_related'
 }
 
+
+DJANGO_TESTS_WHICH_EXPECT_SEQUENTIAL_IDS = {
+    'ordering.tests.OrderingTests.test_order_by_pk',
+    'ordering.tests.OrderingTests.test_order_by_fk_attname',
+}
+
 DJANGO_TESTS_TO_SKIP = DJANGO_TESTS_WHICH_REQUIRE_ZERO_PKS.union(
     DJANGO_TESTS_WHICH_REQUIRE_AUTH_USER).union(
     DJANGO_TESTS_WHICH_HAVE_BUGS).union(
     DJANGO_TESTS_WHICH_EXPECT_SQL_PARAMS).union(
     DJANGO_TESTS_WHICH_USE_SELECT_RELATED).union(
-    DJANGO_TESTS_WHICH_COUNT_QUERIES
+    DJANGO_TESTS_WHICH_COUNT_QUERIES).union(
+    DJANGO_TESTS_WHICH_EXPECT_SEQUENTIAL_IDS
 )
 
 def init_testbed():

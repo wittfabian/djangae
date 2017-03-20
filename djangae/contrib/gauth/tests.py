@@ -460,7 +460,7 @@ class SwitchAccountsTests(TestCase):
             # Check that the user is logged in
             expected_user_query = GaeDatastoreUser.objects.filter(username=jekyll.user_id())
             self.assertEqual(len(expected_user_query), 1)
-            self.assertEqual(int(self.client._session()['_auth_user_id']), expected_user_query[0].pk)
+            self.assertEqual(int(self.client.session['_auth_user_id']), expected_user_query[0].pk)
             # Now call the switch_accounts view, which should give us a redirect to the login page
             response = self.client.get(switch_accounts_url, follow=False)
             self.assertEqual(response.status_code, 302)
@@ -486,7 +486,7 @@ class SwitchAccountsTests(TestCase):
             self.assertEqual(redirect_path, final_destination)
             expected_user_query = GaeDatastoreUser.objects.filter(username=hyde.user_id())
             self.assertEqual(len(expected_user_query), 1)
-            self.assertEqual(int(self.client._session()['_auth_user_id']), expected_user_query[0].pk)
+            self.assertEqual(int(self.client.session['_auth_user_id']), expected_user_query[0].pk)
 
     @override_settings(DJANGAE_CREATE_UNKNOWN_USER=True)
     def test_switch_to_same_account(self):
@@ -501,7 +501,8 @@ class SwitchAccountsTests(TestCase):
             # Check that the user is logged in
             expected_user_query = GaeDatastoreUser.objects.filter(username=jekyll.user_id())
             self.assertEqual(len(expected_user_query), 1)
-            self.assertEqual(int(self.client._session()['_auth_user_id']), expected_user_query[0].pk)
+
+            self.assertEqual(int(self.client.session['_auth_user_id']), expected_user_query[0].pk)
             # Call switch_accounts view, which should give a redirect to login url
             response = self.client.get(switch_accounts_url, follow=False)
             self.assertEqual(response.status_code, 302)
@@ -519,7 +520,7 @@ class SwitchAccountsTests(TestCase):
             self.assertEqual(redirect_path, final_destination)
             expected_user_query = GaeDatastoreUser.objects.filter(username=jekyll.user_id())
             self.assertEqual(len(expected_user_query), 1)
-            self.assertEqual(int(self.client._session()['_auth_user_id']), expected_user_query[0].pk)
+            self.assertEqual(int(self.client.session['_auth_user_id']), expected_user_query[0].pk)
 
 
 class ModelTests(TestCase):
