@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 
 
 INVALID_ORDERING_FIELD_MESSAGE = (
-    "Ordering on TextField or BinaryField is not supported on the datastore. "
+    "Ordering on TextField or BinaryField is not supported on the Datastore. "
     "You might consider using a ComputedCharField which stores the first "
     "_MAX_STRING_LENGTH (from google.appengine.api.datastore_types) bytes of the "
     "field and instead order on that."
@@ -210,7 +210,7 @@ class BaseParser(object):
             return operator
 
         if not hasattr(node, "lhs"):
-            raise NotSupportedError("Attempted probable subquery, these aren't supported on the datastore")
+            raise NotSupportedError("Attempted probable subquery, these aren't supported on the Datastore")
 
         # Don't call on querysets
         if not hasattr(node.rhs, "_as_sql") and not isinstance(node.rhs, DjangoQuery):
@@ -231,7 +231,7 @@ class BaseParser(object):
             field = node.lhs.target
             operator = convert_rhs_op(node)
         elif isinstance(node.lhs, Aggregate):
-            raise NotSupportedError("Aggregate filters are not supported on the datastore")
+            raise NotSupportedError("Aggregate filters are not supported on the Datastore")
         else:
             field = node.lhs.lhs.target
             operator = convert_rhs_op(node)
@@ -243,16 +243,16 @@ class BaseParser(object):
                 operator = "{}__{}".format(node.lhs.lookup_name, node.lookup_name)
 
         if get_top_concrete_parent(field.model) != get_top_concrete_parent(model):
-            raise NotSupportedError("Cross-join where filters are not supported on the datastore")
+            raise NotSupportedError("Cross-join where filters are not supported on the Datastore")
 
         # Make sure we don't let people try to filter on a text field, otherwise they just won't
         # get any results!
 
         if field.db_type(connection) in ("bytes", "text"):
-            raise NotSupportedError("You can't filter on text or blob fields on the datastore")
+            raise NotSupportedError("You can't filter on text or blob fields on the Datastore")
 
         if operator == "isnull" and field.model._meta.parents.values():
-            raise NotSupportedError("isnull lookups on inherited relations aren't supported on the datastore")
+            raise NotSupportedError("isnull lookups on inherited relations aren't supported on the Datastore")
 
         lhs = field.column
 
@@ -266,14 +266,13 @@ class BaseParser(object):
                 # was_iter code below. This whole set of if/elif statements needs rethinking!
                 rhs = [list(qs.values_list("pk", flat=True))]
             else:
-
                 # This is a subquery
-                raise NotSupportedError("Attempted to run a subquery on the datastore")
+                raise NotSupportedError("Attempted to run a subquery on the Datastore")
         elif isinstance(node.rhs, ValuesListQuerySet):
             # We explicitly handle ValuesListQuerySet because of the
             # common case of pk__in=Something.objects.values_list("pk", flat=True)
             # this WILL execute another query, but that is to be expected on a
-            # non-relational datastore.
+            # non-relational database.
 
             rhs = [x for x in node.rhs]  # Evaluate the queryset
 
@@ -310,7 +309,7 @@ class BaseParser(object):
         # For some reason, this test:
         # test_update_with_related_manager (get_or_create.tests.UpdateOrCreateTests)
         # ends up with duplicate nodes in the where tree. I don't know why. But this
-        # weirdly causes the datastore query to return nothing.
+        # weirdly causes the Datastore query to return nothing.
         # so here we don't add duplicate nodes, I can't think of a case where that would
         # change the query if it's under the same parent.
         if new_node in new_parent.children:
@@ -399,7 +398,7 @@ class BaseParser(object):
             if len(cross_table_ordering):
                 log_once(
                     logger.warning if environment.is_development_environment() else logger.debug,
-                    "The following orderings were ignored as cross-table orderings are not supported on the datastore: %s", cross_table_ordering
+                    "The following orderings were ignored as cross-table orderings are not supported on the Datastore: %s", cross_table_ordering
                 )
 
             result = new_result
@@ -440,7 +439,7 @@ class BaseParser(object):
                 pk_col = "__key__"
                 final.append("-" + pk_col if col.startswith("-") else pk_col)
             elif col == "?":
-                raise NotSupportedError("Random ordering is not supported on the datastore")
+                raise NotSupportedError("Random ordering is not supported on the Datastore")
             elif col.lstrip("-").startswith("__") and col.endswith("__"):
                 # Allow stuff like __scatter__
                 final.append(col)
@@ -479,7 +478,7 @@ class BaseParser(object):
                     # into account the related model ordering. Note the difference between field.name == column
                     # and field.attname (X_id)
                     if field.related_model and field.name == column and field.related_model._meta.ordering:
-                        raise NotSupportedError("Related ordering is not supported on the datastore")
+                        raise NotSupportedError("Related ordering is not supported on the Datastore")
 
                     column = "__key__" if field.primary_key else field.column
                     final.append("-" + column if col.startswith("-") else column)
@@ -515,7 +514,7 @@ class BaseParser(object):
             diff = set(result) - set(final)
             log_once(
                 logger.warning if environment.is_development_environment() else logger.debug,
-                "The following orderings were ignored as cross-table and random orderings are not supported on the datastore: %s", diff
+                "The following orderings were ignored as cross-table and random orderings are not supported on the Datastore: %s", diff
             )
 
         return final
