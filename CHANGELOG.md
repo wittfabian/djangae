@@ -25,6 +25,7 @@
 - Added a test for prefetching via RelatedSetField/RelatedListField. Cleaned up some related code.
 - Allow the sandbox argument to be at any position.
 - Added some tests for the management command code.
+- Added a test to prove that the ordering specified on a model's `_meta` is used for pagination, when no custom order has been specified on the query set.
 
 ### Bug fixes:
 
@@ -48,10 +49,13 @@
 - Fixed an incompatibility between appstats and the cloud storage backend due to RPC calls being made in the __init__ method
 - Fixed a bug where it wasn't possible to add validators to djangae.fields.CharField
 - Fixed a bug where entries in `RelatedSetField`s and `RelatedListField`s weren't being converted to the same type as the primary key of the model
+- Fixed a bug where running tests would incorrectly load the real search stub before the test version
+- Fixed a bug where IDs weren't reserved with the datastore allocator immediately and so could end up with a race-condition where an ID could be reused
 
 ### Documentation:
 
 - Improved documentation for `djangae.contrib.mappers.defer_iteration`.
+- Changed the installation documentation to reflect the correct way to launch tests
 
 
 ## v0.9.8 (release date: 6th December 2016)
