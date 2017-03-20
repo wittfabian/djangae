@@ -258,7 +258,8 @@ class BaseParser(object):
 
         if hasattr(node.rhs, "get_compiler"):
             if len(node.rhs.select) == 1:
-                # In Django 1.11 this is a values list type query
+                # In Django >= 1.11 this is a values list type query, which we explicitly handle
+                # because of the common case of pk__in=Something.objects.values_list("pk", flat=True)
                 qs = QuerySet(query=node.rhs, using=self.connection.alias)
 
                 # We make the query for the values, but wrap in a list to trick the

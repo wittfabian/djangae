@@ -144,7 +144,7 @@ class SimulatedContentTypeManager(models.Manager):
             raise ContentType.DoesNotExist()
 
     def get(self, *args, **kwargs):
-        # Special case for Django 1.11 which sometimes generates Q() objects
+        # Special case for Django >= 1.11 which sometimes generates Q() objects
         # with a single filter when querying content types. This handles that one
         # case.. if we find there are others we'll have to do something less hacky!
         if args and not kwargs:

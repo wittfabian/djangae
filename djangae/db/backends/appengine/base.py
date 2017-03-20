@@ -572,6 +572,7 @@ class DatabaseWrapper(BaseDatabaseWrapper):
 
     Database = Database
 
+    # These attributes are only used by Django >= 1.11
     client_class = DatabaseClient
     features_class = DatabaseFeatures
     introspection_class = DatabaseIntrospection
@@ -616,7 +617,7 @@ class DatabaseWrapper(BaseDatabaseWrapper):
         self.autocommit = enabled
 
     def create_cursor(self, name=None):
-        self.name = name # Django 1.11 only
+        self.name = name  # Django >= 1.11
         if not self.connection:
             self.connection = self.get_new_connection(self.settings_dict)
 
@@ -626,4 +627,5 @@ class DatabaseWrapper(BaseDatabaseWrapper):
         return DatabaseSchemaEditor(self, *args, **kwargs)
 
     def validate_no_broken_transaction(self):
+        # Override this to do nothing, because it's not relevant to the Datastore
         pass
