@@ -246,8 +246,7 @@ class BlobstoreStorage(Storage, BlobstoreUploadMixin):
             # down an argument saying whether it should be secure or not
             with transaction.non_atomic():
                 # This causes a Datastore lookup which we don't want to interfere with transactions
-                url = get_serving_url(self._get_blobinfo(name))
-            return re.sub("http://", "//", url)
+                return get_serving_url(self._get_blobinfo(name), secure_url=True)
         except (NotImageError, BlobKeyRequiredError, TransformationError, LargeImageError):
             # Django doesn't expect us to return None from this function, and in fact
             # relies on the "truthiness" of the return value when accessing .url on an
@@ -327,8 +326,7 @@ class CloudStorage(Storage, BlobstoreUploadMixin):
             # down an argument saying whether it should be secure or not
             with transaction.non_atomic():
                 # This causes a Datastore lookup which we don't want to interfere with transactions
-                url = get_serving_url(self._get_blobkey(filename))
-            return re.sub("http://", "//", url)
+                return get_serving_url(self._get_blobkey(filename), secure_url=True)
         except (TransformationError):
             # Sometimes TransformationError will be thrown if you call get_serving_url on video files
             # this is probably a bug in App Engine
