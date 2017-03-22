@@ -5,6 +5,7 @@ import hashlib
 from django.utils import timezone
 
 # DJANGAE
+from djangae.contrib import sleuth
 from djangae.test import TestCase
 from .lock import Lock, lock, LockAcquisitionError
 from .kinds import LOCK_KINDS
@@ -89,7 +90,9 @@ class DatastoreLocksTestCase(TestCase):
         ages_ago = timezone.now() - timezone.timedelta(minutes=15)
         self._make_lock("old_lock", timestamp=ages_ago)
         recent_lock = self._make_lock("recent_lock")
-        cleanup_locks(None)
+        # The cleanup_locks view is protected with @task_or_admin_only, hence the sleuth patch:
+        with sleuth.fake("djangae.environment.users.is_current_user_admin", True):
+            cleanup_locks(None)
         self.process_task_queues()
         # The old lock should have been deleted but the new one should not
         self.assertItemsEqual(DatastoreLock.objects.all(), [recent_lock])

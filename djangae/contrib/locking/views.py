@@ -8,6 +8,7 @@ from django.utils import timezone
 from google.appengine.ext.deferred import defer
 
 # DJANGAE
+from djangae.environment import task_or_admin_only
 from .models import DatastoreLock
 
 
@@ -21,6 +22,7 @@ DELETE_LOCKS_OLDER_THAN_SECONDS = 600
 QUEUE = getattr(settings, 'DJANGAE_CLEANUP_LOCKS_QUEUE', 'default')
 
 
+@task_or_admin_only
 def cleanup_locks(request):
     """ Delete all Lock objects that are older than 10 minutes. """
     logger.info("Deferring djangae.contrib.lock cleanup task")
