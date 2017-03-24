@@ -13,6 +13,7 @@ from google.appengine.api import datastore
 from djangae.contrib import sleuth
 from djangae.db.migrations import operations
 from djangae.db.migrations.mapper_library import (
+    _mid_key,
     _mid_string,
     shard_query,
     ShardedTaskMarker,
@@ -493,3 +494,36 @@ class MidStringTestCase(TestCase):
         mid = _mid_string(start, end)
         self.assertTrue(start < mid < end)
 
+
+class MidKeyTestCase(TestCase):
+    """ Tests for the `_mid_key` function. """
+
+    def test_mixed_integers_and_strings_not_allowed(self):
+        """ Finding the mid point between keys of different types is not currently supported and
+            should therefore raise an error.
+        """
+        key1 = datastore.Key.from_path("my_kind", 1)
+        key2 = datastore.Key.from_path("my_kind", "1")
+        self.assertRaises(NotImplementedError, _mid_key, key1, key2)
+
+    def test_mid_integer_key(self):
+        """ Given 2 keys with integer `id_or_name` values, the returned key should have an
+            `id_or_name` which is an integer somewhere between the two.
+        """
+        key1 = datastore.Key.from_path("my_kind", 1)
+        key2 = datastore.Key.from_path("my_kind", 100)
+        result = _mid_key(key1, key2)
+        self.assertEqual(result.kind(), key1.kind())
+        self.assertEqual(result.namespace(), key1.namespace())
+        self.assertTrue(1 < result.id_or_name() < 100)
+
+    def test_mid_string_key(self):
+        """ Given 2 keys with string `id_or_name` values, the returned key should have an
+            `id_or_name` which is a string somewhere between the two.
+        """
+        key1 = datastore.Key.from_path("my_kind", "1")
+        key2 = datastore.Key.from_path("my_kind", "100")
+        result = _mid_key(key1, key2)
+        self.assertEqual(result.kind(), key1.kind())
+        self.assertEqual(result.namespace(), key1.namespace())
+        self.assertTrue("1" < result.id_or_name() < "100")

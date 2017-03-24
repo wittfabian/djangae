@@ -59,15 +59,24 @@ def _mid_key(key1, key2):
         Given two keys, this function returns the key mid-way between them
         - this needs some thought on how to do this with strings
     """
-    val = key1.id_or_name()
-    if isinstance(val, basestring):
-        raise NotImplementedError("need to implement key names")
-    else:
-        return datastore.Key.from_path(
-            key1.kind(),
-            val + ((key2.id_or_name() - val) // 2),
-            namespace=key1.namespace()
+    key1_val = key1.id_or_name()
+    key2_val = key2.id_or_name()
+
+    if type(key1_val) != type(key2_val):
+        raise NotImplementedError(
+            "Sharding of entities with mixed integer and string types is not yet supported."
         )
+
+    if isinstance(key1_val, basestring):
+        mid_id_or_name = _mid_string(key1_val, key2_val)
+    else:
+        mid_id_or_name = key1_val + ((key2_val - key1_val) // 2)
+
+    return datastore.Key.from_path(
+        key1.kind(),
+        mid_id_or_name,
+        namespace=key1.namespace()
+    )
 
 
 def _generate_shards(keys, shard_count):
