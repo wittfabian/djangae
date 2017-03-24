@@ -78,11 +78,19 @@ class JSONFormField(forms.CharField):
 
     def clean(self, value):
         """ (Try to) parse JSON string back to python. """
-        if isinstance(value, six.string_types):
-            if value == "":
-                value = None
+        assert isinstance(value, six.string_types) or value is None, "JSONField value must be a string or None"
+
+        value = super(JSONFormField, self).clean(value)
+
+        if not value:
+            value = None
+
+        if value:
             try:
                 value = json.loads(value)
+                if not value and self.required:
+                    raise forms.ValidationError("Non-empty JSON object is required")
+
             except ValueError:
                 raise forms.ValidationError("Could not parse value as JSON")
         return value

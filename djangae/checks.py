@@ -27,7 +27,13 @@ CSP_SOURCE_NAMES = [
 @register(Tags.security)
 def check_session_csrf_enabled(app_configs, **kwargs):
     errors = []
-    if "session_csrf.CsrfMiddleware" not in settings.MIDDLEWARE_CLASSES:
+
+    # Django >= 1.10 has a MIDDLEWARE setting, which is None by default. Convert
+    # it to a list, it might be a tuple.
+    middleware = list(getattr(settings, 'MIDDLEWARE', []) or [])
+    middleware.extend(getattr(settings, 'MIDDLEWARE_CLASSES', []))
+
+    if 'session_csrf.CsrfMiddleware' not in middleware:
         errors.append(Error(
             "SESSION_CSRF_DISABLED",
             hint="Please add 'session_csrf.CsrfMiddleware' to MIDDLEWARE_CLASSES",

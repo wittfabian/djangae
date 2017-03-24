@@ -5,7 +5,9 @@ from collections import OrderedDict
 from django import forms
 from django.db import models
 from django.db.utils import IntegrityError
-from django.core.exceptions import ValidationError
+from django.conf import settings
+from django.core.exceptions import ValidationError, ImproperlyConfigured
+from django.core.validators import EmailValidator
 
 # DJANGAE
 from djangae.contrib import sleuth
@@ -25,6 +27,8 @@ from djangae.fields import (
 from djangae.fields.counting import DEFAULT_SHARD_COUNT
 from djangae.models import CounterShard
 from djangae.test import TestCase
+
+from google.appengine.api import datastore
 
 
 class ComputedFieldModel(models.Model):
@@ -100,6 +104,9 @@ class ISOther(models.Model):
     class Meta:
         app_label = "djangae"
 
+class StringPkModel(models.Model):
+    name = models.CharField(max_length=500, primary_key=True)
+
 
 class RelationWithoutReverse(models.Model):
     name = models.CharField(max_length=500)
@@ -139,9 +146,27 @@ class IterableFieldModel(models.Model):
     class Meta:
         app_label = "djangae"
 
+class IterableRelatedModel(models.Model):
+    related_set = RelatedListField(ISOther, related_name="+")
+    related_list = RelatedListField(ISOther, related_name="+")
+
+class IterableRelatedWithNonIntPkModel(models.Model):
+    related_set = RelatedListField(StringPkModel, related_name="+")
+    related_list = RelatedListField(StringPkModel, related_name="+")
+
+class IterableFieldsWithValidatorsModel(models.Model):
+    set_field = SetField(models.CharField(max_length=100), min_length=2, max_length=3, blank=False)
+    list_field = ListField(models.CharField(max_length=100), min_length=2, max_length=3, blank=False)
+    related_set = RelatedSetField(ISOther, min_length=2, max_length=3, blank=False)
+    related_list = RelatedListField(ISOther, related_name="iterable_list", min_length=2, max_length=3, blank=False)
+
 
 class JSONFieldModel(models.Model):
-    json_field = JSONField(use_ordered_dict=True)
+    json_field = JSONField(use_ordered_dict=True, blank=True)
+
+
+class NullableJSONFieldModel(models.Model):
+    json_field = JSONField(null=True, blank=True)
 
 
 class JSONFieldWithDefaultModel(models.Model):
@@ -151,6 +176,7 @@ class JSONFieldWithDefaultModel(models.Model):
 class ModelWithCharField(models.Model):
     char_field_with_max = CharField(max_length=10, default='', blank=True)
     char_field_without_max = CharField(default='', blank=True)
+    char_field_as_email = CharField(validators=[EmailValidator(message='failed')], blank=True)
 
 
 class ModelWithCharOrNoneField(models.Model):
@@ -430,6 +456,238 @@ class IterableFieldTests(TestCase):
         self.assertTrue(form.is_valid())
         self.assertTrue(form.save())
 
+    def test_cannot_have_min_length_and_blank(self):
+        """ Having min_length=X, blank=True doesn't make any sense, especially when you consider
+            that django will skip the min_length check when the value (list/set)is empty.
+        """
+        self.assertRaises(
+            ImproperlyConfigured,
+            ListField,
+            CharField(max_length=100),
+            min_length=1,
+            blank=True
+        )
+        self.assertRaises(
+            ImproperlyConfigured,
+            SetField,
+            CharField(max_length=100),
+            min_length=1,
+            blank=True
+        )
+
+    def test_list_field_set_field_min_max_lengths_valid(self):
+        """ Test that when the min_legnth and max_length of a ListField and SetField are correct
+            that no validation error is rasied.
+        """
+        others = []
+        for x in xrange(2):
+            others.append(ISOther.objects.create())
+        instance = IterableFieldsWithValidatorsModel(
+            related_set=set(others),  # not being tested here
+            related_list=others,  # not being tested here
+            set_field=set(["1", "2"]),
+            list_field=["1", "2"],
+        )
+        instance.full_clean()
+
+    def test_list_field_max_length_invalid(self):
+        others = []
+        for x in xrange(2):
+            others.append(ISOther.objects.create())
+        instance = IterableFieldsWithValidatorsModel(
+            related_set=set(others),  # not being tested here
+            related_list=others,  # not being tested here
+            set_field=set(["1", "2"]),  # not being tested here
+            list_field=["1", "2", "3", "4", "5"],
+        )
+        self.assertRaisesMessage(
+            ValidationError,
+            "{'list_field': [u'Ensure this field has at most 3 items (it has 5).']}",
+            instance.full_clean,
+        )
+
+    def test_list_field_min_length_invalid(self):
+        others = []
+        for x in xrange(2):
+            others.append(ISOther.objects.create())
+        instance = IterableFieldsWithValidatorsModel(
+            related_set=set(others),  # not being tested here
+            related_list=others,  # not being tested here
+            set_field=set(["1", "2"]),  # not being tested here
+            list_field=["1"],
+        )
+        self.assertRaisesMessage(
+            ValidationError,
+            "{'list_field': [u'Ensure this field has at least 2 items (it has 1).']}",
+            instance.full_clean,
+        )
+
+    def test_set_field_max_length_invalid(self):
+        others = []
+        for x in xrange(2):
+            others.append(ISOther.objects.create())
+        instance = IterableFieldsWithValidatorsModel(
+            related_set=set(others),  # not being tested here
+            related_list=others,  # not being tested here
+            list_field=["1", "2"],  # not being tested here
+            set_field=set(["1", "2", "3", "4", "5"]),
+        )
+        self.assertRaisesMessage(
+            ValidationError,
+            "{'set_field': [u'Ensure this field has at most 3 items (it has 5).']}",
+            instance.full_clean,
+        )
+
+    def test_set_field_min_length_invalid(self):
+        others = []
+        for x in xrange(2):
+            others.append(ISOther.objects.create())
+        instance = IterableFieldsWithValidatorsModel(
+            related_set=set(others),  # not being tested here
+            related_list=others,  # not being tested here
+            list_field=["1", "2"],  # not being tested here
+            set_field=set(["1"]),
+        )
+        self.assertRaisesMessage(
+            ValidationError,
+            "{'set_field': [u'Ensure this field has at least 2 items (it has 1).']}",
+            instance.full_clean,
+        )
+
+
+class RelatedIterableFieldTests(TestCase):
+    """ Combined tests for common RelatedListField and RelatedSetField tests. """
+
+    def test_cannot_have_min_length_and_blank(self):
+        """ Having min_length=X, blank=True doesn't make any sense, especially when you consider
+            that django will skip the min_length check when the value (list/set)is empty.
+        """
+        self.assertRaises(
+            ImproperlyConfigured,
+            RelatedListField,
+            ISModel,
+            min_length=1,
+            blank=True
+        )
+        self.assertRaises(
+            ImproperlyConfigured,
+            RelatedSetField,
+            ISModel,
+            min_length=1,
+            blank=True
+        )
+
+    def test_related_list_field_set_field_min_max_lengths_valid(self):
+        """ Test that when the min_legnth and max_length of a ListField and SetField are correct
+            that no validation error is rasied.
+        """
+        others = []
+        for x in xrange(2):
+            others.append(ISOther.objects.create())
+        instance = IterableFieldsWithValidatorsModel(
+            list_field=["1", "2"],  # not being tested here
+            set_field=set(["1", "2"]),  # not being tested here
+            related_set=set(others),
+            related_list=others,
+        )
+        instance.full_clean()
+
+    def test_related_list_field_max_length_invalid(self):
+        others = []
+        for x in xrange(5):
+            others.append(ISOther.objects.create())
+        instance = IterableFieldsWithValidatorsModel(
+            list_field=["1", "2"],  # not being tested here
+            set_field=set(["1", "2"]),  # not being tested here
+            related_set=set(others[:2]),  # not being tested here
+            related_list=others,
+        )
+        self.assertRaisesMessage(
+            ValidationError,
+            "{'related_list': [u'Ensure this field has at most 3 items (it has 5).']}",
+            instance.full_clean,
+        )
+
+    def test_related_list_field_min_length_invalid(self):
+        others = []
+        for x in xrange(2):
+            others.append(ISOther.objects.create())
+        instance = IterableFieldsWithValidatorsModel(
+            list_field=["1", "2"],  # not being tested here
+            set_field=set(["1", "2"]),  # not being tested here
+            related_set=set(others),
+            related_list=others[:1],
+        )
+        self.assertRaisesMessage(
+            ValidationError,
+            "{'related_list': [u'Ensure this field has at least 2 items (it has 1).']}",
+            instance.full_clean,
+        )
+
+    def test_related_set_field_max_length_invalid(self):
+        others = []
+        for x in xrange(5):
+            others.append(ISOther.objects.create())
+        instance = IterableFieldsWithValidatorsModel(
+            list_field=["1", "2"],  # not being tested here
+            set_field=set(["1", "2"]),  # not being tested here
+            related_list=others[:2],  # not being tested here
+            related_set=set(others),
+        )
+        self.assertRaisesMessage(
+            ValidationError,
+            "{'related_set': [u'Ensure this field has at most 3 items (it has 5).']}",
+            instance.full_clean,
+        )
+
+    def test_related_set_field_min_length_invalid(self):
+        others = []
+        for x in xrange(2):
+            others.append(ISOther.objects.create())
+        instance = IterableFieldsWithValidatorsModel(
+            list_field=["1", "2"],  # not being tested here
+            set_field=set(["1", "2"]),  # not being tested here
+            related_list=others,  # not being tested here
+            related_set=set(others[:1]),
+        )
+        self.assertRaisesMessage(
+            ValidationError,
+            "{'related_set': [u'Ensure this field has at least 2 items (it has 1).']}",
+            instance.full_clean,
+        )
+
+    def test_model_stores_ids_as_integers_when_saving(self):
+        others = []
+        for x in xrange(2):
+            others.append(ISOther.objects.create())
+
+        instance = IterableRelatedModel(
+            related_set_ids=[str(x.pk) for x in others],
+            related_list_ids=[str(x.pk) for x in others],
+        )
+
+        instance.save()
+        instance.refresh_from_db()
+
+        self.assertEqual(instance.related_set_ids, [int(x.pk) for x in others])
+        self.assertEqual(instance.related_list_ids, [int(x.pk) for x in others])
+
+    def test_model_stores_ids_as_non_integers(self):
+        others = []
+        for x in xrange(2):
+            others.append(StringPkModel.objects.create(name=str(x)))
+
+        instance = IterableRelatedWithNonIntPkModel(
+            related_set_ids=[x.pk for x in others],
+            related_list_ids=[x.pk for x in others],
+        )
+
+        instance.save()
+        instance.refresh_from_db()
+
+        self.assertEqual(instance.related_set_ids, [x.pk for x in others])
+        self.assertEqual(instance.related_list_ids, [x.pk for x in others])
+
 
 class RelatedListFieldModelTests(TestCase):
 
@@ -476,7 +734,7 @@ class Post(models.Model):
 
 
 class Tag(models.Model):
-    name = models.CharField()
+    name = models.CharField(max_length=64)
 
 
 class RelatedSetFieldModelTests(TestCase):
@@ -701,7 +959,6 @@ class InstanceListFieldTests(TestCase):
         self.assertItemsEqual([other, other2, other2], main.related_list.filter(name="one"))
 
 
-
 class InstanceSetFieldTests(TestCase):
 
     def test_deserialization(self):
@@ -852,6 +1109,24 @@ class TestGenericRelationField(TestCase):
 
 class JSONFieldModelTests(TestCase):
 
+    def test_invalid_data_in_datastore_doesnt_throw_an_error(self):
+        """
+            If invalid data is found while reading the entity data, then
+            we should silently ignore the error and just return the data as-is
+            rather than converting to list/dict.
+
+            The reason is that if we blow up on load, then there's no way to load the
+            entity (in Django) to repair the data. This is also consistent with the behaviour
+            of Django when (for example) you load a NULL from the database into a field that is
+            non-nullable. The field value will still be None when read.
+        """
+        entity = datastore.Entity(JSONFieldModel._meta.db_table, id=1, namespace=settings.DATABASES["default"]["NAMESPACE"])
+        entity["json_field"] = "bananas"
+        datastore.Put(entity)
+
+        instance = JSONFieldModel.objects.get(pk=1)
+        self.assertEqual(instance.json_field, "bananas")
+
     def test_object_pairs_hook_with_ordereddict(self):
         items = [('first', 1), ('second', 2), ('third', 3), ('fourth', 4)]
         od = OrderedDict(items)
@@ -949,6 +1224,10 @@ class CharFieldModelTests(TestCase):
             test_instance.full_clean,
          )
 
+    def test_additional_validators_work(self):
+        test_instance = ModelWithCharField(char_field_as_email='bananas')
+        self.assertRaisesMessage(ValidationError, 'failed', test_instance.full_clean)
+
     def test_too_long_max_value_set(self):
         try:
             class TestModel(models.Model):
@@ -1004,3 +1283,38 @@ class StringReferenceRelatedSetFieldModelTests(TestCase):
         self.assertTrue(form.is_valid())
         instance = form.save()
         self.assertEqual({related.pk}, instance.related_things_ids)
+
+
+
+class PFPost(models.Model):
+    content = models.TextField()
+    authors = RelatedSetField('PFAuthor', related_name='posts')
+
+    class Meta:
+        app_label = "djangae"
+
+class PFAuthor(models.Model):
+    name = models.CharField(max_length=32)
+    awards = RelatedSetField('PFAwards')
+
+    class Meta:
+        app_label = "djangae"
+
+class PFAwards(models.Model):
+    name = models.CharField(max_length=32)
+
+    class Meta:
+        app_label = "djangae"
+
+
+class RelatedFieldPrefetchTests(TestCase):
+
+    def test_prefetch_related(self):
+        award = PFAwards.objects.create(name="award")
+        author = PFAuthor.objects.create(awards={award})
+        post = PFPost.objects.create(authors={author})
+
+        posts = list(PFPost.objects.all().prefetch_related('authors__awards'))
+
+        with self.assertNumQueries(0):
+            awards = list(posts[0].authors.all()[0].awards.all())
