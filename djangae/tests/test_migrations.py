@@ -494,6 +494,16 @@ class MidStringTestCase(TestCase):
         mid = _mid_string(start, end)
         self.assertTrue(start < mid < end)
 
+    def test_does_not_return_string_starting_with_double_underscore(self):
+        """ A string that starts with a double underscore is not a valid Datastore key and so
+            should not be returned.
+        """
+        # The true mid point between this start and end combination is a double underscore
+        start = "^^"
+        end = "``"
+        result = _mid_string(start, end)
+        self.assertNotEqual(result, "__")
+
 
 class MidKeyTestCase(TestCase):
     """ Tests for the `_mid_key` function. """

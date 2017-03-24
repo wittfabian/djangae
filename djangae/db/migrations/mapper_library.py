@@ -29,7 +29,11 @@ def _mid_string(string1, string2):
         mid.append(l + (r - l) / 2)
     # Note that some of the numbers might be invalid unicode values, but for the purposes of
     # filtering Datastore keys it doesn't matter
-    return u"".join([unichr(x) for x in mid])
+    result = u"".join([unichr(x) for x in mid])
+    # Strings starting with a double underscore are not valid Datastore keys
+    if result.startswith(u"__"):
+        result = u"_`" + result[2:]
+    return result
 
 
 def _next_key(key):
