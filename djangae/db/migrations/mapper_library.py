@@ -14,6 +14,24 @@ from google.appengine.api import datastore, datastore_errors
 from google.appengine.ext import deferred
 
 
+def _mid_string(string1, string2):
+    # Put the strings in order, so the lowest one is lhs
+    lhs = min(string1, string2)
+    rhs = max(string1, string2)
+    # Pad out the shorter string so that they're both the same length
+    longest_length = max(len(lhs), len(rhs))
+    lhs = lhs.ljust(longest_length, "\0")
+    # For each position in the strings, find the mid character
+    mid = []
+    for l, r in zip(lhs, rhs):
+        l = ord(l)
+        r = ord(r)
+        mid.append(l + (r - l) / 2)
+    # Note that some of the numbers might be invalid unicode values, but for the purposes of
+    # filtering Datastore keys it doesn't matter
+    return u"".join([unichr(x) for x in mid])
+
+
 def _next_key(key):
     """
         Given a key, this returns key + 1. In the case of key names

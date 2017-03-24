@@ -1,3 +1,4 @@
+# encoding: utf-8
 # STANDARD LIB
 from unittest import skipIf
 
@@ -11,7 +12,11 @@ from google.appengine.api import datastore
 # DJANGAE
 from djangae.contrib import sleuth
 from djangae.db.migrations import operations
-from djangae.db.migrations.mapper_library import shard_query, ShardedTaskMarker
+from djangae.db.migrations.mapper_library import (
+    _mid_string,
+    shard_query,
+    ShardedTaskMarker,
+)
 from djangae.test import TestCase
 
 
@@ -445,3 +450,46 @@ class MigrationOperationTests(TestCase):
         shards = shard_query(qry, 50)
         # We can't create 50 shards if there are only 20 objects
         self.assertEqual(20, len(shards))
+
+
+class MidStringTestCase(TestCase):
+    """ Tests for the _mid_string function in the mapper_library. """
+
+    def test_handles_args_in_either_order(self):
+        """ It shouldn't matter whether we pass the "higher" string as the first or second param. """
+        low = "aaaaa"
+        high = "zzzzz"
+        mid1 = _mid_string(low, high)
+        mid2 = _mid_string(low, high)
+        self.assertEqual(mid1, mid2)
+        self.assertTrue(low < mid1 < high)
+
+    def test_basic_behaviour(self):
+        """ Test finding the midpoint between two string in an obvious case. """
+        start = "a"
+        end = "c"
+        self.assertEqual(_mid_string(start, end), "b")
+
+    def test_slightly_less_basic_behaviour(self):
+        start = "aaaaaaaaaaaa"
+        end = "z"
+        mid_low_apprx = "l"
+        mid_high_apprx = "n"
+        result = _mid_string(start, end)
+        self.assertTrue(mid_low_apprx < result < mid_high_apprx)
+
+    def test_handles_strings_of_different_lengths(self):
+        """ Strings of different lengths should return another of a length mid way between """
+        start = "aaa"
+        end = "zzzzzzzzzzzzz"
+        mid = _mid_string(start, end)
+
+        self.assertTrue(start < mid < end)
+
+    def test_handles_unicode(self):
+        """ It should be able to do comparisions on non-ascii strings. """
+        start = u"aaa£¢$›😇"
+        end = u"zzz🤡"
+        mid = _mid_string(start, end)
+        self.assertTrue(start < mid < end)
+
