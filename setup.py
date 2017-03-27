@@ -15,7 +15,7 @@ EXTRAS = {
 
 setup(
     name=NAME,
-    version='0.9.9',
+    version='0.9.10-alpha',
     packages=PACKAGES,
 
     # metadata for upload to PyPI
