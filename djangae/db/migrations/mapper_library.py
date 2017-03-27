@@ -5,6 +5,7 @@
 # 1. We don't want a hard dependency on it and migrations are core (unlike stuff in contrib)
 # 2. MR is massive overkill for what we're doing here
 
+import copy
 import cPickle
 import logging
 
@@ -12,6 +13,12 @@ from datetime import datetime
 from django.conf import settings
 from google.appengine.api import datastore, datastore_errors
 from google.appengine.ext import deferred
+from google.appengine.runtime import DeadlineExceededError
+
+
+class Redefer(Exception):
+    """ Custom exception class to allow triggering of the re-deferring of a processing task. """
+    pass
 
 
 def _mid_string(string1, string2):
@@ -174,6 +181,10 @@ def _find_largest_shard(shards):
 
 
 def shard_query(query, shard_count):
+    """ Given a datastore.Query object and a number of shards, return a list of shards where each
+        shard is a pair of (low_key, high_key).
+        May return fewer than `shard_count` shards in cases where there aren't many entities.
+    """
     OVERSAMPLING_MULTIPLIER = 32  # This value is used in Mapreduce
 
     try:
@@ -296,20 +307,60 @@ class ShardedTaskMarker(datastore.Entity):
 
         datastore.Put(self)
 
-    def run_shard(self, query, shard, operation, operation_method=None):
+    def run_shard(
+        self, query, shard, operation, operation_method=None, offset=0,
+        entities_per_task=None
+    ):
+        """ Given a datastore.Query which does not have any high/low bounds on it, apply the bounds
+            of the given shard (which is a pair of keys), and run either the given `operation`
+            (if it's a function) or the given method of the given operation (if it's an object) on
+            each entity that the query returns, starting at entity `offset`, and redeferring every
+            `entities_per_task` entities to avoid hitting DeadlineExceededError.
+            Tries (but does not guarantee) to avoid processing the same entity more than once.
+        """
+        entities_per_task = entities_per_task or getattr(
+            settings, "DJANGAE_MIGRATION_DEFAULT_ENTITIES_PER_TASK", 100
+        )
         if operation_method:
-            operation = getattr(operation, operation_method)
+            function = getattr(operation, operation_method)
+        else:
+            function = operation
 
         marker = datastore.Get(self.key())
         if cPickle.dumps(shard) not in marker[ShardedTaskMarker.RUNNING_KEY]:
             return
 
+        # Copy the query so that we can re-defer the original, unadulterated version, because once
+        # we've applied limits and ordering to the query it causes pickle errors with defer.
+        original_query = copy.deepcopy(query)
         query["__key__ >="] = shard[0]
         query["__key__ <"] = shard[1]
         query.Order("__key__")
 
-        for entity in query.Run():
-            operation(entity)
+        num_entities_processed = 0
+        try:
+            results = query.Run(offset=offset, limit=entities_per_task)
+            for entity in results:
+                function(entity)
+                num_entities_processed += 1
+                if num_entities_processed >= entities_per_task:
+                    raise Redefer()
+        except (DeadlineExceededError, Redefer):
+            # By keeping track of how many entities we've processed, we can (hopefully) avoid
+            # re-processing entities if we hit DeadlineExceededError by redeferring with the
+            # incremented offset.  But note that if we get crushed by the HARD DeadlineExceededError
+            # before we can redefer, then the whole task will retry and so entities will get
+            # processed twice.
+            deferred.defer(
+                self.run_shard,
+                original_query,
+                shard,
+                operation,
+                operation_method,
+                offset=offset+num_entities_processed,
+                entities_per_task=entities_per_task
+            )
+            return  # This is important!
 
         # Once we've run the operation on all the entities, mark the shard as done
         def txn():
@@ -322,7 +373,7 @@ class ShardedTaskMarker(datastore.Entity):
 
         datastore.RunInTransaction(txn)
 
-    def begin_processing(self, operation, operation_method):
+    def begin_processing(self, operation, operation_method, entities_per_task):
         BATCH_SIZE = 3
 
         # Unpickle the source query
@@ -347,6 +398,7 @@ class ShardedTaskMarker(datastore.Entity):
                         shard,
                         operation,
                         operation_method,
+                        entities_per_task=entities_per_task,
                         _transactional=True
                     )
 
@@ -365,17 +417,20 @@ class ShardedTaskMarker(datastore.Entity):
             datastore.RunInTransaction(txn)
 
 
-def start_mapping(identifier, query, operation, operation_method=None):
+def start_mapping(
+    identifier, query, operation, operation_method=None, shard_count=None,
+    entities_per_task=None
+):
     """ This must *transactionally* defer a task which will call `operation._wrapped_map_entity` on
         all entities of the given `kind` in the given `namespace` and will then transactionally
         update the entity of the given `task_marker_key_key` with `is_finished=True` after all
         entities have been mapped.
     """
-    SHARD_COUNT = getattr(settings, "DJANGAE_MIGRATION_SHARD_COUNT", 32)
+    shard_count = shard_count or getattr(settings, "DJANGAE_MIGRATION_DEFAULT_SHARD_COUNT", 32)
 
     @datastore.NonTransactional
     def calculate_shards():
-        return shard_query(query, SHARD_COUNT)
+        return shard_query(query, shard_count)
 
     def txn():
         marker_key = ShardedTaskMarker.get_key(identifier, query._Query__namespace)
@@ -399,7 +454,10 @@ def start_mapping(identifier, query, operation, operation_method=None):
         marker["time_started"] = datetime.utcnow()
         marker.put()
         if not marker["is_finished"]:
-            deferred.defer(marker.begin_processing, operation, operation_method, _transactional=True)
+            deferred.defer(
+                marker.begin_processing, operation, operation_method, entities_per_task,
+                _transactional=True
+            )
 
         return marker_key
 

@@ -8,6 +8,7 @@ from django.conf import settings
 from django.db import connection, models
 from django.db.migrations.state import ProjectState
 from google.appengine.api import datastore
+from google.appengine.runtime import DeadlineExceededError
 
 # DJANGAE
 from djangae.contrib import sleuth
@@ -19,6 +20,7 @@ from djangae.db.migrations.mapper_library import (
     _next_string,
     shard_query,
     ShardedTaskMarker,
+    start_mapping,
 )
 from djangae.test import TestCase
 
@@ -57,6 +59,34 @@ def tickle_entity(entity):
     datastore.Put(entity)
 
 
+def tickle_entity_volitle(entity):
+    """ Like `tickle_entity`, but raises DeadlineExceededError every 3rd call. """
+    call_count = getattr(tickle_entity_volitle, "call_count", 1)
+    tickle_entity_volitle.call_count = call_count + 1
+    if call_count % 3 == 0:
+        raise DeadlineExceededError()
+    else:
+        tickle_entity(entity)
+
+
+def flush_task_markers():
+    """ Delete all ShardedTaskMarker objects from the DB.
+        Useful to call in setUp(), as Django doesn't wipe this kind because there's
+        no model for it.
+    """
+    namespaces = set()
+    namespaces.add(settings.DATABASES['default'].get('NAMESPACE', ''))
+    namespaces.add(settings.DATABASES.get('ns1', {}).get('NAMESPACE', ''))
+
+    for namespace in namespaces:
+        query = datastore.Query(
+            ShardedTaskMarker.KIND,
+            namespace=namespace,
+            keys_only=True
+        ).Run()
+        datastore.Delete([x for x in query])
+
+
 class MigrationOperationTests(TestCase):
 
     multi_db = True
@@ -65,17 +95,7 @@ class MigrationOperationTests(TestCase):
         # We need to clean out the migration task markers from the Datastore between each test, as
         # the standard flush only cleans out models
         super(MigrationOperationTests, self).setUp()
-        namespaces = set()
-        namespaces.add(settings.DATABASES['default'].get('NAMESPACE', ''))
-        namespaces.add(settings.DATABASES.get('ns1', {}).get('NAMESPACE', ''))
-
-        for namespace in namespaces:
-            query = datastore.Query(
-                ShardedTaskMarker.KIND,
-                namespace=namespace,
-                keys_only=True
-            ).Run()
-            datastore.Delete([x for x in query])
+        flush_task_markers()
 
     def start_operation(self, operation, detonate=True):
         # Make a from_state and a to_state to pass to the operation, these can just be the
@@ -584,3 +604,45 @@ class GetKeyRangeTestCase(TestCase):
         key1 = datastore.Key.from_path("my_kind", "a")
         key2 = datastore.Key.from_path("my_kind", 12345)
         self.assertRaises(Exception, _get_range, key1, key2)
+
+
+class MapperLibraryTestCase(TestCase):
+    """ Tests which check the behaviour of the mapper library directly. """
+
+    def setUp(self):
+        # We need to clean out the migration task markers from the Datastore between each test, as
+        # the standard flush only cleans out models
+        super(MapperLibraryTestCase, self).setUp()
+        flush_task_markers()
+
+    def test_mapper_will_continue_after_deadline_exceeded_error(self):
+        """ If DeadlineExceededError is encountered when processing one of the entities, the mapper
+            should redefer and continue.
+        """
+        objs = []
+        for x in xrange(8):
+            objs.append(TestModel(name="Test-%s" % x))
+        TestModel.objects.bulk_create(objs)
+
+        def get_datastore_query():
+            return datastore.Query(
+                TestModel._meta.db_table,
+                namespace=settings.DATABASES['default'].get('NAMESPACE', '')
+            )
+
+        identifier = "my_test_mapper"
+        query = get_datastore_query()
+
+        # Reset the call_count on tickle_entity_volitle.  We can't use sleuth.watch because a
+        # wrapped function can't be pickled
+        tickle_entity_volitle.call_count = 0
+        # Run the mapper and run all the tasks
+        start_mapping(
+            identifier, query, tickle_entity_volitle, shard_count=1,
+        )
+        self.process_task_queues()
+        # Check that the tickle_entity_volitle function was called more times than there are
+        # entities (because some calls should have failed and been retried)
+        # self.assertTrue(tickle_entity_volitle.call_count > TestModel.objects.count())
+        # And check that every entity has been tickled
+        self.assertTrue(all(e['is_tickled'] for e in get_datastore_query().Run()))
