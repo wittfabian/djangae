@@ -208,6 +208,8 @@ def django_instance_to_entities(connection, fields, raw, instance, check_null=Tr
     field_values = {}
     primary_key = None
 
+    descendents = []
+
     for field in fields:
         value, is_primary_key = value_from_instance(instance, field)
         if is_primary_key:
@@ -219,7 +221,7 @@ def django_instance_to_entities(connection, fields, raw, instance, check_null=Tr
         for index in special_indexes_for_column(model, field.column):
             indexer = get_indexer(field, index)
 
-            values = indexer.prep_value_for_database(value, index)
+            values = indexer.prep_value_for_database(value, index, model=model, column=field.column)
 
             if values is None:
                 continue
@@ -227,15 +229,24 @@ def django_instance_to_entities(connection, fields, raw, instance, check_null=Tr
             if not hasattr(values, "__iter__"):
                 values = [ values ]
 
-            for i, v in enumerate(values):
-                column = indexer.indexed_column_name(field.column, v, index)
-                if column in field_values:
-                    if not isinstance(field_values[column], list):
-                        field_values[column] = [ field_values[column], v ]
+            # If the indexer returns additional entities (instead of indexing a special column)
+            # then just store those entities
+            if indexer.PREP_VALUE_RETURNS_ENTITIES:
+                descendents.extend(values)
+            else:
+                for i, v in enumerate(values):
+                    column = indexer.indexed_column_name(field.column, v, index)
+
+                    # If the column already exists in the values, then we convert it to a
+                    # list and append the new value
+                    if column in field_values:
+                        if not isinstance(field_values[column], list):
+                            field_values[column] = [ field_values[column], v ]
+                        else:
+                            field_values[column].append(v)
                     else:
-                        field_values[column].append(v)
-                else:
-                    field_values[column] = v
+                        # Otherwise we just set the column to the value
+                        field_values[column] = v
 
     kwargs = {}
     if primary_key:
@@ -260,7 +271,7 @@ def django_instance_to_entities(connection, fields, raw, instance, check_null=Tr
     if len(classes) > 1:
         entity[POLYMODEL_CLASS_ATTRIBUTE] = list(set(classes))
 
-    return entity, []
+    return entity, descendents
 
 
 def get_datastore_key(model, pk, namespace):

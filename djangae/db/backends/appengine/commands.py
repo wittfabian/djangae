@@ -15,7 +15,7 @@ from django.db import IntegrityError
 
 from google.appengine.api import datastore, datastore_errors, memcache
 from google.appengine.datastore import datastore_stub_util
-from google.appengine.api.datastore import Query
+from google.appengine.api.datastore import Query, Key, Entity
 from google.appengine.ext import db
 
 #DJANGAE
@@ -582,6 +582,7 @@ class SelectCommand(object):
                 lookup = "{} {}".format(filter_node.column, filter_node.operator)
 
                 value = filter_node.value
+
                 # This is a special case. Annoyingly Django's decimal field doesn't
                 # ever call ops.get_prep_save or lookup or whatever when you are filtering
                 # on a query. It *does* do it on a save, so we basically need to do a
@@ -881,9 +882,18 @@ class InsertCommand(object):
             results = []
             for primary, descendents in entities:
                 new_key = datastore.Put(primary)
-                for descendent in descendents:
-                    descendent.ancestor(new_key)
-                datastore.Put(descendents)
+                if descendents:
+                    for i, descendent in enumerate(descendents):
+                        descendents[i] = Entity(
+                            descendent.kind(),
+                            parent=new_key,
+                            namespace=new_key.namespace(),
+                            id=descendent.key().id() or None,
+                            name=descendent.key().name() or None
+                        )
+                        descendents[i].update(descendent)
+
+                    datastore.Put(descendents)
                 results.append(new_key)
             return results
 
@@ -1188,9 +1198,15 @@ class UpdateCommand(object):
                 """
                 inserted_key = datastore.Put(result)
                 if descendents:
-                    for descendent in descendents:
-                        descendent.ancestor(inserted_key)
-
+                    for i, descendent in enumerate(descendents):
+                        descendents[i] = Entity(
+                            descendent.kind(),
+                            parent=inserted_key,
+                            namespace=inserted_key.namespace(),
+                            id=descendent.key().id() or None,
+                            name=descendent.key().name() or None
+                        )
+                        descendents[i].update(descendent)
                     datastore.Put(descendents)
 
             if not constraints.has_active_unique_constraints(self.model):

@@ -57,3 +57,5 @@ DJANGAE_RUNSERVER_IGNORED_FILES_REGEXES = ['^.+$(?<!\.py)(?<!\.yaml)(?<!\.html)'
 DJANGAE_RUNSERVER_IGNORED_DIR_REGEXES = [r"^google_appengine$"]
 
 TEST_RUNNER = 'djangae.test.DjangaeDiscoverRunner'
+
+DJANGAE_USE_LEGACY_CONTAINS_LOGIC = False 
