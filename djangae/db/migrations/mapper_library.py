@@ -97,6 +97,32 @@ def _mid_key(key1, key2):
     )
 
 
+def _get_range(key1, key2):
+    """ Given 2 Datastore keys, return the range that their IDs span.
+        E.g. if the IDs are 7 and 100, then the range is 93.
+        Works for string-based keys as well, but returns a string representation of the difference.
+    """
+    val1 = key1.id_or_name()
+    val2 = key2.id_or_name()
+    if type(val1) != type(val2):
+        raise Exception("Cannot calculate range between keys of different types.")
+    if isinstance(val1, (int, long)):
+        return val2 - val1
+    # Otherwise, the values are strings...
+    # Put the strings in order, so the lowest one is lhs
+    lhs = min(val1, val2)
+    rhs = max(val1, val2)
+    # Pad out the shorter string so that they're both the same length
+    longest_length = max(len(lhs), len(rhs))
+    lhs = lhs.ljust(longest_length, "\0")
+    # For each position in the strings, find the difference
+    diffs = []
+    for l, r in zip(lhs, rhs):
+        diffs.append(ord(r) - ord(l))
+    # We return this "difference" as a string
+    return u"".join([unichr(x) for x in diffs])
+
+
 def _generate_shards(keys, shard_count):
     """
         Given a set of keys with:
@@ -128,7 +154,8 @@ def _generate_shards(keys, shard_count):
 
 def _find_largest_shard(shards):
     """
-        Given a list of shards, find the one with the largest ID range
+        Given a list of shards, where each shard is a pair of (lowest_key, highest_key),
+        return the shard with the largest ID range
 
         FIXME: Not implemented for key names!
     """

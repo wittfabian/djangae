@@ -13,6 +13,7 @@ from google.appengine.api import datastore
 from djangae.contrib import sleuth
 from djangae.db.migrations import operations
 from djangae.db.migrations.mapper_library import (
+    _get_range,
     _mid_key,
     _mid_string,
     _next_string,
@@ -556,3 +557,30 @@ class NextStringTestCase(TestCase):
         )
         for input_text, expected_output in checks:
             self.assertEqual(_next_string(input_text), expected_output)
+
+
+class GetKeyRangeTestCase(TestCase):
+    """ Tests for the `_get_range` function. """
+
+    def test_integer_range(self):
+        """ Given 2 integer-based keys, it should return the range that the IDs span. """
+        key1 = datastore.Key.from_path("my_kind", 4012809128)
+        key2 = datastore.Key.from_path("my_kind", 9524773032)
+        self.assertEqual(_get_range(key1, key2), 9524773032 - 4012809128)
+
+    def test_string_range(self):
+        """ Given 2 string-based keys, it should return a representation of the range that the two
+            keys span.
+        """
+        key1 = datastore.Key.from_path("my_kind", "a")
+        key2 = datastore.Key.from_path("my_kind", "b")
+        # The difference between "a" and "b" is 1 character
+        self.assertEqual(_get_range(key1, key2), unichr(1))
+
+    def test_mixed_keys_cause_exception(self):
+        """ Trying to get a range between 2 keys when one is an integer and the other is a string
+            should cause an explosion.
+        """
+        key1 = datastore.Key.from_path("my_kind", "a")
+        key2 = datastore.Key.from_path("my_kind", 12345)
+        self.assertRaises(Exception, _get_range, key1, key2)
