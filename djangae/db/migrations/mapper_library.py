@@ -15,6 +15,7 @@ from google.appengine.ext import deferred
 
 
 def _mid_string(string1, string2):
+    """ Given 2 unicode strings, return the string that is alphabetically half way between them. """
     # Put the strings in order, so the lowest one is lhs
     lhs = min(string1, string2)
     rhs = max(string1, string2)
@@ -58,11 +59,9 @@ def _next_key(key):
     """
     val = key.id_or_name()
     if isinstance(val, basestring):
-        # FIXME: This is wrong! If we have key aaa, the next key should be aab
-        # not aaa\0x1
         return datastore.Key.from_path(
             key.kind(),
-            val + chr(1),
+            _next_string(val),
             namespace=key.namespace()
         )
     else:
