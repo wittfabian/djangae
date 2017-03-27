@@ -157,12 +157,25 @@ def get_field_from_column(model, column):
             return field
     return None
 
-def django_instance_to_entity(connection, model, fields, raw, instance, check_null=True):
+def django_instance_to_entity(connection, fields, raw, instance, check_null=True, model=None):
+    """
+        Converts a Django Model instance to an App Engine `Entity`
+
+        connection: Djangae appengine connection object
+        fields: A list of fields to populate in the Entity
+        raw: raw flag to pass to get_prepared_db_value
+        instance: The instance to convert
+        check_null: Whether or not we should enforce NULL during conversion
+           (throws an error if None is set no a non-nullable field)
+        model: Model class to use instead of the instance one
+    """
+
     from djangae.db.backends.appengine.indexing import special_indexes_for_column, get_indexer
     from djangae.db.backends.appengine import POLYMODEL_CLASS_ATTRIBUTE
 
-    # uses_inheritance = False
+    model = model or type(instance)
     inheritance_root = get_top_concrete_parent(model)
+
     db_table = get_datastore_kind(inheritance_root)
 
     def value_from_instance(_instance, _field):

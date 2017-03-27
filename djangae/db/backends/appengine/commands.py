@@ -868,7 +868,7 @@ class InsertCommand(object):
                 )
 
             self.entities.append(
-                django_instance_to_entity(self.connection, self.model, self.fields, self.raw, obj)
+                django_instance_to_entity(self.connection, self.fields, self.raw, obj)
             )
 
     def execute(self):
@@ -1144,10 +1144,11 @@ class UpdateCommand(object):
 
             # Update the entity we read above with the new values
             result.update(django_instance_to_entity(
-                self.connection, self.model,
+                self.connection,
                 [ x[0] for x in self.values],  # Pass in the fields that were updated
-                True, instance)
-            )
+                True, instance,
+                model=self.model
+            ))
 
             # Make sure we keep all classes in the inheritence tree!
             if original_class:
