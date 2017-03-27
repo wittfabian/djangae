@@ -36,6 +36,21 @@ def _mid_string(string1, string2):
     return result
 
 
+def _next_string(string):
+    """ Given a string (or unicode), return the alphabetically next string. """
+    # Note that in python 2 at least, unicode is 16 bit, and therefore some characters (e.g. emoji)
+    # are encoded as 2 characters, so when we slice the last "character" off the string we're
+    # actually getting half a character, and then when we increment it we're possibly creating an
+    # invalid character, but for the purpose of ordering Datastore keys it shouldn't matter
+    try:
+        # Try to increment the last character by 1
+        return string[:-1] + unichr(ord(string[-1]) + 1)
+    except ValueError:
+        # If the last character was already the highest possible unicode value, then instead add
+        # another character to the string
+        return string + unichr(1)
+
+
 def _next_key(key):
     """
         Given a key, this returns key + 1. In the case of key names

@@ -15,6 +15,7 @@ from djangae.db.migrations import operations
 from djangae.db.migrations.mapper_library import (
     _mid_key,
     _mid_string,
+    _next_string,
     shard_query,
     ShardedTaskMarker,
 )
@@ -537,3 +538,21 @@ class MidKeyTestCase(TestCase):
         self.assertEqual(result.kind(), key1.kind())
         self.assertEqual(result.namespace(), key1.namespace())
         self.assertTrue("1" < result.id_or_name() < "100")
+
+
+class NextStringTestCase(TestCase):
+    """ Tests for the _next_string function in the mapper_library. """
+
+    def test_basic_behaviour(self):
+        # Python 2 using 16 bit unicode, so the highest possible character is (2**16) - 1
+        highest_unicode_char = unichr(2 ** 16 - 1)
+        checks = (
+            # Pairs of (input, expected_output)
+            ("a", "b"),
+            ("aaaa", "aaab"),
+            # unichr((2 ** 32) - 1) is the last possible unicode character
+            (highest_unicode_char, highest_unicode_char + unichr(1)),
+            (u"aaa" + highest_unicode_char, u"aaa" + highest_unicode_char + unichr(1)),
+        )
+        for input_text, expected_output in checks:
+            self.assertEqual(_next_string(input_text), expected_output)
