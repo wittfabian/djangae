@@ -13,7 +13,7 @@ from google.appengine.ext import deferred
 from djangae.db import transaction
 from djangae.fields import RelatedSetField
 from djangae.contrib.mappers.pipes import MapReduceTask, DjangaeMapperPipeline, PIPELINE_BASE_PATH
-from djangae.db.utils import django_instance_to_entity
+from djangae.db.utils import django_instance_to_entities
 from djangae.db.unique_utils import unique_identifiers_from_entity
 from djangae.db.constraints import UniqueMarker
 from djangae.db.caching import disable_cache
@@ -167,7 +167,7 @@ class CheckRepairMapper(MapReduceTask):
         alias = kwargs.get("db", "default")
         namespace = settings.DATABASES.get(alias, {}).get("NAMESPACE")
         assert alias == (instance._state.db or "default")
-        entity = django_instance_to_entity(connections[alias], instance._meta.fields, raw=True, instance=instance, check_null=False)
+        entity, _ = django_instance_to_entities(connections[alias], instance._meta.fields, raw=True, instance=instance, check_null=False)
         identifiers = unique_identifiers_from_entity(type(instance), entity, ignore_pk=True)
         identifier_keys = [datastore.Key.from_path(UniqueMarker.kind(), i, namespace=namespace) for i in identifiers]
 
@@ -247,7 +247,7 @@ class CleanMapper(RawMapperMixin, MapReduceTask):
                 return
 
             # Get the possible unique markers for the entity, if this one doesn't exist in that list then delete it
-            instance_entity = django_instance_to_entity(connections[alias], instance._meta.fields, raw=True, instance=instance, check_null=False)
+            instance_entity, _ = django_instance_to_entities(connections[alias], instance._meta.fields, raw=True, instance=instance, check_null=False)
             identifiers = unique_identifiers_from_entity(model, instance_entity, ignore_pk=True)
             identifier_keys = [datastore.Key.from_path(UniqueMarker.kind(), i, namespace=entity["instance"].namespace()) for i in identifiers]
             if entity.key() not in identifier_keys:
