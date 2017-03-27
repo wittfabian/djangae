@@ -156,19 +156,19 @@ def _find_largest_shard(shards):
     """
         Given a list of shards, where each shard is a pair of (lowest_key, highest_key),
         return the shard with the largest ID range
-
-        FIXME: Not implemented for key names!
     """
     largest_shard = None
+    range_of_largest_shard = None
 
     for shard in shards:
         if largest_shard is None:
             largest_shard = shard
+            range_of_largest_shard = _get_range(shard[0], shard[1])
         else:
-            current_range = largest_shard[1].id_or_name() - largest_shard[0].id_or_name()
-            this_range = shard[1].id_or_name() - shard[0].id_or_name()
-            if this_range > current_range:
+            this_range = _get_range(shard[0], shard[1])
+            if this_range > range_of_largest_shard:
                 largest_shard = shard
+                range_of_largest_shard = _get_range(shard[0], shard[1])
 
     return largest_shard
 
