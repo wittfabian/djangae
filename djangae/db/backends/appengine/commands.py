@@ -1036,6 +1036,7 @@ class DeleteCommand(object):
              are handled automatically they just case a small performance hit on write.
              - Check the entity matches the query still (there's a fixme there)
         """
+        from djangae.db.backends.appengine.indexing import indexers_for_model
 
         self.select.execute()
 
@@ -1078,14 +1079,20 @@ class DeleteCommand(object):
 
                 wipe_polymodel_from_entity(entity, self.table_to_delete)
                 if not entity.get('class'):
-                    to_delete.append(entity)
-                    constraints.release(self.model, entity)
+                    to_delete.append(entity.key())
+                    if constraints_enabled:
+                        constraints.release(self.model, entity)
                 else:
                     to_update.append(entity)
                 updated_keys.append(entity.key())
 
-            datastore.DeleteAsync([x.key() for x in to_delete])
+            datastore.DeleteAsync(to_delete)
             datastore.PutAsync(to_update)
+
+            # Clean up any special index things that need to be cleaned
+            for indexer in indexers_for_model(self.model):
+                for key in to_delete:
+                    indexer.cleanup(key)
 
             caching.remove_entities_from_cache_by_key(
                 updated_keys, self.namespace

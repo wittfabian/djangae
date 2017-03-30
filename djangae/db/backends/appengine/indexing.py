@@ -17,7 +17,11 @@ from djangae.core.validators import MaxBytesValidator
 from djangae.fields import iterable
 from djangae.sandbox import allow_mode_write
 
-from google.appengine.api.datastore import Query, Entity
+from google.appengine.api.datastore import (
+    Entity,
+    Delete,
+    Query
+)
 
 logger = logging.getLogger(__name__)
 _project_special_indexes = {}
@@ -212,6 +216,15 @@ class Indexer(object):
     # djangae_idx_XXXX where XXX is the top concrete model kind of the instance you
     # are indexing. If you do not do this, then the tables will not be correctly flushed
     # when the database is flushed**
+
+    @classmethod
+    def cleanup(cls, datastore_key):
+        """
+            Called when an instance is deleted, if the instances has an index
+            which uses this indexer. This is mainly for cleaning up descendent kinds
+            (e.g. like those used in contains + icontains)
+        """
+        pass
 
     def handles(self, field, operator):
         """
@@ -512,6 +525,21 @@ class ContainsIndexer(StringIndexerMixin, Indexer):
             return True
         except ValidationError:
             return False
+
+    @classmethod
+    def cleanup(cls, datastore_key):
+
+        # Kindless query, we don't know the kinds because we don't know all the fields
+        # that use contains. But, we do know that all the things we need to delete are:
+        # a.) A descendent
+        # b.) Have a key name of whatever OPERATOR is
+
+        qry = Query(keys_only=True, namespace=datastore_key.namespace())
+        qry = qry.Ancestor(datastore_key)
+
+        # Delete all the entities matching the ancestor query
+        Delete([x for x in qry.Run() if x.name() == cls.OPERATOR])
+
 
     def _generate_kind_name(self, model, column):
         return "djangae_idx_{}_{}".format(
@@ -896,6 +924,16 @@ def get_indexer(field, operator):
     for indexer in _REGISTERED_INDEXERS:
         if indexer.handles(field, operator):
             return indexer
+
+def indexers_for_model(model_class):
+    indexes = special_indexes_for_model(model_class)
+
+    indexers = []
+    for field in model_class._meta.fields:
+        if field.name in indexes:
+            for operator in indexes[field.name]:
+                indexers.append(get_indexer(field, operator))
+    return set(indexers)
 
 
 register_indexer(IExactIndexer)
