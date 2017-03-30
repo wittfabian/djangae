@@ -12,6 +12,7 @@ from django.apps import apps
 from django.conf import settings
 
 from djangae import environment
+from djangae.db.utils import get_top_concrete_parent
 from djangae.core.validators import MaxBytesValidator
 from djangae.fields import iterable
 from djangae.sandbox import allow_mode_write
@@ -509,7 +510,7 @@ class ContainsIndexer(StringIndexerMixin, Indexer):
 
     def _generate_kind_name(self, model, column):
         return "djangae_idx_{}_{}".format(
-            model._meta.db_table,
+            get_top_concrete_parent(model)._meta.db_table,
             column
         )
 
