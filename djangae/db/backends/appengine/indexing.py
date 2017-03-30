@@ -208,6 +208,11 @@ class Indexer(object):
     # to save as descendents, rather than values to index as columns
     PREP_VALUE_RETURNS_ENTITIES = False
 
+    # **IMPORTANT! If you return Entities from an indexer, the kind *must* start with
+    # djangae_idx_XXXX where XXX is the top concrete model kind of the instance you
+    # are indexing. If you do not do this, then the tables will not be correctly flushed
+    # when the database is flushed**
+
     def handles(self, field, operator):
         """
             When given a field instance and an operator (e.g. gt, month__gt etc.)
