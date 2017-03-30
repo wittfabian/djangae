@@ -283,6 +283,30 @@ When you run a query that requires special indexes for the first time, an entry 
 see this file appear in your project root. From that point on, any entities that are saved will have the additional property added. If a new entry
 appears in djangaeidx.yaml, you will need to resave all of your entities of that kind so that they will be returned by query lookups.
 
+### contains and icontains Filters
+
+When you use `__contains` or `__icontains` all subsequent entity saves will generate an additional descendent entity-per-instance-field to store
+indexing data for that field. This approach will add an additional `Put()` for each save() and an additional `Query()` for each `__contains`
+look up.
+
+Previously, Djangae used to store this index data on the entity itself which caused a number of problems:
+
+1. The index data had more permutations than were necessary. This was each set of possible characters had to be stored in a List property so that
+ the lookup could use an equality query. Djangae couldn't rely on an inequality (which would allow storing fewer permutations) because that would
+ greatly restrict the queries that a user could perform.
+2. The large number of permutations caused the entities to bloat with additional properties and it wasn't possible to filter them out when querying
+ which means every query (whether using `contains` or not) would transfer a large amount of data over the RPC, slowing down every single query on an instance
+ which had contains data indexed.
+3. The implementation was flawed. It was originally thought that list properties were limited to 500 entries, this may have been true at some point
+ in datastore history but it's certainly not true now. Because of this incorrect assumption, indexed data was split across properties which made the code
+ very confusing
+
+For now, the legacy behaviour is available by setting `DJANGAE_USE_LEGACY_CONTAINS_LOGIC = True` in your settings file. This setting
+will be removed so it's recommended that upon upgrading to Djangae 0.9.10 you resave all of your entities (that use `contains`) instead.
+
+Resaving will not remove old indexed properties, we hope to provide a migration file in future that will do that for you.
+
+
 ### Distributing djangaeidx.yaml
 
 If you are writing a portable app, and your app makes queries which require special indexes, you can ship a custom djangaeidx.yaml in the root of
