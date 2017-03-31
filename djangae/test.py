@@ -4,6 +4,8 @@ import os
 
 from django import test
 from django.test import Client
+from django.test.runner import DiscoverRunner
+from djangae.test_runner import bed_wrap
 
 from djangae.environment import get_application_root
 
@@ -23,10 +25,6 @@ def inconsistent_db(probability=0, connection='default'):
     from django.db import connections
 
     conn = connections[connection]
-
-    if not hasattr(conn.creation, "testbed") or "datastore_v3" not in conn.creation.testbed._enabled_stubs:
-        raise RuntimeError("Tried to use the inconsistent_db stub when not testing")
-
 
     stub = apiproxy_stub_map.apiproxy.GetStub('datastore_v3')
 
@@ -175,3 +173,10 @@ class TestCase(HandlerAssertionsMixin, TestCaseMixin, test.TestCase):
 
 class TransactionTestCase(HandlerAssertionsMixin, TestCaseMixin, test.TransactionTestCase):
     pass
+
+
+class DjangaeDiscoverRunner(DiscoverRunner):
+    def build_suite(self, *args, **kwargs):
+        suite = super(DjangaeDiscoverRunner, self).build_suite(*args, **kwargs)
+        suite._tests[:] = [bed_wrap(test) for test in suite._tests]
+        return suite

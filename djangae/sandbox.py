@@ -174,11 +174,12 @@ def _local(devappserver2=None, configuration=None, options=None, wsgi_request_in
         request_data, storage_path, options, configuration)
 
     from .blobstore_service import start_blobstore_service, stop_blobstore_service
-
+    from google.appengine.tools.devappserver2 import api_server
     start_blobstore_service()
     try:
         yield
     finally:
+        api_server.cleanup_stubs()
         os.environ = original_environ
         stop_blobstore_service()
 
@@ -265,7 +266,7 @@ _OPTIONS = None
 _CONFIG = None
 
 @contextlib.contextmanager
-def activate(sandbox_name, add_sdk_to_path=False, new_env_vars=None, app_id=None, **overrides):
+def activate(sandbox_name, add_sdk_to_path=False, new_env_vars=None, **overrides):
     """Context manager for command-line scripts started outside of dev_appserver.
 
     :param sandbox_name: str, one of 'local', 'remote' or 'test'
@@ -373,10 +374,7 @@ def activate(sandbox_name, add_sdk_to_path=False, new_env_vars=None, app_id=None
 
         setattr(options, option, overrides[option])
 
-    if app_id:
-        configuration = application_configuration.ApplicationConfiguration(options.config_paths, app_id=app_id)
-    else:
-        configuration = application_configuration.ApplicationConfiguration(options.config_paths)
+    configuration = application_configuration.ApplicationConfiguration(options.config_paths, app_id=options.app_id)
 
     # Enable built-in libraries from app.yaml without enabling the full sandbox.
     module = configuration.modules[0]

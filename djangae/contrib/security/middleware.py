@@ -9,6 +9,11 @@ from google.appengine.api import urlfetch
 from django.conf import settings
 from django.core.exceptions import MiddlewareNotUsed
 
+try:
+    from django.utils.deprecation import MiddlewareMixin
+except ImportError:
+    MiddlewareMixin = object
+
 
 logger = logging.getLogger(__name__)
 
@@ -89,7 +94,7 @@ def _HttpUrlLoggingWrapper(func):
 
 PATCHES_APPLIED = False
 
-class AppEngineSecurityMiddleware(object):
+class AppEngineSecurityMiddleware(MiddlewareMixin):
     """
         This middleware patches over some more insecure parts of the Python and AppEngine libraries.
 

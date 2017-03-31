@@ -1,12 +1,18 @@
+## The test runner in here is for running the Djangae test suite itself. Projects using Djangae
+## should either use djangae.test.DjangaeDiscoverRunner or if using Nose, use the noseplugin
+## both of which will setup and teardown the App Engine testbed for each test
+
 import unittest
 import os
 from unittest import TextTestResult
 
 from django.test.runner import DiscoverRunner
 from django.db import NotSupportedError
+from django.conf import settings
 
 from djangae import environment
 
+from google.appengine.datastore import datastore_stub_util
 from google.appengine.ext import testbed
 
 
@@ -35,7 +41,7 @@ DJANGO_TESTS_WHICH_HAVE_BUGS = {
 
     # Fails to recognize deprecation warning is emitted, even though it is... must be
     # something to do with our setup
-    'many_to_one.tests.ManyToOneTests.test_reverse_assignment_deprecation'
+    'many_to_one.tests.ManyToOneTests.test_reverse_assignment_deprecation',
 }
 
 # This is potentially fixable by us. sql_with_params returns a tuple of
@@ -68,21 +74,36 @@ DJANGO_TESTS_WHICH_COUNT_QUERIES = {
     'delete.tests.DeletionTests.test_large_delete_related'
 }
 
+
+DJANGO_TESTS_WHICH_EXPECT_SEQUENTIAL_IDS = {
+    'ordering.tests.OrderingTests.test_order_by_pk',
+    'ordering.tests.OrderingTests.test_order_by_fk_attname',
+}
+
 DJANGO_TESTS_TO_SKIP = DJANGO_TESTS_WHICH_REQUIRE_ZERO_PKS.union(
     DJANGO_TESTS_WHICH_REQUIRE_AUTH_USER).union(
     DJANGO_TESTS_WHICH_HAVE_BUGS).union(
     DJANGO_TESTS_WHICH_EXPECT_SQL_PARAMS).union(
     DJANGO_TESTS_WHICH_USE_SELECT_RELATED).union(
-    DJANGO_TESTS_WHICH_COUNT_QUERIES
+    DJANGO_TESTS_WHICH_COUNT_QUERIES).union(
+    DJANGO_TESTS_WHICH_EXPECT_SEQUENTIAL_IDS
 )
 
 def init_testbed():
-    # We don't initialize the datastore stub here, that needs to be done by Django's create_test_db and destroy_test_db.
-    IGNORED_STUBS = [ "init_datastore_v3_stub" ]
+    IGNORED_STUBS = []
+
+    # We allow users to disable scattered IDs in tests. This primarily for running Django tests that
+    # assume implicit ordering (yeah, annoying)
+    use_scattered = not getattr(settings, "DJANGAE_SEQUENTIAL_IDS_IN_TESTS", False)
 
     stub_kwargs = {
         "init_taskqueue_stub": {
             "root_path": environment.get_application_root()
+        },
+        "init_datastore_v3_stub": {
+            "use_sqlite": True,
+            "auto_id_policy": testbed.AUTO_ID_POLICY_SCATTERED if use_scattered else testbed.AUTO_ID_POLICY_SEQUENTIAL,
+            "consistency_policy": datastore_stub_util.PseudoRandomHRConsistencyPolicy(probability=1)
         }
     }
     bed = testbed.Testbed()
@@ -193,3 +214,4 @@ class SkipUnsupportedRunner(DjangaeTestSuiteRunner):
             failfast=self.failfast,
             resultclass=SkipUnsupportedTestResult
         ).run(suite)
+

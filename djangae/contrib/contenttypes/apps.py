@@ -1,6 +1,12 @@
 from django.apps import AppConfig
 from django.utils.translation import ugettext_lazy as _
-from django.contrib.contenttypes.management import update_contenttypes as django_update_contenttypes
+
+try:
+    from django.contrib.contenttypes.management import update_contenttypes as django_update_contenttypes
+except ImportError:
+    # Django 1.11
+    from django.contrib.contenttypes.management import create_contenttypes as django_update_contenttypes
+
 from django.db.models.signals import post_migrate
 
 from .management import update_contenttypes

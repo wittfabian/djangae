@@ -753,6 +753,28 @@ class BackendTests(TestCase):
         condition = Q()
         self.assertEqual(t1, TestUser.objects.filter(condition).first())
 
+    def test_only_defer_does_project(self):
+        with sleuth.watch("google.appengine.api.datastore.Query.__init__") as watcher:
+            list(TestUser.objects.only("pk").all())
+            self.assertTrue(watcher.calls[0].kwargs["keys_only"])
+            self.assertFalse(watcher.calls[0].kwargs["projection"])
+
+        with sleuth.watch("google.appengine.api.datastore.Query.__init__") as watcher:
+            list(TestUser.objects.values("pk"))
+            self.assertTrue(watcher.calls[0].kwargs["keys_only"])
+            self.assertFalse(watcher.calls[0].kwargs["projection"])
+
+        with sleuth.watch("google.appengine.api.datastore.Query.__init__") as watcher:
+            list(TestUser.objects.only("username").all())
+            self.assertFalse(watcher.calls[0].kwargs["keys_only"])
+            self.assertItemsEqual(watcher.calls[0].kwargs["projection"], ["username"])
+
+        with sleuth.watch("google.appengine.api.datastore.Query.__init__") as watcher:
+            list(TestUser.objects.defer("username").all())
+            self.assertFalse(watcher.calls[0].kwargs["keys_only"])
+            self.assertTrue(watcher.calls[0].kwargs["projection"])
+            self.assertFalse("username" in watcher.calls[0].kwargs["projection"])
+
     def test_chaining_none_filter(self):
         t1 = TestUser.objects.create()
         self.assertFalse(TestUser.objects.none().filter(pk=t1.pk))

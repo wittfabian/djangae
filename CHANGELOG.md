@@ -1,12 +1,43 @@
-## v0.9.9 (in development)
+## v0.9.10 (in development)
 
 ### New features & improvements:
 
+ -
+
+### Bug fixes:
+
+ -
+
+## v0.9.9 (release date: 27th March 2017)
+
+### New features & improvements:
+
+- Added preliminary support for Django 1.11 (not yet released, don't upgrade yet!)
+- The system check for session_csrf now works with the MIDDLEWARE setting when using Django >= 1.10.
 - System check for deferred builtin which should always be switched off.
 - Implemented weak (memcache) locking to contrib.locking
 - The `disable_cache` decorator now wraps the returned function with functools.wraps
 - `prefetch_related()` now works on RelatedListField and RelatedSetField
 - Added a test for Model.objects.none().filter(pk=xyz) type filters
+- Use `user.is_authenticated` instead of `user.is_authenticated()` when using Django >= 1.10.
+- Added `max_length` and `min_length` validation support to `ListField`, `SetField`, `RelatedListField` and `RelatedSetField`.
+- Moved checks verifying csrf, csp and template loader configuration from djangae-scaffold into Djangae.
+- Renamed `contrib.gauth.datastore` and `contrib.gauth.sql` to `contrib.gauth_datastore` and `contrib.gauth_sql` respectively.
+    - This change requires you to update your settings to reference the new app names.
+    - The old names still work for now but will trigger deprecation warnings.
+    - DB table names for Datastore-based models have not changed.  DB table name for the SQL User model has changed, but wasn't entirely usable before anyway.
+- Moved everything from `contrib.gauth.common.*` to the parent `contrib.gauth` module.  I.e. removed the `.common` part.
+    - This change requires you to update your application to reference/import from the new paths.
+    - The old paths still work for now but will trigger deprecation warnings.
+- Cleaned up the query fetching code to be more readable. Moved where result fetching happens to be inline with other backends, which makes Django Debug Toolbar query profiling output correct
+- Cleaned up app_id handling in --sandbox management calls
+- The default GCS bucket name is now cached when first read, saving on RPC calls
+- Updated `AppEngineSecurityMiddleware` to work with Django >= 1.10
+- Added a test for prefetching via RelatedSetField/RelatedListField. Cleaned up some related code.
+- Allow the sandbox argument to be at any position.
+- Added some tests for the management command code.
+- Added a test to prove that the ordering specified on a model's `_meta` is used for pagination, when no custom order has been specified on the query set.
+- Added a `@task_or_admin_only` decorator to `djangae.environment` to allow restricting views to tasks (including crons) or admins of the application.
 
 ### Bug fixes:
 
@@ -20,10 +51,23 @@
 - Fixed missing `_deferred` attribute in Django models for versions >= 1.10
 - Fixed an error when submitting an empty JSONFormField
 - Fixed a bug where an error would be thrown if you loaded an entity with a JSONField that had non-JSON data, now the data is returned unaltered
+- Fixed a bug where only("pk") wouldn't perform a keys_only query
+- Dropped the deprecated patterns() from contrib.locking.urls
+- Fixed a bug where search indexes weren't saved when they were generated in the local shell
+- Fixed a bug where permissions wouldn't be created when using Django's PermissionsMixin on the datastore (for some reason)
+- Fixed a bug where a user's username would be set to the string 'None' if username was not populated on an admin form
+- Fixed `djangae.contrib.mappers.defer.defer_iteration` to allow inequality filters in querysets
+- Fixed a bug in `djangae.contrib.mappers.defer.defer_iteration` where `_shard` would potentially ignore the first element of the queryset
+- Fixed an incompatibility between appstats and the cloud storage backend due to RPC calls being made in the __init__ method
+- Fixed a bug where it wasn't possible to add validators to djangae.fields.CharField
+- Fixed a bug where entries in `RelatedSetField`s and `RelatedListField`s weren't being converted to the same type as the primary key of the model
+- Fixed a bug where running tests would incorrectly load the real search stub before the test version
+- Fixed a bug where IDs weren't reserved with the datastore allocator immediately and so could end up with a race-condition where an ID could be reused
 
 ### Documentation:
 
 - Improved documentation for `djangae.contrib.mappers.defer_iteration`.
+- Changed the installation documentation to reflect the correct way to launch tests
 
 
 ## v0.9.8 (release date: 6th December 2016)
@@ -201,7 +245,6 @@ If you're still using Django 1.7 in your project:
 - `djangae.contrib.gauth` now always add users with their emails lowercased
 - Provided limited options for `on_delete` on `RelatedSetField` and `RelatedListField`
 - Renamed `AppEngineUserAPI` to `AppEngineUserAPIBackend`
-- Moved checks verifying csrf, csp and template loader configuration from djangae-scaffold into Djangae.
 
 ### Bug fixes:
 - Special indexing now works on fields that are primary keys too
@@ -214,3 +257,4 @@ If you're still using Django 1.7 in your project:
 - Fixed bug when using `RelatedListField` on a form
 - Don't allow ordering by a `TextField`
 - Properly limiting number of results when excludes are used
+- Allow migrations to work on gauth sql User model

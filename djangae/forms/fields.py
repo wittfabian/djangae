@@ -78,6 +78,7 @@ class JSONFormField(forms.CharField):
 
     def clean(self, value):
         """ (Try to) parse JSON string back to python. """
+        assert isinstance(value, six.string_types) or value is None, "JSONField value must be a string or None"
 
         value = super(JSONFormField, self).clean(value)
 
