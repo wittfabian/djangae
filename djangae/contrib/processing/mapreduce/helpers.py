@@ -103,24 +103,38 @@ def _do_map(
     ))
 
     if finalize_func:
-        processor_kwargs["func"] = qualname(finalize_func) if callable(finalize_func) else finalize_func
         pipelines.append(
             CallbackPipeline(
+                qualname(finalize_func) if callable(finalize_func) else finalize_func,
                 *processor_args,
                 **processor_kwargs
             )
         )
 
     new_pipeline = DynamicPipeline(pipelines)
-    new_pipeline.start(queue_name=_queue_name)
+    new_pipeline.start(queue_name=_queue_name or 'default')
     return new_pipeline
 
 
-def map_queryset(
-    queryset, processor_func, finalize_func=None, _shards=None,
-    _output_writer=None, _output_writer_kwargs=None, _job_name=None,
-    _queue_name=None, *processor_args, **processor_kwargs
-):
+def extract_options(kwargs, additional=None):
+    VALID_OPTIONS = {
+        "_shards",
+        "_output_writer",
+        "_output_writer_kwargs",
+        "_job_name",
+        "_queue_name",
+    }
+
+    options = {}
+
+    for option in VALID_OPTIONS.union(additional or set()):
+        if option in kwargs:
+            options[option] = kwargs.pop(option)
+
+    return options
+
+
+def map_queryset(queryset, processor_func, *args, **kwargs):
     """
         Iterates over a queryset with mapreduce calling process_func for
         each Django instance. Calls finalize_func when the iteration completes.
@@ -129,28 +143,41 @@ def map_queryset(
         subclass. Any additional args or kwargs are passed down to the
         handling function.
 
-        Returns the pipeline
+        Returns the pipeline.
+
+        Valid additional options are (as kwargs):
+            "finalize_func",
+            "_shards",
+            "_output_writer",
+            "_output_writer_kwargs",
+            "_job_name",
+            "_queue_name",
     """
+    options = extract_options(kwargs, additional={"finalize_func"})
+
     params = {
         'input_reader': DjangoInputReader.params_from_queryset(queryset),
-        'output_writer': _output_writer_kwargs or {}
+        'output_writer': options.pop("_output_writer_kwargs", {}) or {}
     }
+
+    finalize_func = options.pop("finalize_func", None)
+    _shards = options.pop("_shards", None)
+    _output_writer = options.pop("_output_writer", None)
+    _output_writer_kwargs = params["output_writer"]
+    _job_name = options.pop("_job_name", "Map task over {}".format(queryset.model))
+    _queue_name = options.pop("_queue_name", None)
 
     return _do_map(
         DjangoInputReader,
         processor_func, finalize_func, params, _shards, _output_writer,
         _output_writer_kwargs,
-        _job_name or "Map task over {}".format(queryset.model),
-        _queue_name=_queue_name,
-        *processor_args, **processor_kwargs
+        _job_name,
+        _queue_name,
+        *args, **kwargs
     )
 
 
-def map_files(
-    processor_func, bucketname, filenames=None, finalize_func=None, _shards=None,
-    _output_writer=None, _output_writer_kwargs=None, _job_name=None, _queue_name=None,
-    *processor_args, **processor_kwargs
-):
+def map_files(bucketname, processor_func, *args, **kwargs):
     """
         Iterates over files in cloudstorage matching patterns in filenames list.
 
@@ -159,7 +186,21 @@ def map_files(
         handling function.
 
         Returns the pipeline
+
+        Valid additional options are (as kwargs):
+            "finalize_func",
+            "filenames",
+            "_shards",
+            "_output_writer",
+            "_output_writer_kwargs",
+            "_job_name",
+            "_queue_name",
     """
+
+    options = extract_options(kwargs, additional={"filenames", "finalize_func"})
+
+    filenames = options.pop("filenames", None)
+
     if filenames is None:
         filenames = ['*']
 
@@ -168,23 +209,27 @@ def map_files(
             GoogleCloudStorageInputReader.OBJECT_NAMES_PARAM: filenames,
             GoogleCloudStorageInputReader.BUCKET_NAME_PARAM: bucketname,
         },
-        'output_writer': _output_writer_kwargs or {}
+        'output_writer': options.pop("_output_writer_kwargs", {}) or {}
     }
+
+    finalize_func = options.pop("finalize_func", None)
+    _shards = options.pop("_shards", None)
+    _output_writer = options.pop("_output_writer", None)
+    _output_writer_kwargs = params["output_writer"]
+    _job_name = options.pop("_job_name", "Map task over files {} in {}".format(filenames, bucketname))
+    _queue_name = options.pop("_queue_name", None)
 
     return _do_map(
         GoogleCloudStorageInputReader,
         processor_func, finalize_func, params, _shards, _output_writer,
         _output_writer_kwargs,
-        _job_name or "Map task over files {} in {}".format(filenames, bucketname),
-        *processor_args, **processor_kwargs
+        _job_name,
+        _queue_name,
+        *args, **kwargs
     )
 
 
-def map_entities(
-    kind_name, namespace, processor_func, finalize_func=None, _shards=None, _output_writer=None,
-    _output_writer_kwargs=None, _job_name=None, _queue_name=None,
-    *processor_args, **processor_kwargs
-):
+def map_entities(kind_name, namespace, processor_func, *args, **kwargs):
     """
         Iterates over all entities of a particular kind, calling processor_func
         on each one.
@@ -195,29 +240,34 @@ def map_entities(
 
         Returns the pipeline
     """
+    options = extract_options(kwargs, additional={"finalize_func"})
+
     params = {
         'input_reader': {
             RawDatastoreInputReader.ENTITY_KIND_PARAM: kind_name,
             RawDatastoreInputReader.NAMESPACE_PARAM: namespace
         },
-        'output_writer': _output_writer_kwargs or {}
+        'output_writer': options.pop("_output_writer_kwargs", {}) or {}
     }
+
+    finalize_func = options.pop("finalize_func", None)
+    _shards = options.pop("_shards", None)
+    _output_writer = options.pop("_output_writer", None)
+    _output_writer_kwargs = params["output_writer"]
+    _job_name = options.pop("_job_name", "Map task over {}".format(kind_name))
+    _queue_name = options.pop("_queue_name", None)
 
     return _do_map(
         RawDatastoreInputReader,
         processor_func, finalize_func, params, _shards, _output_writer,
         _output_writer_kwargs,
-        _job_name or "Map task over {}".format(kind_name),
-        _queue_name=_queue_name,
-        *processor_args,
-        **processor_kwargs
+        _job_name,
+        _queue_name,
+        *args, **kwargs
     )
 
 
-def map_reduce_queryset(
-    queryset, map_func, reduce_func, output_writer,
-    finalize_func=None, _shards=None, _output_writer_kwargs=None, _job_name=None, _queue_name=None
-):
+def map_reduce_queryset(queryset, map_func, reduce_func, output_writer, *args, **kwargs):
 
     """
         Does a complete map-shuffle-reduce over the queryset
@@ -229,8 +279,15 @@ def map_reduce_queryset(
     map_func = qualname(map_func)
     reduce_func = qualname(reduce_func)
     output_writer = qualname(output_writer)
+
+    options = extract_options(kwargs)
+
+    _shards = options.pop("_shards", None)
+    _job_name = options.pop("_job_name", "Map reduce task over {}".format(queryset.model))
+    _queue_name = options.pop("_queue_name", 'default')
+
     pipeline = MapreducePipeline(
-        _job_name or "Map task over {}".format(queryset.model),
+        _job_name,
         map_func,
         reduce_func,
         qualname(DjangoInputReader),
@@ -239,7 +296,7 @@ def map_reduce_queryset(
             "input_reader": DjangoInputReader.params_from_queryset(queryset),
         },
         reducer_params={
-            "output_writer": _output_writer_kwargs
+            'output_writer': options.pop("_output_writer_kwargs", {}) or {}
         },
         shards=_shards
     )
@@ -247,11 +304,7 @@ def map_reduce_queryset(
     return pipeline
 
 
-def map_reduce_entities(
-    kind_name, map_func, reduce_func, output_writer, finalize_func=None,
-    _shards=None, _output_writer_kwargs=None, _job_name=None, _queue_name=None
-):
-
+def map_reduce_entities(kind_name, map_func, reduce_func, output_writer, *args, **kwargs):
     """
         Does a complete map-shuffle-reduce over the entities
 
@@ -262,8 +315,15 @@ def map_reduce_entities(
     map_func = qualname(map_func)
     reduce_func = qualname(reduce_func)
     output_writer = qualname(output_writer)
+
+    options = extract_options(kwargs)
+
+    _shards = options.pop("_shards", None)
+    _job_name = options.pop("_job_name", "Map reduce task over {}".format(kind_name))
+    _queue_name = options.pop("_queue_name", 'default')
+
     pipeline = MapreducePipeline(
-        _job_name or "Map task over {}".format(kind_name),
+        _job_name,
         map_func,
         reduce_func,
         qualname(RawDatastoreInputReader),
@@ -274,7 +334,7 @@ def map_reduce_entities(
             },
         },
         reducer_params={
-            "output_writer": _output_writer_kwargs or {}
+            'output_writer': options.pop("_output_writer_kwargs", {}) or {}
         },
         shards=_shards
     )

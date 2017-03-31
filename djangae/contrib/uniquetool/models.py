@@ -140,9 +140,9 @@ class RawMapperMixin(object):
 
         return map_entities(
             self.model._meta.db_table if self.model else self.kind,
-            settings.DATABASES.get(self.db, {}).get('NAMESPACE'),
+            settings.DATABASES.get(self.db, {}).get('NAMESPACE', ''),
             ".".join([qualname(self.__class__), "run_map"]),
-            ".".join([qualname(self.__class__), "finish"]) if finish else None,
+            finalize_func=".".join([qualname(self.__class__), "finish"]) if finish else None,
             _output_writer=self.output_writer_spec,
             _shards=self.shard_count,
             _job_name=self.job_name,

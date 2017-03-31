@@ -90,12 +90,14 @@ class MapReduceTask(object):
 
         # We have to pass dotted paths to functions here because staticmethods don't have
         # any concept of self, or the class they are defined in.
+
         return map_queryset(
             self.model.objects.using(self.db).all(),
             ".".join([qualname(self.__class__), "run_map"]),
-            ".".join([qualname(self.__class__), "finish"]) if finish else None,
-            _output_writer=self.output_writer_spec,
+            finalize_func=".".join([qualname(self.__class__), "finish"]) if finish else None,
             _shards=self.shard_count,
+            _output_writer=self.output_writer_spec,
+            _output_writer_kwargs=None,
             _job_name=self.job_name,
             _queue_name=kwargs.pop('queue_name', self.queue_name),
             *args,

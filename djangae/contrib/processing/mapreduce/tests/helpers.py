@@ -3,6 +3,7 @@ from django.db import models
 from djangae.test import TestCase
 from unittest import skipIf
 
+from django.db import connection
 from django.core.files.base import ContentFile
 from djangae.storage import CloudStorage, has_cloudstorage
 from django.test.utils import override_settings
@@ -55,7 +56,7 @@ def reduce_count(key, values):
     yield (key, len(values))
 
 
-def delete():
+def delete(*args, **kwargs):
     TestModel.objects.all().delete()
 
 
@@ -74,7 +75,7 @@ class MapReduceEntityTests(TestCase):
             yield_letters,
             reduce_count,
             output_writers.GoogleCloudStorageKeyValueOutputWriter,
-            output_writer_kwargs={
+            _output_writer_kwargs={
                 'bucket_name': 'test-bucket'
             }
         )
@@ -99,7 +100,7 @@ class MapReduceQuerysetTests(TestCase):
             yield_letters,
             reduce_count,
             output_writers.GoogleCloudStorageKeyValueOutputWriter,
-            output_writer_kwargs={
+            _output_writer_kwargs={
                 'bucket_name': 'test-bucket'
             }
         )
@@ -176,9 +177,9 @@ class MapFilesTests(TestCase):
 
         counter = Counter.objects.create()
         pipeline = map_files(
-            count_contents,
             'test_bucket',
-            ['a/*'],
+            count_contents,
+            filenames=['a/*'],
             counter_id=counter.pk
         )
 
@@ -207,6 +208,7 @@ class MapEntitiesTests(TestCase):
 
         pipeline = map_entities(
             TestModel._meta.db_table,
+            connection.settings_dict['NAMESPACE'],
             count_entity,
             finalize_func=delete,
             counter_id=counter.pk
