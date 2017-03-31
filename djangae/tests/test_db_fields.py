@@ -1232,7 +1232,7 @@ class CharFieldModelTests(TestCase):
         try:
             class TestModel(models.Model):
                 test_char_field = CharField(max_length=1501)
-        except AssertionError, e:
+        except AssertionError as e:
             self.assertEqual(
                 e.message,
                 'CharFields max_length must not be grater than 1500 bytes.',
