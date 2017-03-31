@@ -2,7 +2,8 @@
 
 ### New features & improvements:
 
- -
+ - A new contrib app `djangae.contrib.processing.mapreduce` has been added to provide a Django-friendly API to mapreduce. The existing
+   `djangae.contrib.mappers` API has been reimplemented in terms of `djangae.contrib.processing.mapreduce`
 
 ### Bug fixes:
 
