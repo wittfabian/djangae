@@ -162,7 +162,7 @@ def port_is_open(port, url):
 
 
 def get_next_available_port(url, port):
-    for offset in xrange(10):
+    for offset in range(10):
         if port_is_open(url, port + offset):
             port = port + offset
             break

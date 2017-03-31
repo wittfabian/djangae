@@ -480,7 +480,7 @@ class IterableFieldTests(TestCase):
             that no validation error is rasied.
         """
         others = []
-        for x in xrange(2):
+        for x in range(2):
             others.append(ISOther.objects.create())
         instance = IterableFieldsWithValidatorsModel(
             related_set=set(others),  # not being tested here
@@ -492,7 +492,7 @@ class IterableFieldTests(TestCase):
 
     def test_list_field_max_length_invalid(self):
         others = []
-        for x in xrange(2):
+        for x in range(2):
             others.append(ISOther.objects.create())
         instance = IterableFieldsWithValidatorsModel(
             related_set=set(others),  # not being tested here
@@ -508,7 +508,7 @@ class IterableFieldTests(TestCase):
 
     def test_list_field_min_length_invalid(self):
         others = []
-        for x in xrange(2):
+        for x in range(2):
             others.append(ISOther.objects.create())
         instance = IterableFieldsWithValidatorsModel(
             related_set=set(others),  # not being tested here
@@ -524,7 +524,7 @@ class IterableFieldTests(TestCase):
 
     def test_set_field_max_length_invalid(self):
         others = []
-        for x in xrange(2):
+        for x in range(2):
             others.append(ISOther.objects.create())
         instance = IterableFieldsWithValidatorsModel(
             related_set=set(others),  # not being tested here
@@ -540,7 +540,7 @@ class IterableFieldTests(TestCase):
 
     def test_set_field_min_length_invalid(self):
         others = []
-        for x in xrange(2):
+        for x in range(2):
             others.append(ISOther.objects.create())
         instance = IterableFieldsWithValidatorsModel(
             related_set=set(others),  # not being tested here
@@ -582,7 +582,7 @@ class RelatedIterableFieldTests(TestCase):
             that no validation error is rasied.
         """
         others = []
-        for x in xrange(2):
+        for x in range(2):
             others.append(ISOther.objects.create())
         instance = IterableFieldsWithValidatorsModel(
             list_field=["1", "2"],  # not being tested here
@@ -594,7 +594,7 @@ class RelatedIterableFieldTests(TestCase):
 
     def test_related_list_field_max_length_invalid(self):
         others = []
-        for x in xrange(5):
+        for x in range(5):
             others.append(ISOther.objects.create())
         instance = IterableFieldsWithValidatorsModel(
             list_field=["1", "2"],  # not being tested here
@@ -610,7 +610,7 @@ class RelatedIterableFieldTests(TestCase):
 
     def test_related_list_field_min_length_invalid(self):
         others = []
-        for x in xrange(2):
+        for x in range(2):
             others.append(ISOther.objects.create())
         instance = IterableFieldsWithValidatorsModel(
             list_field=["1", "2"],  # not being tested here
@@ -626,7 +626,7 @@ class RelatedIterableFieldTests(TestCase):
 
     def test_related_set_field_max_length_invalid(self):
         others = []
-        for x in xrange(5):
+        for x in range(5):
             others.append(ISOther.objects.create())
         instance = IterableFieldsWithValidatorsModel(
             list_field=["1", "2"],  # not being tested here
@@ -642,7 +642,7 @@ class RelatedIterableFieldTests(TestCase):
 
     def test_related_set_field_min_length_invalid(self):
         others = []
-        for x in xrange(2):
+        for x in range(2):
             others.append(ISOther.objects.create())
         instance = IterableFieldsWithValidatorsModel(
             list_field=["1", "2"],  # not being tested here
@@ -658,7 +658,7 @@ class RelatedIterableFieldTests(TestCase):
 
     def test_model_stores_ids_as_integers_when_saving(self):
         others = []
-        for x in xrange(2):
+        for x in range(2):
             others.append(ISOther.objects.create())
 
         instance = IterableRelatedModel(
@@ -674,7 +674,7 @@ class RelatedIterableFieldTests(TestCase):
 
     def test_model_stores_ids_as_non_integers(self):
         others = []
-        for x in xrange(2):
+        for x in range(2):
             others.append(StringPkModel.objects.create(name=str(x)))
 
         instance = IterableRelatedWithNonIntPkModel(
@@ -750,7 +750,7 @@ class RelatedSetFieldModelTests(TestCase):
     def test_prefetch_related(self):
         tag = Tag.objects.create(name="Apples")
 
-        for i in xrange(2):
+        for i in range(2):
             Post.objects.create(content="Bananas", tags={tag})
 
         posts = list(Post.objects.prefetch_related('tags').all())
@@ -792,7 +792,7 @@ class InstanceListFieldTests(TestCase):
         # Extra one to make sure we're filtering properly
         Tag.objects.create(name="unused")
 
-        for i in xrange(3):
+        for i in range(3):
             Post.objects.create(content="Bananas", ordered_tags=tags)
 
         with self.assertNumQueries(2):

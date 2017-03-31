@@ -977,7 +977,7 @@ class ConstraintTests(TestCase):
                 # Make sure bulk creates are limited when there are unique constraints
                 # involved
                 ModelWithUniques.objects.bulk_create(
-                    [ ModelWithUniques(name=str(x)) for x in xrange(26) ]
+                    [ ModelWithUniques(name=str(x)) for x in range(26) ]
                 )
 
         finally:
@@ -1703,7 +1703,7 @@ class EdgeCaseTests(TestCase):
         # This currently raises an error from App Engine, should we raise our own?
         self.assertRaises(Exception, list, query)
         # Check that it's ok with PKs though
-        query = TestUser.objects.filter(pk__in=list(xrange(1, 32)))
+        query = TestUser.objects.filter(pk__in=list(range(1, 32)))
         list(query)
         # Check that it's ok joining filters with pks
         results = list(TestUser.objects.filter(
@@ -2121,9 +2121,9 @@ class CascadeDeletionTests(TestCase):
     def test_deleting_more_than_30_items(self):
         zoo = Zoo.objects.create()
 
-        for i in xrange(40):
+        for i in range(40):
             enclosure = Enclosure.objects.create(zoo=zoo)
-            for i in xrange(2):
+            for i in range(2):
                 Animal.objects.create(enclosure=enclosure)
 
         self.assertEqual(Animal.objects.count(), 80)

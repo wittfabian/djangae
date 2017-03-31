@@ -29,7 +29,7 @@ class EnsureCreatedModel(models.Model):
 class EnsureCreatedTests(TestCase):
 
     def test_basic_usage(self):
-        for i in xrange(5):
+        for i in range(5):
             EnsureCreatedModel.objects.create(
                 pk=i + 1,
                 field1=i
@@ -81,7 +81,7 @@ class EnsureCreatedTests(TestCase):
         self.assertEqual(1, list(ensure_instance_consistent(qs, 8)).count(new_instance))
 
     def test_add_many_instances(self):
-        for i in xrange(5):
+        for i in range(5):
             EnsureCreatedModel.objects.create(
                 pk=i + 1,
                 field1=i + 5
@@ -89,7 +89,7 @@ class EnsureCreatedTests(TestCase):
 
         with inconsistent_db():
             new_instances = []
-            for i in xrange(3):
+            for i in range(3):
                 instance = EnsureCreatedModel.objects.create(
                     pk=i + 7,
                     field1=i
@@ -118,14 +118,14 @@ class EnsureCreatedTests(TestCase):
         self.assertEqual(5, len(ensure_instances_consistent(qs, new_instance_pks)))
 
     def test_delete_many_instances(self):
-        for i in xrange(5):
+        for i in range(5):
             EnsureCreatedModel.objects.create(
                 pk=i + 1,
                 field1=i + 5
             )
 
         instances_to_delete = []
-        for i in xrange(3):
+        for i in range(3):
             instance = EnsureCreatedModel.objects.create(
                 pk=i + 7,
                 field1=i + 1
