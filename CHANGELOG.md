@@ -2,7 +2,7 @@
 
 ### New features & improvements:
 
- -
+ - Added AsyncMultiQuery as a replacement for Google's MultiQuery (which doesn't exist on Cloud Datastore)
 
 ### Bug fixes:
 
