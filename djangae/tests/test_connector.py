@@ -1688,6 +1688,7 @@ class EdgeCaseTests(TestCase):
             list(dates)
         )
 
+    @override_settings(DJANGAE_MAX_QUERY_BRANCHES=30)
     def test_in_query(self):
         """ Test that the __in filter works, and that it cannot be used with more than 30 values,
             unless it's used on the PK field.
@@ -1700,7 +1701,6 @@ class EdgeCaseTests(TestCase):
         self.assertItemsEqual(results, [self.u1, self.u2])
         # Check that using more than 30 items in an __in query not on the pk causes death
         query = TestUser.objects.filter(username__in=list([x for x in letters[:31]]))
-        # This currently raises an error from App Engine, should we raise our own?
         self.assertRaises(Exception, list, query)
         # Check that it's ok with PKs though
         query = TestUser.objects.filter(pk__in=list(range(1, 32)))
