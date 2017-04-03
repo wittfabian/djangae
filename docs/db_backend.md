@@ -188,7 +188,7 @@ There is also an equivalent function for ensuring the consistency of multiple it
 * Doing filter(pk__in=Something.objects.values_list('pk', flat=True)) will implicitly evaluate the inner query while preparing to run the outer one. This means two queries, not one like SQL would do!
 * IN queries and queries with OR branches which aren't filtered on PK result in multiple queries to the datastore. By default you will get an error
   if you exceed 100 IN filters but this is configurable via the `DJANGAE_MAX_QUERY_BRANCHES` setting. Be aware that
-  the more IN/OR filters in a query, the slower the query becomes. 100 is already a high values for this setting so
+  the more IN/OR filters in a query, the slower the query becomes. 100 is already a high value for this setting so
   raising it isn't recommended (it's probably better to rethink your data structure or querying)
 
 ## Unique Constraint Checking
