@@ -46,8 +46,7 @@ class AsyncMultiQueryTest(TestCase):
         for i in range(11):
             MultiQueryModel.objects.create(field1=i)
 
-        self.assertRaises(NotSupportedError,
-            lambda: list(MultiQueryModel.objects.filter(
-                field1__in=range(11)
-            ))
+        self.assertRaises(
+            NotSupportedError,
+            list, MultiQueryModel.objects.filter(field1__in=range(11))
         )
