@@ -10,6 +10,7 @@ from djangae.db.backends.appengine import POLYMODEL_CLASS_ATTRIBUTE
 
 from google.appengine.api import datastore
 from google.appengine.api.datastore import Query
+from google.appengine.datastore.datastore_query import QueryOptions
 
 
 class AsyncMultiQuery(object):
@@ -24,9 +25,16 @@ class AsyncMultiQuery(object):
         self._orderings = orderings
         self._min_max_cache = {}
 
+        # When set, this is called on the query before .Run() is called
+        # Which allows you to manipulate the options. Recommend this is set/unset
+        # in a try/finally
+        self._query_decorator = None
+
     def _spawn_thread(self, i, query, result_queues, **query_run_args):
+
         class Thread(threading.Thread):
-            def __init__(self, *args, **kwargs):
+            def __init__(self, query, *args, **kwargs):
+                self.query = query
                 self.results_fetched = False
                 super(Thread, self).__init__(*args, **kwargs)
 
@@ -34,11 +42,21 @@ class AsyncMultiQuery(object):
                 result_queues[i] = (x for x in query.Run(**query_run_args))
                 self.results_fetched = True
 
-        thread = Thread()
+        if self._query_decorator:
+            query = self._query_decorator(query)
+
+        thread = Thread(query)
         thread.start()
         return thread
 
     def _fetch_results(self):
+        """
+            Returns a list of generators (one for each query in the multi query)
+            which generate entity results (or keys if it's keys_only)
+
+            Uses multiple threads to submit RPC calls
+        """
+
         threads = []
 
         # We need to grab a set of results per query
@@ -46,6 +64,8 @@ class AsyncMultiQuery(object):
 
         # Go through the queries, trigger new threads as they become available
         for i, query in enumerate(self._queries):
+
+            # Iterate while we have a full thread list
             while len(threads) >= self.THREAD_COUNT:
                 try:
                     complete = (x for x in threads if x.results_fetched).next()
@@ -65,6 +85,9 @@ class AsyncMultiQuery(object):
         return result_queues
 
     def _compare_entities(self, lhs, rhs):
+        if all([isinstance(x, datastore.Key) for x in (lhs, rhs)]):
+            return cmp(lhs, rhs)
+
         def get_extreme_if_list_property(entity_key, column, value, order):
             if not isinstance(value, list):
                 return value
@@ -97,6 +120,21 @@ class AsyncMultiQuery(object):
 
         return cmp(lhs.key(), rhs.key())
 
+
+    def Count(self, **kwargs):
+        def query_decorator(query):
+            # Force keys_only
+            import copy
+            query = copy.deepcopy(query)
+            query._Query__query_options = QueryOptions(keys_only=True)
+
+            return query
+
+        try:
+            self._query_decorator = query_decorator
+            return len([x for x in self.Run(**kwargs)])
+        finally:
+            self._query_decorator = None
 
     def Run(self, **kwargs):
         """
@@ -141,16 +179,21 @@ class AsyncMultiQuery(object):
                 return lowest
 
             # Find the next entry from the available queues
-            next = get_next()
+            next_entity = get_next()
 
             # No more entries if this is the case
-            if next is None:
-                break;
+            if next_entity is None:
+                break
+
+            next_key = (
+                next_entity
+                if isinstance(next_entity, datastore.Key) else next_entity.key()
+            )
 
             # Make sure we haven't seen this result before before yielding
-            if next.key() not in seen_keys:
-                seen_keys.add(next.key())
-                yield next
+            if next_key not in seen_keys:
+                seen_keys.add(next_key)
+                yield next_entity
 
 
 def _convert_entity_based_on_query_options(entity, opts):
