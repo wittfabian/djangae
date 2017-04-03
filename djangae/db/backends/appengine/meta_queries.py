@@ -37,6 +37,26 @@ class AsyncMultiQuery(object):
         self._query_decorator = None
 
     def _spawn_thread(self, i, query, result_queues, **query_run_args):
+        """
+            Spawns a thread to return a queries resultset
+
+            *Note* by evaluating the entire query results in the thread we ruin the datastore
+            query batching in the situation that you:
+
+             a. Have limited the query
+             b. Have a large number of results in one or more branches of the OR
+
+            Basically, if you do this:
+
+            MyModel.objects.filter(field1__in=("A", "B"))[:1000]
+
+            and you have 1000 results with "A" and 1000 results with "B" all
+            2000 results will be fetched even though you asked for 1000. However, this is
+            not the most likely situation for a MultiQuery when normally few results will be returned
+            by each branch. Threading seems to help in the common case but we can revisit
+            when we have more data. If threading isn't worth the cost we can revert to just using
+            async queries like Google's multiquery does.
+        """
 
         class Thread(threading.Thread):
             def __init__(self, query, *args, **kwargs):
