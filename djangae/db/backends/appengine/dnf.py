@@ -208,12 +208,12 @@ def normalize_query(query):
 
     MAX_ALLOWABLE_QUERIES = getattr(
         settings,
-        "DJANGAE_MAX_ALLOWABLE_QUERIES", DEFAULT_MAX_ALLOWABLE_QUERIES
+        "DJANGAE_MAX_QUERY_BRANCHES", DEFAULT_MAX_ALLOWABLE_QUERIES
     )
 
     if (not all_pks) and len(query.where.children) > MAX_ALLOWABLE_QUERIES:
         raise NotSupportedError(
-            "Unable to run query as it required more than {} subqueries".format(
+            "Unable to run query as it required more than {} subqueries (limit is configurable with DJANGAE_MAX_QUERY_BRANCHES)".format(
                 MAX_ALLOWABLE_QUERIES
             )
         )
