@@ -1,3 +1,4 @@
+import copy
 import threading
 
 from functools import partial
@@ -124,7 +125,8 @@ class AsyncMultiQuery(object):
     def Count(self, **kwargs):
         def query_decorator(query):
             # Force keys_only
-            import copy
+            # we copy to prevent changing the original query
+            # unexpectedly
             query = copy.deepcopy(query)
             query._Query__query_options = QueryOptions(keys_only=True)
 

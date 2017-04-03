@@ -1,8 +1,15 @@
 import copy
 from itertools import  product
+
+from django.conf import settings
 from django.db.models.sql.datastructures import EmptyResultSet
 from djangae.db.backends.appengine.query import WhereNode
 from django.db import NotSupportedError
+
+
+# Maximum number of subqueries in a multiquery
+DEFAULT_MAX_ALLOWABLE_QUERIES = 100
+
 
 def preprocess_node(node, negated):
 
@@ -199,8 +206,17 @@ def normalize_query(query):
             all_pks = False
             break
 
-    if (not all_pks) and len(query.where.children) > 30:
-        raise NotSupportedError("Unable to run query as it required more than 30 subqueries")
+    MAX_ALLOWABLE_QUERIES = getattr(
+        settings,
+        "DJANGAE_MAX_ALLOWABLE_QUERIES", DEFAULT_MAX_ALLOWABLE_QUERIES
+    )
+
+    if (not all_pks) and len(query.where.children) > MAX_ALLOWABLE_QUERIES:
+        raise NotSupportedError(
+            "Unable to run query as it required more than {} subqueries".format(
+                MAX_ALLOWABLE_QUERIES
+            )
+        )
 
     def remove_empty_in(node):
         """
