@@ -17,7 +17,7 @@ class AsyncMultiQuery(object):
         Runs multiple queries simultaneously and merges the result sets based on the
         shared ordering.
     """
-    THREAD_COUNT = 2
+    THREAD_COUNT = 3
 
     def __init__(self, queries, orderings):
         self._queries = queries
@@ -48,7 +48,7 @@ class AsyncMultiQuery(object):
         for i, query in enumerate(self._queries):
             while len(threads) >= self.THREAD_COUNT:
                 try:
-                    complete = (x for x in threads if x.is_finished).next()
+                    complete = (x for x in threads if x.results_fetched).next()
                 except StopIteration:
                     # No threads available, continue waiting
                     continue
@@ -99,9 +99,20 @@ class AsyncMultiQuery(object):
 
 
     def Run(self, **kwargs):
+        """
+            Returns an iterator through the result set.
+
+            This calls _fetch_results which returns a list of iterators,
+            where each is the result of a single query. This function does a
+            zig-zag merge of the entities. It starts by creating a list of the next
+            entry in each resultset, then iteratively picks the next entity and then
+            fills the slot from the counterpart result set until all the slots are None.
+        """
         self._min_max_cache = []
         results = self._fetch_results()
 
+        # Go through each outstanding result queue and store
+        # the next entry of each (None if the result queue is done)
         next_entries = [None] * len(results)
         for i, queue in enumerate(results):
             try:
@@ -111,13 +122,30 @@ class AsyncMultiQuery(object):
 
         seen_keys = set() #For de-duping results
         while any(next_entries):
-            next = sorted(next_entries, self._compare_entities)[0]
+            def get_next():
+                idx, lowest = None, None
 
-            i = next_entries.index(next)
-            try:
-                next_entries[i] = results[i].next()
-            except StopIteration:
-                next_entries[i] = None
+                for i, entry in enumerate(next_entries):
+                    if entry is None:
+                        continue
+
+                    if lowest is None or self._compare_entities(entry, lowest) < 0:
+                        idx, lowest = i, entry
+
+                # Move the queue along if we found the entry there
+                if lowest is not None:
+                    try:
+                        next_entries[idx] = results[idx].next()
+                    except StopIteration:
+                        next_entries[idx] = None
+                return lowest
+
+            # Find the next entry from the available queues
+            next = get_next()
+
+            # No more entries if this is the case
+            if next is None:
+                break;
 
             # Make sure we haven't seen this result before before yielding
             if next.key() not in seen_keys:

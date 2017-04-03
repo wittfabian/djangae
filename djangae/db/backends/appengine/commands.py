@@ -438,7 +438,7 @@ class SelectCommand(object):
 
             return queries[0]
         else:
-            return datastore.MultiQuery(queries, ordering)
+            return meta_queries.AsyncMultiQuery(queries, ordering)
 
     def _fetch_results(self, query):
         # If we're manually excluding PKs, and we've specified a limit to the results

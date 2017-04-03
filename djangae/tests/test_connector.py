@@ -445,7 +445,7 @@ class BackendTests(TestCase):
             list(TestUser.objects.filter(username="test"))
             self.assertEqual(1, query_mock.call_count)
 
-        with sleuth.switch("djangae.db.backends.appengine.commands.datastore.MultiQuery.Run", lambda *args, **kwargs: []) as query_mock:
+        with sleuth.switch("djangae.db.backends.appengine.meta_queries.AsyncMultiQuery.Run", lambda *args, **kwargs: []) as query_mock:
             list(TestUser.objects.filter(username__in=["test", "cheese"]))
             self.assertEqual(1, query_mock.call_count)
 
@@ -453,7 +453,7 @@ class BackendTests(TestCase):
             list(TestUser.objects.filter(pk=1))
             self.assertEqual(1, get_mock.call_count)
 
-        with sleuth.switch("djangae.db.backends.appengine.commands.datastore.MultiQuery.Run", lambda *args, **kwargs: []) as query_mock:
+        with sleuth.switch("djangae.db.backends.appengine.meta_queries.AsyncMultiQuery.Run", lambda *args, **kwargs: []) as query_mock:
             list(TestUser.objects.exclude(username__startswith="test"))
             self.assertEqual(1, query_mock.call_count)
 
