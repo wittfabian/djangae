@@ -19,7 +19,12 @@ class AsyncMultiQuery(object):
         Runs multiple queries simultaneously and merges the result sets based on the
         shared ordering.
     """
-    THREAD_COUNT = 3
+
+    # Testing seems to show that more threads == better, but I'm concerned if we
+    # raise this too high we'll start hitting bottlenecks elsewhere. Serious performance
+    # testing needs to happen. Theoretically I think we could make THREAD_COUNT == len(queries)
+    # but I'd rather prove that doesn't cause problems before I do it!
+    THREAD_COUNT = 8
 
     def __init__(self, queries, orderings):
         self._queries = queries
@@ -40,7 +45,9 @@ class AsyncMultiQuery(object):
                 super(Thread, self).__init__(*args, **kwargs)
 
             def run(self):
-                result_queues[i] = (x for x in query.Run(**query_run_args))
+                # Evaluate the result set in the thread, but return an iterator
+                # so we can change this if necessary without breaking assumptions elsewhere
+                result_queues[i] = iter([x for x in query.Run(**query_run_args)])
                 self.results_fetched = True
 
         if self._query_decorator:
