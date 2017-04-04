@@ -22,6 +22,7 @@ from django.conf import settings
 from django.utils import six
 from django.core.serializers.json import DjangoJSONEncoder
 
+from djangae.db.backends.appengine.indexing import Indexer, register_indexer
 from djangae.forms.fields import JSONFormField, JSONWidget
 
 __all__ = ( 'JSONField',)
@@ -199,3 +200,55 @@ class JSONField(models.TextField):
 
         return LookupBuilder
             
+
+class JSONKeyLookupIndexer(Indexer):
+    OPERATOR = 'json_path'
+
+    def handles(self, field, operator):
+        from djangae.fields import JSONField
+
+        operator_part = operator.split("__", 1)[0]
+        return isinstance(field, JSONField) and operator_part == self.OPERATOR
+
+    def prepare_index_type(self, index_type, value):
+        return index_type
+
+    def prep_value_for_query(self, value):
+        return value
+
+    def prep_query_operator(self, op):
+        return "exact"
+
+    def prep_value_for_database(self, value, index):
+        import json
+
+        if isinstance(value, basestring):
+            try:
+                value = json.loads(value)
+            except ValueError:
+                return None
+
+        index_part = index.split("__", 1)[1]
+        path = index_part.split("__")
+
+        for section in path:
+            try:
+                section = int(section)
+            except (TypeError, ValueError):
+                pass
+
+            try:
+                value = value[section]
+            except (KeyError, IndexError, TypeError):
+                return None
+
+        return value
+
+    def indexed_column_name(self, field_column, value, index):
+        return "_idx_json_path_{}_{}".format(
+            field_column,
+            index.split("__", 1)[-1]
+        )
+
+# Especially for JSON fields
+register_indexer(JSONKeyLookupIndexer)
