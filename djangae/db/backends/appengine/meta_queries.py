@@ -272,6 +272,7 @@ class QueryByKeys(object):
 
         is_projection = False
 
+        cache_results = True
         results = None
         if key_count == 1:
             # FIXME: Potentially could use get_multi in memcache and the make a query
@@ -280,11 +281,12 @@ class QueryByKeys(object):
             result = caching.get_from_cache_by_key(key)
             if result is not None:
                 results = [result]
-                cache = False # Don't update cache, we just got it from there
+                cache_results = False # Don't update cache, we just got it from there
 
         if results is None:
             if opts.projection:
-                is_projection = True # Don't cache projection results!
+                is_projection = True
+                cache_results = False # Don't cache projection results!
 
                 # Assumes projection ancestor queries are faster than a datastore Get
                 # due to lower traffic over the RPC. This should be faster for queries with
@@ -331,7 +333,7 @@ class QueryByKeys(object):
             # This is safe, because Django is fetching all results any way :(
             sorted_results = sorted(results, cmp=partial(utils.django_ordering_comparison, self.ordering))
             sorted_results = [result for result in sorted_results if result is not None]
-            if not is_projection and sorted_results:
+            if cache_results and sorted_results:
                 caching.add_entities_to_cache(
                     self.model,
                     sorted_results,
