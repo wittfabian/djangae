@@ -73,6 +73,24 @@ class JSONOrderedDict(OrderedDict):
         return dumps(self)
 
 
+class JSONKeyLookup(models.Lookup):
+    lookup_name = 'json_path'
+    operator = 'json_path'
+    bilateral_transforms = False
+    lookup_supports_text = True # Tell Djangae connector that we are OK on text fields
+
+    def __init__(self, path):
+        self.path = path
+
+    def get_rhs_op(self, connection, rhs):
+        return "__".join([self.operator, self.path])
+
+    def __call__(self, lhs, rhs):
+        self.lhs = lhs
+        self.rhs = rhs
+        return self
+
+
 class JSONField(models.TextField):
     """JSONField is a generic textfield that neatly serializes/unserializes
     JSON objects seamlessly.  Main thingy must be a dict object."""
@@ -150,3 +168,34 @@ class JSONField(models.TextField):
         }
         defaults.update(kwargs)
         return super(JSONField, self).formfield(**defaults)
+
+    def get_lookup(self, lookup):
+        ret = super(JSONField, self).get_lookup(lookup)
+        if ret:
+            return ret
+        return JSONKeyLookup(lookup)
+
+    def get_transform(self, lookup):
+        ret = super(JSONField, self).get_transform(lookup)
+        if ret:
+            return ret
+
+        # Assume a key path lookup
+        class LookupBuilder(models.Transform):
+            source_expressions = []
+            lookup_name = 'json_path'
+
+            def __init__(self, *args, **kwargs):
+                super(LookupBuilder, self).__init__(*args, **kwargs)
+                self.path = [lookup]
+
+            def get_transform(self, lookup):
+                self.path.append(lookup)
+                return lambda lhs: self
+
+            def get_lookup(self, lookup):
+                self.path.append(lookup)
+                return JSONKeyLookup("__".join(self.path))
+
+        return LookupBuilder
+            
