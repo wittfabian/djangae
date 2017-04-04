@@ -2,7 +2,7 @@
 
 ### New features & improvements:
 
- -
+ - Add support for the latest App Engine SDK (1.9.51)
 
 ### Bug fixes:
 
