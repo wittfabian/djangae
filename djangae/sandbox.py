@@ -109,6 +109,9 @@ def _create_dispatcher(configuration, options):
             current_version == TEMP_1_9_49_VERSION_NO:
         dispatcher_args.append(options.external_port)
 
+    if current_version >= _VersionList('1.9.50'):
+        dispatcher_args.insert(7, DevelopmentServer._create_go_config(options))
+
     if current_version >= _VersionList('1.9.22') or \
             current_version == TEMP_1_9_49_VERSION_NO:
         dispatcher_args.insert(8, None) # Custom config setting
@@ -163,18 +166,40 @@ def _local(devappserver2=None, configuration=None, options=None, wsgi_request_in
     os.environ['DEFAULT_VERSION_HOSTNAME'] = '%s:%s' % (os.environ['SERVER_NAME'], os.environ['SERVER_PORT'])
 
     devappserver2._setup_environ(configuration.app_id)
-    storage_path = devappserver2._get_storage_path(options.storage_path, configuration.app_id)
+
+    from google.appengine.tools.devappserver2 import api_server
+    if hasattr(api_server, "get_storage_path"):
+        storage_path = api_server.get_storage_path(options.storage_path, configuration.app_id)
+    else:
+        # SDK < 1.9.51
+        storage_path = devappserver2._get_storage_path(options.storage_path, configuration.app_id)
 
     dispatcher = _create_dispatcher(configuration, options)
     request_data = CustomWSGIRequestInfo(dispatcher)
     # Remember the wsgi request info object so it can be reused to avoid duplication.
     dispatcher._request_data = request_data
 
-    _API_SERVER = devappserver2.DevelopmentServer._create_api_server(
-        request_data, storage_path, options, configuration)
+    if hasattr(api_server, "create_api_server"):
+        _API_SERVER = api_server.create_api_server(
+            request_data, storage_path, options, configuration
+        )
+
+        # We have to patch api_server.create_api_server to return _API_SERVER
+        # every time it's called, without this we end up with all kinds of
+        # problems. Basically we need one api server for the lifetime of the
+        # sandbox (including in `runserver`)
+        def create_api_server_patch(*args, **kwargs):
+            return _API_SERVER
+
+        api_server.create_api_server = create_api_server_patch
+
+    else:
+        _API_SERVER = devappserver2.DevelopmentServer._create_api_server(
+            request_data, storage_path, options, configuration
+        )
 
     from .blobstore_service import start_blobstore_service, stop_blobstore_service
-    from google.appengine.tools.devappserver2 import api_server
+
     start_blobstore_service()
     try:
         yield
