@@ -346,16 +346,15 @@ class BackendTests(TestCase):
                 # Make sure the query is an ancestor of the key
                 self.assertEqual(query_anc.calls[0].args[1], datastore.Key.from_path(TestFruit._meta.db_table, "0", namespace=DEFAULT_NAMESPACE))
 
-        # Now check projections work with more than 30 things
-        with sleuth.watch('google.appengine.api.datastore.MultiQuery.__init__') as query_init:
+        # Now check projections work with fewer than 100 things
+        with sleuth.watch('djangae.db.backends.appengine.meta_queries.AsyncMultiQuery.__init__') as query_init:
             with sleuth.watch('google.appengine.api.datastore.Query.Ancestor') as query_anc:
                 keys = [str(x) for x in range(32)]
                 results = list(TestFruit.objects.only("color").filter(pk__in=keys).order_by("name"))
 
-                self.assertEqual(query_init.call_count, 2) # Two multi queries
+                self.assertEqual(query_init.call_count, 1) # One multiquery
                 self.assertEqual(query_anc.call_count, 32) # 32 Ancestor calls
-                self.assertEqual(len(query_init.calls[0].args[1]), 30)
-                self.assertEqual(len(query_init.calls[1].args[1]), 2)
+                self.assertEqual(len(query_init.calls[0].args[1]), 32)
 
                 # Confirm the ordering is correct
                 self.assertEqual(sorted(keys), [ x.pk for x in results ])

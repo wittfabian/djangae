@@ -4,6 +4,7 @@ import threading
 from functools import partial
 from itertools import chain, groupby
 
+from django.conf import settings
 from djangae.db.backends.appengine import caching
 from djangae.db import utils
 
@@ -241,6 +242,9 @@ class QueryByKeys(object):
     """ Does the most efficient fetching possible for when we have the keys of the entities we want. """
 
     def __init__(self, model, queries, ordering, namespace):
+        # Imported here for potential circular import and isolation reasons
+        from djangae.db.backends.appengine.dnf import DEFAULT_MAX_ALLOWABLE_QUERIES
+
         # `queries` should be filtered by __key__ with keys that have the namespace applied to them.
         # `namespace` is passed for explicit niceness (mostly so that we don't have to assume that
         # all the keys belong to the same namespace, even though they will).
@@ -253,7 +257,11 @@ class QueryByKeys(object):
 
         # groupby requires that the iterable is sorted by the given key before grouping
         self.queries = sorted(queries, key=_get_key)
+        self.query_count = len(self.queries)
         self.queries_by_key = { a: list(b) for a, b in groupby(self.queries, _get_key) }
+
+        self.max_allowable_queries = getattr(settings, "DJANGAE_MAX_QUERY_BRACHES", DEFAULT_MAX_ALLOWABLE_QUERIES)
+        self.can_multi_query = self.query_count < self.max_allowable_queries
 
         self.ordering = ordering
         self._Query__kind = queries[0]._Query__kind
@@ -284,22 +292,17 @@ class QueryByKeys(object):
                 cache_results = False # Don't update cache, we just got it from there
 
         if results is None:
-            if opts.projection:
+            if opts.projection and self.can_multi_query:
                 is_projection = True
                 cache_results = False # Don't cache projection results!
 
-                # Assumes projection ancestor queries are faster than a datastore Get
-                # due to lower traffic over the RPC. This should be faster for queries with
-                # < 30 keys (which is the most common case), and faster if the entities are
-                # larger and there are many results, but there is probably a slower middle ground
-                # because the larger number of RPC calls. Still, if performance is an issue the
-                # user can just do a normal get() rather than values/values_list/only/defer
-
+                # If we can multi-query in a single query, we do so using a number of
+                # ancestor queries (to stay consistent) otherwise, we just do a
+                # datastore Get, but this will return extra data over the RPC
                 to_fetch = (offset or 0) + limit if limit else None
                 additional_cols = set([ x[0] for x in self.ordering if x[0] not in opts.projection])
 
                 multi_query = []
-                final_queries = []
                 orderings = self.queries[0]._Query__orderings
                 for key, queries in self.queries_by_key.iteritems():
                     for query in queries:
@@ -315,16 +318,11 @@ class QueryByKeys(object):
 
                         query.Ancestor(key) # Make this an ancestor query
                         multi_query.append(query)
-                        if len(multi_query) == 30:
-                            final_queries.append(datastore.MultiQuery(multi_query, orderings).Run(limit=to_fetch))
-                            multi_query = []
-                else:
-                    if len(multi_query) == 1:
-                        final_queries.append(multi_query[0].Run(limit=to_fetch))
-                    elif multi_query:
-                        final_queries.append(datastore.MultiQuery(multi_query, orderings).Run(limit=to_fetch))
 
-                results = chain(*final_queries)
+                if len(multi_query) == 1:
+                    results = multi_query[0].Run(limit=to_fetch)
+                else:
+                    results = AsyncMultiQuery(multi_query, orderings).Run(limit=to_fetch)
             else:
                 results = datastore.Get(self.queries_by_key.keys())
 
