@@ -3,6 +3,8 @@
 ### New features & improvements:
 
  - Add support for the latest App Engine SDK (1.9.51)
+ - Add support for querying JSONFields in a similar way to the PostgreSQL JSONField
+ - Allow special indexers to index `None` as well as remove unused index properties from the entity
 
 ### Bug fixes:
 
