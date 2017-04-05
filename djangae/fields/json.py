@@ -220,19 +220,23 @@ class JSONKeyLookupIndexer(Indexer):
         return "exact"
 
     def prep_value_for_database(self, value, index):
-        import json
-
         if isinstance(value, basestring):
             value = json.loads(value)
 
         index_part = index.split("__", 1)[1]
         path = index_part.split("__")
 
+        is_isnull = False
+        # Ignore isnull on the end of a path, it's not a value lookup
+        if len(path) > 1 and path[-1] == "isnull":
+            is_isnull = True
+            path.pop()
+
         # Go through the path and look up the value from each
         # dictionary/list if we fail to find a value we raise
         # a IgnoreForIndexing exception which tells the special indexer
         # to not save *anything*
-        for section in path:
+        for i, section in enumerate(path):
             try:
                 section = int(section)
             except (TypeError, ValueError):
@@ -242,6 +246,9 @@ class JSONKeyLookupIndexer(Indexer):
                 value = value[section]
             except (KeyError, IndexError, TypeError):
                 raise IgnoreForIndexing("")
+
+        if is_isnull:
+            return value is None
 
         return value
 
