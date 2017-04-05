@@ -1153,7 +1153,8 @@ class UpdateCommand(object):
 
             # Remove fields which have been marked to be unindexed
             for col in getattr(updated_entity, "_properties_to_remove", []):
-                del result[col]
+                if col in result:
+                    del result[col]
 
             # Make sure we keep all classes in the inheritence tree!
             if original_class:
