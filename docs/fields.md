@@ -202,6 +202,18 @@ class MyModelAdmin(admin.ModelAdmin):
 If a JSONField is set to blank=False, then any form submitted value must be a valid JSON object which is not empty (e.g. not `{}` or `[]`) if
   a JSONField is nullable and blank=True then a None will be saved in the empty case. An empty string is not a valid value for a JSONField.
 
+### Querying
+
+You can query JSONField contents using a similar format to the that used by Django's [PostgreSQL JSONField](https://docs.djangoproject.com/en/1.10/ref/contrib/postgres/fields/#querying-jsonfield).
+Only direct path lookups are implemented, so no `contains`, `contained_by`, `has_key` etc.
+
+There are some limitations:
+
+ - The only possible lookups are 'exact' lookups, or `isnull`
+ - If a path contains an integer, it's assumed to be an integer index into a list (you can't query a key of "1" for example)
+ - You can't query paths where the final part of the path is "isnull"... for obvious reasons
+ - Paths must be added to djangaeidx.yaml (automatic after first use) and your entities must be resaved for the queries to return values
+
 ## TrueOrNullField
 
 This field is not specific to the App Engine Datastore (or any non-relational database), but is included in Djangae for convenience.
