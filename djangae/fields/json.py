@@ -22,7 +22,7 @@ from django.conf import settings
 from django.utils import six
 from django.core.serializers.json import DjangoJSONEncoder
 
-from djangae.db.backends.appengine.indexing import Indexer, register_indexer
+from djangae.db.backends.appengine.indexing import Indexer, register_indexer, IgnoreForIndexing
 from djangae.forms.fields import JSONFormField, JSONWidget
 
 __all__ = ( 'JSONField',)
@@ -223,14 +223,15 @@ class JSONKeyLookupIndexer(Indexer):
         import json
 
         if isinstance(value, basestring):
-            try:
-                value = json.loads(value)
-            except ValueError:
-                return None
+            value = json.loads(value)
 
         index_part = index.split("__", 1)[1]
         path = index_part.split("__")
 
+        # Go through the path and look up the value from each
+        # dictionary/list if we fail to find a value we raise
+        # a IgnoreForIndexing exception which tells the special indexer
+        # to not save *anything*
         for section in path:
             try:
                 section = int(section)
@@ -240,7 +241,7 @@ class JSONKeyLookupIndexer(Indexer):
             try:
                 value = value[section]
             except (KeyError, IndexError, TypeError):
-                return None
+                raise IgnoreForIndexing("")
 
         return value
 

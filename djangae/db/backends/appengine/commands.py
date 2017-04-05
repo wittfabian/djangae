@@ -1142,12 +1142,18 @@ class UpdateCommand(object):
             # We need to add to the class attribute, rather than replace it!
             original_class = result.get(POLYMODEL_CLASS_ATTRIBUTE, [])
 
-            # Update the entity we read above with the new values
-            result.update(django_instance_to_entity(
+            updated_entity = django_instance_to_entity(
                 self.connection, self.model,
                 [ x[0] for x in self.values],  # Pass in the fields that were updated
-                True, instance)
-            )
+                True, instance
+             )
+
+            # Update the entity we read above with the new values
+            result.update(updated_entity)
+
+            # Remove fields which have been marked to be unindexed
+            for col in getattr(updated_entity, "_properties_to_remove", []):
+                del result[col]
 
             # Make sure we keep all classes in the inheritence tree!
             if original_class:

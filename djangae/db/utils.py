@@ -11,6 +11,7 @@ from django.conf import settings
 from django.db.backends.utils import format_number
 from django.db import IntegrityError
 from django.utils import timezone
+
 from google.appengine.api import datastore
 from google.appengine.api.datastore import Key, Query
 try:
@@ -158,7 +159,7 @@ def get_field_from_column(model, column):
     return None
 
 def django_instance_to_entity(connection, model, fields, raw, instance, check_null=True):
-    from djangae.db.backends.appengine.indexing import special_indexes_for_column, get_indexer
+    from djangae.db.backends.appengine.indexing import IgnoreForIndexing, special_indexes_for_column, get_indexer
     from djangae.db.backends.appengine import POLYMODEL_CLASS_ATTRIBUTE
 
     # uses_inheritance = False
@@ -167,7 +168,6 @@ def django_instance_to_entity(connection, model, fields, raw, instance, check_nu
 
     def value_from_instance(_instance, _field):
         value = get_prepared_db_value(connection, _instance, _field, raw)
-
         # If value is None, but there is a default, and the field is not nullable then we should populate it
         # Otherwise thing get hairy when you add new fields to models
         if value is None and _field.has_default() and not _field.null:
@@ -187,6 +187,8 @@ def django_instance_to_entity(connection, model, fields, raw, instance, check_nu
     field_values = {}
     primary_key = None
 
+    fields_to_unindex = set()
+
     for field in fields:
         value, is_primary_key = value_from_instance(instance, field)
         if is_primary_key:
@@ -197,7 +199,14 @@ def django_instance_to_entity(connection, model, fields, raw, instance, check_nu
         # Add special indexed fields
         for index in special_indexes_for_column(model, field.column):
             indexer = get_indexer(field, index)
-            values = indexer.prep_value_for_database(value, index)
+
+            unindex = False
+            try:
+                values = indexer.prep_value_for_database(value, index)
+            except IgnoreForIndexing as e:
+                # We mark this value as being wiped out for indexing
+                unindex = True
+                values = e.processed_value
 
             if values is None:
                 continue
@@ -207,6 +216,10 @@ def django_instance_to_entity(connection, model, fields, raw, instance, check_nu
 
             for v in values:
                 column = indexer.indexed_column_name(field.column, v, index)
+                if unindex:
+                    fields_to_unindex.add(column)
+                    continue
+
                 if column in field_values:
                     if not isinstance(field_values[column], list):
                         field_values[column] = [ field_values[column], v ]
@@ -233,6 +246,9 @@ def django_instance_to_entity(connection, model, fields, raw, instance, check_nu
     namespace = connection.settings_dict.get("NAMESPACE")
     entity = datastore.Entity(db_table, namespace=namespace, **kwargs)
     entity.update(field_values)
+
+    if fields_to_unindex:
+        entity._properties_to_remove = fields_to_unindex
 
     classes = get_concrete_db_tables(model)
     if len(classes) > 1:

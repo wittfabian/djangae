@@ -198,6 +198,26 @@ def add_special_index(model_class, field_name, indexer, operator, value=None):
     write_special_indexes()
 
 
+class IgnoreForIndexing(Exception):
+    """
+        An exception thrown from prep_value_for_database if the index column
+        should be removed from the entity.
+
+        Frustratingly, the legacy icontains and contains Indexers use 'value' when
+        determining the column name, and so you must pass the prepared value for the
+        column anyway, even though it won't be used.
+
+        When the legacy icontains/contains indexers are removed we should:
+
+         - Remove __init__ from this class
+         - Remove 'value' as an argument to indexed_column_name
+         - Stop setting 'values' from processed_value in django_instance_to_entity
+    """
+
+    def __init__(self, processed_value):
+        self.processed_value = processed_value
+
+
 class Indexer(object):
     def handles(self, field, operator):
         """
@@ -778,9 +798,6 @@ class IRegexIndexer(RegexIndexer):
 
     def indexed_column_name(self, field_column, value, index):
         return "_idx_iregex_{0}_{1}".format(field_column, self.get_pattern(index).encode('hex'))
-
-
-
 
 
 _REGISTERED_INDEXERS = []
