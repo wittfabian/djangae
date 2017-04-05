@@ -208,9 +208,6 @@ def django_instance_to_entity(connection, model, fields, raw, instance, check_nu
                 unindex = True
                 values = e.processed_value
 
-            if values is None:
-                continue
-
             if not hasattr(values, "__iter__"):
                 values = [ values ]
 

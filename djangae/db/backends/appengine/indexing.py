@@ -548,7 +548,7 @@ class ContainsIndexer(StringIndexerMixin, Indexer):
                 results.extend(lists)
 
         if not results:
-            return None
+            raise IgnoreForIndexing([])
 
         return _deduplicate_list(results)
 
@@ -570,6 +570,7 @@ class ContainsIndexer(StringIndexerMixin, Indexer):
         # This we use when we actually query to return the right field for a given
         # value length
         length = len(value)
+
         column_number = 0
         for x in CHARACTERS_PER_COLUMN:
             if length > x:
@@ -585,7 +586,7 @@ class IContainsIndexer(ContainsIndexer):
 
     def prep_value_for_database(self, value, index):
         if value is None:
-            return None
+            raise IgnoreForIndexing("")
         value = _make_lower(value)
         result = super(IContainsIndexer, self).prep_value_for_database(value, index)
         return result if result else None
