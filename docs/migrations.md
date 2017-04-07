@@ -32,6 +32,8 @@ It is important that you do not mix Django migration operations and Djangae migr
 
 It's important to note that any Django migration operations (e.g. AddField, AddModel) that happen on the datastore will be no-ops, but you still need to include any Django-generated migrations so that the Djangae migrations have access to the latest model state.
 
+It's also important to understand that for various reasons an entity may be processed twice or more while running a migration so your migration operations should be able to handle this.
+
 ## Migration Operations
 
 This section summarizes the different migration operations available in Djangae and the steps that must be taken for them to work properly.
@@ -90,6 +92,18 @@ Whether you want to run the `RemoveFieldData` task or not depends on how much da
 **Explanation**
 
 Renaming a field requires adding a new field, copying the data from the old field, and then removing the old field, but in doing so ensuring that any objects which are created or edited during that process have their (latest) values for the old field copied across.
+
+# Settings
+
+## `DJANGAE_MIGRATION_DEFAULT_SHARD_COUNT`
+
+Sets the default number of shards that migration use. Higher values will perform migrations more quickly, but this will spin update
+more instances and so cost more.
+
+## `DJANGAE_MIGRATION_DEFAULT_ENTITIES_PER_TASK`
+
+The number of entities a migration task will process before stopping and continuing with a fresh task. Each shard runs a series of tasks
+serially to avoid exceeding App Engine task deadlines. If you increase this value you increase the risk of hitting a deadline error.
 
 # Potential Future Improvements / Additions
 
