@@ -619,6 +619,74 @@ class MapperLibraryTestCase(TestCase):
         super(MapperLibraryTestCase, self).setUp()
         flush_task_markers()
 
+    def _get_testmodel_query(self, db="default"):
+        namespace = settings.DATABASES[db].get('NAMESPACE', '')
+        return datastore.Query(
+            TestModel._meta.db_table,
+            namespace=namespace
+        )
+
+    def _get_taskmarker_query(self, namespace=""):
+        return datastore.Query("ShardedTaskMarker", namespace=namespace)
+
+    def test_basic_processing(self):
+        """ Test that calling `start_mapping` with some sensible parameters will do the right
+            processing.
+        """
+        objs = []
+        for x in xrange(2):
+            objs.append(TestModel(name="Test-%s" % x))
+        TestModel.objects.bulk_create(objs)
+        start_mapping("my_lovely_mapper", self._get_testmodel_query(), tickle_entity)
+        self.process_task_queues()
+        # And check that every entity has been tickled
+        self.assertTrue(all(e['is_tickled'] for e in self._get_testmodel_query().Run()))
+
+    def test_cannot_start_same_mapping_twice(self):
+        """ Calling `start_mapping` with the same parameters twice then it should NOT create 2
+            mappers.
+        """
+        objs = []
+        for x in xrange(2):
+            objs.append(TestModel(name="Test-%s" % x))
+        TestModel.objects.bulk_create(objs)
+
+        assert self._get_taskmarker_query().Count() == 0  # Sanity
+        marker = start_mapping("my_test_mapper", self._get_testmodel_query(), tickle_entity)
+        task_count = self.get_task_count()
+        assert marker  # Sanity
+        assert task_count  # Sanity
+        # Now try to defer the same mapper again
+        marker = start_mapping("my_test_mapper", self._get_testmodel_query(), tickle_entity)
+        # That shouldn't have worked, so the number of tasks should remain unchanged
+        self.assertEqual(self.get_task_count(), task_count)
+        # And it should not have returned a marker
+        self.assertIsNone(marker)
+
+    def test_can_start_same_mapping_in_2_different_namespaces(self):
+        """ Calling `start_mapping` with the same parameters but with different namespaces on the
+            query should work and correctly defer 2 processing tasks.
+        """
+        dbs = ("default", "ns1")
+        # Create some objects in 2 different namespaces
+        for db in dbs:
+            objs = []
+            for x in xrange(2):
+                objs.append(TestModel(name="Test-%s" % x))
+            TestModel.objects.using(db).bulk_create(objs)
+
+        # Start the same mapper twice but in 2 different namespaces, and check that they both work
+        current_task_count = self.get_task_count()
+        markers = set()
+        for db in dbs:
+            marker = start_mapping("my_test_mapper", self._get_testmodel_query(db), tickle_entity)
+            self.assertIsNotNone(marker)
+            self.assertFalse(marker in markers)
+            markers.add(marker)
+            new_task_count = self.get_task_count()
+            self.assertTrue(new_task_count > current_task_count)
+            current_task_count = new_task_count
+
     def test_mapper_will_continue_after_deadline_exceeded_error(self):
         """ If DeadlineExceededError is encountered when processing one of the entities, the mapper
             should redefer and continue.
@@ -628,14 +696,8 @@ class MapperLibraryTestCase(TestCase):
             objs.append(TestModel(name="Test-%s" % x))
         TestModel.objects.bulk_create(objs)
 
-        def get_datastore_query():
-            return datastore.Query(
-                TestModel._meta.db_table,
-                namespace=settings.DATABASES['default'].get('NAMESPACE', '')
-            )
-
         identifier = "my_test_mapper"
-        query = get_datastore_query()
+        query = self._get_testmodel_query()
 
         # Reset the call_count on tickle_entity_volitle.  We can't use sleuth.watch because a
         # wrapped function can't be pickled
@@ -649,4 +711,4 @@ class MapperLibraryTestCase(TestCase):
         # entities (because some calls should have failed and been retried)
         # self.assertTrue(tickle_entity_volitle.call_count > TestModel.objects.count())
         # And check that every entity has been tickled
-        self.assertTrue(all(e['is_tickled'] for e in get_datastore_query().Run()))
+        self.assertTrue(all(e['is_tickled'] for e in self._get_testmodel_query().Run()))
