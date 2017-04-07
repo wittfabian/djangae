@@ -17,6 +17,9 @@ _SCRIPT_NAME = 'dev_appserver.py'
 
 _API_SERVER = None
 
+DEFAULT_API_PORT = 8010
+DEFAULT_ADMIN_PORT = 8011
+DEFAULT_BLOBSTORE_SERVICE_PORT = 8012
 
 # This is a temporary workaround for the issue with 1.9.49 version where
 # version is set to [0, 0, 0] instead of [1, 9, 49]. This could be removed
@@ -157,9 +160,11 @@ def _local(devappserver2=None, configuration=None, options=None, wsgi_request_in
 
     original_environ = os.environ.copy()
 
-    # Silence warnings about this being unset, localhost:8080 is the dev_appserver default
+    # Silence warnings about this being unset, localhost:8080 is the dev_appserver default.
+    # Note that we're setting things for the *Blobstore* handler in os.environ here, which seems
+    # kind of crazy, and probably is, but it seems to be necessary to make stuff work.
     url = "localhost"
-    port = get_next_available_port(url, 8080)
+    port = get_next_available_port(url, DEFAULT_BLOBSTORE_SERVICE_PORT)
     os.environ.setdefault("HTTP_HOST", "{}:{}".format(url, port))
     os.environ['SERVER_NAME'] = url
     os.environ['SERVER_PORT'] = str(port)
@@ -178,6 +183,12 @@ def _local(devappserver2=None, configuration=None, options=None, wsgi_request_in
     request_data = CustomWSGIRequestInfo(dispatcher)
     # Remember the wsgi request info object so it can be reused to avoid duplication.
     dispatcher._request_data = request_data
+
+    # We set the API and Admin ports so that they are beyond any modules (if you
+    # have 10 modules then these values will shift, but it's better that they are predictable
+    # in the common case)
+    options.api_port = get_next_available_port(url, DEFAULT_API_PORT)
+    options.admin_port = get_next_available_port(url, DEFAULT_ADMIN_PORT)
 
     if hasattr(api_server, "create_api_server"):
         _API_SERVER = api_server.create_api_server(

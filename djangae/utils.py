@@ -151,22 +151,23 @@ def djangae_webapp(request_handler):
     return request_handler_wrapper
 
 
-def port_is_open(port, url):
+def port_is_open(url, port):
     s = socket()
     try:
-        s.connect((url, int(port)))
-        s.shutdown(SHUT_RDWR)
+        s.bind((url, int(port)))
+        s.close()
         return True
-    except:
+    except Exception:
         return False
 
 
 def get_next_available_port(url, port):
     for offset in range(10):
         if port_is_open(url, port + offset):
-            port = port + offset
             break
-    return port
+    else:
+        raise Exception("Could not find available port between %d and %d", (port, port + offset))
+    return port + offset
 
 
 class memoized(object):
