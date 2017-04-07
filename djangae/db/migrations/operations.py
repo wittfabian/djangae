@@ -60,7 +60,7 @@ class BaseEntityMapperOperation(Operation, DjangaeMigration):
             self._wait_until_task_finished()
             return
 
-        print "Deferring migration operation task for %s" % self.identifier
+        print("Deferring migration operation task for %s" % self.identifier)
         self._start_task()
 
     def database_backwards(self, app_label, schema_editor, from_state, to_state):
@@ -68,14 +68,14 @@ class BaseEntityMapperOperation(Operation, DjangaeMigration):
 
     def _wait_until_task_finished(self):
         if mapper_library.is_mapper_finished(self.identifier, self.namespace):
-            print "Task for migration operation '%s' already finished. Skipping." % self.identifier
+            print("Task for migration operation '%s' already finished. Skipping." % self.identifier)
             return
 
         while mapper_library.is_mapper_running(self.identifier, self.namespace):
-            print "Waiting for migration operation '%s' to complete." % self.identifier
+            print("Waiting for migration operation '%s' to complete." % self.identifier)
             time.sleep(TASK_RECHECK_INTERVAL)
 
-        print "Migration operation '%s' completed!" % self.identifier
+        print("Migration operation '%s' completed!" % self.identifier)
 
     def _start_task(self):
         assert not mapper_library.is_mapper_running(self.identifier, self.namespace), "Migration started by separate thread?"
