@@ -29,7 +29,7 @@ If any ports are found to be in use, the port number will be incremented until a
 
 App Engine apps can be made up of multiple modules (the default being the one defined by app.yaml). If your
 project makes use of additional modules then you can specify a list of yaml file paths in the `DJANGAE_ADDITIONAL_MODULES`
-and these will be forwarded to the dev_appserver when runserver is called
+and these will be forwarded to the dev_appserver when `runserver` is called
 
 ## Running Commands Remotely
 
