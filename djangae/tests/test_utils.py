@@ -9,11 +9,13 @@ class AvailablePortTests(TestCase):
 
     def test_get_next_available_port(self):
         url = "127.0.0.1"
-        port = 8081
-        self.assertEquals(8081, get_next_available_port(url, port))
-        with sleuth.switch("djangae.utils.port_is_open",
-                lambda *args, **kwargs: False if args[1] < 8085 else True):
-            self.assertEquals(8085, get_next_available_port(url, port))
+        port = 8091
+        self.assertEquals(8091, get_next_available_port(url, port))
+        with sleuth.switch(
+            "djangae.utils.port_is_open",
+            lambda *args, **kwargs: False if args[1] < 8095 else True
+        ):
+            self.assertEquals(8095, get_next_available_port(url, port))
 
 
 class EnsureCreatedModel(models.Model):
@@ -29,7 +31,7 @@ class EnsureCreatedModel(models.Model):
 class EnsureCreatedTests(TestCase):
 
     def test_basic_usage(self):
-        for i in xrange(5):
+        for i in range(5):
             EnsureCreatedModel.objects.create(
                 pk=i + 1,
                 field1=i
@@ -81,7 +83,7 @@ class EnsureCreatedTests(TestCase):
         self.assertEqual(1, list(ensure_instance_consistent(qs, 8)).count(new_instance))
 
     def test_add_many_instances(self):
-        for i in xrange(5):
+        for i in range(5):
             EnsureCreatedModel.objects.create(
                 pk=i + 1,
                 field1=i + 5
@@ -89,7 +91,7 @@ class EnsureCreatedTests(TestCase):
 
         with inconsistent_db():
             new_instances = []
-            for i in xrange(3):
+            for i in range(3):
                 instance = EnsureCreatedModel.objects.create(
                     pk=i + 7,
                     field1=i
@@ -118,14 +120,14 @@ class EnsureCreatedTests(TestCase):
         self.assertEqual(5, len(ensure_instances_consistent(qs, new_instance_pks)))
 
     def test_delete_many_instances(self):
-        for i in xrange(5):
+        for i in range(5):
             EnsureCreatedModel.objects.create(
                 pk=i + 1,
                 field1=i + 5
             )
 
         instances_to_delete = []
-        for i in xrange(3):
+        for i in range(3):
             instance = EnsureCreatedModel.objects.create(
                 pk=i + 7,
                 field1=i + 1
