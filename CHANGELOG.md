@@ -4,6 +4,8 @@
 
  - Add support for the latest App Engine SDK (1.9.51)
  - The default ports for the API server, admin server and blobstore service have changed to 8010, 8011, and 8012 respectively to avoid clashes with modules
+ - Switched the default storage backend (in settings_base.py) to cloud storage. If you need to retain compatibility make sure you
+ override the `DEFAULT_FILE_STORAGE` setting to point to `'djangae.storage.BlobstoreStorage'`.
 
 ### Bug fixes:
 
