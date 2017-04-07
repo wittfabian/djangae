@@ -69,7 +69,8 @@
 
 - Improved documentation for `djangae.contrib.mappers.defer_iteration`.
 - Changed the installation documentation to reflect the correct way to launch tests
-
+- Added documentation for local server port configuration.
+- Added documentation for `DJANGAE_ADDITIONAL_MODULES` setting.
 
 ## v0.9.8 (release date: 6th December 2016)
 
