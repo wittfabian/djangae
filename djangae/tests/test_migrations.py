@@ -548,8 +548,15 @@ class NextStringTestCase(TestCase):
     """ Tests for the _next_string function in the mapper_library. """
 
     def test_basic_behaviour(self):
-        # Python 2 using 16 bit unicode, so the highest possible character is (2**16) - 1
-        highest_unicode_char = unichr(2 ** 16 - 1)
+        try:
+            unichr(65536)
+            # Python wide-unicode build (Linux) UTF-32
+            highest_unicode_char = unichr(0x10ffff)
+        except ValueError:
+            # Python narrow build (OSX)
+            # Python 2 using 16 bit unicode, so the highest possible character is (2**16) - 1
+            highest_unicode_char = unichr(2 ** 16 - 1)
+
         checks = (
             # Pairs of (input, expected_output)
             ("a", "b"),
