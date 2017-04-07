@@ -12,6 +12,9 @@ from google.appengine.api.mail_errors import InvalidSenderError
 from google.appengine.runtime import apiproxy_errors
 
 
+logger = logging.getLogger(__name__)
+
+
 class EmailBackend(BaseEmailBackend):
     can_defer = False
 
@@ -57,8 +60,8 @@ class EmailBackend(BaseEmailBackend):
     def _send(self, message):
         try:
             message = self._copy_message(message)
-        except (ValueError, aeemail.InvalidEmailError), err:
-            logging.warn(err)
+        except (ValueError, aeemail.InvalidEmailError) as err:
+            logger.warn(err)
             if not self.fail_silently:
                 raise
             return False
@@ -72,7 +75,7 @@ class EmailBackend(BaseEmailBackend):
             message.send()
         except (aeemail.Error, apiproxy_errors.Error) as e:
             if isinstance(e, InvalidSenderError):
-                logging.error("Invalid 'from' address: %s", message.sender)
+                logger.error("Invalid 'from' address: %s", message.sender)
             if not self.fail_silently:
                 raise
             return False

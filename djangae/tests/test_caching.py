@@ -466,6 +466,65 @@ class MemcacheCachingTests(TestCase):
         self.assertEqual(delete_many.call_count, 1)
         self.assertEqual(len(get_many.calls[0].args[1]), 3)  # Get by pk from cache
 
+    @disable_cache(memcache=False, context=True)
+    def test_cache_disabled_elements_not_removed_when_saving_in_transaction(self):
+        entity_data = {
+            "field1": "Apple",
+            "comb1": 1,
+            "comb2": "Cherry"
+        }
+
+        original = CachingTestModel.objects.create(**entity_data)
+
+        # add to cache
+        original.refresh_from_db()
+
+        with sleuth.switch("djangae.db.backends.appengine.caching.CACHE_ENABLED", False):
+            with sleuth.watch(
+                    "djangae.db.backends.appengine.caching._remove_entities_from_memcache_by_key") as _remove_entities_from_memcache_by_key:
+                with transaction.atomic():
+                    instance = original.save()
+
+        self.assertFalse(_remove_entities_from_memcache_by_key.called)
+
+    @disable_cache(memcache=False, context=True)
+    def test_cache_disabled_elements_not_added(self):
+        entity_data = {
+            "field1": "Apple",
+            "comb1": 1,
+            "comb2": "Cherry"
+        }
+
+        original = CachingTestModel.objects.create(**entity_data)
+
+        # add to cache
+        original.refresh_from_db()
+
+        with sleuth.switch("djangae.db.backends.appengine.caching.CACHE_ENABLED", False):
+            with sleuth.watch(
+                    "djangae.db.backends.appengine.caching._add_entity_to_memcache") as _add_entity_to_memcache:
+                instance = CachingTestModel.objects.get(pk=original.pk)
+
+        self.assertFalse(_add_entity_to_memcache.called)
+
+    @disable_cache(memcache=False, context=True)
+    def test_cache_disabled_elements_removed(self):
+        entity_data = {
+            "field1": "Apple",
+            "comb1": 1,
+            "comb2": "Cherry"
+        }
+
+        original = CachingTestModel.objects.create(**entity_data)
+        # add to cache
+        original.refresh_from_db()
+
+        with sleuth.switch("djangae.db.backends.appengine.caching.CACHE_ENABLED", False):
+            with sleuth.watch(
+                    "djangae.db.backends.appengine.caching._remove_entities_from_memcache_by_key") as _remove_entities_from_memcache_by_key:
+                original.delete()
+
+        self.assertFalse(_remove_entities_from_memcache_by_key.called)
 
 class ContextCachingTests(TestCase):
     """

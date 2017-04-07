@@ -66,7 +66,7 @@ class MapReduceTestCase(TestCase):
     def setUp(self):
         super(MapReduceTestCase, self).setUp()
 
-        for x in xrange(10):
+        for x in range(10):
             TestNode(data="TestNode".format(x), counter=x).save()
 
     def test_all_models_delete(self):
@@ -79,7 +79,7 @@ class MapReduceTestCase(TestCase):
         """
             Test that overriding the model works
         """
-        for x in xrange(10):
+        for x in range(10):
             TestNode2(data="TestNode2".format(x), counter=x).save()
         self.assertEqual(TestNode2.objects.count(), 10)
         TestMapperClass(model=TestNode2).start()
@@ -116,7 +116,7 @@ class TestDeferIteration(TestCase):
     def setUp(self):
         super(TestDeferIteration, self).setUp()
 
-        for x in xrange(10):
+        for x in range(10):
             TestNode.objects.create(data="TestNode {}".format(x), counter=x+1)
 
     def test_that_sharding_works(self):
@@ -142,6 +142,25 @@ class TestDeferIteration(TestCase):
         self.process_task_queues()
 
         self.assertEqual(
-            sum([(x+1) + 100 for x in xrange(10)]),
+            sum([(x+1) + 100 for x in range(10)]),
             sum(TestNode.objects.values_list("counter", flat=True))
+        )
+
+    def test_that_processing_with_inequality_filter_works(self):
+        """ Regression tests: after introducing shards in commit
+        8c3804a8f7ffcd379fcaf6af452a698b4ac6e756 deferring iteration was
+        impossible for querysets containing inequality filters.
+        """
+        queryset = TestNode.objects.filter(counter__lt=1000)
+        defer_iteration(queryset, add_onehundred, shard_size=5)
+
+        initial_sum = sum(TestNode.objects.filter(counter__lt=1000).values_list("counter", flat=True))
+        num_objects = TestNode.objects.filter(counter__lt=11).count()
+        expected_new_sum = initial_sum + (num_objects * 100)
+
+        self.process_task_queues()
+
+        self.assertEqual(
+            sum(TestNode.objects.filter(counter__lt=1000).values_list("counter", flat=True)),
+            expected_new_sum
         )

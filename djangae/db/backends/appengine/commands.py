@@ -34,7 +34,8 @@ from djangae.db import constraints, utils
 from djangae.db.backends.appengine import caching
 from djangae.db.unique_utils import query_is_unique
 
-DJANGAE_LOG = logging.getLogger("djangae")
+
+logger = logging.getLogger(__name__)
 
 OPERATORS_MAP = {
     'exact': '=',
@@ -342,12 +343,6 @@ def convert_django_ordering_to_gae(ordering):
             result.append((column, datastore.Query.ASCENDING))
     return result
 
-def wrap_result_with_functor(results, func):
-    for result in results:
-        result = func(result)
-        if result is not None:
-            yield result
-
 def limit_results_generator(results, limit):
     for result in results:
         yield result
@@ -382,6 +377,111 @@ def can_perform_datastore_get(normalized_query):
 
     return True
 
+class EntityTransforms:
+    @staticmethod
+    def convert_key_to_entity(result):
+        class FakeEntity(dict):
+            def __init__(self, key):
+                self._key = key
+
+            def key(self):
+                return self._key
+
+        return FakeEntity(result)
+
+    @staticmethod
+    def rename_pk_field(model, concrete_model, result):
+        if result is None:
+            return result
+
+        value = result.key().id_or_name()
+        result[model._meta.pk.column] = value
+        result[concrete_model._meta.pk.column] = value
+        return result
+
+    @staticmethod
+    def process_extra_selects(query, result):
+        """
+            We handle extra selects by generating the new columns from
+            each result. We can handle simple boolean logic and operators.
+        """
+        if result is None:
+            return result
+
+        extra_selects = query.extra_selects
+        model_fields = query.model._meta.fields
+
+        DATE_FORMATS = ("%Y-%m-%d", "%Y-%m-%d %H:%M:%S")
+
+        def process_arg(arg):
+            if arg.startswith("'") and arg.endswith("'"):
+                # String literal
+                arg = arg.strip("'")
+                # Check to see if this is a date
+                for date in DATE_FORMATS:
+                    try:
+                        value = datetime.strptime(arg, date)
+                        return value
+                    except ValueError:
+                        continue
+                return arg
+            elif arg in [x.column for x in model_fields]:
+                # Column value
+                return result.get(arg)
+
+            # Handle NULL
+            if arg.lower() == 'null':
+                return None
+            elif arg.lower() == 'true':
+                return True
+            elif arg.lower() == 'false':
+                return False
+
+            # See if it's an integer
+            try:
+                arg = int(arg)
+            except (TypeError, ValueError):
+                pass
+
+            # Just a plain old literal
+            return arg
+
+        for col, select in extra_selects:
+            result[col] = select[0](*[ process_arg(x) for x in select[1] ])
+
+        return result
+
+    @staticmethod
+    def convert_datetime_fields(query, result):
+        if result is None:
+            return result
+
+        fields = [
+            x for x in query.model._meta.fields
+            if x.get_internal_type() in ("DateTimeField", "DateField", "TimeField")
+        ]
+
+        for field in fields:
+            column = field.column
+            if isinstance(result, dict): # sometimes it's a key!
+                value = result.get(column)
+            else:
+                value = None
+
+            if value is not None:
+                result[column] = ensure_datetime(value)
+        return result
+
+    @staticmethod
+    def ignore_excluded_pks(excluded_pks, result):
+        if result is None:
+            return result
+            
+        if result.key() in excluded_pks:
+            return None
+
+        return result
+
 
 class SelectCommand(object):
     def __init__(self, connection, query, keys_only=False):
@@ -393,7 +493,16 @@ class SelectCommand(object):
         self.query = normalize_query(self.query)
 
         self.original_query = query
-        self.keys_only = (keys_only or [x.field for x in query.select] == [query.model._meta.pk])
+
+        # We enable keys only queries if they have been forced, or, if
+        # someone did only("pk") or someone did values_list("pk") this is a little
+        # inconsistent with other fields which aren't projected if just values(_list) is used
+        self.keys_only = keys_only or (
+            query.deferred_loading[1] is False and
+            len(query.deferred_loading[0]) == 1 and query.model._meta.pk.column in query.deferred_loading[0]
+        ) or (
+            len(query.select) == 1 and query.select[0].field == query.model._meta.pk
+        )
 
         # MultiQuery doesn't support keys_only
         if self.query.where and len(self.query.where.children) > 1:
@@ -426,7 +535,6 @@ class SelectCommand(object):
         self._sanity_check()
 
         queries = []
-
         projection = self._exclude_pk(self.query.columns) or None
 
         query_kwargs = {
@@ -573,155 +681,63 @@ class SelectCommand(object):
                     count_query = Query(query._Query__kind, keys_only=True, namespace=self.namespace)
                     count_query.update(query)
                     resultset = count_query.Run(limit=limit, offset=offset)
-                self.results = (x for x in [ len([ y for y in resultset if y not in excluded_pks]) ])
+                self.results = [ len([ y for y in resultset if y not in excluded_pks]) ]
+                self.results_returned = 1
             else:
-                self.results = (x for x in [query.Count(limit=limit, offset=offset)])
+                self.results = [query.Count(limit=limit, offset=offset)]
+                self.results_returned = 1
             return
         elif self.query.kind == "AVERAGE":
             raise ValueError("AVERAGE not yet supported")
-        else:
-            self.results = query.Run(limit=limit, offset=offset)
 
         # Ensure that the results returned is reset
         self.results_returned = 0
+        self.results = []
 
-        def increment_returned_results(result):
-            self.results_returned += 1
-            return result
+        seen = set()
 
-        def convert_key_to_entity(result):
-            class FakeEntity(dict):
-                def __init__(self, key):
-                    self._key = key
-
-                def key(self):
-                    return self._key
-
-            return FakeEntity(result)
-
-        def rename_pk_field(result):
-            if result is None:
+        def dedupe(result):
+            # FIXME: This logic can't be right. I think we need to store the distinct fields
+            # somewhere on the query
+            if getattr(self.original_query, "annotation_select", None):
+                columns = self.original_query.annotation_select.keys()
+            else:
+                columns = self.query.columns or []
+            if not columns:
                 return result
 
-            value = result.key().id_or_name()
-            result[self.query.model._meta.pk.column] = value
-            result[self.query.concrete_model._meta.pk.column] = value
-            return result
-
-        def process_extra_selects(result):
-            """
-                We handle extra selects by generating the new columns from
-                each result. We can handle simple boolean logic and operators.
-            """
-            extra_selects = self.query.extra_selects
-            model_fields = self.query.model._meta.fields
-
-            DATE_FORMATS = ("%Y-%m-%d", "%Y-%m-%d %H:%M:%S")
-
-            def process_arg(arg):
-                if arg.startswith("'") and arg.endswith("'"):
-                    # String literal
-                    arg = arg.strip("'")
-                    # Check to see if this is a date
-                    for date in DATE_FORMATS:
-                        try:
-                            value = datetime.strptime(arg, date)
-                            return value
-                        except ValueError:
-                            continue
-                    return arg
-                elif arg in [x.column for x in model_fields]:
-                    # Column value
-                    return result.get(arg)
-
-                # Handle NULL
-                if arg.lower() == 'null':
-                    return None
-                elif arg.lower() == 'true':
-                    return True
-                elif arg.lower() == 'false':
-                    return False
-
-                # See if it's an integer
-                try:
-                    arg = int(arg)
-                except (TypeError, ValueError):
-                    pass
-
-                # Just a plain old literal
-                return arg
-
-            for col, select in extra_selects:
-                result[col] = select[0](*[ process_arg(x) for x in select[1] ])
-
-            return result
-
-        def convert_datetime_fields(result):
-            fields = [
-                x for x in self.query.model._meta.fields
-                if x.get_internal_type() in ("DateTimeField", "DateField", "TimeField")
-            ]
-
-            for field in fields:
-                column = field.column
-                if isinstance(result, dict): # sometimes it's a key!
-                    value = result.get(column)
-                else:
-                    value = None
-
-                if value is not None:
-                    result[column] = ensure_datetime(value)
-            return result
-
-        def ignore_excluded_pks(result):
-            if result.key() in excluded_pks:
+            key = tuple([ result[x] for x in self._exclude_pk(columns) if x in result ])
+            if key in seen:
                 return None
+            seen.add(key)
             return result
 
-        self.results = wrap_result_with_functor(self.results, increment_returned_results)
+        for entity in query.Run(limit=limit, offset=offset):
+            # If this is a keys only query, we need to generate a fake entity
+            # for each key in the result set
+            if self.keys_only:
+                entity = EntityTransforms.convert_key_to_entity(entity)
 
-        # If this is a keys only query, we need to generate a fake entity
-        # for each key in the result set
-        if self.keys_only:
-            self.results = wrap_result_with_functor(self.results, convert_key_to_entity)
+            entity = EntityTransforms.ignore_excluded_pks(excluded_pks, entity)
+            entity = EntityTransforms.convert_datetime_fields(self.query, entity)
+            entity = EntityTransforms.rename_pk_field(self.query.model, self.query.concrete_model, entity)
+            entity = EntityTransforms.process_extra_selects(self.query, entity)
 
-        self.results = wrap_result_with_functor(self.results, ignore_excluded_pks)
-        self.results = wrap_result_with_functor(self.results, convert_datetime_fields)
-        self.results = wrap_result_with_functor(self.results, rename_pk_field)
-        self.results = wrap_result_with_functor(self.results, process_extra_selects)
+            if self.query.distinct and self.query.extra_selects:
+                entity = dedupe(entity)
 
-        if self.query.distinct and self.query.extra_selects:
-            # If we had extra selects, and we're distinct, we must deduplicate results
-            def deduper_factory():
-                seen = set()
+            if entity:
+                self.results.append(entity)
+                self.results_returned += 1
 
-                def dedupe(result):
-                    # FIXME: This logic can't be right. I think we need to store the distinct fields
-                    # somewhere on the query
-                    if getattr(self.original_query, "annotation_select", None):
-                        columns = self.original_query.annotation_select.keys()
-                    else:
-                        columns = self.query.columns or []
-                    if not columns:
-                        return result
-
-                    key = tuple([ result[x] for x in self._exclude_pk(columns) if x in result ])
-                    if key in seen:
-                        return None
-                    seen.add(key)
-                    return result
-
-                return dedupe
-
-            self.results = wrap_result_with_functor(self.results, deduper_factory())
-
-        if limit:
-            self.results = limit_results_generator(self.results, limit - excluded_pk_count)
-
+            if limit and self.results_returned >= (limit - excluded_pk_count):
+                break
 
     def execute(self):
         self.gae_query = self._build_query()
         self._fetch_results(self.gae_query)
+        self.results = iter(self.results)
+        return self.results_returned
 
     def __unicode__(self):
         # TODO: should we print out the namespace in here too?
@@ -746,11 +762,14 @@ class SelectCommand(object):
             return result
         except:
             # We never want this to cause things to die
-            logging.exception("Unable to translate query to string")
+            logger.exception("Unable to translate query to string")
             return "QUERY TRANSLATION ERROR"
 
     def __repr__(self):
         return self.__unicode__().encode("utf-8")
+
+    def __mod__(self, params):
+        return repr(self)
 
     def lower(self):
         """
@@ -797,7 +816,7 @@ class FlushCommand(object):
 def reserve_id(kind, id_or_name, namespace):
     from google.appengine.api.datastore import _GetConnection
     key = datastore.Key.from_path(kind, id_or_name, namespace=namespace)
-    _GetConnection()._async_reserve_keys(None, [key])
+    _GetConnection()._reserve_keys([key])
 
 
 class BulkInsertError(IntegrityError, NotSupportedError):
@@ -946,7 +965,7 @@ class InsertCommand(object):
             return result
         except:
             # We never want this to cause things to die
-            logging.info("InsertCommand is unable to translate query to string")
+            logger.info("InsertCommand is unable to translate query to string")
             return u"QUERY TRANSLATION ERROR"
 
     def __repr__(self):
@@ -1179,7 +1198,7 @@ class UpdateCommand(object):
                 except:
                     # We ignore the exception because raising will rollback the transaction causing
                     # an inconsistent state
-                    logging.exception("Unable to update the context cache")
+                    logger.exception("Unable to update the context cache")
                     pass
 
             # Return true to indicate update success

@@ -41,7 +41,7 @@ from djangae.db.utils import (
 from google.appengine.api import datastore
 
 
-DJANGAE_LOG = logging.getLogger("djangae")
+logger = logging.getLogger(__name__)
 
 
 VALID_QUERY_KINDS = (
@@ -353,7 +353,7 @@ class Query(object):
             raise NotSupportedError("{} is not a valid column for the queried model. Did you try to join?".format(column))
 
         if field.db_type(self.connection) in ("bytes", "text", "list", "set"):
-            DJANGAE_LOG.warn("Disabling projection query as %s is an unprojectable type", column)
+            logger.warn("Disabling projection query as %s is an unprojectable type", column)
             self.columns = None
             self.projection_possible = False
             return

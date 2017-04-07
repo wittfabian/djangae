@@ -1,27 +1,96 @@
-## v0.9.8 (in development)
+## v0.9.10 (in development)
 
 ### New features & improvements:
 
-- Cleaned up and refactored internal implementation of SimulatedContentTypeManager. Now also allows patching ContentType manager in migrations.
+ - Add support for the latest App Engine SDK (1.9.51)
+
+### Bug fixes:
+
+ -
+
+## v0.9.9 (release date: 27th March 2017)
+
+### New features & improvements:
+
+- Added preliminary support for Django 1.11 (not yet released, don't upgrade yet!)
+- The system check for session_csrf now works with the MIDDLEWARE setting when using Django >= 1.10.
+- System check for deferred builtin which should always be switched off.
+- Implemented weak (memcache) locking to contrib.locking
+- The `disable_cache` decorator now wraps the returned function with functools.wraps
+- `prefetch_related()` now works on RelatedListField and RelatedSetField
+- Added a test for Model.objects.none().filter(pk=xyz) type filters
+- Use `user.is_authenticated` instead of `user.is_authenticated()` when using Django >= 1.10.
+- Added `max_length` and `min_length` validation support to `ListField`, `SetField`, `RelatedListField` and `RelatedSetField`.
+- Moved checks verifying csrf, csp and template loader configuration from djangae-scaffold into Djangae.
+- Renamed `contrib.gauth.datastore` and `contrib.gauth.sql` to `contrib.gauth_datastore` and `contrib.gauth_sql` respectively.
+    - This change requires you to update your settings to reference the new app names.
+    - The old names still work for now but will trigger deprecation warnings.
+    - DB table names for Datastore-based models have not changed.  DB table name for the SQL User model has changed, but wasn't entirely usable before anyway.
+- Moved everything from `contrib.gauth.common.*` to the parent `contrib.gauth` module.  I.e. removed the `.common` part.
+    - This change requires you to update your application to reference/import from the new paths.
+    - The old paths still work for now but will trigger deprecation warnings.
+- Cleaned up the query fetching code to be more readable. Moved where result fetching happens to be inline with other backends, which makes Django Debug Toolbar query profiling output correct
+- Cleaned up app_id handling in --sandbox management calls
+- The default GCS bucket name is now cached when first read, saving on RPC calls
+- Updated `AppEngineSecurityMiddleware` to work with Django >= 1.10
+- Added a test for prefetching via RelatedSetField/RelatedListField. Cleaned up some related code.
+- Allow the sandbox argument to be at any position.
+- Added some tests for the management command code.
+- Added a test to prove that the ordering specified on a model's `_meta` is used for pagination, when no custom order has been specified on the query set.
+- Added a `@task_or_admin_only` decorator to `djangae.environment` to allow restricting views to tasks (including crons) or admins of the application.
+
+### Bug fixes:
+
+- Fixed a minor bug where entities were still added to memcache (but not fetched from it) with `DJANGAE_CACHE_ENABLED=False`.  This fix now allows disabling the cache to be a successful workaround for https://code.google.com/p/googleappengine/issues/detail?id=7876.
+- Fixed a bug where entities could still be fetched from memcache with `DJANGAE_CACHE_ENABLED=False` when saving in a transaction or deleting them.
+- Fixed overlap filtering on RelatedListField and RelatedSetField (Thanks Grzes!)
+- Fixed various issues with `djangae.contrib.mappers.defer_iteration`, so that it no longers gets stuck deferring tasks or hitting memory limit errors when uses on large querysets.
+- Fixed an issue where having a ForeignKey to a ContentType would cause an issue when querying due to the large IDs produced by djangae.contrib.contenttypes's SimulatedContentTypesManager.
+- Fix a problem with query parsing which would throw a NotSupportedError on Django 1.8 if you used an empty Q() object in a filter
+- Cascade deletions will now correctly batch object collection within the datastore query limits, fixing errors on deletion.
+- Fixed missing `_deferred` attribute in Django models for versions >= 1.10
+- Fixed an error when submitting an empty JSONFormField
+- Fixed a bug where an error would be thrown if you loaded an entity with a JSONField that had non-JSON data, now the data is returned unaltered
+- Fixed a bug where only("pk") wouldn't perform a keys_only query
+- Dropped the deprecated patterns() from contrib.locking.urls
+- Fixed a bug where search indexes weren't saved when they were generated in the local shell
+- Fixed a bug where permissions wouldn't be created when using Django's PermissionsMixin on the datastore (for some reason)
+- Fixed a bug where a user's username would be set to the string 'None' if username was not populated on an admin form
+- Fixed `djangae.contrib.mappers.defer.defer_iteration` to allow inequality filters in querysets
+- Fixed a bug in `djangae.contrib.mappers.defer.defer_iteration` where `_shard` would potentially ignore the first element of the queryset
+- Fixed an incompatibility between appstats and the cloud storage backend due to RPC calls being made in the __init__ method
+- Fixed a bug where it wasn't possible to add validators to djangae.fields.CharField
+- Fixed a bug where entries in `RelatedSetField`s and `RelatedListField`s weren't being converted to the same type as the primary key of the model
+- Fixed a bug where running tests would incorrectly load the real search stub before the test version
+- Fixed a bug where IDs weren't reserved with the datastore allocator immediately and so could end up with a race-condition where an ID could be reused
+
+### Documentation:
+
+- Improved documentation for `djangae.contrib.mappers.defer_iteration`.
+- Changed the installation documentation to reflect the correct way to launch tests
+
+
+## v0.9.8 (release date: 6th December 2016)
+
+### New features & improvements:
+
+- Cleaned up and refactored internal implementation of `SimulatedContentTypeManager`. Now also allows patching `ContentType` manager in migrations.
 - Add ability to specify GAE target instance for remote command with `--app_id` flag
 - When App Engine raises an `InvalidSenderError` when trying to send an email, Djangae now logs the 'from' address which is invalid (App Engine doesn't include it in the error).
 
 ### Bug fixes:
 
 - Fixed an issue where Django Debug Toolbar would get a `UnicodeDecodeError` if a query contained a non-ascii character.
-- Fixed an issue where getting and flushing a specific TaskQueue using the test stub (including when using `djangae.test.TestCase.process_task_queues`) would flush all task queues.
+- Fixed an issue where getting and flushing a specific `TaskQueue` using the test stub (including when using `djangae.test.TestCase.process_task_queues`) would flush all task queues.
 - Fixed a bug in our forced contenttypes migration
 - Fixed `./manage.py runserver` not working with Django 1.10 and removed a RemovedInDjango110Warning message at startup.
 - Restore `--nothreading` functionality to runserver (this went away when we dropped support for the old dev_appserver)
 - Fixed a bug where the `dumpurls` command had stopped working due to subtle import changes.
 - Utilise `get_serving_url` to get the correct url for serving images from Cloud Storage.
 - Fixed a side effect of that ^ introduction of `get_serving_url` which would add an entity group to any transaction in which it was called (due to the Datastore read done by `get_serving_url`).
-- Fixed fetching url for non images after introduction of `get_serving_url` call inside CloudStorage url method.
-
-### Documentation:
-
--
--
+- Fixed fetching url for non images after introduction of `get_serving_url` call inside `CloudStorage` url method.
+- Fixed fetching url for files after introduction of `get_serving_url` call inside `BlobstoreStorage` url method when file is bigger than 32MB.
+- Fixed `gauth` middleware to update user email address if it gets changed
 
 
 ## v0.9.7 (release date: 11th August 2016)
@@ -188,3 +257,4 @@ If you're still using Django 1.7 in your project:
 - Fixed bug when using `RelatedListField` on a form
 - Don't allow ordering by a `TextField`
 - Properly limiting number of results when excludes are used
+- Allow migrations to work on gauth sql User model

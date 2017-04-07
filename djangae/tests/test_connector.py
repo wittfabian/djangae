@@ -463,6 +463,12 @@ class BackendTests(TestCase):
 
             self.assertEqual(1, get_mock.call_count)
 
+    def test_gae_query_display(self):
+        # Shouldn't raise any exceptions:
+        representation = str(TestUser.objects.filter(username='test').query)
+        self.assertTrue('test' in representation)
+        self.assertTrue('username' in representation)
+
     def test_range_behaviour(self):
         IntegerModel.objects.create(integer_field=5)
         IntegerModel.objects.create(integer_field=10)
@@ -474,7 +480,7 @@ class BackendTests(TestCase):
 
     def test_exclude_nullable_field(self):
         instance = ModelWithNullableCharField.objects.create(some_id=999) # Create a nullable thing
-        instance2 = ModelWithNullableCharField.objects.create(some_id=999, field1="test") # Create a nullable thing
+        ModelWithNullableCharField.objects.create(some_id=999, field1="test") # Create a nullable thing
         self.assertItemsEqual([instance], ModelWithNullableCharField.objects.filter(some_id=999).exclude(field1="test").all())
 
         instance.field1 = "bananas"
@@ -739,6 +745,40 @@ class BackendTests(TestCase):
         expected = [(t, dt)]
         self.assertItemsEqual(result, expected)
 
+    def test_filter_with_empty_q(self):
+        t1 = TestUser.objects.create(username='foo', field2='bar')
+        condition = Q() | Q(username='foo')
+        self.assertEqual(t1, TestUser.objects.filter(condition).first())
+
+        condition = Q()
+        self.assertEqual(t1, TestUser.objects.filter(condition).first())
+
+    def test_only_defer_does_project(self):
+        with sleuth.watch("google.appengine.api.datastore.Query.__init__") as watcher:
+            list(TestUser.objects.only("pk").all())
+            self.assertTrue(watcher.calls[0].kwargs["keys_only"])
+            self.assertFalse(watcher.calls[0].kwargs["projection"])
+
+        with sleuth.watch("google.appengine.api.datastore.Query.__init__") as watcher:
+            list(TestUser.objects.values("pk"))
+            self.assertTrue(watcher.calls[0].kwargs["keys_only"])
+            self.assertFalse(watcher.calls[0].kwargs["projection"])
+
+        with sleuth.watch("google.appengine.api.datastore.Query.__init__") as watcher:
+            list(TestUser.objects.only("username").all())
+            self.assertFalse(watcher.calls[0].kwargs["keys_only"])
+            self.assertItemsEqual(watcher.calls[0].kwargs["projection"], ["username"])
+
+        with sleuth.watch("google.appengine.api.datastore.Query.__init__") as watcher:
+            list(TestUser.objects.defer("username").all())
+            self.assertFalse(watcher.calls[0].kwargs["keys_only"])
+            self.assertTrue(watcher.calls[0].kwargs["projection"])
+            self.assertFalse("username" in watcher.calls[0].kwargs["projection"])
+
+    def test_chaining_none_filter(self):
+        t1 = TestUser.objects.create()
+        self.assertFalse(TestUser.objects.none().filter(pk=t1.pk))
+
 
 class ModelFormsetTest(TestCase):
     def test_reproduce_index_error(self):
@@ -937,7 +977,7 @@ class ConstraintTests(TestCase):
                 # Make sure bulk creates are limited when there are unique constraints
                 # involved
                 ModelWithUniques.objects.bulk_create(
-                    [ ModelWithUniques(name=str(x)) for x in xrange(26) ]
+                    [ ModelWithUniques(name=str(x)) for x in range(26) ]
                 )
 
         finally:
@@ -1067,7 +1107,7 @@ class ConstraintTests(TestCase):
                 raise AssertionError()
             return datastore.Put(*args, **kwargs)
 
-        with sleuth.switch("djangae.db.backends.appengine.commands.datastore.Put", wrapped_put) as put_mock:
+        with sleuth.switch("djangae.db.backends.appengine.commands.datastore.Put", wrapped_put):
             with self.assertRaises(Exception):
                 instance.save()
 
@@ -1094,7 +1134,7 @@ class ConstraintTests(TestCase):
                 raise AssertionError()
             return datastore.Put(*args, **kwargs)
 
-        with sleuth.switch("djangae.db.backends.appengine.commands.datastore.Put", wrapped_put) as put_mock:
+        with sleuth.switch("djangae.db.backends.appengine.commands.datastore.Put", wrapped_put):
             with self.assertRaises(Exception):
                 ModelWithUniques.objects.create(name="One")
 
@@ -1663,7 +1703,7 @@ class EdgeCaseTests(TestCase):
         # This currently raises an error from App Engine, should we raise our own?
         self.assertRaises(Exception, list, query)
         # Check that it's ok with PKs though
-        query = TestUser.objects.filter(pk__in=list(xrange(1, 32)))
+        query = TestUser.objects.filter(pk__in=list(range(1, 32)))
         list(query)
         # Check that it's ok joining filters with pks
         results = list(TestUser.objects.filter(
@@ -2063,3 +2103,32 @@ class TestHelperTests(TestCase):
         self.process_task_queues()
 
         self.assertNumTasksEquals(0) #No tasks
+
+
+class Zoo(models.Model):
+    pass
+
+
+class Enclosure(models.Model):
+    zoo = models.ForeignKey(Zoo)
+
+
+class Animal(models.Model):
+    enclosure = models.ForeignKey(Enclosure)
+
+
+class CascadeDeletionTests(TestCase):
+    def test_deleting_more_than_30_items(self):
+        zoo = Zoo.objects.create()
+
+        for i in range(40):
+            enclosure = Enclosure.objects.create(zoo=zoo)
+            for i in range(2):
+                Animal.objects.create(enclosure=enclosure)
+
+        self.assertEqual(Animal.objects.count(), 80)
+
+        zoo.delete()
+
+        self.assertEqual(Enclosure.objects.count(), 0)
+        self.assertEqual(Animal.objects.count(), 0)

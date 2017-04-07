@@ -43,6 +43,9 @@ from .commands import (
 from djangae.db.backends.appengine import dbapi as Database
 
 
+logger = logging.getLogger(__name__)
+
+
 class Connection(object):
     """ Dummy connection class """
     def __init__(self, wrapper, params):
@@ -122,14 +125,12 @@ class Cursor(object):
             return []
 
         result = []
-        i = 0
-        while i < size:
+        for i in range(size):
             entity = self.fetchone(delete_flag)
             if entity is None:
                 break
 
             result.append(entity)
-            i += 1
 
         return result
 
@@ -157,6 +158,13 @@ class DatabaseOperations(BaseDatabaseOperations):
         'PositiveSmallIntegerField': (0, MAXINT-1),
         'PositiveIntegerField': (0, MAXINT-1),
     }
+
+    def bulk_batch_size(self, field, objs):
+        # This value is used in cascade deletions, and also on bulk insertions
+        # Bulk insertions really need to be limited to 25 elsewhere (so that they can be done)
+        # transactionally, so setting to 30 doesn't matter but for cascade deletions
+        # (which explode to thing_id__in=[]) we need to limit to MAX_ALLOWABLE_QUERIES
+        return datastore.MAX_ALLOWABLE_QUERIES
 
     def quote_name(self, name):
         return name
@@ -465,34 +473,13 @@ class DatabaseCreation(BaseDatabaseCreation):
         return []
 
     def _create_test_db(self, verbosity, autoclobber, *args):
-        from google.appengine.ext import testbed # Imported lazily to prevent warnings on GAE
-
-        assert not self.testbed
-
         if args:
-            logging.warning("'keepdb' argument is not currently supported on the AppEngine backend")
+            logger.warning("'keepdb' argument is not currently supported on the AppEngine backend")
 
-        # We allow users to disable scattered IDs in tests. This primarily for running Django tests that
-        # assume implicit ordering (yeah, annoying)
-        use_scattered = not getattr(settings, "DJANGAE_SEQUENTIAL_IDS_IN_TESTS", False)
-
-        kwargs = {
-            "use_sqlite": True,
-            "auto_id_policy": testbed.AUTO_ID_POLICY_SCATTERED if use_scattered else testbed.AUTO_ID_POLICY_SEQUENTIAL,
-            "consistency_policy": datastore_stub_util.PseudoRandomHRConsistencyPolicy(probability=1)
-        }
-
-        self.testbed = testbed.Testbed()
-        self.testbed.activate()
-        self.testbed.init_datastore_v3_stub(**kwargs)
-        self.testbed.init_memcache_stub()
         get_context().reset()
 
     def _destroy_test_db(self, name, verbosity):
-        if self.testbed:
-            get_context().reset()
-            self.testbed.deactivate()
-            self.testbed = None
+        get_context().reset()
 
 
 class DatabaseIntrospection(BaseDatabaseIntrospection):
@@ -522,10 +509,10 @@ class DatabaseSchemaEditor(BaseDatabaseSchemaEditor):
 
     def add_field(self, model, field):
         pass
-        
+
     def alter_index_together(self, model, old_index_together, new_index_together):
         pass
-        
+
     def delete_model(self, model):
         pass
 
@@ -564,15 +551,28 @@ class DatabaseWrapper(BaseDatabaseWrapper):
 
     Database = Database
 
+    # These attributes are only used by Django >= 1.11
+    client_class = DatabaseClient
+    features_class = DatabaseFeatures
+    introspection_class = DatabaseIntrospection
+    features_class = DatabaseFeatures
+    ops_class = DatabaseOperations
+    creation_class = DatabaseCreation
+    validation_class = BaseDatabaseValidation
+
     def __init__(self, *args, **kwargs):
         super(DatabaseWrapper, self).__init__(*args, **kwargs)
 
-        self.features = DatabaseFeatures(self)
-        self.ops = DatabaseOperations(self)
-        self.client = DatabaseClient(self)
-        self.creation = DatabaseCreation(self)
-        self.introspection = DatabaseIntrospection(self)
-        self.validation = BaseDatabaseValidation(self)
+        if not hasattr(self, "client"):
+            # Django 1.11 creates these automatically, when we call super
+            # These are here for Django <= 1.10
+            self.features = DatabaseFeatures(self)
+            self.ops = DatabaseOperations(self)
+            self.client = DatabaseClient(self)
+            self.creation = DatabaseCreation(self)
+            self.introspection = DatabaseIntrospection(self)
+            self.validation = BaseDatabaseValidation(self)
+
         self.autocommit = True
 
     def is_usable(self):
@@ -595,7 +595,8 @@ class DatabaseWrapper(BaseDatabaseWrapper):
     def _set_autocommit(self, enabled):
         self.autocommit = enabled
 
-    def create_cursor(self):
+    def create_cursor(self, name=None):
+        self.name = name  # Django >= 1.11
         if not self.connection:
             self.connection = self.get_new_connection(self.settings_dict)
 
@@ -603,3 +604,7 @@ class DatabaseWrapper(BaseDatabaseWrapper):
 
     def schema_editor(self, *args, **kwargs):
         return DatabaseSchemaEditor(self, *args, **kwargs)
+
+    def validate_no_broken_transaction(self):
+        # Override this to do nothing, because it's not relevant to the Datastore
+        pass

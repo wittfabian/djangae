@@ -9,6 +9,10 @@ import warnings
 
 from socket import socket, SHUT_RDWR
 
+
+logger = logging.getLogger(__name__)
+
+
 class DjangaeDeprecation(DeprecationWarning):
     pass
 
@@ -106,15 +110,15 @@ def retry(func, *args, **kwargs):
             try:
                 i += 1
                 return func(*args, **kwargs)
-            except (datastore_errors.Error, apiproxy_errors.Error, TransactionFailedError), exc:
-                logging.info("Retrying function: %s(%s, %s) - %s", str(func), str(args), str(kwargs), str(exc))
+            except (datastore_errors.Error, apiproxy_errors.Error, TransactionFailedError) as exc:
+                logger.info("Retrying function: %s(%s, %s) - %s", str(func), str(args), str(kwargs), str(exc))
                 time.sleep(timeout_ms / 1000000.0)
                 timeout_ms *= 2
                 if i > retries:
                     raise exc
 
     except DeadlineExceededError:
-        logging.error("Timeout while running function: %s(%s, %s)", str(func), str(args), str(kwargs))
+        logger.error("Timeout while running function: %s(%s, %s)", str(func), str(args), str(kwargs))
         raise
 
 
@@ -158,7 +162,7 @@ def port_is_open(url, port):
 
 
 def get_next_available_port(url, port):
-    for offset in xrange(10):
+    for offset in range(10):
         if port_is_open(url, port + offset):
             break
     else:

@@ -18,6 +18,11 @@ Note that currently only the 'map' stage is implemented.  There is currently no 
 
 ### djangae.contrib.mappers.defer_iteration
 
-This function takes a queryset and a callback, and also optionally a shard_size and a _queue. It
+This function takes a `queryset` and a `callback`, and also optionally a `shard_size` and a `_queue`. It
 defers background tasks to iterate over the entire queryset on the specified task queue calling your
-callback function each time.
+callback function on each Django model instance in the queryset.
+
+* The shard size is the number of instance which it will attempt to process in a single task, and defaults to 500.
+    * Depending on how long your callback function is likely to take on each instance, you should reduce the shard size in order that it can safely process that many instances in App Engine's task time limit of 10 minutes.
+* There is no exception handling around the callback function, so an exception is raised when processing one of the instances then that task will fail and be retried, thus re-processing any prior instances in that same shard.
+    * Your callback function should be idempotent.

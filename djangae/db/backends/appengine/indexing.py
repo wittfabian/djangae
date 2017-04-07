@@ -14,6 +14,7 @@ from djangae.fields import iterable
 from djangae.sandbox import allow_mode_write
 
 
+logger = logging.getLogger(__name__)
 _project_special_indexes = {}
 _app_special_indexes = {}
 _last_loaded_times = {}
@@ -136,7 +137,7 @@ def load_special_indexes():
                 ).setdefault(field_name, []).extend(values)
 
     _indexes_loaded = True
-    logging.debug("Loaded special indexes for %d models", len(_merged_indexes()))
+    logger.debug("Loaded special indexes for %d models", len(_merged_indexes()))
 
 
 def special_index_exists(model_class, field_name, index_type):
@@ -518,12 +519,12 @@ class ContainsIndexer(StringIndexerMixin, Indexer):
                 # substrings of each string in `value`
                 for element in value:
                     length = len(element)
-                    lists = [element[i:j + 1] for i in xrange(length) for j in xrange(i, length)]
+                    lists = [element[i:j + 1] for i in range(length) for j in range(i, length)]
                     results.extend(lists)
             else:
                 # `value` is a string. Generate a list of all its substrings.
                 length = len(value)
-                lists = [value[i:j + 1] for i in xrange(length) for j in xrange(i, length)]
+                lists = [value[i:j + 1] for i in range(length) for j in range(i, length)]
                 results.extend(lists)
 
         if not results:
@@ -602,11 +603,11 @@ class EndsWithIndexer(StringIndexerMixin, Indexer):
             # `value` is a list of strings. Create a single combined list of "endswith" values
             # of all the strings in the list
             for element in value:
-                for i in xrange(0, len(element)):
+                for i in range(0, len(element)):
                     results.append(element[i:])
         else:
             # `value` is a string. Create a list of "endswith" strings.
-            for i in xrange(0, len(value)):
+            for i in range(0, len(value)):
                 results.append(value[i:])
 
         if not results:
@@ -671,11 +672,11 @@ class StartsWithIndexer(StringIndexerMixin, Indexer):
             # `value` is a list of strings. Create a single combined list of "startswith" values
             # of all the strings in the list
             for element in value:
-                for i in xrange(1, len(element) + 1):
+                for i in range(1, len(element) + 1):
                     results.append(element[:i])
         else:
             # `value` is a string. Create a list of "startswith" strings.
-            for i in xrange(1, len(value) + 1):
+            for i in range(1, len(value) + 1):
                 results.append(value[:i])
 
         if not results:

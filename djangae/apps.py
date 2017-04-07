@@ -42,3 +42,7 @@ class DjangaeConfig(AppConfig):
                     # Raise error if User is using both Django and Djangae CT, but
                     # Django CT comes after Djangae CT
                     raise contenttype_configuration_error
+
+        from django.core import checks
+        from djangae import checks
+
