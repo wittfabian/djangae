@@ -31,6 +31,9 @@ class BaseEntityMapperOperation(Operation, DjangaeMigration):
     reversible = False
     reduces_to_sql = False
 
+    def __init__(self, *args, **kwargs):
+        self.uid = kwargs.pop("uid", "")
+        super(BaseEntityMapperOperation, self).__init__(*args, **kwargs)
     def state_forwards(self, app_label, state):
         """ As all Djangae migrations are only supplements to the Django migrations, we don't need
             to do any altering of the model state.
@@ -40,9 +43,12 @@ class BaseEntityMapperOperation(Operation, DjangaeMigration):
     def database_forwards(self, app_label, schema_editor, from_state, to_state):
         # Django's `migrate` command writes to stdout without a trailing line break, which means
         # that unless we print a blank line our first print statement is on the same line
-        print ""   # yay
+        print("")   # yay
 
-        self._set_identifier(app_label, schema_editor, from_state, to_state)
+        self.identifier = self._get_identifier(app_label, schema_editor, from_state, to_state)
+        if self.uid:
+            self.identifier = "{}.{}".format(self.uid, self.identifier)
+
         self._set_map_kind(app_label, schema_editor, from_state, to_state)
         self._pre_map_hook(app_label, schema_editor, from_state, to_state)
         self.namespace = schema_editor.connection.settings_dict.get("NAMESPACE")
@@ -107,13 +113,13 @@ class BaseEntityMapperOperation(Operation, DjangaeMigration):
         """
         pass
 
-    def _set_identifier(self, app_label, schema_editor, from_state, to_state):
-        """ Set self.identifier, which must be a string which uniquely identifies this operation
+    def _get_identifier(self, app_label, schema_editor, from_state, to_state):
+        """ Return an ID for self.identifier, which must be a string which uniquely identifies this operation
             across the entire site.  It must be able to fit in a Datastore string property.
             This will likely need to use app_label combined with values passed to __init__.
         """
         raise NotImplementedError(
-            "Subclasses of EntityMapperOperation must implement _set_identifier"
+            "Subclasses of EntityMapperOperation must implement _get_identifier"
         )
 
     def _set_map_kind(self, app_label, schema_editor, from_state, to_state):
@@ -137,7 +143,7 @@ class AddFieldData(BaseEntityMapperOperation):
         self.name = name
         self.field = field
 
-    def _set_identifier(self, app_label, schema_editor, from_state, to_state):
+    def _get_identifier(self, app_label, schema_editor, from_state, to_state):
         identifier = "%s.%s.%s:%s" % (
             app_label, self.model_name, self.__class__.__name__, self.name
         )
@@ -172,15 +178,12 @@ class RemoveFieldData(BaseEntityMapperOperation):
         self.name = name
         self.field = field
 
-    def _set_identifier(self, app_label, schema_editor, from_state, to_state):
+    def _get_identifier(self, app_label, schema_editor, from_state, to_state):
         identifier = "%s.%s.%s:%s" % (
             app_label, self.model_name, self.__class__.__name__, self.name
         )
-        # TODO: ideally we need some kind of way of getting hold of the migration name here, as
-        # it's possible that 2 operations add the same field to the same model, e.g. if it is
-        # added, then removed, then added.  Although it's highly unlikely that those 2 migrations
-        # would ever run at the same time, so we can probably ignore it for now :-).
-        self.identifier = identifier
+
+        return identifier
 
     def _set_map_kind(self, app_label, schema_editor, from_state, to_state):
         model = to_state.apps.get_model(app_label, self.model_name)
@@ -208,14 +211,13 @@ class CopyFieldData(BaseEntityMapperOperation):
         self.from_column_name = from_column_name
         self.to_column_name = to_column_name
 
-    def _set_identifier(self, app_label, schema_editor, from_state, to_state):
+    def _get_identifier(self, app_label, schema_editor, from_state, to_state):
         identifier = "%s.%s.%s:%s.%s" % (
             app_label, self.model_name, self.__class__.__name__,
             self.from_column_name, self.to_column_name
         )
-        # TODO: ideally we need some kind of way of getting hold of the migration name here, as per
-        # other operations
-        self.identifier = identifier
+
+        return identifier
 
     def _set_map_kind(self, app_label, schema_editor, from_state, to_state):
         model = to_state.apps.get_model(app_label, self.model_name)
@@ -240,13 +242,13 @@ class DeleteModelData(BaseEntityMapperOperation):
     def __init__(self, model_name):
         self.model_name = model_name
 
-    def _set_identifier(self, app_label, schema_editor, from_state, to_state):
+    def _get_identifier(self, app_label, schema_editor, from_state, to_state):
         identifier = "%s.%s:%s" % (
             app_label, self.model_name, self.__class__.__name__
         )
         # TODO: ideally we need some kind of way of getting hold of the migration name here, as per
         # other operations
-        self.identifier = identifier
+        return identifier
 
     def _set_map_kind(self, app_label, schema_editor, from_state, to_state):
         model = to_state.apps.get_model(app_label, self.model_name)
@@ -272,14 +274,13 @@ class CopyModelData(BaseEntityMapperOperation):
         self.to_model_name = to_model_name
         self.overwrite_existing = overwrite_existing
 
-    def _set_identifier(self, app_label, schema_editor, from_state, to_state):
+    def _get_identifier(self, app_label, schema_editor, from_state, to_state):
         identifier = "%s.%s.%s:%s.%s" % (
             app_label, self.model_name, self.__class__.__name__,
             self.to_app_label, self.to_model_name
         )
-        # TODO: ideally we need some kind of way of getting hold of the migration name here, as per
-        # other operations
-        self.identifier = identifier
+
+        return identifier
 
     def _set_map_kind(self, app_label, schema_editor, from_state, to_state):
         """ We need to map over the entities that we're copying *from*. """
@@ -322,16 +323,15 @@ class CopyModelDataToNamespace(BaseEntityMapperOperation):
         self.to_model_name = to_model_name
         self.overwrite_existing = overwrite_existing
 
-    def _set_identifier(self, app_label, schema_editor, from_state, to_state):
+    def _get_identifier(self, app_label, schema_editor, from_state, to_state):
         to_app_label = self.to_app_label or app_label
         to_model_name = self.to_model_name or self.model_name
         identifier = "%s.%s.%s:%s.%s.%s" % (
             app_label, self.model_name, self.__class__.__name__, self.to_namespace, to_app_label,
             to_model_name
         )
-        # TODO: ideally we need some kind of way of getting hold of the migration name here, as per
-        # other operations
-        self.identifier = identifier
+
+        return identifier
 
     def _set_map_kind(self, app_label, schema_editor, from_state, to_state):
         """ We need to map over the entities that we're copying *from*. """
@@ -383,13 +383,12 @@ class MapFunctionOnEntities(BaseEntityMapperOperation):
         self.model_name = model_name
         self.function = function
 
-    def _set_identifier(self, app_label, schema_editor, from_state, to_state):
+    def _get_identifier(self, app_label, schema_editor, from_state, to_state):
         identifier = "%s.%s.%s:%s" % (
             app_label, self.model_name, self.__class__.__name__, self.function.__name__
         )
-        # TODO: ideally we need some kind of way of getting hold of the migration name here, as per
-        # other operations
-        self.identifier = identifier
+
+        return identifier
 
     def _set_map_kind(self, app_label, schema_editor, from_state, to_state):
         model = to_state.apps.get_model(app_label, self.model_name)
