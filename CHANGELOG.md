@@ -3,10 +3,11 @@
 ### New features & improvements:
 
  - Add support for the latest App Engine SDK (1.9.51)
+ - The default ports for the API server, admin server and blobstore service have changed to 8010, 8011, and 8012 respectively to avoid clashes with modules
 
 ### Bug fixes:
 
- -
+ - When running the local sandbox, if a port clash is detected then the next port will be used (this was broken before)
 
 ## v0.9.9 (release date: 27th March 2017)
 
