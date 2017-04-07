@@ -206,12 +206,6 @@ class Command(runserver.Command):
         if additional_modules:
             sandbox._OPTIONS.config_paths.extend(additional_modules)
 
-        if int(self.port) != sandbox._OPTIONS.port or additional_modules:
-            # Override the port numbers
-            sandbox._OPTIONS.port = int(self.port)
-            sandbox._OPTIONS.admin_port = int(self.port) + len(additional_modules) + 1
-            sandbox._OPTIONS.api_port = int(self.port) + len(additional_modules) + 2
-
         if self.addr != sandbox._OPTIONS.host:
             sandbox._OPTIONS.host = sandbox._OPTIONS.admin_host = sandbox._OPTIONS.api_host = self.addr
 
