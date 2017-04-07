@@ -457,23 +457,6 @@ class MigrationOperationTests(TestCase):
         self.assertEqual(len(entities), 2)
         self.assertTrue(all(entity.get("is_tickled") for entity in entities))
 
-    def test_query_sharding(self):
-        ns1 = settings.DATABASES["default"]["NAMESPACE"]
-
-        for x in xrange(1, 21):
-            TestModel.objects.create(pk=x)
-
-        qry = datastore.Query(TestModel._meta.db_table, namespace=ns1)
-        shards = shard_query(qry, 1)
-        self.assertEqual(1, len(shards))
-
-        shards = shard_query(qry, 20)
-        self.assertEqual(20, len(shards))
-
-        shards = shard_query(qry, 50)
-        # We can't create 50 shards if there are only 20 objects
-        self.assertEqual(20, len(shards))
-
 
 class MidStringTestCase(TestCase):
     """ Tests for the _mid_string function in the mapper_library. """
@@ -604,6 +587,27 @@ class GetKeyRangeTestCase(TestCase):
         key1 = datastore.Key.from_path("my_kind", "a")
         key2 = datastore.Key.from_path("my_kind", 12345)
         self.assertRaises(Exception, _get_range, key1, key2)
+
+
+class ShardQueryTestCase(TestCase):
+    """ Tests for the `shard_query` function. """
+
+    def test_query_sharding(self):
+        ns1 = settings.DATABASES["default"]["NAMESPACE"]
+
+        for x in xrange(1, 21):
+            TestModel.objects.create(pk=x)
+
+        qry = datastore.Query(TestModel._meta.db_table, namespace=ns1)
+        shards = shard_query(qry, 1)
+        self.assertEqual(1, len(shards))
+
+        shards = shard_query(qry, 20)
+        self.assertEqual(20, len(shards))
+
+        shards = shard_query(qry, 50)
+        # We can't create 50 shards if there are only 20 objects
+        self.assertEqual(20, len(shards))
 
 
 class MapperLibraryTestCase(TestCase):
