@@ -443,7 +443,7 @@ def start_mapping(
             pass
 
         marker = ShardedTaskMarker(identifier, query, namespace=query._Query__namespace)
-        shards = calculate_shards()
+        shards = calculate_shards()  # TODO: move this out of the transaction, as it might cause a timeout
 
         if shards:
             for shard in shards:
