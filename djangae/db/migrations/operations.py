@@ -33,7 +33,10 @@ class BaseEntityMapperOperation(Operation, DjangaeMigration):
 
     def __init__(self, *args, **kwargs):
         self.uid = kwargs.pop("uid", "")
+        self.shard_count = kwargs.pop("shard_count", None)
+        self.entities_per_task = kwargs.pop("entities_per_task", None)
         super(BaseEntityMapperOperation, self).__init__(*args, **kwargs)
+
     def state_forwards(self, app_label, state):
         """ As all Djangae migrations are only supplements to the Django migrations, we don't need
             to do any altering of the model state.
@@ -79,7 +82,8 @@ class BaseEntityMapperOperation(Operation, DjangaeMigration):
 
         query = Query(self.map_kind, namespace=self.namespace)
         return mapper_library.start_mapping(
-            self.identifier, query, self, operation_method="_wrapped_map_entity"
+            self.identifier, query, self, operation_method="_wrapped_map_entity",
+            shard_count=self.shard_count, entities_per_task=self.entities_per_task
         )
 
     def _wrapped_map_entity(self, entity):
