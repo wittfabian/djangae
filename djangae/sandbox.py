@@ -160,7 +160,9 @@ def _local(devappserver2=None, configuration=None, options=None, wsgi_request_in
 
     original_environ = os.environ.copy()
 
-    # Silence warnings about this being unset, localhost:8080 is the dev_appserver default
+    # Silence warnings about this being unset, localhost:8080 is the dev_appserver default.
+    # Note that we're setting things for the *Blobstore* handler in os.environ here, which seems
+    # kind of crazy, and probably is, but it seems to be necessary to make stuff work.
     url = "localhost"
     port = get_next_available_port(url, DEFAULT_BLOBSTORE_SERVICE_PORT)
     os.environ.setdefault("HTTP_HOST", "{}:{}".format(url, port))
