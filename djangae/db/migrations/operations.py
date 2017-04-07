@@ -11,7 +11,6 @@ from google.appengine.api import datastore_errors
 # DJANGAE
 from djangae.db.backends.appengine.caching import remove_entities_from_cache_by_key
 from djangae.db.backends.appengine.commands import reserve_id
-# TODO: replace me with a real mapper library.  MUST implemented functions as described though.
 from . import mapper_library
 
 from .constants import TASK_RECHECK_INTERVAL
