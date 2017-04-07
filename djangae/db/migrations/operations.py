@@ -152,11 +152,7 @@ class AddFieldData(BaseEntityMapperOperation):
         identifier = "%s.%s.%s:%s" % (
             app_label, self.model_name, self.__class__.__name__, self.name
         )
-        # TODO: ideally we need some kind of way of getting hold of the migration name here, as
-        # it's possible that 2 operations add the same field to the same model, e.g. if it is
-        # added, then removed, then added.  Although it's highly unlikely that those 2 migrations
-        # would ever run at the same time, so we can probably ignore it for now :-).
-        self.identifier = identifier
+        return identifier
 
     def _set_map_kind(self, app_label, schema_editor, from_state, to_state):
         model = to_state.apps.get_model(app_label, self.model_name)
@@ -254,8 +250,6 @@ class DeleteModelData(BaseEntityMapperOperation):
         identifier = "%s.%s:%s" % (
             app_label, self.model_name, self.__class__.__name__
         )
-        # TODO: ideally we need some kind of way of getting hold of the migration name here, as per
-        # other operations
         return identifier
 
     def _set_map_kind(self, app_label, schema_editor, from_state, to_state):
