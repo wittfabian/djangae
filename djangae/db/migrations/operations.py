@@ -142,10 +142,11 @@ class BaseEntityMapperOperation(Operation, DjangaeMigration):
 
 class AddFieldData(BaseEntityMapperOperation):
 
-    def __init__(self, model_name, name, field):
+    def __init__(self, model_name, name, field, **kwargs):
         self.model_name = model_name
         self.name = name
         self.field = field
+        super(AddFieldData, self).__init__(**kwargs)
 
     def _get_identifier(self, app_label, schema_editor, from_state, to_state):
         identifier = "%s.%s.%s:%s" % (
@@ -177,10 +178,11 @@ class AddFieldData(BaseEntityMapperOperation):
 
 class RemoveFieldData(BaseEntityMapperOperation):
 
-    def __init__(self, model_name, name, field):
+    def __init__(self, model_name, name, field, **kwargs):
         self.model_name = model_name
         self.name = name
         self.field = field
+        super(RemoveFieldData, self).__init__(**kwargs)
 
     def _get_identifier(self, app_label, schema_editor, from_state, to_state):
         identifier = "%s.%s.%s:%s" % (
@@ -210,10 +212,11 @@ class RemoveFieldData(BaseEntityMapperOperation):
 
 class CopyFieldData(BaseEntityMapperOperation):
 
-    def __init__(self, model_name, from_column_name, to_column_name):
+    def __init__(self, model_name, from_column_name, to_column_name, **kwargs):
         self.model_name = model_name
         self.from_column_name = from_column_name
         self.to_column_name = to_column_name
+        super(CopyFieldData, self).__init__(**kwargs)
 
     def _get_identifier(self, app_label, schema_editor, from_state, to_state):
         identifier = "%s.%s.%s:%s.%s" % (
@@ -243,8 +246,9 @@ class CopyFieldData(BaseEntityMapperOperation):
 
 class DeleteModelData(BaseEntityMapperOperation):
 
-    def __init__(self, model_name):
+    def __init__(self, model_name, **kwargs):
         self.model_name = model_name
+        super(DeleteModelData, self).__init__(**kwargs)
 
     def _get_identifier(self, app_label, schema_editor, from_state, to_state):
         identifier = "%s.%s:%s" % (
@@ -271,12 +275,13 @@ class CopyModelData(BaseEntityMapperOperation):
 
     def __init__(
         self, model_name, to_app_label, to_model_name,
-        overwrite_existing=False
+        overwrite_existing=False, **kwargs
     ):
         self.model_name = model_name
         self.to_app_label = to_app_label
         self.to_model_name = to_model_name
         self.overwrite_existing = overwrite_existing
+        super(CopyModelData, self).__init__(**kwargs)
 
     def _get_identifier(self, app_label, schema_editor, from_state, to_state):
         identifier = "%s.%s.%s:%s.%s" % (
@@ -319,13 +324,14 @@ class CopyModelDataToNamespace(BaseEntityMapperOperation):
 
     def __init__(
         self, model_name, to_namespace, to_app_label=None, to_model_name=None,
-        overwrite_existing=False
+        overwrite_existing=False, **kwargs
     ):
         self.model_name = model_name
         self.to_namespace = to_namespace
         self.to_app_label = to_app_label
         self.to_model_name = to_model_name
         self.overwrite_existing = overwrite_existing
+        super(CopyModelDataToNamespace, self).__init__(**kwargs)
 
     def _get_identifier(self, app_label, schema_editor, from_state, to_state):
         to_app_label = self.to_app_label or app_label
@@ -383,9 +389,10 @@ class CopyModelDataToNamespace(BaseEntityMapperOperation):
 class MapFunctionOnEntities(BaseEntityMapperOperation):
     """ Operation for calling a custom function on each entity of a given model. """
 
-    def __init__(self, model_name, function):
+    def __init__(self, model_name, function, **kwargs):
         self.model_name = model_name
         self.function = function
+        super(MapFunctionOnEntities, self).__init__(**kwargs)
 
     def _get_identifier(self, app_label, schema_editor, from_state, to_state):
         identifier = "%s.%s.%s:%s" % (
