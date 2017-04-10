@@ -113,3 +113,46 @@ serially to avoid exceeding App Engine task deadlines. If you increase this valu
 * Custom data fiddling.
 * Do the arguments to the various operations make sense, and are they consistent?  E.g. for CopyFieldData, should it take a field, rather than just the column name?
 * Should the `to_model_app_label` kwarg for CopyModelDataToNamespace be named better?  Should it just be `to_app_label`?
+
+# Migration Operation Ambiguity
+
+The datastore migration tasks work by creating markers in the datastore to represent each individual operation. These markers keep track of the progress of the operation (i.e. whether or not it's finished).
+
+Unfortunately there is no concrete way to uniquely identify an operation, take for example the following migrations:
+
+```
+# First migration
+
+class Migration(migrations.Migration):
+    operations = [
+        AddFieldData("mymodel", "myfield", ...)
+    ]
+
+
+# Second migration
+
+class Migration(migrations.Migration):
+    operations = [
+        RemoveField("mymodel", "myfield", ...)
+    ]
+
+# Third migration
+
+class Migration(migrations.Migration):
+    operations = [
+        AddFieldData("mymodel", "myfield", ...)
+    ]
+```
+
+Here, the first and third migrations have operations that will clash as they are the same operation, with the same arguments. In this situation
+the third migration will fail as the operation would appear to have been completed. You can avoid this situation by providing a `uid` argument
+to the operation:
+
+```
+class Migration(migrations.Migration):
+    operations = [
+        AddFieldData("mymodel", "myfield", ..., uid="first_migration")
+    ]
+```
+
+The `uid` will be added to the task marker and so there won't be a clash in future. It's good practice to specify the uid to be safe, perhaps using the date the migration file was created.
