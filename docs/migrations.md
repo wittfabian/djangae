@@ -93,6 +93,27 @@ Whether you want to run the `RemoveFieldData` task or not depends on how much da
 
 Renaming a field requires adding a new field, copying the data from the old field, and then removing the old field, but in doing so ensuring that any objects which are created or edited during that process have their (latest) values for the old field copied across.
 
+
+### Delete Model Data
+
+The `DeleteModelData` operation deletes all the data related to a particular model (essentially `DROP TABLE X`)
+there is no special process required here, just use this operation carefully!
+
+### Copy Data from One Model to Another
+
+The `CopyModelData` operation copies all the row data for a model into another. Both model classes must exist in your project for the operation to work.
+
+### Copy Data for a Model into a Different Namespace
+
+The datastore has muliple namespaces (similar to separate databases), the `CopyModelDataToNamespace` operation copies
+the data for a model into a specified namespace. You can then access this data by adding another connection
+to your `DATABASES` setting.
+
+### Custom Processing Per Entity
+
+The `MapFunctionOnEntities` operation allows you to run a custom function on all the entities of a model class. Note that the function
+must be able to be pickled and that the function is provided an entity, not a Django model instance.
+
 # Settings
 
 ## `DJANGAE_MIGRATION_DEFAULT_SHARD_COUNT`
