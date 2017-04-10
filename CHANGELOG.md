@@ -5,10 +5,14 @@
  - Add support for the latest App Engine SDK (1.9.51)
  - Add support for querying JSONFields in a similar way to the PostgreSQL JSONField
  - Allow special indexers to index `None` as well as remove unused index properties from the entity
+ - The default ports for the API server, admin server and blobstore service have changed to 8010, 8011, and 8012 respectively to avoid clashes with modules
+ - Switched the default storage backend (in settings_base.py) to cloud storage. If you need to retain compatibility make sure you
+ override the `DEFAULT_FILE_STORAGE` setting to point to `'djangae.storage.BlobstoreStorage'`.
+- Added AsyncMultiQuery as a replacement for Google's MultiQuery (which doesn't exist on Cloud Datastore).  This is the first step towards support for Cloud Datastore and therefore Flexible Environment.
 
 ### Bug fixes:
 
- -
+ - When running the local sandbox, if a port clash is detected then the next port will be used (this was broken before)
 
 ## v0.9.9 (release date: 27th March 2017)
 
@@ -70,7 +74,8 @@
 
 - Improved documentation for `djangae.contrib.mappers.defer_iteration`.
 - Changed the installation documentation to reflect the correct way to launch tests
-
+- Added documentation for local server port configuration.
+- Added documentation for `DJANGAE_ADDITIONAL_MODULES` setting.
 
 ## v0.9.8 (release date: 6th December 2016)
 
