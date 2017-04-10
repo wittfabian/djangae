@@ -333,9 +333,9 @@ class ShardedTaskMarker(datastore.Entity):
         # Copy the query so that we can re-defer the original, unadulterated version, because once
         # we've applied limits and ordering to the query it causes pickle errors with defer.
         original_query = copy.deepcopy(query)
+        query.Order("__key__")
         query["__key__ >="] = shard[0]
         query["__key__ <"] = shard[1]
-        query.Order("__key__")
 
         num_entities_processed = 0
         try:
@@ -432,7 +432,7 @@ def start_mapping(
     def calculate_shards():
         return shard_query(query, shard_count)
 
-    def txn():
+    def txn(shards):
         marker_key = ShardedTaskMarker.get_key(identifier, query._Query__namespace)
         try:
             datastore.Get(marker_key)
@@ -443,7 +443,6 @@ def start_mapping(
             pass
 
         marker = ShardedTaskMarker(identifier, query, namespace=query._Query__namespace)
-        shards = calculate_shards()  # TODO: move this out of the transaction, as it might cause a timeout
 
         if shards:
             for shard in shards:
@@ -461,7 +460,7 @@ def start_mapping(
 
         return marker_key
 
-    return datastore.RunInTransaction(txn)
+    return datastore.RunInTransaction(txn, calculate_shards())
 
 
 def mapper_exists(identifier, namespace):
