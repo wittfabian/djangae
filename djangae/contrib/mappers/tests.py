@@ -66,7 +66,7 @@ class MapReduceTestCase(TestCase):
     def setUp(self):
         super(MapReduceTestCase, self).setUp()
 
-        for x in xrange(10):
+        for x in range(10):
             TestNode(data="TestNode".format(x), counter=x).save()
 
     def test_all_models_delete(self):
@@ -79,7 +79,7 @@ class MapReduceTestCase(TestCase):
         """
             Test that overriding the model works
         """
-        for x in xrange(10):
+        for x in range(10):
             TestNode2(data="TestNode2".format(x), counter=x).save()
         self.assertEqual(TestNode2.objects.count(), 10)
         TestMapperClass(model=TestNode2).start()
@@ -116,7 +116,7 @@ class TestDeferIteration(TestCase):
     def setUp(self):
         super(TestDeferIteration, self).setUp()
 
-        for x in xrange(10):
+        for x in range(10):
             TestNode.objects.create(data="TestNode {}".format(x), counter=x+1)
 
     def test_that_sharding_works(self):
@@ -142,7 +142,7 @@ class TestDeferIteration(TestCase):
         self.process_task_queues()
 
         self.assertEqual(
-            sum([(x+1) + 100 for x in xrange(10)]),
+            sum([(x+1) + 100 for x in range(10)]),
             sum(TestNode.objects.values_list("counter", flat=True))
         )
 

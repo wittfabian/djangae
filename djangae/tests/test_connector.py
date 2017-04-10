@@ -346,16 +346,15 @@ class BackendTests(TestCase):
                 # Make sure the query is an ancestor of the key
                 self.assertEqual(query_anc.calls[0].args[1], datastore.Key.from_path(TestFruit._meta.db_table, "0", namespace=DEFAULT_NAMESPACE))
 
-        # Now check projections work with more than 30 things
-        with sleuth.watch('google.appengine.api.datastore.MultiQuery.__init__') as query_init:
+        # Now check projections work with fewer than 100 things
+        with sleuth.watch('djangae.db.backends.appengine.meta_queries.AsyncMultiQuery.__init__') as query_init:
             with sleuth.watch('google.appengine.api.datastore.Query.Ancestor') as query_anc:
                 keys = [str(x) for x in range(32)]
                 results = list(TestFruit.objects.only("color").filter(pk__in=keys).order_by("name"))
 
-                self.assertEqual(query_init.call_count, 2) # Two multi queries
+                self.assertEqual(query_init.call_count, 1) # One multiquery
                 self.assertEqual(query_anc.call_count, 32) # 32 Ancestor calls
-                self.assertEqual(len(query_init.calls[0].args[1]), 30)
-                self.assertEqual(len(query_init.calls[1].args[1]), 2)
+                self.assertEqual(len(query_init.calls[0].args[1]), 32)
 
                 # Confirm the ordering is correct
                 self.assertEqual(sorted(keys), [ x.pk for x in results ])
@@ -445,7 +444,7 @@ class BackendTests(TestCase):
             list(TestUser.objects.filter(username="test"))
             self.assertEqual(1, query_mock.call_count)
 
-        with sleuth.switch("djangae.db.backends.appengine.commands.datastore.MultiQuery.Run", lambda *args, **kwargs: []) as query_mock:
+        with sleuth.switch("djangae.db.backends.appengine.meta_queries.AsyncMultiQuery.Run", lambda *args, **kwargs: []) as query_mock:
             list(TestUser.objects.filter(username__in=["test", "cheese"]))
             self.assertEqual(1, query_mock.call_count)
 
@@ -453,7 +452,7 @@ class BackendTests(TestCase):
             list(TestUser.objects.filter(pk=1))
             self.assertEqual(1, get_mock.call_count)
 
-        with sleuth.switch("djangae.db.backends.appengine.commands.datastore.MultiQuery.Run", lambda *args, **kwargs: []) as query_mock:
+        with sleuth.switch("djangae.db.backends.appengine.meta_queries.AsyncMultiQuery.Run", lambda *args, **kwargs: []) as query_mock:
             list(TestUser.objects.exclude(username__startswith="test"))
             self.assertEqual(1, query_mock.call_count)
 
@@ -977,7 +976,7 @@ class ConstraintTests(TestCase):
                 # Make sure bulk creates are limited when there are unique constraints
                 # involved
                 ModelWithUniques.objects.bulk_create(
-                    [ ModelWithUniques(name=str(x)) for x in xrange(26) ]
+                    [ ModelWithUniques(name=str(x)) for x in range(26) ]
                 )
 
         finally:
@@ -1688,6 +1687,7 @@ class EdgeCaseTests(TestCase):
             list(dates)
         )
 
+    @override_settings(DJANGAE_MAX_QUERY_BRANCHES=30)
     def test_in_query(self):
         """ Test that the __in filter works, and that it cannot be used with more than 30 values,
             unless it's used on the PK field.
@@ -1700,10 +1700,9 @@ class EdgeCaseTests(TestCase):
         self.assertItemsEqual(results, [self.u1, self.u2])
         # Check that using more than 30 items in an __in query not on the pk causes death
         query = TestUser.objects.filter(username__in=list([x for x in letters[:31]]))
-        # This currently raises an error from App Engine, should we raise our own?
         self.assertRaises(Exception, list, query)
         # Check that it's ok with PKs though
-        query = TestUser.objects.filter(pk__in=list(xrange(1, 32)))
+        query = TestUser.objects.filter(pk__in=list(range(1, 32)))
         list(query)
         # Check that it's ok joining filters with pks
         results = list(TestUser.objects.filter(
@@ -1843,7 +1842,7 @@ class BlobstoreFileUploadHandlerTest(TestCase):
     def test_blobstore_upload_url_templatetag(self):
         template = """{% load storage %}{% blobstore_upload_url '/something/' %}"""
         response = Template(template).render(Context({}))
-        self.assertTrue(response.startswith("http://localhost:8080/_ah/upload/"))
+        self.assertTrue(response.startswith("http://localhost:8012/_ah/upload/"))
 
 
 class DatastorePaginatorTest(TestCase):
@@ -2121,9 +2120,9 @@ class CascadeDeletionTests(TestCase):
     def test_deleting_more_than_30_items(self):
         zoo = Zoo.objects.create()
 
-        for i in xrange(40):
+        for i in range(40):
             enclosure = Enclosure.objects.create(zoo=zoo)
-            for i in xrange(2):
+            for i in range(2):
                 Animal.objects.create(enclosure=enclosure)
 
         self.assertEqual(Animal.objects.count(), 80)

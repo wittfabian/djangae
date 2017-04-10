@@ -2,6 +2,8 @@
 
 Djangae provides two storage backends. `djangae.storage.CloudStorage` and `djangae.storage.BlobstoreStorage`.
 
+If you've imported `djangae.settings_base.*`, then the default backend is `djangae.storage.CloudStorage`
+
 ## Cloud Storage
 
 `djangae.storage.CloudStorage` is a  django storage backend that works with Google Cloud Storage, you can treat it just as

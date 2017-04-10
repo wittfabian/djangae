@@ -125,7 +125,7 @@ class Cursor(object):
             return []
 
         result = []
-        for i in xrange(size):
+        for i in range(size):
             entity = self.fetchone(delete_flag)
             if entity is None:
                 break

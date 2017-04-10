@@ -110,7 +110,7 @@ def retry(func, *args, **kwargs):
             try:
                 i += 1
                 return func(*args, **kwargs)
-            except (datastore_errors.Error, apiproxy_errors.Error, TransactionFailedError), exc:
+            except (datastore_errors.Error, apiproxy_errors.Error, TransactionFailedError) as exc:
                 logger.info("Retrying function: %s(%s, %s) - %s", str(func), str(args), str(kwargs), str(exc))
                 time.sleep(timeout_ms / 1000000.0)
                 timeout_ms *= 2
@@ -151,22 +151,23 @@ def djangae_webapp(request_handler):
     return request_handler_wrapper
 
 
-def port_is_open(port, url):
+def port_is_open(url, port):
     s = socket()
     try:
-        s.connect((url, int(port)))
-        s.shutdown(SHUT_RDWR)
+        s.bind((url, int(port)))
+        s.close()
         return True
-    except:
+    except Exception:
         return False
 
 
 def get_next_available_port(url, port):
-    for offset in xrange(10):
+    for offset in range(10):
         if port_is_open(url, port + offset):
-            port = port + offset
             break
-    return port
+    else:
+        raise Exception("Could not find available port between %d and %d", (port, port + offset))
+    return port + offset
 
 
 class memoized(object):

@@ -35,7 +35,7 @@ Here is a brief list of hard limitations you may encounter when using the Djanga
 
  - `bulk_create()` is limited to 25 instances if the model has active unique constraints, or the instances being inserted have
    the primary key specified. In other cases the limit is 1000.
- - `filter(field__in=[...])` queries are limited to 30 entries in the list if `field` is not the primary key
+ - `filter(field__in=[...])` queries are limited to 100 entries (by default) in the list if `field` is not the primary key
  - `filter(pk__in=[...])` queries are limited to 1000 entries
  - You are limited to a single inequality filter per query, although excluding by primary key is not included in this count
  - Queries without primary key equality filters are not allowed within an `atomic` block
@@ -186,9 +186,10 @@ There is also an equivalent function for ensuring the consistency of multiple it
 * Doing an `.only('foo')` or `.defer('bar')` with a `pk_in=[...]` filter may not be more efficient. This is because we must perform a projection query for each key, and although we send them over the RPC in batches of 30, the RPC costs may outweigh the savings of a plain old datastore.Get. You should profile and check to see whether using only/defer results in a speed improvement for your use case.
 * Due to the way it has to be implemented on the Datastore, an `update()` query is not particularly fast, and other than avoiding calling the `save()` method on each object it doesn't offer much speed advantage over iterating over the objects and modifying them.  However, it does offer significant integrity advantages, see [General behaviours](#general-behaviours) section above.
 * Doing filter(pk__in=Something.objects.values_list('pk', flat=True)) will implicitly evaluate the inner query while preparing to run the outer one. This means two queries, not one like SQL would do!
-
-
-
+* IN queries and queries with OR branches which aren't filtered on PK result in multiple queries to the datastore. By default you will get an error
+  if you exceed 100 IN filters but this is configurable via the `DJANGAE_MAX_QUERY_BRANCHES` setting. Be aware that
+  the more IN/OR filters in a query, the slower the query becomes. 100 is already a high value for this setting so
+  raising it isn't recommended (it's probably better to rethink your data structure or querying)
 
 ## Unique Constraint Checking
 
