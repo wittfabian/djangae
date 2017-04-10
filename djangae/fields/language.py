@@ -3,8 +3,8 @@
 import os
 import zipfile
 
-from .computed import ComputedCharField
-
+from .computed import ComputedFieldMixin
+from .charfields import CharField
 
 # pyuca only supports version 5.2.0 of the collation algorithm on Python 2.x
 COLLATION_FILE = "allkeys-5.2.0.txt"
@@ -50,7 +50,7 @@ class ZipLoaderMixin(object):
                     self.table.add(char_list, coll_elements)
 
 
-class ComputedCollationField(ComputedCharField):
+class ComputedCollationField(ComputedFieldMixin, CharField):
     """
         App Engine sorts strings based on the unicode codepoints that make them
         up. When you have strings from non-ASCII languages this makes the sort order
@@ -74,6 +74,10 @@ class ComputedCollationField(ComputedCharField):
             source_value = getattr(instance, source_field_name, u"")
             return self.collator.sort_key(unicode(source_value, "utf-8"))
 
-        super(ComputedCharField, self).__init__(computer)
+        super(ComputedCollationField, self).__init__(computer)
 
+    def deconstruct(self):
+        name, path, args, kwargs = super(ComputedCollationField, self).deconstruct()
+        del kwargs["max_length"]
+        return name, path, args, kwargs
 
