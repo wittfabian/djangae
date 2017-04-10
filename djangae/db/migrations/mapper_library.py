@@ -308,7 +308,7 @@ class ShardedTaskMarker(datastore.Entity):
         datastore.Put(self)
 
     def run_shard(
-        self, query, shard, operation, operation_method=None, offset=0,
+        self, original_query, shard, operation, operation_method=None, offset=0,
         entities_per_task=None
     ):
         """ Given a datastore.Query which does not have any high/low bounds on it, apply the bounds
@@ -332,7 +332,7 @@ class ShardedTaskMarker(datastore.Entity):
 
         # Copy the query so that we can re-defer the original, unadulterated version, because once
         # we've applied limits and ordering to the query it causes pickle errors with defer.
-        original_query = copy.deepcopy(query)
+        query = copy.deepcopy(original_query)
         query.Order("__key__")
         query["__key__ >="] = shard[0]
         query["__key__ <"] = shard[1]
