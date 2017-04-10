@@ -61,14 +61,18 @@ class ComputedCollationField(ComputedFieldMixin, CharField):
         correctly.
     """
 
+    collator = None
+
     def __init__(self, source_field_name):
         import pyuca # Required dependency for ComputedCollationField
         from pyuca.collator import Collator_5_2_0
 
-        class Collator(ZipLoaderMixin, Collator_5_2_0):
-            pass
+        # Instantiate Collator once only to save on memory / processing
+        if not ComputedCollationField.collator:
+            class Collator(ZipLoaderMixin, Collator_5_2_0):
+                pass
 
-        self.collator = Collator(COLLATION_ZIP_FILE, COLLATION_FILE)
+            ComputedCollationField.collator = Collator(COLLATION_ZIP_FILE, COLLATION_FILE)
 
         def computer(instance):
             source_value = getattr(instance, source_field_name, u"")
