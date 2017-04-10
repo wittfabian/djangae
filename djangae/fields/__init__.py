@@ -9,6 +9,7 @@ from .related import *
 from .computed import *
 from .json import *
 from .counting import *
+from .language import ComputedCollationField
 
 
 class TrueOrNullField(models.NullBooleanField):

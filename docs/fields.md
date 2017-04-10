@@ -262,3 +262,35 @@ def log_meow(sanctuary):
     # Note that we don't need to save the object
     print sanctuary.number_of_meows.value()
 ```
+
+## djangae.fields.language.ComputedCollationField
+
+This is a specialized computed field which is used so you can have correct alphabetical ordering of non-ASCII strings.
+
+### Explanation
+
+SQL databases (such as MySQL) use various 'collations' for determining how one string is ordered relative to another. The Datastore
+does not have this functionality. On the Datastore all strings are ordered by their unicode code point, which means that non-ASCII characters
+are always ordered after ASCII ones, and the ordering of unicode chars is not alphabetical.
+
+This means that if you (for example) want to order users by their first name this would give the wrong result:
+
+```
+   User.objects.create(first_name="Vera")
+   User.objects.create(first_name="Łukasz")
+   User.objects.order_by("first_name")
+```
+
+ComputedCollationField fixes this by calculating a suitable 'sort key' from the source value, you would then use the
+ComputedCollationField when specifying the order. For example:
+
+```
+from djangae.fields import CharField, ComputedCollationField
+
+class User(models.Model):
+    first_name = CharField() # This is the field you work with
+    first_name_order = ComputedCollationField('first_name') # This is what you order by
+
+User.objects.order_by("first_name_order") # Now correctly orders alphabetically
+```
+
