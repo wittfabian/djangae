@@ -267,6 +267,8 @@ def log_meow(sanctuary):
 
 This is a specialized computed field which is used so you can have correct alphabetical ordering of non-ASCII strings.
 
+*Note: use of this field requires the 'pyuca' package be installed*
+
 ### Explanation
 
 SQL databases (such as MySQL) use various 'collations' for determining how one string is ordered relative to another. The Datastore
