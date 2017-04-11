@@ -287,7 +287,37 @@ def _remote(configuration=None, remote_api_stub=None, apiproxy_stub_map=None, **
 
 @contextlib.contextmanager
 def _test(**kwargs):
+    """
+        This stub uses the testbed to initialize the bare minimum to use the
+        Datastore connector. Tests themselves should setup/tear down their own
+        stubs by using DjangaeDiscoverRunner or the nose plugin.
+
+        The stubs here are just for bootstrapping the tests. Obviously any data inserted
+        between here, and the tests themselves will be wiped out when the tests begin!
+    """
+
+    from google.appengine.ext import testbed
+    from google.appengine.datastore import datastore_stub_util
+
+    MINIMAL_STUBS = {
+        "init_memcache_stub": {},
+        "init_datastore_v3_stub": {
+            "use_sqlite": True,
+            "auto_id_policy": testbed.AUTO_ID_POLICY_SCATTERED,
+            "consistency_policy": datastore_stub_util.PseudoRandomHRConsistencyPolicy(probability=1)
+        }
+    }
+
+    testbed = testbed.Testbed()
+    testbed.activate()
+    for init_name, stub_kwargs in MINIMAL_STUBS.items():
+        getattr(testbed, init_name)(**stub_kwargs)
+
     yield
+
+    if testbed:
+        testbed.deactivate()
+
 
 LOCAL = 'local'
 REMOTE = 'remote'
