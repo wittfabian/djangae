@@ -26,6 +26,7 @@ def key_or_entity_compare(lhs, rhs):
 DEFAULT_MAX_CACHE_DICT_SIZE = 1024 * 1024 * 8
 MAX_CACHE_DICT_SETTING_NAME = "DJANGAE_CACHE_MAX_CONTEXT_SIZE"
 
+
 class CacheDict(object):
     """
         This is a special dictionary-like object which does the following:
@@ -33,6 +34,10 @@ class CacheDict(object):
         1. Copies items in and out to prevent storing references
         2. The cache dict is restricted to a maximum size in bytes
         3. Unaccessed entries are removed first
+
+        The priority of eviction is based on the *value* and not the *keys*. If multiple
+        keys point to the same object reference then an access to any of them will mark the
+        value as used, if a value is evicted, all the keys pointing to it are removed.
     """
 
     def __init__(self, max_size_in_bytes=None):
@@ -40,58 +45,94 @@ class CacheDict(object):
             settings, MAX_CACHE_DICT_SETTING_NAME, DEFAULT_MAX_CACHE_DICT_SIZE
         )
 
-        self.key_priority = []
-        self.entries = {}
+        self.value_priority = []
+        self.value_references = {}
+        self._entries = {}
         self.total_value_size = 0
         self.max_size_in_bytes = max_size_in_bytes
 
+    def __deepcopy__(self, memo):
+        new_one = CacheDict()
+        new_one.update(self)
+        return new_one
+
+    def _set_value(self, k, v):
+        if k in self._entries:
+            # We already have a value, we need to clean up
+            old_value = self._entries[k]
+
+            # Same object, do nothing
+            if id(old_value) == id(v):
+                return
+
+            old_key = id(old_value)
+
+            self.value_references[old_key].remove(k)
+            del self._entries[k]
+
+            if not self.value_references[old_key]:
+                self._purge_value(old_value)
+
+        priority_key = id(v)
+
+        existing_value = priority_key in self.value_priority
+
+        self.value_references.setdefault(priority_key, set()).add(k)
+        if priority_key not in self.value_priority:
+            self.value_priority.insert(len(self.value_priority) // 2, priority_key)
+
+        self._entries[k] = v
+
+        if not existing_value:
+            self.total_value_size += sys.getsizeof(v)
+
     def _check_size_and_limit(self):
         while self.total_value_size > self.max_size_in_bytes:
-            next_key = self.key_priority[-1]
-            del self[next_key]
+            next_priority_key = self.value_priority[-1]
+            for reference in self.value_references[next_priority_key][:]:
+                del self[reference]
 
-    def set(self, k, v, perform_copy=True):
+    def _set(self, k, v, perform_copy=True):
         if perform_copy:
             v = copy.deepcopy(v)
 
-        self.entries[k] = v
-
-        try:
-            # If the key already exists, we don't reorder based on a set
-            # we only promote keys if they are accessed.
-            self.key_priority.index(k)
-        except ValueError:
-            # Insert new keys in the middle of the priority list, with usage
-            # they will either go up or down the list from there
-            insert_position = len(self.key_priority) // 2
-            self.key_priority.insert(insert_position, k)
-
-        self.total_value_size += sys.getsizeof(v)
+        self._set_value(k, v)
         self._check_size_and_limit()
 
     def set_multi(self, keys, value):
         value = copy.deepcopy(value) # Copy once
-        for k in keys:
-            self.set(k, value, perform_copy=False)
-
-    def __setitem__(self, k, v):
-        self.set(k, v)
+        for k in set(keys):
+            self._set(k, value, perform_copy=False)
 
     def __getitem__(self, k):
-        v = self.entries[k] # Find the entry
+        v = self._entries[k] # Find the entry
 
-        # Move the key up the key priority
-        index = self.key_priority.index(k)
-        self.key_priority.pop(index)
-        self.key_priority.insert(0, k)
+        # Move the value up the value priority
+        priority_key = id(v)
+        self.value_priority.remove(priority_key)
+        self.value_priority.insert(0, priority_key)
         return copy.deepcopy(v)
 
-    def __delitem__(self, k):
-        v = self.entries[k]
-        del self.entries[k]
-        index = self.key_priority.index(k)
-        self.key_priority.pop(index)
+    def _purge_value(self, v):
+        priority_key = id(v)
+        del self.value_references[priority_key]
+        self.value_priority.remove(priority_key)
         self.total_value_size -= sys.getsizeof(v)
+
+    def __delitem__(self, k):
+        assert(set([id(x) for x in self._entries.values()]) == set(self.value_priority))
+        v = self._entries[k]
+        priority_key = id(v)
+
+        self.value_references[priority_key].remove(k)
+        # Only remove from the priority (and adjust the size)
+        # if the value no longer exists in the dictionary
+        if not self.value_references[priority_key]:
+            self._purge_value(v)
+
+        del self._entries[k]
+
+        assert(set([id(x) for x in self._entries.values()]) == set(self.value_priority))
 
     def __repr__(self):
         return "{%s}" % ", ".join([":".join([repr(k), repr(v)]) for k, v in self.items()])
@@ -101,14 +142,21 @@ class CacheDict(object):
         return len(unshared_items) == 0
 
     def __contains__(self, k):
-        return k in self.entries
+        return k in self.keys()
 
     def update(self, other):
-        for k, v in other.items():
-            self[k] = v
+        # Find the unique values in the other dictionary
+        to_update = {}
+        for v in other.values():
+            to_update[id(v)] = v
+
+        # Go through, and call set multi (which will perform one copy per value)
+        for k, v in to_update.items():
+            keys = other.value_references[k]
+            self.set_multi(keys, v)
 
     def __iter__(self):
-        return iter(self.key_priority)
+        return iter(self.keys())
 
     def get(self, k, default=None):
         try:
@@ -117,17 +165,16 @@ class CacheDict(object):
             return default
 
     def keys(self):
-        """ Returns the keys in priority order (recently used first)"""
-        return self.key_priority[:]
+        return self._entries.keys()
 
     def values(self):
-        return self.entries.values()
+        return self._entries.values()
 
     def items(self):
         for k in self.keys():
             # Intentionally don't reorganize the key priority if we're iterating
             # that would be *slow* and unlikely to lead to what you want
-            yield (k, self.entries[k])
+            yield (k, self._entries[k])
 
     def get_reversed(self, value, compare_func=None):
         """
@@ -138,7 +185,7 @@ class CacheDict(object):
             returns True
         """
         results = []
-        for k, v in self.entries.items():
+        for k, v in self._entries.items():
             if compare_func and compare_func(v, value):
                 results.append(k)
             elif v == value:
