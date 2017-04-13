@@ -50,8 +50,10 @@ class CacheDict(object):
             next_key = self.key_priority[-1]
             del self[next_key]
 
-    def __setitem__(self, k, v):
-        v = copy.deepcopy(v)
+    def set(self, k, v, perform_copy=True):
+        if perform_copy:
+            v = copy.deepcopy(v)
+
         self.entries[k] = v
 
         try:
@@ -66,6 +68,14 @@ class CacheDict(object):
 
         self.total_value_size += sys.getsizeof(v)
         self._check_size_and_limit()
+
+    def set_multi(self, keys, value):
+        value = copy.deepcopy(value) # Copy once
+        for k in keys:
+            self.set(k, value, perform_copy=False)
+
+    def __setitem__(self, k, v):
+        self.set(k, v)
 
     def __getitem__(self, k):
         v = self.entries[k] # Find the entry
@@ -174,8 +184,7 @@ class Context(object):
     def cache_entity(self, identifiers, entity, situation):
         assert hasattr(identifiers, "__iter__")
 
-        for identifier in identifiers:
-            self.cache[identifier] = entity
+        self.cache.set_multi(identifiers, entity)
 
     def remove_entity(self, entity_or_key):
         if not isinstance(entity_or_key, datastore.Key):
