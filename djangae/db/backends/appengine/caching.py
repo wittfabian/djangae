@@ -218,6 +218,12 @@ def add_entities_to_cache(model, entities, situation, namespace, skip_memcache=F
     if not CACHE_ENABLED:
         return None
 
+    context = get_context()
+
+    if not (context.context_enabled or context.memcache_enabled):
+        # Don't cache anything if caching is disabled
+        return
+
     # Don't cache on Get if we are inside a transaction, even in the context
     # This is because transactions don't see the current state of the datastore
     # We can still cache in the context on Put() but not in memcache
