@@ -12,7 +12,7 @@ from django.core.cache.backends.base import default_key_func
 
 from djangae.db import utils
 from djangae.db.unique_utils import unique_identifiers_from_entity, _format_value_for_identifier
-from djangae.db.backends.appengine.context import ContextCache
+from djangae.db.backends.appengine.context import ContextCache, key_or_entity_compare
 
 _local = threading.local()
 
@@ -260,7 +260,7 @@ def remove_entities_from_cache_by_key(keys, namespace, memcache_only=False):
     context = get_context()
     if not memcache_only:
         for key in keys:
-            identifiers = context.stack.top.reverse_cache.get(key, [])
+            identifiers = context.stack.top.cache.get_reversed(key, compare_func=key_or_entity_compare)
             for identifier in identifiers:
                 if identifier in context.stack.top.cache:
                     del context.stack.top.cache[identifier]
