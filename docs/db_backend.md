@@ -124,7 +124,7 @@ The following settings are available to control the caching:
 
  - `DJANGAE_CACHE_ENABLED` (default `True`). Setting to False it all off, I really wouldn't suggest doing that!
  - `DJANGAE_CACHE_TIMEOUT_SECONDS` (default `60 * 60`). The length of time stuff should be kept in memcache.
- - `DJANGAE_CACHE_MAX_CONTEXT_SIZE` (default `1024 * 1024 * 8). This is (approximately) the max size of a local context cache instance. Each request and each nested transaction gets its own
+ - `DJANGAE_CACHE_MAX_CONTEXT_SIZE` (default `1024 * 1024 * 8`). This is (approximately) the max size of a local context cache instance. Each request and each nested transaction gets its own
     context cache instance so be aware that this total can rapidly add up, especially on F1 instances. If you have an F2 or F4 instance you might want to increase this value. If you hit the limit
     the least used entities will be evicted from the cache.
  - `DJANGAE_CACHE_MAX_ENTITY_COUNT` (default 8). This is the max number of entities returned by a pk__in query which will be cached in the context or memcache upon their return. If more
