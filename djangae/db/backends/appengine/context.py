@@ -45,10 +45,22 @@ class CacheDict(object):
             settings, MAX_CACHE_DICT_SETTING_NAME, DEFAULT_MAX_CACHE_DICT_SIZE
         )
 
+        # This is a list of `id(value)` values in priority of most recently used
+        # to least recently used
         self.value_priority = []
+
+        # This is a reverse lookup dict of id(value): {key1, key2, ...}
         self.value_references = {}
+
+        # The actual entries, values are normally entities but it makes it easy to
+        # understand this class if you think of them as the references they are.
+        # Multiple keys can map to the same entity reference
         self._entries = {}
+
+        # THe total size of all values in bytes
         self.total_value_size = 0
+
+        # The max size in bytes that the total values can become
         self.max_size_in_bytes = max_size_in_bytes
 
     def __deepcopy__(self, memo):
@@ -57,6 +69,12 @@ class CacheDict(object):
         return new_one
 
     def _set_value(self, k, v):
+        """
+            Sets a value in the _entries dictionary but manages the associated
+            data in value_priority and value_references including when a key already
+            exists with a different value
+        """
+
         if k in self._entries:
             # We already have a value, we need to clean up
             old_value = self._entries[k]
@@ -83,31 +101,44 @@ class CacheDict(object):
 
         self._entries[k] = v
 
+        # If we added a new value to the dict, we increase the used size
         if not existing_value:
             self.total_value_size += sys.getsizeof(v)
 
     def _check_size_and_limit(self):
+        """
+            If the dict size is larger than the max specified bytes,
+            we remove entities by deleting all their associated keys
+        """
         while self.total_value_size > self.max_size_in_bytes:
             next_priority_key = self.value_priority[-1]
+
+            # We intentionally copy the result with [:] as this will be manipulated
+            # in del self[reference]
             for reference in self.value_references[next_priority_key][:]:
                 del self[reference]
 
-    def _set(self, k, v, perform_copy=True):
-        if perform_copy:
-            v = copy.deepcopy(v)
-
+    def _set(self, k, v):
         self._set_value(k, v)
         self._check_size_and_limit()
 
     def set_multi(self, keys, value):
+        """
+            This is the only public setting API because we don't want to
+            duplicate values across keys unnecessarily but we *do* want to copy
+            the value passed in by the user to protect against accidental manipulation
+            of the cached value
+        """
+
         value = copy.deepcopy(value) # Copy once
         for k in set(keys):
-            self._set(k, value, perform_copy=False)
+            # Set the same value for multiple keys
+            self._set(k, value)
 
     def __getitem__(self, k):
         v = self._entries[k] # Find the entry
 
-        # Move the value up the value priority
+        # Move the value up the value priority (remove the id() and add it back at the front)
         priority_key = id(v)
         self.value_priority.remove(priority_key)
         self.value_priority.insert(0, priority_key)
@@ -145,6 +176,16 @@ class CacheDict(object):
         return k in self.keys()
 
     def update(self, other):
+        """
+            The code here might look weird, but it's the fastest way to do it.
+
+            Go through the other values (remember, we work with reference values)
+            and build a dictionary of the id(value): value. This deduplicates values
+            which are accessible through multiple keys.
+
+            Then, set_multi the value in self using other.value_references to get the
+            list of keys without iterating `other`
+        """
         # Find the unique values in the other dictionary
         to_update = {}
         for v in other.values():
@@ -171,10 +212,13 @@ class CacheDict(object):
         return self._entries.values()
 
     def items(self):
+        """
+            Iterate the items, this will not update priorities
+        """
         for k in self.keys():
             # Intentionally don't reorganize the key priority if we're iterating
             # that would be *slow* and unlikely to lead to what you want
-            yield (k, self._entries[k])
+            yield (k, copy.deepcopy(self._entries[k]))
 
     def get_reversed(self, value, compare_func=None):
         """
