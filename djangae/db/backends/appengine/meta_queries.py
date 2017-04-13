@@ -260,7 +260,7 @@ class QueryByKeys(object):
         self.query_count = len(self.queries)
         self.queries_by_key = { a: list(b) for a, b in groupby(self.queries, _get_key) }
 
-        self.max_allowable_queries = getattr(settings, "DJANGAE_MAX_QUERY_BRACHES", DEFAULT_MAX_ALLOWABLE_QUERIES)
+        self.max_allowable_queries = getattr(settings, "DJANGAE_MAX_QUERY_BRANCHES", DEFAULT_MAX_ALLOWABLE_QUERIES)
         self.can_multi_query = self.query_count < self.max_allowable_queries
 
         self.ordering = ordering
