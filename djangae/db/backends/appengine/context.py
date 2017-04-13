@@ -1,6 +1,7 @@
 import copy
 import sys
 
+from django.conf import settings
 from google.appengine.api import datastore
 
 
@@ -19,16 +20,26 @@ def key_or_entity_compare(lhs, rhs):
     return lhs == rhs
 
 
+# 8M default cache size. Fairly arbitrary but the lowest instance class (F1) has 128M
+# of ram, and can serve 8 Python requests at the same time which gives us 16M per request
+# so we use 50% of that by default.
+DEFAULT_MAX_CACHE_DICT_SIZE = 1024 * 1024 * 8
+MAX_CACHE_DICT_SETTING_NAME = "DJANGAE_CACHE_MAX_CONTEXT_SIZE"
+
 class CacheDict(object):
     """
         This is a special dictionary-like object which does the following:
 
-        1. Copys items in and out to prevent storing references
+        1. Copies items in and out to prevent storing references
         2. The cache dict is restricted to a maximum size in bytes
         3. Unaccessed entries are removed first
     """
 
-    def __init__(self, max_size_in_bytes=(1024 * 1024 * 32)):
+    def __init__(self, max_size_in_bytes=None):
+        max_size_in_bytes = max_size_in_bytes or getattr(
+            settings, MAX_CACHE_DICT_SETTING_NAME, DEFAULT_MAX_CACHE_DICT_SIZE
+        )
+
         self.key_priority = []
         self.entries = {}
         self.total_value_size = 0
