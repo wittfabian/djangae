@@ -113,9 +113,9 @@ class CacheDict(object):
         while self.total_value_size > self.max_size_in_bytes:
             next_priority_key = self.value_priority[-1]
 
-            # We intentionally copy the result with [:] as this will be manipulated
+            # We intentionally copy the result with list() as this will be manipulated
             # in del self[reference]
-            for reference in self.value_references[next_priority_key][:]:
+            for reference in list(self.value_references[next_priority_key]):
                 del self[reference]
 
     def _set(self, k, v):
