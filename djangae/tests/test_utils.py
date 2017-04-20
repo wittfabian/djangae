@@ -3,6 +3,7 @@ from djangae.contrib import sleuth
 from djangae.test import TestCase, inconsistent_db
 from djangae.utils import get_next_available_port
 from djangae.db.consistency import ensure_instance_consistent, ensure_instances_consistent
+from djangae.db.backends.appengine.context import CacheDict
 
 
 class AvailablePortTests(TestCase):
@@ -143,3 +144,35 @@ class EnsureCreatedTests(TestCase):
             for instance in instances_to_delete:
                 instance.delete()
             self.assertEqual(5, len(ensure_instances_consistent(qs, instances_to_delete_pks)))
+
+
+class CacheDictTests(TestCase):
+    # Using a test value of size 280 (a dict), and a cache with room for 3 of them
+
+    def test_size_limit(self):
+        cache = CacheDict(max_size_in_bytes=900)
+        value = dict(v=100)
+
+        cache.set_multi(['v1'], value)
+        cache.set_multi(['v2'], value)
+        cache.set_multi(['v3'], value)
+        self.assertEqual(set(('v1', 'v2', 'v3')), set(cache.keys()))
+
+        # setting another key will evict the oldest value
+        cache.set_multi(['v4'], value)
+        self.assertEqual(set(('v2', 'v3', 'v4')), set(cache.keys()))
+
+    def test_priorities(self):
+        cache = CacheDict(max_size_in_bytes=900)
+        value = dict(v=100)
+
+        cache.set_multi(['v1'], value)
+        cache.set_multi(['v2'], value)
+        cache.set_multi(['v3'], value)
+        cache['v1']
+        cache.set_multi(['v4'], value)
+        cache.set_multi(['v5'], value)
+        cache['v1']
+        cache.set_multi(['v6'], value)
+
+        self.assertEqual(set(('v1', 'v5', 'v6')), set(cache.keys()))
