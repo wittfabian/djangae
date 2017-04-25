@@ -1,7 +1,7 @@
 from django.contrib import admin
 
 # DJANGAE
-from djangae.contrib.gauth.datastore.models import (
+from djangae.contrib.gauth_datastore.models import (
     GaeDatastoreUser,
     Group
 )

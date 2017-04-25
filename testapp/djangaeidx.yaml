@@ -52,6 +52,8 @@ many_to_one_null_article:
   headline: [startswith]
 many_to_one_reporter:
   first_name: [startswith]
+model_forms_category:
+  slug: [contains]
 model_forms_post:
   posted: [day, year, month, day__exact, year__exact, month__exact]
 model_inheritance_place:

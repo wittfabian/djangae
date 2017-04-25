@@ -3,7 +3,6 @@ import threading
 import logging
 import re
 
-
 logger = logging.getLogger(__name__)
 blobstore_service = None
 server = None

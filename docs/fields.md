@@ -5,16 +5,15 @@
 These allows you to store a list/set of values (strings, floats, integers dates) in a single field.
 This is often useful when structuring data for a non-relational database. [See example usage](fields.md#example-usages).
 
-### ListField(item_field_type, **kwargs)
+### `ListField(item_field, **kwargs)`
 
 
-* `item_field_type`: An instance of a Django model field which defines the data type and validation for each item in the list.
+* `item_field`: An instance of a Django model field which defines the data type and validation for each item in the list.
 * `ordering`: A callable which allows the items in the list to be automatically sorted.
 
+### `SetField(item_field, **kwargs)`
 
-### SetField(item_field_type, **kwargs)
-
-* `item_field_type`: An instance of a Django model field which defines the data type and validation for each item in the list.
+* `item_field`: An instance of a Django model field which defines the data type and validation for each item in the list.
 
 
 Both fields also accept the following standard Django model field kwargs:
@@ -28,6 +27,11 @@ Both fields also accept the following standard Django model field kwargs:
 * `editable`: works as normal.
 * `help_text`: works as normal.
 * `verbose_name`: works as normal.
+* `max_length`: limits the number of items allowed in the list/set.  Note that this is separate to any `max_length` that you might have on the nested `item_field`.
+
+Both fields also accept the following additional kwargs:
+
+* `min_length`: Set the minimum number of items allowed in the list/set.
 
 Djangae makes some effort to provide a sensible form field for `ListField`/`SetField`, but you may find that in some cases you need to customise or change this behaviour to suit your usage.
 
@@ -195,6 +199,8 @@ class MyModelAdmin(admin.ModelAdmin):
     }
 ```
 
+If a JSONField is set to blank=False, then any form submitted value must be a valid JSON object which is not empty (e.g. not `{}` or `[]`) if
+  a JSONField is nullable and blank=True then a None will be saved in the empty case. An empty string is not a valid value for a JSONField.
 
 ## TrueOrNullField
 

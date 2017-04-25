@@ -1,4 +1,11 @@
+# STANDARD LIBRARY
+from functools import wraps
 import os
+
+# THIRD PARTY
+from django.http import HttpResponseForbidden
+
+# DJANGAE
 from djangae.utils import memoized
 
 
@@ -104,3 +111,23 @@ def get_application_root():
                 path = parent
 
     raise RuntimeError("Unable to locate app.yaml. Did you add it to skip_files?")
+
+
+def task_or_admin_only(view_function):
+    """ View decorator for restricting access to tasks (and crons) and admins of the application
+        only.
+    """
+    # Avoiding an ImportError when the SDK is not already on sys.path.
+    from google.appengine.api import users
+
+    @wraps(view_function)
+    def replacement(*args, **kwargs):
+        if not any((
+            is_in_task(),
+            is_in_cron(),
+            users.is_current_user_admin(),
+        )):
+            return HttpResponseForbidden("Access denied.")
+        return view_function(*args, **kwargs)
+
+    return replacement

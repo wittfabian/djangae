@@ -11,11 +11,26 @@ from djangae.crc64 import CRC64
 
 logger = logging.getLogger(__name__)
 
+class ListQS(list):
+    """
+        Hacky wrapper around a list to satisfy related_descriptors.py when accessing contenttypes through
+        foreign keys
+    """
+    def get(self):
+        return self[0]
+
 
 class SimulatedContentTypeManager(models.Manager):
     """
         Simulates content types without actually hitting the datastore.
+
+        The methods in this class are literally stubs which allow the normal Django
+        code (Django admin) to believe it's talking to a database.
+
+        ONLY A SMALL SUBSET OF CONTENTTYPE QUERIES ARE SUPPORTED AND THOSE UNSUPPORTED
+        MAY JUST RETURN THE WRONG RESULTSET RATHER THAN THROWING AN ERROR. YOU HAVE BEEN WARNED! :)
     """
+    use_for_related_fields = True
 
     _store = threading.local()
 
@@ -32,6 +47,9 @@ class SimulatedContentTypeManager(models.Manager):
         return self.model or ContentType
 
     def _get_id(self, app_label, model):
+        """
+            Generate a unique (ish) ID given the app label and model name
+        """
         crc = CRC64()
         crc.append(app_label)
         crc.append(model)
@@ -40,7 +58,7 @@ class SimulatedContentTypeManager(models.Manager):
     def _get_opts(self, model, for_concrete_model):
         if for_concrete_model:
             model = model._meta.concrete_model
-        elif model._deferred:
+        elif getattr(model, '_deferred', False) or model is getattr(models, 'DEFERRED', None):
             model = model._meta.proxy_for_model
         return model._meta
 
@@ -125,7 +143,16 @@ class SimulatedContentTypeManager(models.Manager):
             ContentType = self._get_model()
             raise ContentType.DoesNotExist()
 
-    def get(self, **kwargs):
+    def get(self, *args, **kwargs):
+        # Special case for Django >= 1.11 which sometimes generates Q() objects
+        # with a single filter when querying content types. This handles that one
+        # case.. if we find there are others we'll have to do something less hacky!
+        if args and not kwargs:
+            if len(args) == 1 and len(args[0].children) == 1 and not args[0].negated:
+                kwargs = dict(args[0].children)
+            else:
+                raise ValueError("Unsupported Q operation")
+
         ContentType = self._get_model()
         self._repopulate_if_necessary()
 
@@ -186,25 +213,39 @@ class SimulatedContentTypeManager(models.Manager):
                 kwargs.update(**defaults)
             return self.create(**kwargs), True
 
-    def filter(self, **kwargs):
+    def filter(self, *args, **kwargs):
         self._repopulate_if_necessary()
 
         def _condition(ct):
+            for qobj in args:
+                if qobj.connector == 'AND' and not qobj.negated:
+                    # normal kwargs are an AND anyway, so just use those for now
+                    for child in qobj.children:
+                        kwargs.update(dict([child]))
+                else:
+                    raise NotImplementedError("Unsupported Q object")
+
             for attr, val in kwargs.items():
                 if getattr(ct, attr) != val:
                     return False
             return True
 
-        return [ct for ct in self.all() if _condition(ct)]
+        # We wrap the results in a class which has a .get attribute to satisfy
+        # the code which is called when a reverse relation is followed on a ForeignKey
+        return ListQS([ct for ct in self.all() if _condition(ct)])
 
     def all(self, **kwargs):
+        return self
+
+    def __iter__(self):
         self._repopulate_if_necessary()
 
-        result = []
-
         for ct in self._store.content_types.keys():
-            result.append(self.get(id=ct))
-        return result
+            yield self.get(id=ct)
+
+    def __len__(self):
+        self._repopulate_if_necessary()
+        return len(self._store.content_types)
 
     def using(self, *args, **kwargs):
         return self

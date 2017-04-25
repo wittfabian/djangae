@@ -154,15 +154,21 @@ def serve_file(request, blob_key_or_info, as_download=False, content_type=None, 
     return response
 
 
+DEFAULT_GCS_BUCKET = None
+
 def get_bucket_name():
     """
         Returns the bucket name for Google Cloud Storage, either from your
         settings or the default app bucket.
     """
+    global DEFAULT_GCS_BUCKET
+
     bucket = getattr(settings, BUCKET_KEY, None)
     if not bucket:
         # No explicit setting, lets try the default bucket for your application.
-        bucket = app_identity.get_default_gcs_bucket_name()
+        bucket = DEFAULT_GCS_BUCKET or app_identity.get_default_gcs_bucket_name()
+        DEFAULT_GCS_BUCKET = bucket
+
     if not bucket:
         from django.core.exceptions import ImproperlyConfigured
         message = '%s not set or no default bucket configured' % BUCKET_KEY
@@ -287,11 +293,14 @@ class CloudStorage(Storage, BlobstoreUploadMixin):
     write_options = None
 
     def __init__(self, bucket=None, google_acl=None):
-        if not bucket:
-            bucket = get_bucket_name()
-        self.bucket = bucket
-        # +2 for the slashes.
-        self._bucket_prefix_len = len(bucket) + 2
+        if callable(bucket):
+            # If the bucket is callable, just store the callable
+            self._bucket_calculator = bucket
+        else:
+            # Otherwise, store a callable which returns the bucket or
+            # use the get_bucket_name function (default bucket)
+            self._bucket_calculator = (lambda: bucket) if bucket else get_bucket_name
+
         if cloudstorage.common.local_run() and not cloudstorage.common.get_access_token():
             # We do it this way so that the stubs override in tests
             self.api_url = '/_ah/gcs'
@@ -303,6 +312,15 @@ class CloudStorage(Storage, BlobstoreUploadMixin):
             # If you don't specify an acl means you get the default permissions.
             self.write_options['x-goog-acl'] = google_acl
 
+    @property
+    def bucket(self):
+        return self._bucket_calculator()
+
+    @property
+    def _bucket_prefix_len(self):
+        # +2 for the slashes.
+        return len(self.bucket) + 2
+
     def url(self, filename):
         try:
             # Return a protocol-less URL, because django can't/won't pass
@@ -311,10 +329,13 @@ class CloudStorage(Storage, BlobstoreUploadMixin):
                 # This causes a Datastore lookup which we don't want to interfere with transactions
                 url = get_serving_url(self._get_blobkey(filename))
             return re.sub("http://", "//", url)
-        except (TransformationError):
+        except (TransformationError, cloudstorage.NotFoundError):
             # Sometimes TransformationError will be thrown if you call get_serving_url on video files
             # this is probably a bug in App Engine
             # Probably related to this: https://code.google.com/p/googleappengine/issues/detail?id=8601
+
+            # Also, Django requires that url() return something 'truthy' even if the file field hasn't been
+            # saved yet so we do the same thing if the file is not found (just add the bucket to the filename)
             quoted_filename = urllib.quote(self._add_bucket(filename))
             return '{0}{1}'.format(self.api_url, quoted_filename)
 

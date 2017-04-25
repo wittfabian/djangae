@@ -1,4 +1,4 @@
-DEFAULT_FILE_STORAGE = 'djangae.storage.BlobstoreStorage'
+DEFAULT_FILE_STORAGE = 'djangae.storage.CloudStorage'
 FILE_UPLOAD_MAX_MEMORY_SIZE = 1024 * 1024
 FILE_UPLOAD_HANDLERS = (
     'djangae.storage.BlobstoreFileUploadHandler',
@@ -55,3 +55,5 @@ ALLOWED_HOSTS = ("*",)
 DJANGAE_RUNSERVER_IGNORED_FILES_REGEXES = ['^.+$(?<!\.py)(?<!\.yaml)(?<!\.html)']
 # Note that these should match a directory name, not directory path:
 DJANGAE_RUNSERVER_IGNORED_DIR_REGEXES = [r"^google_appengine$"]
+
+TEST_RUNNER = 'djangae.test.DjangaeDiscoverRunner'

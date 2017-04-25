@@ -1,5 +1,8 @@
 import re, inspect
+import django
+
 from django.contrib.admindocs import views as admindocs_views
+from django.contrib.admindocs import utils as admindocs_utils
 from django.core.exceptions import ViewDoesNotExist
 from django.core.urlresolvers import RegexURLPattern, RegexURLResolver
 
@@ -183,8 +186,14 @@ non_named_group_matcher = re.compile(
 def simplify_regex(pattern):
     """ Do the same as django.contrib.admindocs.views.simplify_regex but with our improved regex.
     """
-    original_regex = admindocs_views.non_named_group_matcher
-    admindocs_views.non_named_group_matcher = non_named_group_matcher
-    result = admindocs_views.simplify_regex(pattern)
-    admindocs_views.non_named_group_matcher = original_regex
+    if django.VERSION[1] > 10:
+        original_regex = admindocs_utils.unnamed_group_matcher
+        admindocs_utils.unnamed_group_matcher = non_named_group_matcher
+        result = admindocs_views.simplify_regex(pattern)
+        admindocs_utils.unnamed_group_matcher = original_regex
+    else:
+        original_regex = admindocs_views.non_named_group_matcher
+        admindocs_views.non_named_group_matcher = non_named_group_matcher
+        result = admindocs_views.simplify_regex(pattern)
+        admindocs_views.non_named_group_matcher = original_regex
     return result

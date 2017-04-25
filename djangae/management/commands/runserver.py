@@ -22,7 +22,7 @@ if DJANGAE_RUNSERVER_IGNORED_DIR_REGEXES:
     DJANGAE_RUNSERVER_IGNORED_DIR_REGEXES = [re.compile(regex) for regex in DJANGAE_RUNSERVER_IGNORED_DIR_REGEXES]
 
 
-def ignore_file(filename):
+def ignore_file(filename, *args, **kwargs):
     """ Replacement for devappserver2.watchter_common.ignore_file
         - to be monkeypatched into place.
     """
@@ -36,7 +36,7 @@ def ignore_file(filename):
     )
 
 
-def skip_ignored_dirs(dirs):
+def skip_ignored_dirs(*args, **kwargs):
     """ Replacement for devappserver2.watchter_common.skip_ignored_dirs
     - to be monkeypatched into place.
     """
@@ -44,7 +44,24 @@ def skip_ignored_dirs(dirs):
     # Also note that `dirs` is a list of dir *names* not dir *paths*, which means that we can't
     # differentiate between /foo/bar and /moo/bar because we just get 'bar'. But allowing that
     # would require a whole load more monkey patching.
+    from djangae import sandbox
     from google.appengine.tools.devappserver2 import watcher_common
+
+    # since version 1.9.49 (which is incorrectly marked as [0, 0, 0] for now, until
+    # https://code.google.com/p/googleappengine/issues/detail?id=13439 will be fixed,
+    # skip_ignored_dirs have three arguments instead of one. To preserve
+    # backwards compatibilty we check version here and use args to fetch one
+    # or three arguments depending on version. We do not do any further error handling
+    # here to make sure that this explicitly fail if there is another change in
+    # the number of arguments with new SDK versions.
+    current_version = _VersionList(GetVersionObject()['release'])
+    if current_version == sandbox.TEMP_1_9_49_VERSION_NO:
+        current_version = _VersionList('1.9.49')
+
+    if current_version >= _VersionList('1.9.49'):
+        dirpath, dirs, skip_files_re = args
+    else:
+        dirs = args[0]
     watcher_common._remove_pred(dirs, lambda d: d.startswith(watcher_common._IGNORED_PREFIX))
     watcher_common._remove_pred(
         dirs,
@@ -158,12 +175,6 @@ class Command(runserver.Command):
         if additional_modules:
             sandbox._OPTIONS.config_paths.extend(additional_modules)
 
-        if int(self.port) != sandbox._OPTIONS.port or additional_modules:
-            # Override the port numbers
-            sandbox._OPTIONS.port = int(self.port)
-            sandbox._OPTIONS.admin_port = int(self.port) + len(additional_modules) + 1
-            sandbox._OPTIONS.api_port = int(self.port) + len(additional_modules) + 2
-
         if self.addr != sandbox._OPTIONS.host:
             sandbox._OPTIONS.host = sandbox._OPTIONS.admin_host = sandbox._OPTIONS.api_host = self.addr
 
@@ -173,7 +184,8 @@ class Command(runserver.Command):
 
         # External port is a new flag introduced in 1.9.19
         current_version = _VersionList(GetVersionObject()['release'])
-        if current_version >= _VersionList('1.9.19'):
+        if current_version >= _VersionList('1.9.19') or \
+                current_version == sandbox.TEMP_1_9_49_VERSION_NO:
             sandbox._OPTIONS.external_port = None
 
         # Apply equivalent options for Django args

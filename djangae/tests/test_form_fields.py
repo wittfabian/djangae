@@ -6,12 +6,18 @@ from django.db import models
 # DJANGAE
 from djangae.fields import ListField
 from djangae.test import TestCase
-from djangae.tests.test_db_fields import JSONFieldModel
+from djangae.tests.test_db_fields import JSONFieldModel, NullableJSONFieldModel
 
 
 class JSONModelForm(forms.ModelForm):
     class Meta:
         model = JSONFieldModel
+        fields = ['json_field']
+
+
+class NullableJSONModelForm(forms.ModelForm):
+    class Meta:
+        model = NullableJSONFieldModel
         fields = ['json_field']
 
 
@@ -26,6 +32,20 @@ class ListFieldForm(forms.ModelForm):
 
 
 class JSONFieldFormsTest(TestCase):
+
+    def test_empty_string_submission(self):
+        data = dict(json_field="")
+        form = JSONModelForm(data)
+        assert form.is_valid()  # Sanity, and to trigger cleaned_data
+        expected_data = None
+        self.assertEqual(form.cleaned_data['json_field'], expected_data)
+
+    def test_nullable_field(self):
+        data = dict(json_field="")
+        form = NullableJSONModelForm(data)
+        assert form.is_valid()  # Sanity, and to trigger cleaned_data
+        expected_data = None
+        self.assertEqual(form.cleaned_data['json_field'], expected_data)
 
     def test_json_data_is_python_after_cleaning(self):
         """ In the forms' `cleaned_data`, the json_field data should be python, rather than still
