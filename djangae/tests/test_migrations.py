@@ -7,6 +7,7 @@ from django.apps.registry import apps  # Apps
 from django.conf import settings
 from django.db import connection, models
 from django.db.migrations.state import ProjectState
+from django.test import override_settings
 from google.appengine.api import datastore
 from google.appengine.runtime import DeadlineExceededError
 
@@ -216,6 +217,58 @@ class MigrationOperationTests(TestCase):
             ShardedTaskMarker.get_key(operation.identifier, operation.namespace)
         )
         self.assertTrue(task_marker["is_finished"])
+
+    def test_queue_option(self):
+        """ The `queue` kwarg should determine the task queue that the operation runs on. """
+        for x in xrange(3):
+            TestModel.objects.create()
+
+        operation = operations.AddFieldData(
+            "testmodel", "new_field", models.CharField(max_length=100, default="squirrel"),
+            queue="another",
+            # Ensure that we trigger a re-defer, so that we test that the correct queue is used for
+            # subsequent tasks, not just the first one
+            entities_per_task=1,
+            shard_count=1
+        )
+        self.start_operation(operation)
+        # The task(s) should not be in the default queue, but in the "another" queue instead
+        self.assertEqual(self.get_task_count("default"), 0)
+        self.assertTrue(self.get_task_count("another") > 0)
+        # And if we only run the tasks on the "another" queue, the whole operation should complete.
+        self.process_task_queues("another")
+        # And the entities should be updated
+        entities = self.get_entities()
+        self.assertTrue(all(entity['new_field'] == 'squirrel' for entity in entities))
+
+    def test_default_queue_setting(self):
+        """ If no `queue` kwarg is passed then the DJANGAE_MIGRATION_DEFAULT_QUEUE setting should
+            be used to determine the task queue.
+        """
+        for x in xrange(2):
+            TestModel.objects.create()
+
+        operation = operations.AddFieldData(
+            "testmodel", "new_field", models.CharField(max_length=100, default="squirrel"),
+        )
+        # Check that starting the operation with a different setting correctly affects the queue.
+        # Note that here we don't check that *all* tasks go on the correct queue, just the first
+        # one.  We test that more thoroughly in `test_queue_option` above.
+        with override_settings(DJANGAE_MIGRATION_DEFAULT_QUEUE="another"):
+            self.start_operation(operation)
+            self.assertEqual(self.get_task_count("default"), 0)
+            self.assertTrue(self.get_task_count("another") > 0)
+
+        self.flush_task_queues()
+        flush_task_markers()
+        # santity checks:
+        assert getattr(settings, "DJANGAE_MIGRATION_DEFAULT_QUEUE", None) is None
+        assert self.get_task_count() == 0
+        # Trigger the operation without that setting. The task(s) should go on the default queue.
+        self.start_operation(operation)
+        self.assertTrue(self.get_task_count("default") > 0)
+
+
 
     def test_addfielddata(self):
         """ Test the AddFieldData operation. """

@@ -35,6 +35,7 @@ class BaseEntityMapperOperation(Operation, DjangaeMigration):
         self.uid = kwargs.pop("uid", "")
         self.shard_count = kwargs.pop("shard_count", None)
         self.entities_per_task = kwargs.pop("entities_per_task", None)
+        self.queue = kwargs.pop("queue", None)
         super(BaseEntityMapperOperation, self).__init__(*args, **kwargs)
 
     def state_forwards(self, app_label, state):
@@ -83,7 +84,8 @@ class BaseEntityMapperOperation(Operation, DjangaeMigration):
         query = Query(self.map_kind, namespace=self.namespace)
         return mapper_library.start_mapping(
             self.identifier, query, self, operation_method="_wrapped_map_entity",
-            shard_count=self.shard_count, entities_per_task=self.entities_per_task
+            shard_count=self.shard_count, entities_per_task=self.entities_per_task,
+            queue=self.queue
         )
 
     def _wrapped_map_entity(self, entity):

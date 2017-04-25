@@ -12,6 +12,7 @@ import logging
 from datetime import datetime
 from django.conf import settings
 from google.appengine.api import datastore, datastore_errors
+from google.appengine.api.taskqueue.taskqueue import _DEFAULT_QUEUE
 from google.appengine.ext import deferred
 from google.appengine.runtime import DeadlineExceededError
 
@@ -309,7 +310,7 @@ class ShardedTaskMarker(datastore.Entity):
 
     def run_shard(
         self, original_query, shard, operation, operation_method=None, offset=0,
-        entities_per_task=None
+        entities_per_task=None, queue=_DEFAULT_QUEUE
     ):
         """ Given a datastore.Query which does not have any high/low bounds on it, apply the bounds
             of the given shard (which is a pair of keys), and run either the given `operation`
@@ -358,7 +359,11 @@ class ShardedTaskMarker(datastore.Entity):
                 operation,
                 operation_method,
                 offset=offset+num_entities_processed,
-                entities_per_task=entities_per_task
+                entities_per_task=entities_per_task,
+                # Defer this task onto the correct queue (with `_queue`), passing the `queue`
+                # parameter back to the function again so that it can do the same next time
+                queue=queue,
+                _queue=queue,
             )
             return  # This is important!
 
@@ -373,7 +378,7 @@ class ShardedTaskMarker(datastore.Entity):
 
         datastore.RunInTransaction(txn)
 
-    def begin_processing(self, operation, operation_method, entities_per_task):
+    def begin_processing(self, operation, operation_method, entities_per_task, queue):
         BATCH_SIZE = 3
 
         # Unpickle the source query
@@ -399,7 +404,11 @@ class ShardedTaskMarker(datastore.Entity):
                         operation,
                         operation_method,
                         entities_per_task=entities_per_task,
-                        _transactional=True
+                        # Defer this task onto the correct queue with `_queue`, passing the `queue`
+                        # parameter back to the function again so that it can do the same next time
+                        queue=queue,
+                        _queue=queue,
+                        _transactional=True,
                     )
 
                 marker.put()
@@ -419,7 +428,7 @@ class ShardedTaskMarker(datastore.Entity):
 
 def start_mapping(
     identifier, query, operation, operation_method=None, shard_count=None,
-    entities_per_task=None
+    entities_per_task=None, queue=None
 ):
     """ This must *transactionally* defer a task which will call `operation._wrapped_map_entity` on
         all entities of the given `kind` in the given `namespace` and will then transactionally
@@ -431,6 +440,7 @@ def start_mapping(
     @datastore.NonTransactional
     def calculate_shards():
         return shard_query(query, shard_count)
+    queue = queue or getattr(settings, "DJANGAE_MIGRATION_DEFAULT_QUEUE", _DEFAULT_QUEUE)
 
     def txn(shards):
         marker_key = ShardedTaskMarker.get_key(identifier, query._Query__namespace)
@@ -454,8 +464,8 @@ def start_mapping(
         marker.put()
         if not marker["is_finished"]:
             deferred.defer(
-                marker.begin_processing, operation, operation_method, entities_per_task,
-                _transactional=True
+                marker.begin_processing, operation, operation_method, entities_per_task, queue,
+                _transactional=True, _queue=queue
             )
 
         return marker_key
