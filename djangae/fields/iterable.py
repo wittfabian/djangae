@@ -1,5 +1,6 @@
 # STANDARD LIB
 import copy
+from decimal import Decimal
 from itertools import chain
 
 # THIRD PARTY
@@ -7,11 +8,15 @@ from django import forms
 from django.db import models
 from django.db.models.lookups import Lookup, Transform
 from django.core.exceptions import ValidationError, ImproperlyConfigured
+from django.utils import six
 from django.utils.text import capfirst
 
 # DJANGAE
 from djangae.core.validators import MinItemsValidator, MaxItemsValidator
 from djangae.forms.fields import ListFormField
+
+# types that don't need to be quoted when serializing an iterable field
+_SERIALIZABLE_TYPES = six.integer_types + (float, Decimal,)
 
 
 class _FakeModel(object):
@@ -305,6 +310,11 @@ class IterableField(models.Field):
         defaults.update(**kwargs)
         return form_field_class(**defaults)
 
+    def value_to_string(self, obj):
+        return "[" + ",".join(
+            _serialize_value(o) for o in self._get_val_from_obj(obj)
+        ) + "]"
+
 
 # New API
 IterableField.register_lookup(ContainsLookup)
@@ -364,9 +374,15 @@ class SetField(IterableField):
             ret = list(ret)
         return ret
 
-    def value_to_string(self, obj):
-        """
-        Custom method for serialization, as JSON doesn't support
-        serializing sets.
-        """
-        return str(list(self._get_val_from_obj(obj)))
+
+def _serialize_value(value):
+    if isinstance(value, _SERIALIZABLE_TYPES):
+        return str(value)
+
+    if hasattr(value, 'isoformat'):
+        # handle datetime, date, and time objects
+        value = value.isoformat()
+    elif not isinstance(value, basestring):
+        value = str(value)
+
+    return "'{0}'".format(value.encode('utf-8'))

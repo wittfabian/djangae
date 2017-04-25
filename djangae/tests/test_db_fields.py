@@ -1,8 +1,10 @@
 # -*- encoding: utf-8 -*
 from collections import OrderedDict
+import datetime
 
 # LIBRARIES
 from django import forms
+from django.core import serializers
 from django.db import models
 from django.db.utils import IntegrityError
 from django.conf import settings
@@ -142,6 +144,10 @@ class ISModel(models.Model):
 class IterableFieldModel(models.Model):
     set_field = SetField(models.CharField(max_length=1))
     list_field = ListField(models.CharField(max_length=1))
+    set_field_int = SetField(models.BigIntegerField(max_length=1))
+    list_field_int = ListField(models.BigIntegerField(max_length=1))
+    set_field_dt = SetField(models.DateTimeField())
+    list_field_dt = ListField(models.DateTimeField())
 
     class Meta:
         app_label = "djangae"
@@ -440,6 +446,24 @@ class IterableFieldTests(TestCase):
 
         self.assertFalse(IterableFieldModel.objects.exclude(set_field__isempty=False).exists())
         self.assertTrue(IterableFieldModel.objects.exclude(set_field__isempty=True).exists())
+
+    def test_serialization(self):
+        dt = datetime.datetime(2017, 1, 1, 12)
+        instance = IterableFieldModel.objects.create(
+            set_field={u"foo"},
+            list_field=[u"bar"],
+            set_field_int={123L},
+            list_field_int=[456L],
+            set_field_dt={dt},
+            list_field_dt=[dt],
+        )
+
+        self.assertEqual("['foo']", instance._meta.get_field("set_field").value_to_string(instance))
+        self.assertEqual("['bar']", instance._meta.get_field("list_field").value_to_string(instance))
+        self.assertEqual("[123]", instance._meta.get_field("set_field_int").value_to_string(instance))
+        self.assertEqual("[456]", instance._meta.get_field("list_field_int").value_to_string(instance))
+        self.assertEqual("['2017-01-01T12:00:00']", instance._meta.get_field("set_field_dt").value_to_string(instance))
+        self.assertEqual("['2017-01-01T12:00:00']", instance._meta.get_field("list_field_dt").value_to_string(instance))
 
     def test_saving_forms(self):
         class TestForm(forms.ModelForm):
@@ -1060,6 +1084,21 @@ class InstanceSetFieldTests(TestCase):
 
         self.assertItemsEqual([obj], ISModel.objects.filter(related_things__isempty=True))
         self.assertItemsEqual([obj], ISModel.objects.filter(related_things_ids__isempty=True))
+
+    def test_related_set_field_serializes_and_deserializes(self):
+        obj = ISModel.objects.create()
+        foo = ISOther.objects.create(name='foo')
+        bar = ISOther.objects.create(name='bar')
+        obj.related_things.add(foo, bar)
+        obj.save()
+
+        data = serializers.serialize('json', [obj])
+
+        new_obj = serializers.deserialize('json', data).next().object
+        self.assertEqual(
+            set(new_obj.related_things.all()),
+            set([foo, bar]),
+        )
 
 
 class TestGenericRelationField(TestCase):

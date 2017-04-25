@@ -17,7 +17,7 @@ import django
 
 # DJANGAE
 from djangae.core.validators import MinItemsValidator, MaxItemsValidator
-from djangae.fields.iterable import IsEmptyLookup, ContainsLookup, OverlapLookup
+from djangae.fields.iterable import IsEmptyLookup, ContainsLookup, OverlapLookup, _serialize_value
 
 
 class RelatedIteratorRel(ForeignObjectRel):
@@ -514,12 +514,9 @@ class RelatedIteratorField(ForeignObject):
         return ret
 
     def value_to_string(self, obj):
-        """
-        Custom method for serialization, as JSON doesn't support
-        serializing sets.
-        """
-        return str(list(self._get_val_from_obj(obj)))
-
+        return "[" + ",".join(
+            _serialize_value(o) for o in self._get_val_from_obj(obj)
+        ) + "]"
 
     def formfield(self, **kwargs):
         db = kwargs.pop('using', None)
