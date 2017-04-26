@@ -578,6 +578,20 @@ class IterableFieldTests(TestCase):
             instance.full_clean,
         )
 
+    def test_list_field_serializes_and_deserializes(self):
+        obj = IterableFieldModel(list_field=['foo', 'bar'])
+        data = serializers.serialize('json', [obj])
+
+        new_obj = serializers.deserialize('json', data).next().object
+        self.assertEqual(new_obj.list_field, ['foo', 'bar'])
+
+    def test_set_field_serializes_and_deserializes(self):
+        obj = IterableFieldModel(set_field=set(['foo', 'bar']))
+        data = serializers.serialize('json', [obj])
+
+        new_obj = serializers.deserialize('json', data).next().object
+        self.assertEqual(new_obj.set_field, set(['foo', 'bar']))
+
 
 class RelatedIterableFieldTests(TestCase):
     """ Combined tests for common RelatedListField and RelatedSetField tests. """
@@ -981,6 +995,21 @@ class InstanceListFieldTests(TestCase):
         main.related_list.add(other, other1, other2, other1, other2,)
         main.save()
         self.assertItemsEqual([other, other2, other2], main.related_list.filter(name="one"))
+
+    def test_related_list_field_serializes_and_deserializes(self):
+        obj = ISModel.objects.create()
+        foo = ISOther.objects.create(name='foo')
+        bar = ISOther.objects.create(name='bar')
+        obj.related_list.add(foo, bar)
+        obj.save()
+
+        data = serializers.serialize('json', [obj])
+
+        new_obj = serializers.deserialize('json', data).next().object
+        self.assertEqual(
+            list(new_obj.related_things.all()),
+            [foo, bar],
+        )
 
 
 class InstanceSetFieldTests(TestCase):
