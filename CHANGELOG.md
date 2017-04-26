@@ -13,8 +13,9 @@
 
  - When running the local sandbox, if a port clash is detected then the next port will be used (this was broken before)
  - Accessing the Datastore from outside tests will no longer throw an error when using the test sandbox
- - The in-context cache is now reliably wiped when the testbed is initialized for each test
+ - The in-context cache is now reliably wiped when the testbed is initialized for each test.
  - The iterable set and list fields and their related fk variations didn't properly serialize / deserialize.
+ - Fixed an ImportError when the SDK is not on sys.path.
 
 ## v0.9.9 (release date: 27th March 2017)
 

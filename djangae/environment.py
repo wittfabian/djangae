@@ -4,7 +4,6 @@ import os
 
 # THIRD PARTY
 from django.http import HttpResponseForbidden
-from google.appengine.api import users
 
 # DJANGAE
 from djangae.utils import memoized
@@ -118,6 +117,9 @@ def task_or_admin_only(view_function):
     """ View decorator for restricting access to tasks (and crons) and admins of the application
         only.
     """
+    # Avoiding an ImportError when the SDK is not already on sys.path.
+    from google.appengine.api import users
+
     @wraps(view_function)
     def replacement(*args, **kwargs):
         if not any((

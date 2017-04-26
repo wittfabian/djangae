@@ -48,6 +48,6 @@ class TaskOrAdminOnlyTestCase(TestCase):
         def view(request):
             return HttpResponse("Hello")
 
-        with sleuth.fake("djangae.environment.users.is_current_user_admin", True):
+        with sleuth.fake("google.appengine.api.users.is_current_user_admin", True):
             response = view(None)
         self.assertEqual(response.status_code, 200)
