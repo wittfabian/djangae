@@ -516,9 +516,10 @@ class RelatedIteratorField(ForeignObject):
     def value_to_string(self, obj):
         """
         Custom method for serialization, as JSON doesn't support
-        serializing sets.
+        serializing sets. Using '%x' formatting, because default repr on long pk's
+        adds a trailing L to numbers.
         """
-        return str(list(self._get_val_from_obj(obj)))
+        return '[%s]' % ', '.join('%x' % x for x in self._get_val_from_obj(obj))
 
 
     def formfield(self, **kwargs):
@@ -648,7 +649,10 @@ class RelatedListField(RelatedIteratorField):
             # Annoyingly Django special cases FK and M2M in the Python deserialization code,
             # to assign to the attname, whereas all other fields (including this one) are required to
             # populate field.name instead. So we have to query here... we have no choice :(
-            return list(self.rel.to._default_manager.db_manager('default').filter(pk__in=ids))
+
+            related_instances = {i.pk: i for i in self.rel.to._default_manager.db_manager('default').filter(pk__in=ids)}
+            # return the list in the specified order
+            return [related_instances[i] for i in ids]
 
         return list(value)
 

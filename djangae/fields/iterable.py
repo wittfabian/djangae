@@ -201,9 +201,15 @@ class IterableField(models.Field):
         # If possible, parse the string into the iterable
         if not hasattr(value, "__iter__"): # Allows list/set, not string
             if isinstance(value, basestring):
-                if (self._iterable_type == set and value.startswith("{") and value.endswith("}")) or \
-                   (self._iterable_type == list and value.startswith("[") and value.endswith("]")):
-                    value = [x.strip() for x in value[1:-1].split(",") ]
+                if self._iterable_type in (list, set) and (
+                    (value.startswith("[") and value.endswith("]")) or
+                    (value.startswith("{") and value.endswith("}"))):
+                    value = value[1:-1]
+
+                    if not value:
+                        value = []  # a split on an empty string returns ['']
+                    else:
+                        value = [x.strip(" '\"") for x in value.split(",")]
                 else:
                     raise ValueError("Unable to parse string into iterable field")
             else:
