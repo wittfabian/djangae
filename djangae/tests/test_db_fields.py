@@ -431,7 +431,7 @@ class IterableFieldTests(TestCase):
         instance = IterableFieldModel.objects.get(pk=instance.pk)
         self.assertEqual(set(["One"]), instance.set_field)
 
-        self.assertEqual({1, 2}, SetField(models.IntegerField).to_python("{1, 2}"))
+        self.assertEqual({1, 2}, SetField(models.IntegerField).to_python("[1, 2]"))
 
     def test_empty_list_queryable_with_is_null(self):
         instance = IterableFieldModel.objects.create()
