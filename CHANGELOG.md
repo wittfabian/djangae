@@ -15,6 +15,7 @@
  - Accessing the Datastore from outside tests will no longer throw an error when using the test sandbox
  - The in-context cache is now reliably wiped when the testbed is initialized for each test.
  - Fixed an ImportError when the SDK is not on sys.path.
+ - Updated the documenation to say that DJANGAE_CREATE_UNKNOWN_USER defaults to True.
 
 
 ## v0.9.9 (release date: 27th March 2017)
