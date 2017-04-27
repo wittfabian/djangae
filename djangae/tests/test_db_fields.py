@@ -1004,10 +1004,9 @@ class InstanceListFieldTests(TestCase):
         obj.save()
 
         data = serializers.serialize('json', [obj])
-
         new_obj = serializers.deserialize('json', data).next().object
         self.assertEqual(
-            list(new_obj.related_things.all()),
+            list(new_obj.related_list.all()),
             [foo, bar],
         )
 
