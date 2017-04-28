@@ -87,7 +87,7 @@ class RelatedShardManager(RelatedIteratorManagerBase, models.Manager):
                 num_to_create = min(total_to_create, MAX_SHARDS_PER_TRANSACTION)
 
                 new_shard_pks = set()
-                for x in xrange(num_to_create):
+                for x in range(num_to_create):
                     new_shard_pks.add(self._create_shard(count=0).pk)
 
                 new_instance_shard_pks.update(new_shard_pks)
