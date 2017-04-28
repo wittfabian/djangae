@@ -149,6 +149,10 @@ class SkipUnsupportedTestResult(TextTestResult):
 
 
 class DjangaeTestSuiteRunner(DiscoverRunner):
+    def __init__(self, *a, **kw):
+        kw['pattern'] = '*tests.py'
+        super(DjangaeTestSuiteRunner, self).__init__(*a, **kw)
+
     def _discover_additional_tests(self):
         """
             Django's DiscoverRunner only detects apps that are below
