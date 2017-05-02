@@ -2001,6 +2001,34 @@ class TestSpecialIndexers(TestCase):
             self.assertEqual(len(qry), 1)
 
 
+class SliceModel(models.Model):
+    field1 = models.CharField(max_length=32)
+
+
+class SlicingTests(TestCase):
+
+    def test_slice_params_are_passed_to_query(self):
+        for i in range(15):
+            SliceModel.objects.create(field1=str(i))
+
+        with sleuth.watch('google.appengine.api.datastore.Query.Run') as Run:
+            qs = SliceModel.objects.order_by("field1")[:5]
+
+            self.assertEqual(5, len(list(qs)))
+            self.assertEqual(Run.calls[0].kwargs['limit'], 5)
+            self.assertEqual(Run.calls[0].kwargs['offset'], 0)
+
+            qs = SliceModel.objects.order_by("field1")[5:]
+            self.assertEqual(10, len(list(qs)))
+            self.assertEqual(Run.calls[1].kwargs['limit'], None)
+            self.assertEqual(Run.calls[1].kwargs['offset'], 5)
+
+            qs = SliceModel.objects.order_by("field1")[5:10]
+            self.assertEqual(5, len(list(qs)))
+            self.assertEqual(Run.calls[2].kwargs['limit'], 5)
+            self.assertEqual(Run.calls[2].kwargs['offset'], 5)
+
+
 class NamespaceTests(TestCase):
     multi_db = True
 
