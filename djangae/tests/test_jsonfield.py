@@ -11,7 +11,7 @@ from google.appengine.api.datastore import Get, Key
 
 
 class Dog(models.Model):
-    name = models.CharField()
+    name = models.CharField(max_length=32)
     data = JSONField()
 
 
