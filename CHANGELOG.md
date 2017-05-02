@@ -8,6 +8,7 @@
  override the `DEFAULT_FILE_STORAGE` setting to point to `'djangae.storage.BlobstoreStorage'`.
  - Added AsyncMultiQuery as a replacement for Google's MultiQuery (which doesn't exist on Cloud Datastore).  This is the first step towards support for Cloud Datastore and therefore Flexible Environment.
  - Added a configurable memory limit to the context cache, limited the number of instances cached from query results and corrected `disable_cache` behaviour.
+ - Added a test to confirm query slicing works correctly
 
 ### Bug fixes:
 
