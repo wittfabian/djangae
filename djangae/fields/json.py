@@ -192,7 +192,7 @@ class JSONField(models.TextField):
 
             def get_transform(self, lookup):
                 self.path.append(lookup)
-                return lambda lhs: self
+                return lambda lhs, *args, **kwargs: self
 
             def get_lookup(self, lookup):
                 self.path.append(lookup)
