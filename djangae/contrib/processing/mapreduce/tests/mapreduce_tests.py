@@ -5,11 +5,11 @@ from mapreduce.mapreduce_pipeline import MapreducePipeline
 from django.db import models
 from djangae.test import TestCase
 from djangae.test import process_task_queues
-from djangae.contrib.processing.mapreduce.input_readers import DjangoInputReader
+from djangae.contrib.processing.mapreduce.utils import qualname
 # from djangae.contrib.processing.mapreduce.pipelines import MapPipeline
 
 
-class TestNode(models.Model):
+class MRTestNode(models.Model):
     data = models.CharField(max_length=32)
     counter = models.IntegerField()
 
@@ -79,7 +79,7 @@ class MapreduceTestCase(TestCase):
 
     def setUp(self):
         for x in range(20):
-            self.testnode = TestNode()
+            self.testnode = MRTestNode()
             self.testnode.data = 'Lol'
             self.testnode.counter = 1
             self.testnode.save()
@@ -91,8 +91,8 @@ class MapreduceTestCase(TestCase):
         """
         pipe = MapreducePipeline(
             "word_count",
-            "djangae.contrib.processing.mapreduce.tests.mapreduce.letter_count_map",
-            "djangae.contrib.processing.mapreduce.tests.mapreduce.word_count_reduce",
+            qualname(letter_count_map),
+            qualname(word_count_reduce),
             "mapreduce.input_readers.RandomStringInputReader",
             "mapreduce.output_writers.GoogleCloudStorageOutputWriter",
             mapper_params={'count': 10},
@@ -107,22 +107,22 @@ class MapreduceTestCase(TestCase):
             Test basic django operations inside a map task, this shows that
             our handlers are working
         """
-        nodes = TestNode.objects.all()
+        nodes = MRTestNode.objects.all()
         for node in nodes:
             self.assertEqual(node.counter, 1)
         pipe = MapreducePipeline(
             "word_count",
-            "djangae.contrib.processing.mapreduce.tests.mapreduce.model_counter_increment",
-            "djangae.contrib.processing.mapreduce.tests.mapreduce.word_count_reduce",
+            qualname(model_counter_increment),
+            qualname(word_count_reduce),
             "djangae.contrib.processing.mapreduce.input_readers.DjangoInputReader",
             "mapreduce.output_writers.GoogleCloudStorageOutputWriter",
-            mapper_params={'count': 10, 'input_reader': {'model': 'mapreduce.TestNode'}},
+            mapper_params={'count': 10, 'input_reader': {'model': 'mapreduce.MRTestNode'}},
             reducer_params={"mime_type": "text/plain", 'output_writer': {'bucket_name': 'test'}},
             shards=5
         )
         pipe.start()
         process_task_queues()
-        nodes = TestNode.objects.all()
+        nodes = MRTestNode.objects.all()
         for node in nodes:
             self.assertEqual(node.counter, 2)
 
