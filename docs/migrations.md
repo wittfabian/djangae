@@ -1,143 +1,196 @@
 # Migrations
 
-    **Djangae Migration support is highly-experimental, please test your migrations thoroughly before running on production data**
+    **Djangae Migration support is new, and therefore is classed as "experimental". Please test your migrations thoroughly before running on production data**
 
 Migrations are generally required on SQL databases to change table structures to reflect changes in your models. Although using a
-non-relational datastore removes the need for schema migrations, data migrations are still sometimes necessary. It's common to
-take care of these data migrations "on-the-fly" by writing code to manipulate the data during the normal usage of the app (for example in an overridden `save()` method) however there are times when it would be useful to run a data migration on all the entities in a table.
+schemaless database removes the need for schema migrations, _data_ migrations are still sometimes necessary. It's common to
+take care of these data migrations "on-the-fly" by writing code to manipulate the data during the normal running of the application (for example in an overridden `save()` method) however there are times when it is useful to run a data migration on all the entities in a table.
 
-Djangae has support for running these kinds of migrations by using the normal Django migrations infrastructure. It provides a series of
+Djangae has support for running these kinds of migrations by using Django's migrations infrastructure. It provides a series of
 custom migration operations which will run tasks on the App Engine task queue to update the required entities.
 
-One thing to consider is that this migrations only work if the migration file is deployed. The process of running a Djangae migration would be:
+# General Concepts
 
-1. Write a migration file which uses Djangae migration operations
-2. Deploy the code to App Engine and make that version live
-3. Run the migration using the remote sandbox (e.g. `manage.py --sandbox=remote migrate`)
+There are various key differences between using "normal" Django migrations and using migrations with the Datastore.
 
-    **Note: It is a current limitation that you cannot run a migration while it's on a non-default version, this will hopefully be fixed by allowing a version to be specified to the remote sandbox**
+### Do you need a migration? 
+The first difference is that you don't always need a migration at all.  The Datastore is schemaless, and therefore you can, for example, add a new Django model, and just save an instance of that model; you don't need to tell the database to create a "table" for it first.  Similarly, you can add a new field to a model and simply deploy the new code without adding a new "column" to the "table"; when Django encounters an object where the value is missing it simply uses the field's default value, and will add the value to the DB on save.
 
-There are a few important things to understand about Djangae's migrations:
+The times when you _do_ need to use a migration are usually when either:
 
-1. Migrations run on the entity-level, not the Django model instance level. Custom `save()` code will not be called - this is the equivalent of running SQL queries directly on a relational database
-2. Djangae data migrations are not transactional as a whole, if something goes wrong the migration might only run on some entities
-3. An operation may run more than once per entity. If there is an error while a task shard is processing, then that shard will retry, and will run the operation again on all of the entities in that shard. Be sure that running the same migration operation twice on the same entity will not break anything.
-4. If an error occurs, you'll need to deploy code to fix it, otherwise the migration will be "stuck". If one entity causes an error, the shard will restart from the beginning, if that same entity repeatedly causes an error then the data migration will never complete. You should watch the error logs while a migration is running and if an error repeatedly happens you will need to fix it locally then redeploy.
+1. You need to query on the new data.  (You can't query on values that don't exist. Even if the query is for None/NULL, it will _not_ return rows where the value is not actually set to `None`.)
+2. You actually want to delete the old data.  On the Datastore one cannot simply `DROP` a table or column, so the only way to delete data is delete (values from) entities individually.
 
-   **Note: Before writing a Djangae migration, consider if it's even necessary. For example, if you're just adding a new field but never querying on it directly, then just add a default to the model field and this will be populated as your instances are saved during the normal running of the app. If you need to query on the new field then you may need to run a Djangae migration so that field is indexed on all entities**
+### Django's operations are ignored
 
-## Writing Data Migrations
+The next difference is that the Djangae Datastore backend will ignore Django's standard migration operations.  This is largely because, as just noted, the decision of what to do when you add/remove a field/model depends on your specific case.  So rather than trying to guess what you want to do, Djangae ignores Django's operations and provides a separate set of Datastore-specific operations to allow you to specify what you want to do, which might be nothing.
 
-It is important that you do not mix Django migration operations and Djangae migration operations in the same migration file. The reason for this is that if a migration is interrupted and subsequently repeated, any complete Djangae migrations will be skipped but Django ones will retry.
+Note that Django's migration operations are not _just_ about the database changes; they also provide the model state history.  So you should not delete Django's auto-generated migration files. You should just add your own additional files with the Datastore operations that you wish to perform.
 
-It's important to note that any Django migration operations (e.g. AddField, AddModel) that happen on the datastore will be no-ops, but you still need to include any Django-generated migrations so that the Djangae migrations have access to the latest model state.
+Due to the way that migrations are run on the Datastore, you cannot mix Django operations with Djangae operations in the same migration file.
 
-It's also important to understand that for various reasons an entity may be processed twice or more while running a migration so your migration operations should be able to handle this.
+### Other differences
+
+* Migrations run on the entity level, not the Django model instance level. Custom `save()` code will not be called. They are the equivalent of running SQL queries directly on a relational database.
+* Djangae data migrations are not transactional as a whole, if something goes wrong the migration might only run on some entities.
+* An operation may run more than once per entity. If there is an error while a task shard is processing (and you have not set `skip_errors` to `True`), then that shard will retry, and will run the operation again on all of the entities in that shard. Be sure that running the same migration operation twice on the same entity will not break anything.
+* If an error occurs, you'll need to deploy code to fix it, otherwise the migration will be "stuck". If one entity causes an error (and you have not set `skip_entities` to `True`), the shard will restart from the beginning, if that same entity repeatedly causes an error then the data migration will never complete. You should watch the error logs while a migration is running and if an error repeatedly happens you will need to fix it locally then redeploy.
+
+
+
+## Writing & Running Migrations
+
+The process of writing and running a Djangae migration is:
+
+1. Run Django's `makemigrations` command as normal to create the auto-generated migration file(s).  These ensure that the model state is handled correctly, even though the actual database operations are ignored.
+1. Write a separate migration file which uses Djangae migration operations to perform the data changes you want.
+1. Deploy the code to App Engine and make that version the default.
+3. Run the migration using the remote sandbox (e.g. `manage.py --sandbox=remote migrate`).
+
+The command will queue tasks on the live site's, and will then continue to check to see when the operations are complete, giving you a running status update in the terminal.  You can kill and restart the `migrate` command without affecting the migration, but the command must be running in order for it to move from one operation to the next. Similarly, running the `migrate` command from another machine (even at the same time) will not have a negative effect, as the triggering of the operation tasks is transactional.
+
+### Limitations for running migrations
+
+* Migrations only work if the migration file is deployed.  This is because although migrations are _triggered_ from the terminal, they _run_ on the actual App Engine application using the deployed code.
+* Currently, you cannot run a migration while it's on a non-default version, this will hopefully be fixed by allowing a version to be specified to the remote sandbox.
+
 
 ## Migration Operations
 
-This section summarizes the different migration operations available in Djangae and the steps that must be taken for them to work properly.
-
-### Add Field
-
-**Steps**
-
-1. Run the normal `django...AddField` operation
-2. Deploy new model code.
-3. Run the `djangae...AddFieldData` operation to populate the new field (optional).
-4. Deploy code which queries on the new field (optional).
+This section summarizes the different migration operations available in Djangae.  For a more in-depth look at using these, see the [Migration examples](migration_examples.md).
 
 
-**Explanation**
+## Operation Options
 
-If you don't need to query on the new field, then all you need to do is add the field to your model (step 1) and ensure that the field either has a `default` or has `null=True`.
-As instances are loaded from the DB and re-saved as part of the general running of your application, they will be re-saved with the default value.
-You can skip steps 3 and 4.
+The following arguments are available to all Djangae operations. All are optional.
 
-If however, you need to be able to filter on the new field in your queries, then you will need to run step 3 in order to populate the value into the DB (and thus into the Datastore indexes).
-It is recommended that you deploy the new model code _before_ runing the `AddFieldData` operation.
-This is because if you populate the existing objects in the Datastore with the default field value _before_ adding the field to the model, then if your application creates any new model instances after the `AddFieldData` process is started then you may end up with objects which do not have the default value set.
-But if, as recommended, you add the field to your model first, then any new objects created will get the default value (assuming you've set a `default` on the field), and the existing objects will be populated by the `AddFieldData` process, meaning that no objects are missed.
+#### `uid`
 
+This is used to uniquely identify multiple operations which have identical parameters.  See [Migration Operation Ambiguity](#migration-operation-ambiguity).
 
-### Remove Field
+Default: `""`
 
-**Steps**
+#### `shard_count`
 
-1. Run the normal `django...RemoveField` operation.
-2. Deploy new model code.
-3. Run a `djangae...RemoveFieldData` operation (optional).
+Specifies the number of simultaneous shards for processing the entities.  More shards will process the data faster, but will spin up
+more instances of your application and so might cost more.
 
+Default: see [Settings](#settings)
 
-**Explanation**
+#### `entities_per_task`
 
-If you remove a field from a model and you do not run the `RemoveFieldData` process, then any existing objects will simply keep the old field value in their underlying Entity in the Datastore.
-The only problem with this is that it takes up storage space in your Datastore which costs you money.
-But note that running the `RemoveFieldData` process will cause Datastore writes and use instance hours, which will also cost you money.
-Whether you want to run the `RemoveFieldData` task or not depends on how much data there is and how long you expect your application to live for, weighted with the various costs involved in storing or removing it.
+Specifies the number of entities to process in a single task before stopping and continuing in a fresh task.
+Each shard runs a chains of tasks serially to avoid exceeding [App Engine task deadlines](https://cloud.google.com/appengine/docs/standard/python/taskqueue/push/). If you increase this value you increase the risk of hitting a deadline error.
+
+Default: see [Settings](#settings)
 
 
-### Rename Field
+#### `queue`
 
-**Steps**
+Specifies the name of the task queue which should be used for processing the entities.
 
-1. Run the normal `django...AddField(new_field)` operation.
-2. Create `save` method to ensure that any value which is saved to the old field is also saved to the new field.
-3. Deploy new code.
-4. `djangae...CopyFieldData(old_field, new_Field)`.
-5. `django...RemoveField(old_field)`.
-6. `djangae...RemoveFieldData(old_field)` (optional).
+Default: see [Settings](#settings)
 
+#### `skip_errors`
 
-**Explanation**
+Specifies whether the operation should skip over entities which cause an error and continue with processing.  If this is set to `True`, then when an error is encountered processing an entity, it is logged, but processing continues and the operation will be marked as completed despite these errors.  If set to `False` then any error will cause the task to retry, meaning that (assuming you haven't set a `max_retries` limit on the queue) the migration will remain in progress until you fix the error.
 
-Renaming a field requires adding a new field, copying the data from the old field, and then removing the old field, but in doing so ensuring that any objects which are created or edited during that process have their (latest) values for the old field copied across.
+Bear in mind that if you set this to `True` then even transient errors, such as transaction collisions will be caught by this, meaning that you might skip entities unnecessarily.  `DeadlineExceededError` is the only error which is not skipped.
+
+Default: `False`
 
 
-### Delete Model Data
 
-The `DeleteModelData` operation deletes all the data related to a particular model (essentially `DROP TABLE X`)
-there is no special process required here, just use this operation carefully!
+## `AddFieldData`
 
-### Copy Data from One Model to Another
+Adds the `default` value for a field to all entities in the model.  Respects custom `db_column` on the field, if there is one.
 
-The `CopyModelData` operation copies all the row data for a model into another. Both model classes must exist in your project for the operation to work.
+Arguments:
 
-### Copy Data for a Model into a Different Namespace
+* `model_name` - Case sensitive model name, e.g. `Person`.
+* `name` - name of the field, e.g. `is_blue`.
+* `field` - instance of the field, e.g. `BooleanField(default=True)`.
 
-The datastore has muliple namespaces (similar to separate databases), the `CopyModelDataToNamespace` operation copies
-the data for a model into a specified namespace. You can then access this data by adding another connection
-to your `DATABASES` setting.
+## `RemoveFieldData`
 
-### Custom Processing Per Entity
+Removes data for the given field from the given model.  Respects custom `db_column` on the field, if there is one.
 
-The `MapFunctionOnEntities` operation allows you to run a custom function on all the entities of a model class. Note that the function
-must be able to be pickled and that the function is provided an entity, not a Django model instance.
+* `model_name` - Case sensitive model name, e.g. `Person`.
+* `name` - name of the field, e.g. `is_blue`.
+* `field` - instance of the field, e.g. `BooleanField(default=True)`.
+
+## `CopyFieldData`
+
+Copies data from one field on a model to another.  Takes the *db colum* names rather than the field names.
+
+* `model_name` - Case sensitive model name, e.g. `Person`.
+* `from_column_name`
+* `to_column_name`
+
+## `DeleteModelData`
+
+Deletes all data for the given model from the DB.
+
+* `model_name` - Case sensitive model name, e.g. `Person`.
+
+## `CopyModelData`
+
+Copies all data from one model into the table (kind) of another model.  This copies the entities as they are, regardless of the fields on the model class.  The primary keys of the new entities are the same as the original entities.  The model that you are copying data _to_ does not necessarily need to be in the same Django app as the model that you're copying _from_.  But the migration file must live in the app which you are copying _from_.
+
+* `model_name` - Case sensitive model name, e.g. `Person`.
+* `to_app_label`
+* `to_model_name`
+* `overwrite_existing`
+
+## `CopyModelDataToNamespace`
+
+The Datastore has muliple namespaces, which with Djangae are exposed to Django as separate databases (see [Database Backend](db_backend.md#multiple-namespaces)).
+
+This operation copies all data from one model into a different Datastore namespace.  By default it copies the data into a model of the same kind in the same app, but you can optionally specify a different `app_label` and `to_model_name` top copy the data into.  The primary keys of the new entities are the same as the original entities.
+
+* `model_name`
+* `to_namespace`
+* `to_app_label`
+* `to_model_name`
+* `overwrite_existing`
+
+
+## `MapFunctionOnEntities`
+
+Runs a custom function on all entities from the given model.
+
+* `model_name` - Case sensitive model name, e.g. `Person`.
+* `function` - pickle-able function to be called on each Datastore entity.
+
+Note that the function is called with each Datastore _entity_, not with each Django model instance.
+
 
 # Settings
 
+The following settings can be added to your Django settings module to affect the behaviour of Djangae migrations.
+
 ## `DJANGAE_MIGRATION_DEFAULT_SHARD_COUNT`
 
-Sets the default number of shards that migration use. Higher values will perform migrations more quickly, but this will spin update
-more instances and so cost more.
+Sets the default `shard_count` value for all operations that do not specify otherwise.
+
+Default: `32`
 
 ## `DJANGAE_MIGRATION_DEFAULT_ENTITIES_PER_TASK`
 
-The number of entities a migration task will process before stopping and continuing with a fresh task. Each shard runs a series of tasks
-serially to avoid exceeding App Engine task deadlines. If you increase this value you increase the risk of hitting a deadline error.
+Sets the default `entities_per_task` value for all operations that do not specify otherwise.
 
-# Potential Future Improvements / Additions
+Default: `100`
 
-* Remove model
-* Move/rename model.
-* Move a model to a different namespace.
-* Custom data fiddling.
-* Do the arguments to the various operations make sense, and are they consistent?  E.g. for CopyFieldData, should it take a field, rather than just the column name?
-* Should the `to_model_app_label` kwarg for CopyModelDataToNamespace be named better?  Should it just be `to_app_label`?
+
+## `DJANGAE_MIGRATION_DEFAULT_QUEUE`
+
+Sets the default `queue` value for all operations that do not specify otherwise.
+
+Default: `None` (which will result in the `"default"` queue being used)
 
 # Migration Operation Ambiguity
 
-The datastore migration tasks work by creating markers in the datastore to represent each individual operation. These markers keep track of the progress of the operation (i.e. whether or not it's finished).
+The way that Django tracks migrations is on a per-migration basis, rather than a per-operation basis.  And it assumes that each migration will either be "done" or "not done"; there's no "in progress".  Given that operations on the Datastore cannot be treated in this way, the Datastore migrations work by creating markers in the Datastore to represent each individual operation. These markers keep track of the progress of the operation (i.e. whether or not it's been started/finished).
 
 Unfortunately there is no concrete way to uniquely identify an operation, take for example the following migrations:
 
@@ -166,7 +219,7 @@ class Migration(migrations.Migration):
 ```
 
 Here, the first and third migrations have operations that will clash as they are the same operation, with the same arguments. In this situation
-the third migration will fail as the operation would appear to have been completed. You can avoid this situation by providing a `uid` argument
+the third migration will have no effect, as the operation would appear to have been completed. You can avoid this situation by providing a `uid` argument
 to the operation:
 
 ```

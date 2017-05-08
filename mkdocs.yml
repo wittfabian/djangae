@@ -4,6 +4,8 @@ pages:
 - Home: index.md
 - Installation & Deployment: installation.md
 - The Database Backend: db_backend.md
+  - Migrations: migrations.md
+    - Migration examples: migration_examples.md
 - Djangae Model Fields: fields.md
 - Local/remote management commands: sandbox.md
 - Environment: environment.md
