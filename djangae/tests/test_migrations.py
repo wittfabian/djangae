@@ -268,6 +268,39 @@ class MigrationOperationTests(TestCase):
         self.start_operation(operation)
         self.assertTrue(self.get_task_count("default") > 0)
 
+    def test_uid_allows_separate_identical_operations_to_be_run(self):
+        """ By passing the 'uid' kwarg to an operation, we should allow it to be run, even if an
+            otherwise idential operation has already been run.
+        """
+        operation1 = operations.AddFieldData(
+            "testmodel", "new_field", models.BooleanField(default=True)
+        )
+        operation2 = operations.AddFieldData(
+            "testmodel", "new_field", models.BooleanField(default=True)
+        )
+        operation3 = operations.AddFieldData(
+            "testmodel", "new_field", models.BooleanField(default=True), uid="x"
+        )
+        # Create a model instance and run the first operation on it
+        instance = TestModel.objects.create()
+        self.start_operation(operation1)
+        self.process_task_queues()
+        # Check that the migration ran successfully
+        entity = self.get_entities()[0]
+        self.assertTrue(entity["new_field"])
+        # Now create another entity and make sure that the second migration (which is idential)
+        # does NOT run on it
+        instance.delete()
+        instance = TestModel.objects.create()
+        self.start_operation(operation2)
+        self.process_task_queues()
+        entity = self.get_entities()[0]
+        self.assertIsNone(entity.get("new_field"))
+        # Now run the third operation, which is identical but has a uid, so SHOULD be run
+        self.start_operation(operation3)
+        self.process_task_queues()
+        entity = self.get_entities()[0]
+        self.assertTrue(entity["new_field"])
 
 
     def test_addfielddata(self):
