@@ -263,6 +263,9 @@ def shard_query(query, shard_count):
 
 
 class ShardedTaskMarker(datastore.Entity):
+    """ Manages the running of an operation over the entities of a query using multiple processing
+        tasks.  Stores details of the current state on itself as an Entity in the Datastore.
+    """
     KIND = "_djangae_migration_task"
 
     QUEUED_KEY = "shards_queued"
