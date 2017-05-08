@@ -39,7 +39,7 @@ https://djangae.readthedocs.io/
 ## Supported Django Versions
 
 The intention is always to support the currently-supported versions of Django, although older versions may work. Currently
-Django 1.8, 1.9 and 1.10 are supported.
+Django 1.8, 1.9, 1.10 and 1.11 are supported.
 
 # Installation
 
