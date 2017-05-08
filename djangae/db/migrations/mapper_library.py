@@ -436,10 +436,7 @@ def start_mapping(
         entities have been mapped.
     """
     shard_count = shard_count or getattr(settings, "DJANGAE_MIGRATION_DEFAULT_SHARD_COUNT", 32)
-
-    @datastore.NonTransactional
-    def calculate_shards():
-        return shard_query(query, shard_count)
+    shards_to_run = shard_query(query, shard_count)
     queue = queue or getattr(settings, "DJANGAE_MIGRATION_DEFAULT_QUEUE", _DEFAULT_QUEUE)
 
     def txn(shards):
@@ -470,7 +467,7 @@ def start_mapping(
 
         return marker_key
 
-    return datastore.RunInTransaction(txn, calculate_shards())
+    return datastore.RunInTransaction(txn, shards_to_run)
 
 
 def mapper_exists(identifier, namespace):
