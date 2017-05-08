@@ -7,6 +7,7 @@ from django.db import DataError
 from django.db.migrations.operations.base import Operation
 from google.appengine.api.datastore import Delete, Query, Get, Key, Put, RunInTransaction
 from google.appengine.api import datastore_errors
+from google.appengine.runtime import DeadlineExceededError
 
 # DJANGAE
 from djangae.db.backends.appengine.caching import remove_entities_from_cache_by_key
@@ -36,6 +37,7 @@ class BaseEntityMapperOperation(Operation, DjangaeMigration):
         self.shard_count = kwargs.pop("shard_count", None)
         self.entities_per_task = kwargs.pop("entities_per_task", None)
         self.queue = kwargs.pop("queue", None)
+        self.skip_errors = kwargs.pop("skip_errors", False)
         super(BaseEntityMapperOperation, self).__init__(*args, **kwargs)
 
     def state_forwards(self, app_label, state):
@@ -91,21 +93,28 @@ class BaseEntityMapperOperation(Operation, DjangaeMigration):
     def _wrapped_map_entity(self, entity):
         """ Wrapper for self._map_entity which removes the entity from Djangae's cache. """
 
-        # TODO: do we need to remove it from the caches both before and aftewards? Note that other
-        # threads (from the general application running) could also be modifying the entity, and
-        # that we're not using Djangae's transaction managers for our stuff here.
+        # TODO: Note that other threads (from the general application running) could also be
+        # modifying the entity, and that we're not using Djangae's transaction managers for our
+        # stuff here.
 
         remove_entities_from_cache_by_key([entity.key()], self.namespace)
-        # If one entity can't be processed, then don't let that prevent others being processed
         try:
             do_with_retry(self._map_entity, entity)
-        except:
-            logging.exception(
-                "Error processing operation %s for entity %s.  Skipping.",
-                self.identifier, entity.key()
-            )
+        except DeadlineExceededError:
+            # This is (probably) not an error with the individual entity, but more likey that the
+            # task has tried to process too many entities. Either way, we always re-raise it so
+            # that the mapper library can deal with it
+            raise
+        except Exception:
+            if self.skip_errors:
+                logging.exception(
+                    "Error processing operation %s for entity %s.  Skipping.",
+                    self.identifier, entity.key()
+                )
+            else:
+                raise
         if entity.key():
-            # Assumign the entity hasn't been deleted and/or it's key been wiped...
+            # Assuming the entity hasn't been deleted and/or it's key been wiped...
             remove_entities_from_cache_by_key([entity.key()], self.namespace)
 
 
@@ -186,7 +195,6 @@ class RemoveFieldData(BaseEntityMapperOperation):
         identifier = "%s.%s.%s:%s" % (
             app_label, self.model_name, self.__class__.__name__, self.name
         )
-
         return identifier
 
     def _set_map_kind(self, app_label, schema_editor, from_state, to_state):
@@ -221,7 +229,6 @@ class CopyFieldData(BaseEntityMapperOperation):
             app_label, self.model_name, self.__class__.__name__,
             self.from_column_name, self.to_column_name
         )
-
         return identifier
 
     def _set_map_kind(self, app_label, schema_editor, from_state, to_state):
@@ -284,7 +291,6 @@ class CopyModelData(BaseEntityMapperOperation):
             app_label, self.model_name, self.__class__.__name__,
             self.to_app_label, self.to_model_name
         )
-
         return identifier
 
     def _set_map_kind(self, app_label, schema_editor, from_state, to_state):
@@ -336,7 +342,6 @@ class CopyModelDataToNamespace(BaseEntityMapperOperation):
             app_label, self.model_name, self.__class__.__name__, self.to_namespace, to_app_label,
             to_model_name
         )
-
         return identifier
 
     def _set_map_kind(self, app_label, schema_editor, from_state, to_state):
@@ -394,7 +399,6 @@ class MapFunctionOnEntities(BaseEntityMapperOperation):
         identifier = "%s.%s.%s:%s" % (
             app_label, self.model_name, self.__class__.__name__, self.function.__name__
         )
-
         return identifier
 
     def _set_map_kind(self, app_label, schema_editor, from_state, to_state):
