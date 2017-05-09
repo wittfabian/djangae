@@ -237,6 +237,10 @@ def _convert_entity_based_on_query_options(entity, opts):
 
     return entity
 
+# The max number of entities in a resultset that will be cached
+# if a query returns more than this number then only the first ones
+# will be cached
+DEFAULT_MAX_ENTITY_COUNT = 8
 
 class QueryByKeys(object):
     """ Does the most efficient fetching possible for when we have the keys of the entities we want. """
@@ -260,7 +264,7 @@ class QueryByKeys(object):
         self.query_count = len(self.queries)
         self.queries_by_key = { a: list(b) for a, b in groupby(self.queries, _get_key) }
 
-        self.max_allowable_queries = getattr(settings, "DJANGAE_MAX_QUERY_BRACHES", DEFAULT_MAX_ALLOWABLE_QUERIES)
+        self.max_allowable_queries = getattr(settings, "DJANGAE_MAX_QUERY_BRANCHES", DEFAULT_MAX_ALLOWABLE_QUERIES)
         self.can_multi_query = self.query_count < self.max_allowable_queries
 
         self.ordering = ordering
@@ -279,6 +283,8 @@ class QueryByKeys(object):
         key_count = len(self.queries_by_key)
 
         is_projection = False
+
+        max_cache_count = getattr(settings, "DJANGAE_CACHE_MAX_ENTITY_COUNT", DEFAULT_MAX_ENTITY_COUNT)
 
         cache_results = True
         results = None
@@ -334,7 +340,7 @@ class QueryByKeys(object):
             if cache_results and sorted_results:
                 caching.add_entities_to_cache(
                     self.model,
-                    sorted_results,
+                    sorted_results[:max_cache_count],
                     caching.CachingSituation.DATASTORE_GET,
                     self.namespace,
                 )

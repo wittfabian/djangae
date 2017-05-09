@@ -56,9 +56,9 @@ If you want to write your own permissions system, but you still want to take adv
 
 ## Authentication for unknown users
 
-By default Djangae will deny access for unknown users (unless the user is an administrator for the App Engine application).
+By default Djangae will grant access for unknown users who are signed in with a Google account.
 
-Add `DJANGAE_CREATE_UNKNOWN_USER=True` to your settings and Djangae will always grant access (for authenticated Google Accounts users), creating a Django user if one does not exist.
+Add `DJANGAE_CREATE_UNKNOWN_USER=True` (the default) to your settings and Djangae will always grant access (for authenticated Google Accounts users), creating a Django user if one does not exist. If `DJANGAE_CREATE_UNKNOWN_USER=False` then Djangae will deny access for unknown users (unless the user is an administrator for the App Engine application).
 
 If there is a Django user with a matching email address and username set to `None` then Djangae will update the Django user, setting the username to the Google user ID. If there is a user with a matching email address and username set to another user ID then Djangae will set the existing user's email address to `None` and create a new Django user.
 
