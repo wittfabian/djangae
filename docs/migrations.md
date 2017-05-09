@@ -29,6 +29,8 @@ Note that Django's migration operations are not _just_ about the database change
 
 Due to the way that migrations are run on the Datastore, you cannot mix Django operations with Djangae operations in the same migration file.
 
+You should not try to use Django's `RunPython` operation to make changes on the Datastore, as the supplied function will be executed on your local machine, rather than in a task queue on the live App Engine site.
+
 ### Other differences
 
 * Migrations run on the entity level, not the Django model instance level. Custom `save()` code will not be called. They are the equivalent of running SQL queries directly on a relational database.
