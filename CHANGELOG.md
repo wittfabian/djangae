@@ -7,6 +7,7 @@
  - Switched the default storage backend (in settings_base.py) to cloud storage. If you need to retain compatibility make sure you
  override the `DEFAULT_FILE_STORAGE` setting to point to `'djangae.storage.BlobstoreStorage'`.
 - Added AsyncMultiQuery as a replacement for Google's MultiQuery (which doesn't exist on Cloud Datastore).  This is the first step towards support for Cloud Datastore and therefore Flexible Environment.
+- Added support for running migrations on the Datastore via Django migrations.
 
 ### Bug fixes:
 
