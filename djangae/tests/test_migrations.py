@@ -26,6 +26,11 @@ from djangae.db.migrations.mapper_library import (
 from djangae.test import TestCase
 
 
+# Workaround for https://code.djangoproject.com/ticket/28188
+def return_a_string():
+    return "squirrel"
+
+
 class TestModel(models.Model):
 
     name = models.CharField(max_length=100)
@@ -224,7 +229,7 @@ class MigrationOperationTests(TestCase):
             TestModel.objects.create()
 
         operation = operations.AddFieldData(
-            "testmodel", "new_field", models.CharField(max_length=100, default="squirrel"),
+            "testmodel", "new_field", models.CharField(max_length=100, default=return_a_string),
             queue="another",
             # Ensure that we trigger a re-defer, so that we test that the correct queue is used for
             # subsequent tasks, not just the first one
