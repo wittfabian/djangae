@@ -296,15 +296,4 @@ your Django app. The indexes in this file will be combined with the user's main 
 
 ## Migrations
 
-The App Engine Datastore is a schemaless database, so the idea of migrations in the normal Django sense doesn't really apply in the same way.
-
-In order to add a new Django model, you just save an instance of that model, you don't need to tell the database to add a "table" (called a "Kind" in the Datastore) for it.
-Similarly, if you want to add a new field to a model, you just add the field and start saving your objects, there's no need to create a new column in the database first.
-
-However, there are some behaviours of the Datastore which mean that in some cases you will want to run some kind of "migration".  The relevant behaviours are:
-
-* If you remove one of your Django models and you want to delete all of the instances, you can't just `DROP` the "table", you must run a task which maps over each object and deletes it.
-* If you add a new model field with a default value, that value won't get populated into the database until you re-save each instance.  When you load an instance of the model, the default value will be assigned, but the value won't actually be stored in the database until you re-save the object.  This means that querying for objects with that value will not return any objects that have not been re-saved.  This is true even if the default value is `None` (because the Datastore differentiates between a value being set to `None` and a value not existing at all).
-* If you remove a model field, the underlying Datastore entities will still contain the value until they are re-saved.  When you re-save each instance of the model the underlying entity will be overwritten, wiping out the removed field, but if you want to immediately destroy some sensitive data or reduce your used storage quota then simplying removing the field from the model will have no effect.
-
-For these reasons there is a legitimate case for implementing some kind of variant of the Django migration system for Datastore-backed models.  See the [migrations ticket on GitHub](https://github.com/potatolondon/djangae/issues/438) for more info.
+Djangae has support for migrating data using the Django migrations infrastructure.  See [Migrations](migrations.md).
