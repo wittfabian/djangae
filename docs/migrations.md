@@ -107,9 +107,9 @@ Default: `False`
 
 Adds the `default` value for a field to all entities in the model.  Respects custom `db_column` on the field, if there is one.
 
-Arguments:
+**Parameters:**
 
-* `model_name` - Case sensitive model name, e.g. `Person`.
+* `model_name` - case sensitive model name, e.g. `Person`.
 * `name` - name of the field, e.g. `is_blue`.
 * `field` - instance of the field, e.g. `BooleanField(default=True)`.
 
@@ -117,7 +117,9 @@ Arguments:
 
 Removes data for the given field from the given model.  Respects custom `db_column` on the field, if there is one.
 
-* `model_name` - Case sensitive model name, e.g. `Person`.
+**Parameters:**
+
+* `model_name` - case sensitive model name, e.g. `Person`.
 * `name` - name of the field, e.g. `is_blue`.
 * `field` - instance of the field, e.g. `BooleanField(default=True)`.
 
@@ -125,46 +127,56 @@ Removes data for the given field from the given model.  Respects custom `db_colu
 
 Copies data from one field on a model to another.  Takes the *db colum* names rather than the field names.
 
-* `model_name` - Case sensitive model name, e.g. `Person`.
-* `from_column_name`
-* `to_column_name`
+**Parameters:**
+
+* `model_name` - case sensitive model name, e.g. `Person`.
+* `from_column_name` - column name to copy data from.
+* `to_column_name` - column name to copy data to.
 
 ## `DeleteModelData`
 
 Deletes all data for the given model from the DB.
 
-* `model_name` - Case sensitive model name, e.g. `Person`.
+**Parameters:**
+
+* `model_name` - case sensitive model name, e.g. `Person`.
 
 ## `CopyModelData`
 
-Copies all data from one model into the table (kind) of another model.  This copies the entities as they are, regardless of the fields on the model class.  The primary keys of the new entities are the same as the original entities.  The model that you are copying data _to_ does not necessarily need to be in the same Django app as the model that you're copying _from_.  But the migration file must live in the app which you are copying _from_.
+Copies all data from one model into the table (kind) of another model.  This copies the entire entities as they are, regardless of the fields on the model class.  The primary keys of the new entities are the same as the original entities.  The model that you are copying data _to_ does not necessarily need to be in the same Django app as the model that you're copying _from_.  But the migration file must live in the app which you are copying _from_.
 
-* `model_name` - Case sensitive model name, e.g. `Person`.
-* `to_app_label`
-* `to_model_name`
-* `overwrite_existing`
+**Parameters:**
+
+* `model_name` - case sensitive model name, e.g. `Person`.
+* `to_app_label` - label of Django app of target model.
+* `to_model_name` - case sensitive name of target model.
+* `overwrite_existing` - boolean, default: `False`.
 
 ## `CopyModelDataToNamespace`
 
 The Datastore has muliple namespaces, which with Djangae are exposed to Django as separate databases (see [Database Backend](db_backend.md#multiple-namespaces)).
 
-This operation copies all data from one model into a different Datastore namespace.  By default it copies the data into a model of the same kind in the same app, but you can optionally specify a different `app_label` and `to_model_name` top copy the data into.  The primary keys of the new entities are the same as the original entities.
+This operation copies all data from a model in the source database into a different Datastore namespace.  By default it copies the data into a model of the same kind in the same app.  In other words, the "table" (Datastore Kind) stays the same.  But you can optionally specify a different `app_label` and `to_model_name` to copy the data into.  The primary keys of the new entities are the same as the original entities.  The source database is whichever database the migration is being run on (which is the default database, unless you've passed the `--database` option to the `migrate` command).
 
-* `model_name`
-* `to_namespace`
-* `to_app_label`
-* `to_model_name`
-* `overwrite_existing`
+**Parameters:**
+
+* `model_name`- case sensitive model name, e.g. `Person`.
+* `to_namespace` - string name of Datastore namespace to copy data to.
+* `to_app_label` - optional label of Django app of target model (if different).
+* `to_model_name` - optional case sensitive target model name (if different).
+* `overwrite_existing` - boolean, default: `False`.
 
 
 ## `MapFunctionOnEntities`
 
 Runs a custom function on all entities from the given model.
 
-* `model_name` - Case sensitive model name, e.g. `Person`.
+**Parameters:**
+
+* `model_name` - case sensitive model name, e.g. `Person`.
 * `function` - pickle-able function to be called on each Datastore entity.
 
-Note that the function is called with each Datastore _entity_, not with each Django model instance.
+Note that the function is called with each Datastore _entity_, not with each Django model instance.  Support for calling a function on each Django model instance is a planned future feature.
 
 
 # Settings
