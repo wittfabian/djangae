@@ -17,6 +17,40 @@ _SCRIPT_NAME = 'dev_appserver.py'
 
 _API_SERVER = None
 
+# We use this list to prevent user using certain dev_appserver options that
+# might collide with some Django settings.
+WHITELISTED_DEV_APPSERVER_OPTIONS = [
+    'A',
+    'admin_host',
+    'admin_port',
+    'auth_domain',
+    'storage_path',
+    'log_level',
+    'max_module_instances',
+    'use_mtime_file_watcher',
+    'appidentity_email_address',
+    'appidentity_private_key_path',
+    'blobstore_path',
+    'datastore_path',
+    'clear_datastore',
+    'datastore_consistency_policy',
+    'require_indexes',
+    'auto_id_policy',
+    'logs_path',
+    'show_mail_body',
+    'enable_sendmail',
+    'prospective_search_path',
+    'clear_prospective_search',
+    'search_indexes_path',
+    'clear_search_indexes',
+    'enable_task_running',
+    'allow_skipped_files',
+    'api_port',
+    'dev_appserver_log_level',
+    'skip_sdk_update_check',
+    'default_gcs_bucket_name',
+]
+
 DEFAULT_API_PORT = 8010
 DEFAULT_ADMIN_PORT = 8011
 DEFAULT_BLOBSTORE_SERVICE_PORT = 8012
@@ -287,7 +321,37 @@ def _remote(configuration=None, remote_api_stub=None, apiproxy_stub_map=None, **
 
 @contextlib.contextmanager
 def _test(**kwargs):
+    """
+        This stub uses the testbed to initialize the bare minimum to use the
+        Datastore connector. Tests themselves should setup/tear down their own
+        stubs by using DjangaeDiscoverRunner or the nose plugin.
+
+        The stubs here are just for bootstrapping the tests. Obviously any data inserted
+        between here, and the tests themselves will be wiped out when the tests begin!
+    """
+
+    from google.appengine.ext import testbed
+    from google.appengine.datastore import datastore_stub_util
+
+    MINIMAL_STUBS = {
+        "init_memcache_stub": {},
+        "init_datastore_v3_stub": {
+            "use_sqlite": True,
+            "auto_id_policy": testbed.AUTO_ID_POLICY_SCATTERED,
+            "consistency_policy": datastore_stub_util.PseudoRandomHRConsistencyPolicy(probability=1)
+        }
+    }
+
+    testbed = testbed.Testbed()
+    testbed.activate()
+    for init_name, stub_kwargs in MINIMAL_STUBS.items():
+        getattr(testbed, init_name)(**stub_kwargs)
+
     yield
+
+    if testbed:
+        testbed.deactivate()
+
 
 LOCAL = 'local'
 REMOTE = 'remote'
@@ -399,8 +463,13 @@ def activate(sandbox_name, add_sdk_to_path=False, new_env_vars=None, **overrides
     import google.appengine.ext.remote_api.remote_api_stub as remote_api_stub
     import google.appengine.api.apiproxy_stub_map as apiproxy_stub_map
 
+    gae_args = [
+        s for s in sys.argv
+        if any(s.lstrip('--').startswith(gae_option) for gae_option in WHITELISTED_DEV_APPSERVER_OPTIONS)
+    ]
+
     # The argparser is the easiest way to get the default options.
-    options = devappserver2.PARSER.parse_args([project_root])
+    options = devappserver2.PARSER.parse_args([project_root] + gae_args)
     options.enable_task_running = False # Disable task running by default, it won't work without a running server
     options.skip_sdk_update_check = True
 
