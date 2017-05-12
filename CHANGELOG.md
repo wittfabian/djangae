@@ -13,6 +13,7 @@
 - Added support for running migrations on the Datastore using Django migrations.
 - Added a test to confirm query slicing works correctly.
 - Added `ComputedCollationField` to generate correct ordering for unicode strings.
+- Changed CloudStorage and BlobstoreStorage storage backends to return HTTPS URLs for images (instead of the previous protocol-relative URLs).
 
 ### Bug fixes:
 
