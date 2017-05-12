@@ -53,7 +53,6 @@
 - Added some tests for the management command code.
 - Added a test to prove that the ordering specified on a model's `_meta` is used for pagination, when no custom order has been specified on the query set.
 - Added a `@task_or_admin_only` decorator to `djangae.environment` to allow restricting views to tasks (including crons) or admins of the application.
-- Add migration support for the datastore (experimental)
 
 ### Bug fixes:
 
