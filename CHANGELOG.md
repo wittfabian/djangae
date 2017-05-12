@@ -12,6 +12,7 @@
  - Added a configurable memory limit to the context cache, limited the number of instances cached from query results and corrected `disable_cache` behaviour.
 - Added support for running migrations on the Datastore using Django migrations.
 - Added a test to confirm query slicing works correctly.
+- Added `ComputedCollationField` to generate correct ordering for unicode strings.
 
 ### Bug fixes:
 
