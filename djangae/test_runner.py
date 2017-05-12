@@ -11,6 +11,7 @@ from django.db import NotSupportedError
 from django.conf import settings
 
 from djangae import environment
+from djangae.db.backends.appengine.caching import get_context
 
 from google.appengine.datastore import datastore_stub_util
 from google.appengine.ext import testbed
@@ -106,6 +107,8 @@ def init_testbed():
             "consistency_policy": datastore_stub_util.PseudoRandomHRConsistencyPolicy(probability=1)
         }
     }
+
+    get_context().reset(); # Reset any context caching
     bed = testbed.Testbed()
     bed.activate()
     for init_name in testbed.INIT_STUB_METHOD_NAMES.values():
@@ -146,6 +149,10 @@ class SkipUnsupportedTestResult(TextTestResult):
 
 
 class DjangaeTestSuiteRunner(DiscoverRunner):
+    def __init__(self, *a, **kw):
+        kw['pattern'] = '*tests.py'
+        super(DjangaeTestSuiteRunner, self).__init__(*a, **kw)
+
     def _discover_additional_tests(self):
         """
             Django's DiscoverRunner only detects apps that are below

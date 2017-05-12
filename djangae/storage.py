@@ -327,10 +327,13 @@ class CloudStorage(Storage, BlobstoreUploadMixin):
             with transaction.non_atomic():
                 # This causes a Datastore lookup which we don't want to interfere with transactions
                 return get_serving_url(self._get_blobkey(filename), secure_url=True)
-        except (TransformationError):
+        except (TransformationError, cloudstorage.NotFoundError):
             # Sometimes TransformationError will be thrown if you call get_serving_url on video files
             # this is probably a bug in App Engine
             # Probably related to this: https://code.google.com/p/googleappengine/issues/detail?id=8601
+
+            # Also, Django requires that url() return something 'truthy' even if the file field hasn't been
+            # saved yet so we do the same thing if the file is not found (just add the bucket to the filename)
             quoted_filename = urllib.quote(self._add_bucket(filename))
             return '{0}{1}'.format(self.api_url, quoted_filename)
 

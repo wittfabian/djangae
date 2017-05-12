@@ -7,3 +7,4 @@ webtest
 beautifulsoup4
 pytz
 django-session-csrf
+pyuca

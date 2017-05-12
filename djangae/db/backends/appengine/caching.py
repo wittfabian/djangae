@@ -12,7 +12,7 @@ from django.core.cache.backends.base import default_key_func
 
 from djangae.db import utils
 from djangae.db.unique_utils import unique_identifiers_from_entity, _format_value_for_identifier
-from djangae.db.backends.appengine.context import ContextCache
+from djangae.db.backends.appengine.context import ContextCache, key_or_entity_compare
 
 _local = threading.local()
 
@@ -218,6 +218,12 @@ def add_entities_to_cache(model, entities, situation, namespace, skip_memcache=F
     if not CACHE_ENABLED:
         return None
 
+    context = get_context()
+
+    if not (context.context_enabled or context.memcache_enabled):
+        # Don't cache anything if caching is disabled
+        return
+
     # Don't cache on Get if we are inside a transaction, even in the context
     # This is because transactions don't see the current state of the datastore
     # We can still cache in the context on Put() but not in memcache
@@ -266,7 +272,7 @@ def remove_entities_from_cache_by_key(keys, namespace, memcache_only=False):
     context = get_context()
     if not memcache_only:
         for key in keys:
-            identifiers = context.stack.top.reverse_cache.get(key, [])
+            identifiers = context.stack.top.cache.get_reversed(key, compare_func=key_or_entity_compare)
             for identifier in identifiers:
                 if identifier in context.stack.top.cache:
                     del context.stack.top.cache[identifier]
