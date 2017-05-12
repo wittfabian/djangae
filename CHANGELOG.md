@@ -2,13 +2,16 @@
 
 ### New features & improvements:
 
+ - A new contrib app `djangae.contrib.processing.mapreduce` has been added to provide a Django-friendly API to mapreduce. The existing
+   `djangae.contrib.mappers` API has been reimplemented in terms of `djangae.contrib.processing.mapreduce`
  - Add support for the latest App Engine SDK (1.9.51)
  - The default ports for the API server, admin server and blobstore service have changed to 8010, 8011, and 8012 respectively to avoid clashes with modules
  - Switched the default storage backend (in settings_base.py) to cloud storage. If you need to retain compatibility make sure you
  override the `DEFAULT_FILE_STORAGE` setting to point to `'djangae.storage.BlobstoreStorage'`.
  - Added AsyncMultiQuery as a replacement for Google's MultiQuery (which doesn't exist on Cloud Datastore).  This is the first step towards support for Cloud Datastore and therefore Flexible Environment.
  - Added a configurable memory limit to the context cache, limited the number of instances cached from query results and corrected `disable_cache` behaviour.
- - Added a test to confirm query slicing works correctly
+- Added support for running migrations on the Datastore using Django migrations.
+- Added a test to confirm query slicing works correctly.
 
 ### Bug fixes:
 
@@ -16,6 +19,7 @@
  - Accessing the Datastore from outside tests will no longer throw an error when using the test sandbox
  - The in-context cache is now reliably wiped when the testbed is initialized for each test.
  - Fixed an ImportError when the SDK is not on sys.path.
+ - Updated the documenation to say that DJANGAE_CREATE_UNKNOWN_USER defaults to True.
 
 
 ## v0.9.9 (release date: 27th March 2017)
@@ -48,6 +52,7 @@
 - Added some tests for the management command code.
 - Added a test to prove that the ordering specified on a model's `_meta` is used for pagination, when no custom order has been specified on the query set.
 - Added a `@task_or_admin_only` decorator to `djangae.environment` to allow restricting views to tasks (including crons) or admins of the application.
+- Add migration support for the datastore (experimental)
 
 ### Bug fixes:
 

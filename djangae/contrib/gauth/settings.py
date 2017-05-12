@@ -7,5 +7,5 @@ AUTH_USER_MODEL = 'gauth_datastore.GaeDatastoreUser'
 LOGIN_URL = 'djangae_login_redirect'
 
 # Set this to True to allow unknown Google users to sign in. Matching is done
-# by email. Defaults to False.
-# DJANGAE_CREATE_UNKNOWN_USER = False
+# by email.
+# DJANGAE_CREATE_UNKNOWN_USER = True
