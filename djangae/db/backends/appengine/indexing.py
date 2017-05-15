@@ -213,7 +213,7 @@ class Indexer(object):
     PREP_VALUE_RETURNS_ENTITIES = False
 
     # **IMPORTANT! If you return Entities from an indexer, the kind *must* start with
-    # djangae_idx_XXXX where XXX is the top concrete model kind of the instance you
+    # _djangae_idx_XXXX where XXX is the top concrete model kind of the instance you
     # are indexing. If you do not do this, then the tables will not be correctly flushed
     # when the database is flushed**
 
@@ -542,7 +542,7 @@ class ContainsIndexer(StringIndexerMixin, Indexer):
 
 
     def _generate_kind_name(self, model, column):
-        return "djangae_idx_{}_{}".format(
+        return "_djangae_idx_{}_{}".format(
             get_top_concrete_parent(model)._meta.db_table,
             column
         )

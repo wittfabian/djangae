@@ -41,7 +41,7 @@ class ContainsIndexerTests(TestCase):
 
         self.assertItemsEqual([
             ContainsModel._meta.db_table,
-            "djangae_idx_{}_field1".format(ContainsModel._meta.db_table)
+            "_djangae_idx_{}_field1".format(ContainsModel._meta.db_table)
         ], table_names)
 
         # Flush the database
