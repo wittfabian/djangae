@@ -1173,9 +1173,6 @@ class UpdateCommand(object):
                 **instance_kwargs
             )
 
-            # We need to add to the class attribute, rather than replace it!
-            original_class = result.get(POLYMODEL_CLASS_ATTRIBUTE, [])
-
             # Convert the instance to an entity
             primary, descendents = django_instance_to_entities(
                 self.connection,
@@ -1187,16 +1184,13 @@ class UpdateCommand(object):
             # Update the entity we read above with the new values
             result.update(primary)
 
-            # Make sure we keep all classes in the inheritence tree!
-            if original_class:
-                if result[POLYMODEL_CLASS_ATTRIBUTE] is not None:
-                    result[POLYMODEL_CLASS_ATTRIBUTE].extend(original_class)
-                    # Make sure we don't add duplicates
-                else:
-                    result[POLYMODEL_CLASS_ATTRIBUTE] = original_class
-
-            if POLYMODEL_CLASS_ATTRIBUTE in result:
-                result[POLYMODEL_CLASS_ATTRIBUTE] = list(set(result[POLYMODEL_CLASS_ATTRIBUTE]))
+            # Make sure that any polymodel classes which were in the original entity are kept,
+            # as django_instance_to_entities may have wiped them as well as added them.
+            polymodel_classes = list(set(
+                original.get(POLYMODEL_CLASS_ATTRIBUTE, []) + result.get(POLYMODEL_CLASS_ATTRIBUTE, [])
+            ))
+            if polymodel_classes:
+                result[POLYMODEL_CLASS_ATTRIBUTE] = polymodel_classes
 
             def perform_insert():
                 """
