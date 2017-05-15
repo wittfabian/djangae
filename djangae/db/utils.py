@@ -157,6 +157,7 @@ def get_field_from_column(model, column):
             return field
     return None
 
+
 def django_instance_to_entities(connection, fields, raw, instance, check_null=True, model=None):
     """
         Converts a Django Model instance to an App Engine `Entity`
@@ -165,9 +166,9 @@ def django_instance_to_entities(connection, fields, raw, instance, check_null=Tr
             connection: Djangae appengine connection object
             fields: A list of fields to populate in the Entity
             raw: raw flag to pass to get_prepared_db_value
-            instance: The instance to convert
+            instance: The Django model instance to convert
             check_null: Whether or not we should enforce NULL during conversion
-            (throws an error if None is set no a non-nullable field)
+            (throws an error if None is set on a non-nullable field)
             model: Model class to use instead of the instance one
 
         Returns:
@@ -204,7 +205,6 @@ def django_instance_to_entities(connection, fields, raw, instance, check_null=Tr
 
         return value, is_primary_key
 
-
     field_values = {}
     primary_key = None
 
@@ -227,7 +227,7 @@ def django_instance_to_entities(connection, fields, raw, instance, check_null=Tr
                 continue
 
             if not hasattr(values, "__iter__"):
-                values = [ values ]
+                values = [values]
 
             # If the indexer returns additional entities (instead of indexing a special column)
             # then just store those entities
@@ -241,7 +241,7 @@ def django_instance_to_entities(connection, fields, raw, instance, check_null=Tr
                     # list and append the new value
                     if column in field_values:
                         if not isinstance(field_values[column], list):
-                            field_values[column] = [ field_values[column], v ]
+                            field_values[column] = [field_values[column], v]
                         else:
                             field_values[column].append(v)
                     else:

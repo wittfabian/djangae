@@ -476,7 +476,7 @@ class EntityTransforms:
     def ignore_excluded_pks(excluded_pks, result):
         if result is None:
             return result
-            
+
         if result.key() in excluded_pks:
             return None
 
@@ -1158,7 +1158,7 @@ class UpdateCommand(object):
 
             original = copy.deepcopy(result)
 
-            instance_kwargs = {field.attname:value for field, param, value in self.values}
+            instance_kwargs = {field.attname: value for field, param, value in self.values}
 
             # Note: If you replace MockInstance with self.model, you'll find that some delete
             # tests fail in the test app. This is because any unspecified fields would then call
@@ -1179,7 +1179,7 @@ class UpdateCommand(object):
             # Convert the instance to an entity
             primary, descendents = django_instance_to_entities(
                 self.connection,
-                [ x[0] for x in self.values],  # Pass in the fields that were updated
+                [x[0] for x in self.values],  # Pass in the fields that were updated
                 True, instance,
                 model=self.model
             )
