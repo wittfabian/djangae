@@ -1,6 +1,8 @@
 """
     Tests for "special indexing" (E.g. __contains, __startswith etc.)
 """
+from djangae.contrib import sleuth
+from djangae.db.caching import disable_cache
 from djangae.test import TestCase
 
 from django.core.management import call_command
@@ -27,6 +29,23 @@ class ContainsIndexerTests(TestCase):
 
         self.assertEqual(ContainsModel.objects.filter(field1__contains="Ad").first(), c1)
         self.assertEqual(ContainsModel.objects.filter(field1__contains="Lu").first(), c2)
+
+    @disable_cache()
+    def test_queryset_instantiation_does_not_trigger_queries(self):
+        """ The `contains` behaviour should only trigger DB calls when the queryset is evaluated,
+            not when the queryset is created.
+        """
+        ContainsModel.objects.create(field1="Adam")
+        with sleuth.watch("google.appengine.api.datastore.Query.Run") as datastore_query:
+            with sleuth.watch("google.appengine.api.datastore.Get") as datastore_get:
+                queryset = ContainsModel.objects.filter(field1__contains="Ad")
+                self.assertFalse(datastore_query.called)
+                self.assertFalse(datastore_get.called)
+                print len(datastore_query.calls)
+                list(queryset)
+                self.assertTrue(datastore_query.called)
+                print len(datastore_query.calls)
+                self.assertTrue(datastore_get.called)
 
     def test_flush_wipes_descendent_kinds(self):
         """
