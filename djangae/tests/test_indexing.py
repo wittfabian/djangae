@@ -29,6 +29,8 @@ class ContainsIndexerTests(TestCase):
 
         self.assertEqual(ContainsModel.objects.filter(field1__contains="Ad").first(), c1)
         self.assertEqual(ContainsModel.objects.filter(field1__contains="Lu").first(), c2)
+        self.assertEqual(ContainsModel.objects.filter(field1__contains="da").first(), c1)
+        self.assertEqual(ContainsModel.objects.filter(field1__contains="ke").first(), c2)
 
     @disable_cache()
     def test_queryset_instantiation_does_not_trigger_queries(self):
