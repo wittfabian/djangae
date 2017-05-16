@@ -599,7 +599,7 @@ class ContainsIndexer(StringIndexerMixin, Indexer):
         namespace = connection.settings_dict.get("NAMESPACE", "")
         qry = Query(self._generate_kind_name(model, column), keys_only=True, namespace=namespace)
         qry['{} >='.format(self.INDEXED_COLUMN_NAME)] = value
-        qry['{} <'.format(self.INDEXED_COLUMN_NAME)] = value + u'\ufffd'
+        qry['{} <='.format(self.INDEXED_COLUMN_NAME)] = value + u'\ufffd'
 
         resulting_keys = set([x.parent() for x in qry.Run() if x.name() == self.OPERATOR])
         return resulting_keys
