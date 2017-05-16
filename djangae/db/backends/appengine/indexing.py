@@ -601,6 +601,10 @@ class ContainsIndexer(StringIndexerMixin, Indexer):
         qry['{} >='.format(self.INDEXED_COLUMN_NAME)] = value
         qry['{} <='.format(self.INDEXED_COLUMN_NAME)] = value + u'\ufffd'
 
+        # We can't filter on the 'name' as part of the query, because the name is the key and these
+        # are child entities of the ancestor entities which they are indexing, and as we don't know
+        # the keys of the ancestor entities we can't create the complete keys, hence the comparison
+        # of `x.name() == self.OPERATOR` happens here in python
         resulting_keys = set([x.parent() for x in qry.Run() if x.name() == self.OPERATOR])
         return resulting_keys
 
