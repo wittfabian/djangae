@@ -26,6 +26,7 @@ class ContainsIndexerTests(TestCase):
     def test_basic_usage(self):
         c1 = ContainsModel.objects.create(field1="Adam")
         c2 = ContainsModel.objects.create(field1="Luke")
+        ContainsModel.objects.create(field1="Lvke")  # 'v' is the next character after 'u'
 
         self.assertEqual(ContainsModel.objects.filter(field1__contains="Ad").first(), c1)
         self.assertEqual(ContainsModel.objects.filter(field1__contains="Lu").first(), c2)
