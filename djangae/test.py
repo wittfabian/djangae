@@ -3,11 +3,15 @@ import logging
 import os
 
 from django import test
-from django.test import Client
+from django.http import Http404
+from django.test import Client, RequestFactory
 from django.test.runner import DiscoverRunner
 from djangae.test_runner import bed_wrap
 
 from djangae.environment import get_application_root
+
+from django.conf.urls import handler404, handler500
+from django.utils.module_loading import import_string
 
 from google.appengine.api import apiproxy_stub_map, appinfo
 from google.appengine.datastore import datastore_stub_util
@@ -81,9 +85,10 @@ class TaskFailedBehaviour:
 
 
 class TaskFailedError(Exception):
-    def __init__(self, task_name, status_code):
+    def __init__(self, task_name, status_code, original_exception=None):
         self.task_name = task_name
         self.status_code = status_code
+        self.original_exception = original_exception
 
         super(TaskFailedError, self).__init__(
             "Task {} failed with status code: {}".format(task_name, status_code)
@@ -120,11 +125,43 @@ def process_task_queues(queue_name=None, failure_behaviour=TaskFailedBehaviour.D
 
         # AppEngine sets the task headers in the environment, so we should do the same
         with environ_override(**headers):
-            if method.upper() == "POST":
-                #Fixme: post data?
-                response = client.post(task['url'], data=post_data, content_type=headers['HTTP_CONTENT_TYPE'], **headers)
-            else:
-                response = client.get(task['url'], **headers)
+            try:
+                # The Django test client (which we use to call the task URL) doesn't handle
+                # errors in the same way as traditional Django would; it lets exceptions propagate.
+                # What we do here is wrap the client call in a try/except and then call either
+                # handler404 or handler500 to get the appropriate response. We then pass any
+                # original exception to TaskFailedError if the failure_behaviour is RAISE_ERROR
+
+                original_exception = None
+                factory = RequestFactory()
+
+                if method.upper() == "POST":
+                    request_kwargs = {
+                        "path": task['url'],
+                        "data": post_data,
+                        "content_type": headers['HTTP_CONTENT_TYPE']
+                    }
+                    request_kwargs.update(headers)
+
+                    #Fixme: post data?
+                    request = factory.post(**request_kwargs)
+                    response = client.post(**request_kwargs)
+                else:
+                    request_kwargs = {
+                        "path": task['url']
+                    }
+                    request_kwargs.update(headers)
+
+                    request = factory.get(**request_kwargs)
+                    response = client.get(**request_kwargs)
+            except Http404 as e:
+                original_exception = e
+                handler = import_string(handler404)
+                response = handler(request, e)
+            except Exception as e:
+                original_exception = e
+                handler = import_string(handler500)
+                response = handler(request)
 
         if not str(response.status_code).startswith("2"):
             # If the response wasn't a 2xx return code, then handle as required
@@ -138,7 +175,8 @@ def process_task_queues(queue_name=None, failure_behaviour=TaskFailedBehaviour.D
             else:
                 raise TaskFailedError(
                     headers['HTTP_X_APPENGINE_TASKNAME'],
-                    response.status_code
+                    response.status_code,
+                    original_exception
                 )
 
         if not tasks:
@@ -165,8 +203,8 @@ class TestCaseMixin(object):
         if self.taskqueue_stub:
             _flush_tasks(self.taskqueue_stub, queue_name)
 
-    def process_task_queues(self, queue_name=None):
-        process_task_queues(queue_name)
+    def process_task_queues(self, queue_name=None, failure_behaviour=TaskFailedBehaviour.DO_NOTHING):
+        process_task_queues(queue_name, failure_behaviour)
 
     def get_task_count(self, queue_name=None):
         return get_task_count(queue_name)
