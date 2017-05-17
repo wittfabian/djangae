@@ -22,10 +22,6 @@ def inconsistent_db(probability=0, connection='default'):
         This is vital for writing applications that deal with the Datastore's eventual consistency
     """
 
-    from django.db import connections
-
-    conn = connections[connection]
-
     stub = apiproxy_stub_map.apiproxy.GetStub('datastore_v3')
 
     # Set the probability of the datastore stub
@@ -61,6 +57,23 @@ def _flush_tasks(stub, queue_name=None):
         for queue in stub.GetQueues():
             stub.FlushQueue(queue["name"])
 
+
+@contextlib.contextmanager
+def environ_override(**kwargs):
+    original = os.environ.copy()
+    os.environ.update(kwargs)
+
+    yield
+
+    # Delete any keys that were introduced in kwargs
+    for key in kwargs:
+        if key not in original:
+            del os.environ[key]
+
+    # Restore original values
+    os.environ.update(original)
+
+
 def process_task_queues(queue_name=None):
     """
         Processes any queued tasks inline without a server.
@@ -80,14 +93,15 @@ def process_task_queues(queue_name=None):
         post_data = decoded_body
         headers = { "HTTP_{}".format(x.replace("-", "_").upper()): y for x, y in task['headers'] }
 
-        #FIXME: set headers like the queue name etc.
         method = task['method']
 
-        if method.upper() == "POST":
-            #Fixme: post data?
-            response = client.post(task['url'], data=post_data, content_type=headers['HTTP_CONTENT_TYPE'], **headers)
-        else:
-            response = client.get(task['url'], **headers)
+        # AppEngine sets the task headers in the environment, so we should do the same
+        with environ_override(**headers):
+            if method.upper() == "POST":
+                #Fixme: post data?
+                response = client.post(task['url'], data=post_data, content_type=headers['HTTP_CONTENT_TYPE'], **headers)
+            else:
+                response = client.get(task['url'], **headers)
 
         if response.status_code != 200:
             logging.info("Unexpected status (%r) while simulating task with url: %r", response.status_code, task['url'])
