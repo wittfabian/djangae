@@ -273,23 +273,23 @@ Cross-namespace foreign keys aren't supported. Also namespaces effect caching ke
 
 ## Special Indexes
 
-The App Engine datastore backend handles certain queries which are unsupported natively by adding hidden fields to the datastore instances.
+The App Engine datastore backend handles certain queries which are unsupported natively, by adding hidden fields to the Datastore entities or by storing additional child entities.
 The mechanism for adding these fields and then using them during querying is called "special indexing".
 
-For example, querying for `name__iexact` is not supported by the datastore. In this case Djangae generate an additional entity property with the name
+For example, querying for `name__iexact` is not supported by the Datastore. In this case Djangae generates an additional entity property with the name
 value lower-cased, and then when performing an iexact query, will lower case the lookup value and use the generated column rather than the `name` column.
 
 When you run a query that requires special indexes for the first time, an entry will be added to a generated file called `djangaeidx.yaml`. You will
 see this file appear in your project root. From that point on, any entities that are saved will have the additional property added. If a new entry
 appears in djangaeidx.yaml, you will need to resave all of your entities of that kind so that they will be returned by query lookups.
 
-### contains and icontains Filters
+### `contains` and `icontains` Filters
 
-When you use `__contains` or `__icontains` all subsequent entity saves will generate an additional descendent entity-per-instance-field to store
-indexing data for that field. This approach will add an additional `Put()` for each save() and an additional `Query()` for each `__contains`
+When you use `__contains` or `__icontains` in a query, the djangaeidx.yaml file will be updated so that all subsequent entity saves will generate an additional descendent entity per-instance-field to store
+indexing data for that field. This approach will add an additional `Put()` for each `save()` and an additional `Query()` for each `__contains`
 look up.
 
-Previously, Djangae used to store this index data on the entity itself which caused a number of problems:
+Previously, Djangae used to store this index data on the entity itself which caused a number of problems that are now avoided:
 
 1. The index data had more permutations than were necessary. This was each set of possible characters had to be stored in a List property so that
  the lookup could use an equality query. Djangae couldn't rely on an inequality (which would allow storing fewer permutations) because that would
