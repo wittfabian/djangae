@@ -74,10 +74,33 @@ def environ_override(**kwargs):
     os.environ.update(original)
 
 
-def process_task_queues(queue_name=None):
+class TaskFailedBehaviour:
+    DO_NOTHING = 0
+    RETRY_TASK = 1
+    RAISE_ERROR = 2
+
+
+class TaskFailedError(Exception):
+    def __init__(self, task_name, status_code):
+        self.task_name = task_name
+        self.status_code = status_code
+
+        super(TaskFailedError, self).__init__(
+            "Task {} failed with status code: {}".format(task_name, status_code)
+        )
+
+
+def process_task_queues(queue_name=None, failure_behaviour=TaskFailedBehaviour.DO_NOTHING):
     """
         Processes any queued tasks inline without a server.
         This is useful for end-to-end testing background tasks.
+
+        failure_behaviour: This controls the behaviour of the task processing in the case
+        that the task returns a status_code other than 2xx. Options are:
+
+        1. Do nothing (a message will be logged at INFO level though)
+        2. Retry the task (WARNING! This will result in an infinite loop if the task fails forever)
+        3. Throw a TaskFailedError
     """
 
     stub = apiproxy_stub_map.apiproxy.GetStub("taskqueue")
@@ -103,8 +126,20 @@ def process_task_queues(queue_name=None):
             else:
                 response = client.get(task['url'], **headers)
 
-        if response.status_code != 200:
-            logging.info("Unexpected status (%r) while simulating task with url: %r", response.status_code, task['url'])
+        if not str(response.status_code).startswith("2"):
+            # If the response wasn't a 2xx return code, then handle as required
+
+            if failure_behaviour == TaskFailedBehaviour.DO_NOTHING:
+                # Log a message if the task fails
+                logging.info("Unexpected status (%r) while simulating task with url: %r", response.status_code, task['url'])
+            elif failure_behaviour == TaskFailedBehaviour.RETRY_TASK:
+                # Add the task to the end of the task queue
+                tasks.append(task)
+            else:
+                raise TaskFailedError(
+                    headers['HTTP_X_APPENGINE_TASKNAME'],
+                    response.status_code
+                )
 
         if not tasks:
             #The map reduce may have added more tasks, so refresh the list
