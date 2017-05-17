@@ -46,6 +46,17 @@ class RelatedListFieldForm(forms.ModelForm):
         fields = ['related_list_field']
 
 
+class RequiredRelatedListFieldForm(forms.ModelForm):
+
+    class Meta:
+        model = RelatedListFieldModel
+        fields = ['related_list_field']
+
+    def __init__(self, *args, **kwargs):
+        super(RequiredRelatedListFieldForm, self).__init__(*args, **kwargs)
+        self.fields['related_list_field'].required = True
+
+
 class JSONFieldFormsTest(TestCase):
 
     def test_empty_string_submission(self):
@@ -120,3 +131,12 @@ class OrderedModelMultipleChoiceField(TestCase):
             [instance_two.pk, instance_three.pk, instance_one.pk]
         )
 
+    def test_validation_still_performed(self):
+        """
+        Assert the normal validation of the field value occurs despite
+        adding extra logic to the clean method.
+        """
+        data = dict(related_list_field=[])
+        form = RelatedListFieldForm(data)
+        self.assertFalse(form.is_valid())
+        self.assertIn('related_list_field', form.errors)

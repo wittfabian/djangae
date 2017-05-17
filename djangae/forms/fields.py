@@ -108,11 +108,11 @@ class OrderedModelMultipleChoiceField(forms.ModelMultipleChoiceField):
         values passed in is lost.
         """
         if self.required and not value:
-            raise ValidationError(self.error_messages['required'], code='required')
+            raise forms.ValidationError(self.error_messages['required'], code='required')
         elif not self.required and not value:
             return self.queryset.none()
         if not isinstance(value, (list, tuple)):
-            raise ValidationError(self.error_messages['list'], code='list')
+            raise forms.ValidationError(self.error_messages['list'], code='list')
 
         # now make a copy of the value - we still run it via the clean
         # and validators so ValidationErrors can be raised - but we don't
