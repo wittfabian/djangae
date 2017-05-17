@@ -23,6 +23,9 @@
  - Fixed an ImportError when the SDK is not on sys.path.
  - Updated the documenation to say that DJANGAE_CREATE_UNKNOWN_USER defaults to True.
  - os.environ is now correctly updated with task headers when using process_task_queues in tests
+ - process_task_queues can now be controlled by passing the `failure_behaviour` argument as appropriate
+ - process_task_queues will no longer propagate exceptions from tasks, instead use the `failure_behaviour` to control what happens
+   if an exception occurs in a task
 
 
 ## v0.9.9 (release date: 27th March 2017)
