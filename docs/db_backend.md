@@ -306,6 +306,9 @@ will be removed so it's recommended that upon upgrading to Djangae 0.9.10 you re
 
 Resaving will not remove old indexed properties, we hope to provide a migration file in future that will do that for you.
 
+### Querying `date` and `datetime` Fields with `contains`
+The same as when Django is used with a SQL database, Djangae's indexing allows `contains` and `icontains` filters to be used on `DateField` and `DateTimeField`.  When this is used, the field values are converted to ISO format and then indexed as strings, allowing you to perform `contains` queries on any part of the ISO format string.
+
 
 ### Distributing djangaeidx.yaml
 
