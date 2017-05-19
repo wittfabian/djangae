@@ -97,18 +97,30 @@ def process_task_queues(queue_name=None):
             tasks = _get_queued_tasks(stub, queue_name)
 
 
+def get_task_count(queue_name=None):
+    stub = apiproxy_stub_map.apiproxy.GetStub("taskqueue")
+    return len(_get_queued_tasks(stub, queue_name, flush=False))
+
+
 class TestCaseMixin(object):
     def setUp(self):
         super(TestCaseMixin, self).setUp()
         self.taskqueue_stub = apiproxy_stub_map.apiproxy.GetStub("taskqueue")
-        if self.taskqueue_stub:
-            _flush_tasks(self.taskqueue_stub) # Make sure we clear the queue before every test
+        # Make sure we clear the queue before every test
+        self.flush_task_queues()
 
     def assertNumTasksEquals(self, num, queue_name='default'):
         self.assertEqual(num, len(_get_queued_tasks(self.taskqueue_stub, queue_name, flush=False)))
 
+    def flush_task_queues(self, queue_name=None):
+        if self.taskqueue_stub:
+            _flush_tasks(self.taskqueue_stub, queue_name)
+
     def process_task_queues(self, queue_name=None):
         process_task_queues(queue_name)
+
+    def get_task_count(self, queue_name=None):
+        return get_task_count(queue_name)
 
 
 class HandlerAssertionsMixin(object):

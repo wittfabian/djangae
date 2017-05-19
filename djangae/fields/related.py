@@ -10,14 +10,15 @@ from django.utils.functional import cached_property
 from django.core.exceptions import ImproperlyConfigured, ValidationError
 from djangae.forms.fields import (
     encode_pk,
-    GenericRelationFormfield
+    GenericRelationFormfield,
+    OrderedModelMultipleChoiceField,
 )
 from django.utils import six
 import django
 
 # DJANGAE
 from djangae.core.validators import MinItemsValidator, MaxItemsValidator
-from djangae.fields.iterable import IsEmptyLookup, ContainsLookup, OverlapLookup
+from djangae.fields.iterable import IsEmptyLookup, ContainsLookup, OverlapLookup, _serialize_value
 
 
 class RelatedIteratorRel(ForeignObjectRel):
@@ -514,17 +515,15 @@ class RelatedIteratorField(ForeignObject):
         return ret
 
     def value_to_string(self, obj):
-        """
-        Custom method for serialization, as JSON doesn't support
-        serializing sets.
-        """
-        return str(list(self._get_val_from_obj(obj)))
-
+        return u"[" + ",".join(
+            _serialize_value(o) for o in self._get_val_from_obj(obj)
+        ) + "]"
 
     def formfield(self, **kwargs):
         db = kwargs.pop('using', None)
+        form_class = kwargs.pop('form_class', forms.ModelMultipleChoiceField)
         defaults = {
-            'form_class': forms.ModelMultipleChoiceField,
+            'form_class': form_class,
             'queryset': self.rel.to._default_manager.using(db).complex_filter(self.rel.limit_choices_to)
         }
         defaults.update(kwargs)
@@ -549,6 +548,34 @@ class RelatedIteratorField(ForeignObject):
 
         return super(RelatedIteratorField, self).get_lookup(lookup_name)
 
+    def to_python(self, value):
+        if value is None:
+            return list()
+
+        # Deal with deserialization from a string
+        if isinstance(value, basestring):
+            if not (value.startswith("[") and value.endswith("]")):
+                raise ValidationError("Invalid input for {} instance", type(self).__name__)
+
+            value = value[1:-1].strip()
+
+            if not value:
+                return list()
+
+            ids = [
+                self.rel.to._meta.pk.to_python(x.strip("'").strip("\""))
+                for x in value.split(",")
+                if len(value) > 2
+            ]
+            # Annoyingly Django special cases FK and M2M in the Python deserialization code,
+            # to assign to the attname, whereas all other fields (including this one) are required to
+            # populate field.name instead. So we have to query here... we have no choice :(
+            objs = self.rel.to._default_manager.db_manager('default').in_bulk(ids)
+
+            # retain order
+            return [objs.get(_id) for _id in ids if _id in objs]
+
+        return list(value)
 
 RelatedIteratorField.register_lookup(RelatedContainsLookup)
 RelatedIteratorField.register_lookup(RelatedOverlapLookup)
@@ -576,27 +603,7 @@ class RelatedSetField(RelatedIteratorField):
         return name, path, args, kwargs
 
     def to_python(self, value):
-        if value is None:
-            return set()
-
-        # Deal with deserialization from a string
-        if isinstance(value, basestring):
-            if not (value.startswith("[") and value.endswith("]")) and \
-               not (value.startswith("{") and value.endswith("}")):
-                raise ValidationError("Invalid input for RelatedSetField instance")
-
-            value = value[1:-1].strip()
-
-            if not value:
-                return set()
-
-            ids = [self.rel.to._meta.pk.to_python(x) for x in value.split(",")]
-            # Annoyingly Django special cases FK and M2M in the Python deserialization code,
-            # to assign to the attname, whereas all other fields (including this one) are required to
-            # populate field.name instead. So we have to query here... we have no choice :(
-            return set(self.rel.to._default_manager.db_manager('default').filter(pk__in=ids))
-
-        return set(value)
+        return set(super(RelatedSetField, self).to_python(value))
 
     def save_form_data(self, instance, data):
         setattr(instance, self.attname, set()) #Wipe out existing things
@@ -630,27 +637,15 @@ class RelatedListField(RelatedIteratorField):
 
         return name, path, args, kwargs
 
-    def to_python(self, value):
-        if value is None:
-            return list()
-
-        # Deal with deserialization from a string
-        if isinstance(value, basestring):
-            if not (value.startswith("[") and value.endswith("]")):
-                raise ValidationError("Invalid input for RelatedListField instance")
-
-            value = value[1:-1].strip()
-
-            if not value:
-                return list()
-
-            ids = [self.rel.to._meta.pk.to_python(x) for x in value.split(",")]
-            # Annoyingly Django special cases FK and M2M in the Python deserialization code,
-            # to assign to the attname, whereas all other fields (including this one) are required to
-            # populate field.name instead. So we have to query here... we have no choice :(
-            return list(self.rel.to._default_manager.db_manager('default').filter(pk__in=ids))
-
-        return list(value)
+    def formfield(self, **kwargs):
+        """
+        Specify a OrderedModelMultipleChoiceField for the `form_class` so we
+        can retain ordering.
+        """ 
+        # change the form_class in defaults from using ModelMultipleChoiceField
+        # in preference for the djangae subclass OrderedModelMultipleChoiceField
+        kwargs['form_class'] = OrderedModelMultipleChoiceField
+        return super(RelatedListField, self).formfield(**kwargs)
 
     def save_form_data(self, instance, data):
         setattr(instance, self.attname, []) #Wipe out existing things

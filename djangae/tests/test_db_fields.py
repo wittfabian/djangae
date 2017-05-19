@@ -1,8 +1,10 @@
 # -*- encoding: utf-8 -*
 from collections import OrderedDict
+import datetime
 
 # LIBRARIES
 from django import forms
+from django.core import serializers
 from django.db import models
 from django.db.utils import IntegrityError
 from django.conf import settings
@@ -142,6 +144,10 @@ class ISModel(models.Model):
 class IterableFieldModel(models.Model):
     set_field = SetField(models.CharField(max_length=1))
     list_field = ListField(models.CharField(max_length=1))
+    set_field_int = SetField(models.BigIntegerField(max_length=1))
+    list_field_int = ListField(models.BigIntegerField(max_length=1))
+    set_field_dt = SetField(models.DateTimeField())
+    list_field_dt = ListField(models.DateTimeField())
 
     class Meta:
         app_label = "djangae"
@@ -425,7 +431,7 @@ class IterableFieldTests(TestCase):
         instance = IterableFieldModel.objects.get(pk=instance.pk)
         self.assertEqual(set(["One"]), instance.set_field)
 
-        self.assertEqual({1, 2}, SetField(models.IntegerField).to_python("{1, 2}"))
+        self.assertEqual({1, 2}, SetField(models.IntegerField).to_python("[1, 2]"))
 
     def test_empty_list_queryable_with_is_null(self):
         instance = IterableFieldModel.objects.create()
@@ -440,6 +446,24 @@ class IterableFieldTests(TestCase):
 
         self.assertFalse(IterableFieldModel.objects.exclude(set_field__isempty=False).exists())
         self.assertTrue(IterableFieldModel.objects.exclude(set_field__isempty=True).exists())
+
+    def test_serialization(self):
+        dt = datetime.datetime(2017, 1, 1, 12)
+        instance = IterableFieldModel.objects.create(
+            set_field={u"foo"},
+            list_field=[u"bar"],
+            set_field_int={123L},
+            list_field_int=[456L],
+            set_field_dt={dt},
+            list_field_dt=[dt],
+        )
+
+        self.assertEqual("['foo']", instance._meta.get_field("set_field").value_to_string(instance))
+        self.assertEqual("['bar']", instance._meta.get_field("list_field").value_to_string(instance))
+        self.assertEqual("[123]", instance._meta.get_field("set_field_int").value_to_string(instance))
+        self.assertEqual("[456]", instance._meta.get_field("list_field_int").value_to_string(instance))
+        self.assertEqual("['2017-01-01T12:00:00']", instance._meta.get_field("set_field_dt").value_to_string(instance))
+        self.assertEqual("['2017-01-01T12:00:00']", instance._meta.get_field("list_field_dt").value_to_string(instance))
 
     def test_saving_forms(self):
         class TestForm(forms.ModelForm):
@@ -480,7 +504,7 @@ class IterableFieldTests(TestCase):
             that no validation error is rasied.
         """
         others = []
-        for x in xrange(2):
+        for x in range(2):
             others.append(ISOther.objects.create())
         instance = IterableFieldsWithValidatorsModel(
             related_set=set(others),  # not being tested here
@@ -492,7 +516,7 @@ class IterableFieldTests(TestCase):
 
     def test_list_field_max_length_invalid(self):
         others = []
-        for x in xrange(2):
+        for x in range(2):
             others.append(ISOther.objects.create())
         instance = IterableFieldsWithValidatorsModel(
             related_set=set(others),  # not being tested here
@@ -508,7 +532,7 @@ class IterableFieldTests(TestCase):
 
     def test_list_field_min_length_invalid(self):
         others = []
-        for x in xrange(2):
+        for x in range(2):
             others.append(ISOther.objects.create())
         instance = IterableFieldsWithValidatorsModel(
             related_set=set(others),  # not being tested here
@@ -524,7 +548,7 @@ class IterableFieldTests(TestCase):
 
     def test_set_field_max_length_invalid(self):
         others = []
-        for x in xrange(2):
+        for x in range(2):
             others.append(ISOther.objects.create())
         instance = IterableFieldsWithValidatorsModel(
             related_set=set(others),  # not being tested here
@@ -540,7 +564,7 @@ class IterableFieldTests(TestCase):
 
     def test_set_field_min_length_invalid(self):
         others = []
-        for x in xrange(2):
+        for x in range(2):
             others.append(ISOther.objects.create())
         instance = IterableFieldsWithValidatorsModel(
             related_set=set(others),  # not being tested here
@@ -553,6 +577,20 @@ class IterableFieldTests(TestCase):
             "{'set_field': [u'Ensure this field has at least 2 items (it has 1).']}",
             instance.full_clean,
         )
+
+    def test_list_field_serializes_and_deserializes(self):
+        obj = IterableFieldModel(list_field=['foo', 'bar'])
+        data = serializers.serialize('json', [obj])
+
+        new_obj = serializers.deserialize('json', data).next().object
+        self.assertEqual(new_obj.list_field, ['foo', 'bar'])
+
+    def test_set_field_serializes_and_deserializes(self):
+        obj = IterableFieldModel(set_field=set(['foo', 'bar']))
+        data = serializers.serialize('json', [obj])
+
+        new_obj = serializers.deserialize('json', data).next().object
+        self.assertEqual(new_obj.set_field, set(['foo', 'bar']))
 
 
 class RelatedIterableFieldTests(TestCase):
@@ -582,7 +620,7 @@ class RelatedIterableFieldTests(TestCase):
             that no validation error is rasied.
         """
         others = []
-        for x in xrange(2):
+        for x in range(2):
             others.append(ISOther.objects.create())
         instance = IterableFieldsWithValidatorsModel(
             list_field=["1", "2"],  # not being tested here
@@ -594,7 +632,7 @@ class RelatedIterableFieldTests(TestCase):
 
     def test_related_list_field_max_length_invalid(self):
         others = []
-        for x in xrange(5):
+        for x in range(5):
             others.append(ISOther.objects.create())
         instance = IterableFieldsWithValidatorsModel(
             list_field=["1", "2"],  # not being tested here
@@ -610,7 +648,7 @@ class RelatedIterableFieldTests(TestCase):
 
     def test_related_list_field_min_length_invalid(self):
         others = []
-        for x in xrange(2):
+        for x in range(2):
             others.append(ISOther.objects.create())
         instance = IterableFieldsWithValidatorsModel(
             list_field=["1", "2"],  # not being tested here
@@ -626,7 +664,7 @@ class RelatedIterableFieldTests(TestCase):
 
     def test_related_set_field_max_length_invalid(self):
         others = []
-        for x in xrange(5):
+        for x in range(5):
             others.append(ISOther.objects.create())
         instance = IterableFieldsWithValidatorsModel(
             list_field=["1", "2"],  # not being tested here
@@ -642,7 +680,7 @@ class RelatedIterableFieldTests(TestCase):
 
     def test_related_set_field_min_length_invalid(self):
         others = []
-        for x in xrange(2):
+        for x in range(2):
             others.append(ISOther.objects.create())
         instance = IterableFieldsWithValidatorsModel(
             list_field=["1", "2"],  # not being tested here
@@ -658,7 +696,7 @@ class RelatedIterableFieldTests(TestCase):
 
     def test_model_stores_ids_as_integers_when_saving(self):
         others = []
-        for x in xrange(2):
+        for x in range(2):
             others.append(ISOther.objects.create())
 
         instance = IterableRelatedModel(
@@ -674,7 +712,7 @@ class RelatedIterableFieldTests(TestCase):
 
     def test_model_stores_ids_as_non_integers(self):
         others = []
-        for x in xrange(2):
+        for x in range(2):
             others.append(StringPkModel.objects.create(name=str(x)))
 
         instance = IterableRelatedWithNonIntPkModel(
@@ -750,7 +788,7 @@ class RelatedSetFieldModelTests(TestCase):
     def test_prefetch_related(self):
         tag = Tag.objects.create(name="Apples")
 
-        for i in xrange(2):
+        for i in range(2):
             Post.objects.create(content="Bananas", tags={tag})
 
         posts = list(Post.objects.prefetch_related('tags').all())
@@ -792,7 +830,7 @@ class InstanceListFieldTests(TestCase):
         # Extra one to make sure we're filtering properly
         Tag.objects.create(name="unused")
 
-        for i in xrange(3):
+        for i in range(3):
             Post.objects.create(content="Bananas", ordered_tags=tags)
 
         with self.assertNumQueries(2):
@@ -958,6 +996,20 @@ class InstanceListFieldTests(TestCase):
         main.save()
         self.assertItemsEqual([other, other2, other2], main.related_list.filter(name="one"))
 
+    def test_related_list_field_serializes_and_deserializes(self):
+        obj = ISModel.objects.create()
+        foo = ISOther.objects.create(name='foo')
+        bar = ISOther.objects.create(name='bar')
+        obj.related_list.add(foo, bar)
+        obj.save()
+
+        data = serializers.serialize('json', [obj])
+        new_obj = serializers.deserialize('json', data).next().object
+        self.assertEqual(
+            list(new_obj.related_list.all()),
+            [foo, bar],
+        )
+
 
 class InstanceSetFieldTests(TestCase):
 
@@ -1060,6 +1112,21 @@ class InstanceSetFieldTests(TestCase):
 
         self.assertItemsEqual([obj], ISModel.objects.filter(related_things__isempty=True))
         self.assertItemsEqual([obj], ISModel.objects.filter(related_things_ids__isempty=True))
+
+    def test_related_set_field_serializes_and_deserializes(self):
+        obj = ISModel.objects.create()
+        foo = ISOther.objects.create(name='foo')
+        bar = ISOther.objects.create(name='bar')
+        obj.related_things.add(foo, bar)
+        obj.save()
+
+        data = serializers.serialize('json', [obj])
+
+        new_obj = serializers.deserialize('json', data).next().object
+        self.assertEqual(
+            set(new_obj.related_things.all()),
+            set([foo, bar]),
+        )
 
 
 class TestGenericRelationField(TestCase):
@@ -1232,7 +1299,7 @@ class CharFieldModelTests(TestCase):
         try:
             class TestModel(models.Model):
                 test_char_field = CharField(max_length=1501)
-        except AssertionError, e:
+        except AssertionError as e:
             self.assertEqual(
                 e.message,
                 'CharFields max_length must not be grater than 1500 bytes.',
