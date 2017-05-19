@@ -22,6 +22,7 @@
  - The in-context cache is now reliably wiped when the testbed is initialized for each test.
  - Fixed an ImportError when the SDK is not on sys.path.
  - Updated the documenation to say that DJANGAE_CREATE_UNKNOWN_USER defaults to True.
+ - Ensure that the order of values in a RelatedListField are respected when updated via a form.
 
 
 ## v0.9.9 (release date: 27th March 2017)
