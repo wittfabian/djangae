@@ -23,6 +23,7 @@
  - Fixed an ImportError when the SDK is not on sys.path.
  - Fix issue where serialization of IterableFields resulted in invalid JSON
  - Updated the documenation to say that DJANGAE_CREATE_UNKNOWN_USER defaults to True.
+ - Fixed a hard requirement on PIL/Pillow when running the tests. Now, the images stub will not be available if Pillow isn't installed.
 
 ## v0.9.9 (release date: 27th March 2017)
 
