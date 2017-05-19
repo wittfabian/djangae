@@ -23,6 +23,7 @@
  - Fixed an ImportError when the SDK is not on sys.path.
  - Fix issue where serialization of IterableFields resulted in invalid JSON
  - Updated the documenation to say that DJANGAE_CREATE_UNKNOWN_USER defaults to True.
+ - Ensure that the order of values in a RelatedListField are respected when updated via a form.
 
 ## v0.9.9 (release date: 27th March 2017)
 
