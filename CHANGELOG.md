@@ -14,6 +14,9 @@
 - Added a test to confirm query slicing works correctly.
 - Added `ComputedCollationField` to generate correct ordering for unicode strings.
 - Changed CloudStorage and BlobstoreStorage storage backends to return HTTPS URLs for images (instead of the previous protocol-relative URLs).
+- Implemented an entirely new means of storing the indexes for contains and icontains queries. **If you have existing
+  entities which use the current indexing, you MUST set `DJANGAE_USE_LEGACY_CONTAINS_LOGIC = True` in your settings!!**
+  This will be removed in the next release of Djangae so you'll need to re-save your entities with this setting set to False before upgrading (see [detailed release notes](release_notes/0_9_10.md)).
 
 ### Bug fixes:
 
@@ -85,8 +88,7 @@
 
 - Improved documentation for `djangae.contrib.mappers.defer_iteration`.
 - Changed the installation documentation to reflect the correct way to launch tests
-- Added documentation for local server port configuration.
-- Added documentation for `DJANGAE_ADDITIONAL_MODULES` setting.
+
 
 ## v0.9.8 (release date: 6th December 2016)
 

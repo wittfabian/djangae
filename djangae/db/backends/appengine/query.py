@@ -7,6 +7,7 @@ import datetime
 from itertools import chain, imap
 from django.db.models.sql.datastructures import EmptyResultSet
 
+from django.db import connections
 from django.db.models import AutoField
 
 
@@ -87,7 +88,9 @@ def convert_operator(operator):
 
 
 class WhereNode(object):
-    def __init__(self):
+    def __init__(self, using):
+        self.using = using
+
         self.column = None
         self.operator = None
         self.value = None
@@ -153,7 +156,12 @@ class WhereNode(object):
 
             add_special_index(target_field.model, column, special_indexer, operator, value)
             index_type = special_indexer.prepare_index_type(operator, value)
-            value = special_indexer.prep_value_for_query(value)
+            value = special_indexer.prep_value_for_query(
+                value,
+                model=target_field.model,
+                column=column,
+                connection=connections[self.using]
+            )
             column = special_indexer.indexed_column_name(column, value, index_type)
             operator = special_indexer.prep_query_operator(operator)
 
@@ -590,17 +598,17 @@ class Query(object):
             if self.polymodel_filter_added:
                 return
 
-            new_filter = WhereNode()
+            new_filter = WhereNode(self.connection.alias)
             new_filter.column = POLYMODEL_CLASS_ATTRIBUTE
             new_filter.operator = '='
             new_filter.value = self.model._meta.db_table
 
             # We add this bare AND just to stay consistent with what Django does
-            new_and = WhereNode()
+            new_and = WhereNode(self.connection.alias)
             new_and.connector = 'AND'
             new_and.children = [new_filter]
 
-            new_root = WhereNode()
+            new_root = WhereNode(self.connection.alias)
             new_root.connector = 'AND'
             new_root.children = [new_and]
             if self._where:
