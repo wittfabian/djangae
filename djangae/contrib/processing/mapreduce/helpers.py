@@ -1,5 +1,6 @@
 import cPickle
 import pipeline
+
 from importlib import import_module
 from mapreduce import context
 from mapreduce.mapper_pipeline import MapperPipeline
@@ -7,6 +8,8 @@ from mapreduce.mapreduce_pipeline import MapreducePipeline
 from mapreduce import pipeline_base
 from mapreduce.model import MapreduceState
 from mapreduce.input_readers import RawDatastoreInputReader, GoogleCloudStorageInputReader
+
+from django.utils import six
 from djangae.contrib.processing.mapreduce.input_readers import DjangoInputReader
 
 from utils import qualname
@@ -22,7 +25,7 @@ class DynamicPipeline(pipeline_base.PipelineBase):
     def __init__(self, pipelines, *args, **kwargs):
         # This gets reinstantiated somewhere with the already-pickled pipelines argument
         # so we prevent double pickling by checking it's not a string
-        if not isinstance(pipelines, basestring):
+        if not isinstance(pipelines, six.string_types):
             pipelines = str(cPickle.dumps(pipelines))
         super(DynamicPipeline, self).__init__(pipelines, *args, **kwargs)
 
