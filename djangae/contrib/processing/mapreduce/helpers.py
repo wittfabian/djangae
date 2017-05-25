@@ -238,8 +238,8 @@ def map_entities(kind_name, namespace, processor_func, *args, **kwargs):
         on each one.
         Calls finalize_func when the iteration completes.
 
-        output_writer is optional, but should be a mapreduce
-        OutputWriter subclass
+        output_writer is optional, but should be a mapreduce OutputWriter subclass
+        _filters is an optional kwarg which will be passed directly to the input reader
 
         Returns the pipeline
     """
@@ -313,6 +313,7 @@ def map_reduce_entities(kind_name, namespace, map_func, reduce_func, output_writ
         Does a complete map-shuffle-reduce over the entities
 
         output_writer should be a mapreduce OutputWriter subclass
+        _filters is an optional kwarg which will be passed directly to the input reader
 
         Returns the pipeline
     """
