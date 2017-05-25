@@ -201,7 +201,27 @@ def count_entity(entity, counter_id):
 class MapEntitiesTests(TestCase):
     def setUp(self):
         for i in range(5):
-            TestModel.objects.create(id=i+1)
+            TestModel.objects.create(id=i+1, text=str(i))
+
+    def test_filters(self):
+        counter = Counter.objects.create()
+
+        pipeline = map_entities(
+            TestModel._meta.db_table,
+            connection.settings_dict['NAMESPACE'],
+            count_entity,
+            finalize_func=delete,
+            counter_id=counter.pk,
+            _filters=[("text", "<", "3")]
+        )
+
+        self.process_task_queues()
+        pipeline = get_pipeline_by_id(pipeline.pipeline_id)
+        self.assertTrue(pipeline.has_finalized)
+        counter.refresh_from_db()
+
+        self.assertEqual(3, counter.count)
+        self.assertFalse(TestModel.objects.count())
 
     def test_mapping_over_entities(self):
         counter = Counter.objects.create()
