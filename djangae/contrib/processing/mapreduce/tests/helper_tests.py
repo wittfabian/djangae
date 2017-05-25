@@ -24,7 +24,7 @@ class TestModel(models.Model):
         app_label = "mapreduce"
 
     is_true = models.BooleanField(default=False)
-    text = models.CharField(null=True)
+    text = models.CharField(null=True, max_length=50)
 
 
 class Counter(models.Model):
@@ -212,7 +212,7 @@ class MapEntitiesTests(TestCase):
             count_entity,
             finalize_func=delete,
             counter_id=counter.pk,
-            _filters=[("text", "<", "3")]
+            _filters=[("text", "=", "3")]
         )
 
         self.process_task_queues()
@@ -220,7 +220,7 @@ class MapEntitiesTests(TestCase):
         self.assertTrue(pipeline.has_finalized)
         counter.refresh_from_db()
 
-        self.assertEqual(3, counter.count)
+        self.assertEqual(1, counter.count)
         self.assertFalse(TestModel.objects.count())
 
     def test_mapping_over_entities(self):

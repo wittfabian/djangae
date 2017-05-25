@@ -243,7 +243,7 @@ def map_entities(kind_name, namespace, processor_func, *args, **kwargs):
 
         Returns the pipeline
     """
-    options = extract_options(kwargs, additional={"finalize_func"})
+    options = extract_options(kwargs, additional={"finalize_func", "_filters"})
 
     params = {
         'input_reader': {
