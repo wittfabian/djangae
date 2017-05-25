@@ -107,21 +107,14 @@ class OrderedModelMultipleChoiceField(forms.ModelMultipleChoiceField):
         fallback if no ordering is explicit), and thus the original order of the
         values passed in is lost.
         """
-        if self.required and not value:
-            raise forms.ValidationError(self.error_messages['required'], code='required')
-        elif not self.required and not value:
-            return self.queryset.none()
-        if not isinstance(value, (list, tuple)):
-            raise forms.ValidationError(self.error_messages['list'], code='list')
-
-        # now make a copy of the value - we still run it via the clean
-        # and validators so ValidationErrors can be raised - but we don't
-        # return the queryset like the vanilla OrderedModelMultipleChoiceField
-        # as the ordering will be lost by this point
+        # Make a copy of the value - we still run it via the normal clean
+        # so that validators are run - but we don't return the queryset like
+        # the vanilla ModelMultipleChoiceField as the ordering will be lost by
+        # doing that, so instead we return a list of the PK values, which is
+        # not strictly what we should do, but RelatedListField accepts it and
+        # so it makes this work
         value_copy = copy.deepcopy(value)
-        self._check_values(value_copy)
-        self.run_validators(value_copy)
-
+        super(OrderedModelMultipleChoiceField, self).clean(value_copy)
         return [self.queryset.model._meta.pk.to_python(v) for v in value]
 
 

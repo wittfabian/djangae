@@ -641,10 +641,10 @@ class RelatedListField(RelatedIteratorField):
         """
         Specify a OrderedModelMultipleChoiceField for the `form_class` so we
         can retain ordering.
-        """ 
+        """
         # change the form_class in defaults from using ModelMultipleChoiceField
         # in preference for the djangae subclass OrderedModelMultipleChoiceField
-        kwargs['form_class'] = OrderedModelMultipleChoiceField
+        kwargs['form_class'] = kwargs.pop('form_class', OrderedModelMultipleChoiceField)
         return super(RelatedListField, self).formfield(**kwargs)
 
     def save_form_data(self, instance, data):
