@@ -248,7 +248,8 @@ def map_entities(kind_name, namespace, processor_func, *args, **kwargs):
     params = {
         'input_reader': {
             RawDatastoreInputReader.ENTITY_KIND_PARAM: kind_name,
-            RawDatastoreInputReader.NAMESPACE_PARAM: namespace
+            RawDatastoreInputReader.NAMESPACE_PARAM: namespace,
+            RawDatastoreInputReader.FILTERS_PARAM: options.pop("_filters", [])
         },
         'output_writer': options.pop("_output_writer_kwargs", {}) or {}
     }
