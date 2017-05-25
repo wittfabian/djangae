@@ -63,7 +63,7 @@ def delete(*args, **kwargs):
 class MapReduceEntityTests(TestCase):
 
     def setUp(self):
-        for i in xrange(5):
+        for i in range(5):
             TestModel.objects.create(
                 id=i+1,
                 text="abcc"
@@ -88,7 +88,7 @@ class MapReduceEntityTests(TestCase):
 class MapReduceQuerysetTests(TestCase):
 
     def setUp(self):
-        for i in xrange(5):
+        for i in range(5):
             TestModel.objects.create(
                 id=i+1,
                 text="abcc"
@@ -111,7 +111,7 @@ class MapReduceQuerysetTests(TestCase):
 
 class MapQuerysetTests(TestCase):
     def setUp(self):
-        for i in xrange(5):
+        for i in range(5):
             TestModel.objects.create(id=i+1)
 
     def test_filtering(self):
@@ -200,7 +200,7 @@ def count_entity(entity, counter_id):
 
 class MapEntitiesTests(TestCase):
     def setUp(self):
-        for i in xrange(5):
+        for i in range(5):
             TestModel.objects.create(id=i+1)
 
     def test_mapping_over_entities(self):
