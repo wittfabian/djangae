@@ -69,9 +69,27 @@ class MapReduceEntityTests(TestCase):
                 text="abcc"
             )
 
+    def test_filters(self):
+        pipeline = map_reduce_entities(
+            TestModel._meta.db_table,
+            connection.settings_dict["NAMESPACE"],
+            yield_letters,
+            reduce_count,
+            output_writers.GoogleCloudStorageKeyValueOutputWriter,
+            _output_writer_kwargs={
+                'bucket_name': 'test-bucket'
+            },
+            _filters=[("text", "=", "abcc")]
+        )
+        self.process_task_queues()
+        # Refetch the pipeline record
+        pipeline = get_pipeline_by_id(pipeline.pipeline_id)
+        self.assertTrue(pipeline.has_finalized)
+
     def test_mapreduce_over_entities(self):
         pipeline = map_reduce_entities(
             TestModel._meta.db_table,
+            connection.settings_dict["NAMESPACE"],
             yield_letters,
             reduce_count,
             output_writers.GoogleCloudStorageKeyValueOutputWriter,

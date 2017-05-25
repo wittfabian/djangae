@@ -308,7 +308,7 @@ def map_reduce_queryset(queryset, map_func, reduce_func, output_writer, *args, *
     return pipeline
 
 
-def map_reduce_entities(kind_name, map_func, reduce_func, output_writer, *args, **kwargs):
+def map_reduce_entities(kind_name, namespace, map_func, reduce_func, output_writer, *args, **kwargs):
     """
         Does a complete map-shuffle-reduce over the entities
 
@@ -320,7 +320,7 @@ def map_reduce_entities(kind_name, map_func, reduce_func, output_writer, *args, 
     reduce_func = qualname(reduce_func)
     output_writer = qualname(output_writer)
 
-    options = extract_options(kwargs)
+    options = extract_options(kwargs, additional={"_filters"})
 
     _shards = options.pop("_shards", None)
     _job_name = options.pop("_job_name", "Map reduce task over {}".format(kind_name))
@@ -334,7 +334,9 @@ def map_reduce_entities(kind_name, map_func, reduce_func, output_writer, *args, 
         output_writer,
         mapper_params={
             'input_reader': {
-                RawDatastoreInputReader.ENTITY_KIND_PARAM: kind_name
+                RawDatastoreInputReader.ENTITY_KIND_PARAM: kind_name,
+                RawDatastoreInputReader.NAMESPACE_PARAM: namespace,
+                RawDatastoreInputReader.FILTERS_PARAM: options.pop("_filters", [])
             },
         },
         reducer_params={
