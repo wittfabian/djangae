@@ -157,12 +157,34 @@ def get_field_from_column(model, column):
             return field
     return None
 
-def django_instance_to_entity(connection, model, fields, raw, instance, check_null=True):
+
+def django_instance_to_entities(connection, fields, raw, instance, check_null=True, model=None):
+    """
+        Converts a Django Model instance to an App Engine `Entity`
+
+        Arguments:
+            connection: Djangae appengine connection object
+            fields: A list of fields to populate in the Entity
+            raw: raw flag to pass to get_prepared_db_value
+            instance: The Django model instance to convert
+            check_null: Whether or not we should enforce NULL during conversion
+            (throws an error if None is set on a non-nullable field)
+            model: Model class to use instead of the instance one
+
+        Returns:
+            entity, [entity, entity, ...]
+
+       Where the first result in the tuple is the primary entity, and the
+       remaining entities are optionally descendents of the primary entity. This
+       is useful for special indexes (e.g. contains)
+    """
+
     from djangae.db.backends.appengine.indexing import special_indexes_for_column, get_indexer
     from djangae.db.backends.appengine import POLYMODEL_CLASS_ATTRIBUTE
 
-    # uses_inheritance = False
+    model = model or type(instance)
     inheritance_root = get_top_concrete_parent(model)
+
     db_table = get_datastore_kind(inheritance_root)
 
     def value_from_instance(_instance, _field):
@@ -183,9 +205,10 @@ def django_instance_to_entity(connection, model, fields, raw, instance, check_nu
 
         return value, is_primary_key
 
-
     field_values = {}
     primary_key = None
+
+    descendents = []
 
     for field in fields:
         value, is_primary_key = value_from_instance(instance, field)
@@ -197,23 +220,33 @@ def django_instance_to_entity(connection, model, fields, raw, instance, check_nu
         # Add special indexed fields
         for index in special_indexes_for_column(model, field.column):
             indexer = get_indexer(field, index)
-            values = indexer.prep_value_for_database(value, index)
+
+            values = indexer.prep_value_for_database(value, index, model=model, column=field.column)
 
             if values is None:
                 continue
 
             if not hasattr(values, "__iter__"):
-                values = [ values ]
+                values = [values]
 
-            for v in values:
-                column = indexer.indexed_column_name(field.column, v, index)
-                if column in field_values:
-                    if not isinstance(field_values[column], list):
-                        field_values[column] = [ field_values[column], v ]
+            # If the indexer returns additional entities (instead of indexing a special column)
+            # then just store those entities
+            if indexer.PREP_VALUE_RETURNS_ENTITIES:
+                descendents.extend(values)
+            else:
+                for i, v in enumerate(values):
+                    column = indexer.indexed_column_name(field.column, v, index)
+
+                    # If the column already exists in the values, then we convert it to a
+                    # list and append the new value
+                    if column in field_values:
+                        if not isinstance(field_values[column], list):
+                            field_values[column] = [field_values[column], v]
+                        else:
+                            field_values[column].append(v)
                     else:
-                        field_values[column].append(v)
-                else:
-                    field_values[column] = v
+                        # Otherwise we just set the column to the value
+                        field_values[column] = v
 
     kwargs = {}
     if primary_key:
@@ -238,7 +271,7 @@ def django_instance_to_entity(connection, model, fields, raw, instance, check_nu
     if len(classes) > 1:
         entity[POLYMODEL_CLASS_ATTRIBUTE] = list(set(classes))
 
-    return entity
+    return entity, descendents
 
 
 def get_datastore_key(model, pk, namespace):

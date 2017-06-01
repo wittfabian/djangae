@@ -238,7 +238,12 @@ class DatabaseOperations(BaseDatabaseOperations):
         return value
 
     def sql_flush(self, style, tables, seqs, allow_cascade=False):
-        return [FlushCommand(table, self.connection) for table in tables]
+        additional_djangaeidx_tables = [
+            x for x in self.connection.introspection.table_names()
+            if [y for y in tables if x.startswith("_djangae_idx_{}".format(y))]
+        ]
+
+        return [FlushCommand(table, self.connection) for table in tables + additional_djangaeidx_tables]
 
     def prep_lookup_key(self, model, value, field):
         if isinstance(value, basestring):
