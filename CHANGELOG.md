@@ -26,6 +26,10 @@
  - Fixed an ImportError when the SDK is not on sys.path.
  - Fix issue where serialization of IterableFields resulted in invalid JSON
  - Updated the documenation to say that DJANGAE_CREATE_UNKNOWN_USER defaults to True.
+ - os.environ is now correctly updated with task headers when using process_task_queues in tests
+ - process_task_queues can now be controlled by passing the `failure_behaviour` argument as appropriate
+ - process_task_queues will no longer propagate exceptions from tasks, instead use the `failure_behaviour` to control what happens
+   if an exception occurs in a task
  - Ensure that the order of values in a RelatedListField are respected when updated via a form.
 
 ## v0.9.9 (release date: 27th March 2017)
