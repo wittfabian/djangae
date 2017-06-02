@@ -14,6 +14,9 @@
 - Added a test to confirm query slicing works correctly.
 - Added `ComputedCollationField` to generate correct ordering for unicode strings.
 - Changed CloudStorage and BlobstoreStorage storage backends to return HTTPS URLs for images (instead of the previous protocol-relative URLs).
+- Implemented an entirely new means of storing the indexes for contains and icontains queries. **If you have existing
+  entities which use the current indexing, you MUST set `DJANGAE_USE_LEGACY_CONTAINS_LOGIC = True` in your settings!!**
+  This will be removed in the next release of Djangae so you'll need to re-save your entities with this setting set to False before upgrading (see [detailed release notes](release_notes/0_9_10.md)).
 
 ### Bug fixes:
 
@@ -24,6 +27,11 @@
  - Fix issue where serialization of IterableFields resulted in invalid JSON
  - Updated the documenation to say that DJANGAE_CREATE_UNKNOWN_USER defaults to True.
  - Fixed a hard requirement on PIL/Pillow when running the tests. Now, the images stub will not be available if Pillow isn't installed.
+ - os.environ is now correctly updated with task headers when using process_task_queues in tests
+ - process_task_queues can now be controlled by passing the `failure_behaviour` argument as appropriate
+ - process_task_queues will no longer propagate exceptions from tasks, instead use the `failure_behaviour` to control what happens
+   if an exception occurs in a task
+ - Ensure that the order of values in a RelatedListField are respected when updated via a form.
 
 ## v0.9.9 (release date: 27th March 2017)
 
@@ -85,8 +93,7 @@
 
 - Improved documentation for `djangae.contrib.mappers.defer_iteration`.
 - Changed the installation documentation to reflect the correct way to launch tests
-- Added documentation for local server port configuration.
-- Added documentation for `DJANGAE_ADDITIONAL_MODULES` setting.
+
 
 ## v0.9.8 (release date: 6th December 2016)
 

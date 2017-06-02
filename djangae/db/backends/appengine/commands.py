@@ -15,14 +15,14 @@ from django.db import IntegrityError
 
 from google.appengine.api import datastore, datastore_errors, memcache
 from google.appengine.datastore import datastore_stub_util
-from google.appengine.api.datastore import Query
+from google.appengine.api.datastore import Query, Key, Entity
 from google.appengine.ext import db
 
 #DJANGAE
 from djangae.db.backends.appengine.dbapi import NotSupportedError
 from djangae.db.utils import (
     get_datastore_key,
-    django_instance_to_entity,
+    django_instance_to_entities,
     MockInstance,
     has_concrete_parents,
     get_field_from_column,
@@ -274,7 +274,7 @@ class EntityTransforms:
     def ignore_excluded_pks(excluded_pks, result):
         if result is None:
             return result
-            
+
         if result.key() in excluded_pks:
             return None
 
@@ -380,6 +380,7 @@ class SelectCommand(object):
                 lookup = "{} {}".format(filter_node.column, filter_node.operator)
 
                 value = filter_node.value
+
                 # This is a special case. Annoyingly Django's decimal field doesn't
                 # ever call ops.get_prep_save or lookup or whatever when you are filtering
                 # on a query. It *does* do it on a save, so we basically need to do a
@@ -636,7 +637,7 @@ class InsertCommand(object):
 
         for obj in self.objs:
             if self.has_pk:
-                # We must convert the PK value here, even though this normally happens in django_instance_to_entity otherwise
+                # We must convert the PK value here, even though this normally happens in django_instance_to_entities otherwise
                 # custom PK fields don't work properly
                 value = self.model._meta.pk.get_db_prep_save(
                     self.model._meta.pk.pre_save(obj, True),
@@ -665,30 +666,55 @@ class InsertCommand(object):
                     connection=connection,
                 )
 
-            self.entities.append(
-                django_instance_to_entity(self.connection, self.model, self.fields, self.raw, obj)
+            primary, descendents = django_instance_to_entities(
+                self.connection, self.fields, self.raw, obj
             )
+
+            # Append the entity, and any descendents to the list to insert
+            self.entities.append((primary, descendents))
 
     def execute(self):
         check_existence = self.has_pk and not has_concrete_parents(self.model)
 
+        def perform_insert(entities):
+            results = []
+            for primary, descendents in entities:
+                new_key = datastore.Put(primary)
+                if descendents:
+                    for i, descendent in enumerate(descendents):
+                        descendents[i] = Entity(
+                            descendent.kind(),
+                            parent=new_key,
+                            namespace=new_key.namespace(),
+                            id=descendent.key().id() or None,
+                            name=descendent.key().name() or None
+                        )
+                        descendents[i].update(descendent)
+
+                    datastore.Put(descendents)
+                results.append(new_key)
+            return results
+
+
         if not constraints.has_active_unique_constraints(self.model) and not check_existence:
             # Fast path, no constraint checks and no keys mean we can just do a normal datastore.Put
             # which isn't limited to 25
-            results = datastore.Put(self.entities) # This modifies self.entities and sets their keys
+            results = perform_insert(self.entities) # This modifies self.entities and sets their keys
             caching.add_entities_to_cache(
                 self.model,
-                self.entities,
+                [x[0] for x in self.entities],
                 caching.CachingSituation.DATASTORE_GET_PUT,
                 self.namespace,
                 skip_memcache=True
             )
             return results
 
+        entity_group_count = len(self.entities)
+
         def insert_chunk(keys, entities):
             # Note that this is limited to a maximum of 25 entities.
             markers = []
-            @db.transactional(xg=len(entities) > 1)
+            @db.transactional(xg=entity_group_count > 1)
             def txn():
                 for key in keys:
                     if check_existence and key is not None:
@@ -702,13 +728,14 @@ class InsertCommand(object):
                         # Notify App Engine of any keys we're specifying intentionally
                         reserve_id(key.kind(), key.id_or_name(), self.namespace)
 
-                results = datastore.Put(entities)
-                for entity in entities:
+                results = perform_insert(entities)
+
+                for entity, _ in entities:
                     markers.extend(constraints.acquire(self.model, entity))
 
                 caching.add_entities_to_cache(
                     self.model,
-                    entities,
+                    [x[0] for x in entities],
                     caching.CachingSituation.DATASTORE_GET_PUT,
                     self.namespace,
                     skip_memcache=True
@@ -734,7 +761,7 @@ class InsertCommand(object):
         # We can't really support this and maintain expected behaviour. If we chunked the insert and one of the
         # chunks fails it will mean some of the data would be saved and rather than trying to communicate that back
         # to the user it's better that they chunk the data themselves as they can deal with the failure better
-        if len(self.entities) > datastore_stub_util._MAX_EG_PER_TXN:
+        if entity_group_count > datastore_stub_util._MAX_EG_PER_TXN:
             raise BulkInsertError("Bulk inserts with unique constraints, or pre-defined keys are limited to {} instances on the datastore".format(
                 datastore_stub_util._MAX_EG_PER_TXN
             ))
@@ -807,6 +834,7 @@ class DeleteCommand(object):
              are handled automatically they just case a small performance hit on write.
              - Check the entity matches the query still (there's a fixme there)
         """
+        from djangae.db.backends.appengine.indexing import indexers_for_model
 
         self.select.execute()
 
@@ -849,14 +877,20 @@ class DeleteCommand(object):
 
                 wipe_polymodel_from_entity(entity, self.table_to_delete)
                 if not entity.get('class'):
-                    to_delete.append(entity)
-                    constraints.release(self.model, entity)
+                    to_delete.append(entity.key())
+                    if constraints_enabled:
+                        constraints.release(self.model, entity)
                 else:
                     to_update.append(entity)
                 updated_keys.append(entity.key())
 
-            datastore.DeleteAsync([x.key() for x in to_delete])
+            datastore.DeleteAsync(to_delete)
             datastore.PutAsync(to_update)
+
+            # Clean up any special index things that need to be cleaned
+            for indexer in indexers_for_model(self.model):
+                for key in to_delete:
+                    indexer.cleanup(key)
 
             caching.remove_entities_from_cache_by_key(
                 updated_keys, self.namespace
@@ -922,13 +956,13 @@ class UpdateCommand(object):
 
             original = copy.deepcopy(result)
 
-            instance_kwargs = {field.attname:value for field, param, value in self.values}
+            instance_kwargs = {field.attname: value for field, param, value in self.values}
 
             # Note: If you replace MockInstance with self.model, you'll find that some delete
             # tests fail in the test app. This is because any unspecified fields would then call
             # get_default (even though we aren't going to use them) which may run a query which
             # fails inside this transaction. Given as we are just using MockInstance so that we can
-            # call django_instance_to_entity it on it with the subset of fields we pass in,
+            # call django_instance_to_entities it on it with the subset of fields we pass in,
             # what we have is fine.
             meta = self.model._meta
             instance = MockInstance(
@@ -937,30 +971,47 @@ class UpdateCommand(object):
                 **instance_kwargs
             )
 
-            # We need to add to the class attribute, rather than replace it!
-            original_class = result.get(POLYMODEL_CLASS_ATTRIBUTE, [])
-
-            # Update the entity we read above with the new values
-            result.update(django_instance_to_entity(
-                self.connection, self.model,
-                [ x[0] for x in self.values],  # Pass in the fields that were updated
-                True, instance)
+            # Convert the instance to an entity
+            primary, descendents = django_instance_to_entities(
+                self.connection,
+                [x[0] for x in self.values],  # Pass in the fields that were updated
+                True, instance,
+                model=self.model
             )
 
-            # Make sure we keep all classes in the inheritence tree!
-            if original_class:
-                if result[POLYMODEL_CLASS_ATTRIBUTE] is not None:
-                    result[POLYMODEL_CLASS_ATTRIBUTE].extend(original_class)
-                    # Make sure we don't add duplicates
-                else:
-                    result[POLYMODEL_CLASS_ATTRIBUTE] = original_class
+            # Update the entity we read above with the new values
+            result.update(primary)
 
-            if POLYMODEL_CLASS_ATTRIBUTE in result:
-                result[POLYMODEL_CLASS_ATTRIBUTE] = list(set(result[POLYMODEL_CLASS_ATTRIBUTE]))
+            # Make sure that any polymodel classes which were in the original entity are kept,
+            # as django_instance_to_entities may have wiped them as well as added them.
+            polymodel_classes = list(set(
+                original.get(POLYMODEL_CLASS_ATTRIBUTE, []) + result.get(POLYMODEL_CLASS_ATTRIBUTE, [])
+            ))
+            if polymodel_classes:
+                result[POLYMODEL_CLASS_ATTRIBUTE] = polymodel_classes
+
+            def perform_insert():
+                """
+                    Inserts result, and any descendents with their ancestor
+                    value set
+                """
+                inserted_key = datastore.Put(result)
+                if descendents:
+                    for i, descendent in enumerate(descendents):
+                        descendents[i] = Entity(
+                            descendent.kind(),
+                            parent=inserted_key,
+                            namespace=inserted_key.namespace(),
+                            id=descendent.key().id() or None,
+                            name=descendent.key().name() or None
+                        )
+                        descendents[i].update(descendent)
+                    datastore.Put(descendents)
 
             if not constraints.has_active_unique_constraints(self.model):
                 # The fast path, no constraint checking
-                datastore.Put(result)
+                perform_insert()
+
                 caching.add_entities_to_cache(
                     self.model,
                     [result],
@@ -972,7 +1023,8 @@ class UpdateCommand(object):
                 markers_to_acquire[:], markers_to_release[:] = constraints.get_markers_for_update(
                     self.model, original, result
                 )
-                datastore.Put(result)
+
+                perform_insert()
 
                 constraints.update_identifiers(markers_to_acquire, markers_to_release, result.key())
 

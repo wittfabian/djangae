@@ -10,7 +10,8 @@ from django.utils.functional import cached_property
 from django.core.exceptions import ImproperlyConfigured, ValidationError
 from djangae.forms.fields import (
     encode_pk,
-    GenericRelationFormfield
+    GenericRelationFormfield,
+    OrderedModelMultipleChoiceField,
 )
 from django.utils import six
 import django
@@ -520,8 +521,9 @@ class RelatedIteratorField(ForeignObject):
 
     def formfield(self, **kwargs):
         db = kwargs.pop('using', None)
+        form_class = kwargs.pop('form_class', forms.ModelMultipleChoiceField)
         defaults = {
-            'form_class': forms.ModelMultipleChoiceField,
+            'form_class': form_class,
             'queryset': self.rel.to._default_manager.using(db).complex_filter(self.rel.limit_choices_to)
         }
         defaults.update(kwargs)
@@ -634,6 +636,16 @@ class RelatedListField(RelatedIteratorField):
             del kwargs[hardcoded_kwarg]
 
         return name, path, args, kwargs
+
+    def formfield(self, **kwargs):
+        """
+        Specify a OrderedModelMultipleChoiceField for the `form_class` so we
+        can retain ordering.
+        """
+        # change the form_class in defaults from using ModelMultipleChoiceField
+        # in preference for the djangae subclass OrderedModelMultipleChoiceField
+        kwargs['form_class'] = kwargs.pop('form_class', OrderedModelMultipleChoiceField)
+        return super(RelatedListField, self).formfield(**kwargs)
 
     def save_form_data(self, instance, data):
         setattr(instance, self.attname, []) #Wipe out existing things
