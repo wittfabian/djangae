@@ -111,14 +111,28 @@ def _find_sdk_from_path():
 
 def _create_dispatcher(configuration, options):
     from google.appengine.tools.devappserver2 import dispatcher
-    from google.appengine.tools.devappserver2.devappserver2 import (
-        DevelopmentServer, _LOG_LEVEL_TO_RUNTIME_CONSTANT
-    )
+    from google.appengine.tools.devappserver2.devappserver2 import DevelopmentServer
+
+    try:
+        from google.appengine.tools.devappserver2.devappserver2 import _LOG_LEVEL_TO_RUNTIME_CONSTANT
+    except ImportError:
+        from google.appengine.tools.devappserver2.constants import LOG_LEVEL_TO_RUNTIME_CONSTANT
+        _LOG_LEVEL_TO_RUNTIME_CONSTANT = LOG_LEVEL_TO_RUNTIME_CONSTANT
+
     from google.appengine.tools.sdk_update_checker import GetVersionObject, \
                                                           _VersionList
 
     if hasattr(_create_dispatcher, "singleton"):
         return _create_dispatcher.singleton
+
+    class UnsupportedOption(object):
+        pass
+
+    current_version = _VersionList(GetVersionObject()['release'])
+    supports_go_config = current_version >= _VersionList('1.9.50')
+    supports_custom_config = current_version >= _VersionList('1.9.22') or current_version == TEMP_1_9_49_VERSION_NO
+    supports_external_port = current_version >= _VersionList('1.9.19') or current_version == TEMP_1_9_49_VERSION_NO
+    supports_watcher_ignore_re = current_version >= _VersionList('1.9.54')
 
     dispatcher_args = [
         configuration,
@@ -129,29 +143,22 @@ def _create_dispatcher(configuration, options):
         DevelopmentServer._create_php_config(options),
         DevelopmentServer._create_python_config(options),
         DevelopmentServer._create_java_config(options),
+        DevelopmentServer._create_go_config(options) if supports_go_config else UnsupportedOption,
+        None if supports_custom_config else UnsupportedOption,
         DevelopmentServer._create_cloud_sql_config(options),
         DevelopmentServer._create_vm_config(options),
         DevelopmentServer._create_module_to_setting(options.max_module_instances,
                                        configuration, '--max_module_instances'),
         options.use_mtime_file_watcher,
+        None if supports_watcher_ignore_re else UnsupportedOption,
         options.automatic_restart,
         options.allow_skipped_files,
         DevelopmentServer._create_module_to_setting(options.threadsafe_override,
-                                       configuration, '--threadsafe_override')
+                                       configuration, '--threadsafe_override'),
+        options.external_port if supports_external_port else UnsupportedOption
     ]
 
-    # External port is a new flag introduced in 1.9.19
-    current_version = _VersionList(GetVersionObject()['release'])
-    if current_version >= _VersionList('1.9.19') or \
-            current_version == TEMP_1_9_49_VERSION_NO:
-        dispatcher_args.append(options.external_port)
-
-    if current_version >= _VersionList('1.9.50'):
-        dispatcher_args.insert(7, DevelopmentServer._create_go_config(options))
-
-    if current_version >= _VersionList('1.9.22') or \
-            current_version == TEMP_1_9_49_VERSION_NO:
-        dispatcher_args.insert(8, None) # Custom config setting
+    dispatcher_args = [x for x in dispatcher_args if not x is UnsupportedOption]
 
     _create_dispatcher.singleton = dispatcher.Dispatcher(*dispatcher_args)
 
@@ -207,6 +214,8 @@ def _local(devappserver2=None, configuration=None, options=None, wsgi_request_in
     devappserver2._setup_environ(configuration.app_id)
 
     from google.appengine.tools.devappserver2 import api_server
+    from google.appengine.tools.sdk_update_checker import GetVersionObject, _VersionList
+
     if hasattr(api_server, "get_storage_path"):
         storage_path = api_server.get_storage_path(options.storage_path, configuration.app_id)
     else:
@@ -225,9 +234,23 @@ def _local(devappserver2=None, configuration=None, options=None, wsgi_request_in
     options.admin_port = get_next_available_port(url, DEFAULT_ADMIN_PORT)
 
     if hasattr(api_server, "create_api_server"):
-        _API_SERVER = api_server.create_api_server(
-            request_data, storage_path, options, configuration
-        )
+        current_version = _VersionList(GetVersionObject()['release'])
+        app_rather_than_config = current_version >= _VersionList('1.9.54')
+
+        # Google changed the argument structure in version 1.9.54 so we have to
+        # conditionally supply the args here
+        if app_rather_than_config:
+            _API_SERVER = api_server.create_api_server(
+                request_data,
+                storage_path,
+                options,
+                configuration.app_id,
+                environment.get_application_root()
+            )
+        else:
+            _API_SERVER = api_server.create_api_server(
+                request_data, storage_path, options, configuration
+            )
 
         # We have to patch api_server.create_api_server to return _API_SERVER
         # every time it's called, without this we end up with all kinds of
