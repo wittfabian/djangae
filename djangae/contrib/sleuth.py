@@ -147,7 +147,10 @@ class Emplace(ContextDecorator):
             self._target.update(self._replacement_values)
         else:
             self._original_values = self._target[:]
-            self._target[:] = self._replacement_values
+            if self._clear:
+                self._target[:] = self._replacement_values
+            else:
+                self._target.extend(self._replacement_values)
 
     def __exit__(self, *args, **kwargs):
         if isinstance(self._target, dict):
