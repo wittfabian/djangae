@@ -1,7 +1,6 @@
 from django.conf import settings
 from django.conf.urls import url, include
 
-import djangae.contrib.processing.mapreduce.urls
 from . import views
 
 
@@ -16,6 +15,8 @@ urlpatterns = [
 
 # Set up the mapreduce URLs if the mapreduce processing module is installed
 if 'djangae.contrib.processing.mapreduce' in settings.INSTALLED_APPS:
+    import djangae.contrib.processing.mapreduce.urls
+
     urlpatterns.append(
        url(r'^mapreduce/', include(djangae.contrib.processing.mapreduce.urls)),
     )
