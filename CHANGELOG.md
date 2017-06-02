@@ -32,6 +32,7 @@
  - process_task_queues will no longer propagate exceptions from tasks, instead use the `failure_behaviour` to control what happens
    if an exception occurs in a task
  - Ensure that the order of values in a RelatedListField are respected when updated via a form.
+ - Make mapreduce optional again (#926).
 
 ## v0.9.9 (release date: 27th March 2017)
 
