@@ -1,20 +1,13 @@
 import importlib
 import sys
 
-import mock
+from djangae.contrib import sleuth
 from django.test import SimpleTestCase
 
 
 class ImportingUrlsTestCase(SimpleTestCase):
-    def setUp(self):
-        super(ImportingUrlsTestCase, self).setUp()
-        self.patcher = mock.patch.dict('sys.modules', {})
-        self.patcher.start()
 
-    def tearDown(self):
-        self.patcher.stop()
-        super(ImportingUrlsTestCase, self).tearDown()
-
+    @sleuth.emplace('sys.modules', {})
     def test_importing_djangae_urls_should_not_import_mapreduce(self):
         # If you include 'djangae.urls', that should NOT trigger an import of
         # the mapreduce and pipeline when 'djangae.contrib.processing.mapreduce'
@@ -24,6 +17,7 @@ class ImportingUrlsTestCase(SimpleTestCase):
 
         # There are lots of individual modules that are imported as part of the
         # mapreduce and pipeline packages, but we'll use the main ones for this.
+
         module_names = [
             'pipeline',
             'mapreduce',
