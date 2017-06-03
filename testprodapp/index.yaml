@@ -10,7 +10,28 @@ indexes:
 # automatically uploaded to the admin console when you next deploy
 # your application using appcfg.py.
 
+- kind: djangae_gaedatastoreuser
+  properties:
+  - name: __key__
+    direction: desc
+
+- kind: djangae_group
+  properties:
+  - name: __key__
+    direction: desc
+
+- kind: django_admin_log
+  properties:
+  - name: user_id
+  - name: action_time
+    direction: desc
+
 - kind: django_migrations
   properties:
   - name: app
   - name: name
+
+- kind: testapp_testresult
+  properties:
+  - name: __key__
+    direction: desc

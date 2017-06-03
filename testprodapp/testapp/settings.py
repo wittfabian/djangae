@@ -22,7 +22,6 @@ BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 
 if djangae.environment.is_production_environment():
     DEBUG = False
-    TEMPLATE_DEBUG = False
     SECRET_KEY = ''.join([
         random.SystemRandom().choice('abcdefghijklmnopqrstuvwxyz0123456789')
         for i in range(50)
@@ -44,6 +43,7 @@ INSTALLED_APPS = (
     'djangae.contrib.security',
     'django.contrib.contenttypes',
     'djangae.contrib.contenttypes',
+    'django.contrib.sessions',
     'testapp',
 )
 
@@ -97,17 +97,21 @@ STATIC_ROOT = BASE_DIR + 'static'
 STATIC_URL = '/static/'
 
 AUTH_USER_MODEL = 'gauth_datastore.GaeDatastoreUser'
+AUTHENTICATION_BACKENDS = (
+    'djangae.contrib.gauth_datastore.backends.AppEngineUserAPIBackend',
+)
 
 # Here because of "You haven't defined a TEMPLATES setting" deprecation message
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
+        'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
                 'django.contrib.auth.context_processors.auth'
             ],
-            'debug': True
-        }
+            'debug': DEBUG,
+        },
     },
 ]
 
