@@ -1,5 +1,7 @@
 import datetime
 
+from google.appengine.ext import deferred
+
 from .models import TestResult
 from .models import Uuid
 
@@ -32,9 +34,9 @@ def _test_count(method, name, pivot=None, use_gt=False):
 def test_entity_count_vs_length(create=True):
     if create:
         Uuid.objects.create_entities()
-    _test_count('len', 'all')
-    _test_count('len', 'lt8', pivot='8', use_gt=False)
-    _test_count('len', 'gt8', pivot='8', use_gt=True)
-    _test_count('count', 'all')
-    _test_count('count', 'lt8', pivot='8', use_gt=False)
-    _test_count('count', 'gt8', pivot='8', use_gt=True)
+    deferred.defer(_test_count, 'len', 'all')
+    deferred.defer(_test_count, 'len', 'lt8', pivot='8', use_gt=False)
+    deferred.defer(_test_count, 'len', 'gt8', pivot='8', use_gt=True)
+    deferred.defer(_test_count, 'count', 'all')
+    deferred.defer(_test_count, 'count', 'lt8', pivot='8', use_gt=False)
+    deferred.defer(_test_count, 'count', 'gt8', pivot='8', use_gt=True)
