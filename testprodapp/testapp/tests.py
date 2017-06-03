@@ -14,7 +14,7 @@ class TestResultTest(TestCase):
     def test_valid_data(self):
         self.assertIsNotNone(self.result.last_modified)
         self.assertEqual(self.result.status, 'new')
-        self.assertEqual(self.result.output, '')
+        self.assertEqual(self.result.data, {})
 
 
 class TestResultManagerTest(TestCase):
@@ -33,15 +33,15 @@ class TestResultManagerTest(TestCase):
         self.assertEqual(TestResult.objects.count(), 2)
 
     def test_setter(self):
-        result = TestResult.objects.set_result('test', 'success', 'abc')
+        result = TestResult.objects.set_result('test', 'success', {'k': 'v'})
         self.assertEqual(TestResult.objects.count(), 1)
         self.assertIsNotNone(result)
         result = TestResult.objects.get_result('test')
         self.assertEqual(result.status, 'success')
-        self.assertEqual(result.output, 'abc')
+        self.assertEqual(result.data['k'], 'v')
 
     def test_setter_new_name(self):
-        TestResult.objects.set_result('test2', 'success', 'abc')
+        TestResult.objects.set_result('test2', 'success', {})
         self.assertEqual(TestResult.objects.count(), 2)
 
 

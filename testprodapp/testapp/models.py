@@ -1,7 +1,7 @@
 import uuid
 
 from django.db import models
-
+from djangae.fields import JSONField
 
 test_result_choices = [(x, x) for x in [
     'new',
@@ -17,10 +17,10 @@ class TestResultManager(models.Manager):
         result, _ = TestResult.objects.get_or_create(name=name)
         return result
 
-    def set_result(self, name, status, output):
+    def set_result(self, name, status, data):
         result = TestResult.objects.get_result(name=name)
         result.status = status
-        result.output = output
+        result.data = data
         result.save()
         return result
 
@@ -35,7 +35,7 @@ class TestResult(models.Model):
         default=test_result_choices[0][0],
         editable=False,
         )
-    output = models.CharField(max_length=500, editable=False)
+    data = JSONField(default=dict, editable=False)
 
     objects = TestResultManager()
 
