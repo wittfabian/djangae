@@ -56,3 +56,6 @@ site/
 # Tests
 testapp/.storage
 testapp/libs
+testprodapp/.storage
+testprodapp/libs/*
+!testprodapp/libs/djangae
