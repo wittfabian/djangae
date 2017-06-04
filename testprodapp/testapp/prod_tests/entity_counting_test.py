@@ -2,8 +2,8 @@ import datetime
 
 from google.appengine.ext import deferred
 
-from .models import TestResult
-from .models import Uuid
+from ..models import TestResult
+from ..models import Uuid
 
 
 def _test_count(method, name, pivot=None, use_gt=False):

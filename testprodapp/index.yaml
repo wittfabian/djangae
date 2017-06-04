@@ -36,6 +36,12 @@ indexes:
   - name: __key__
     direction: desc
 
+- kind: testapp_testresult
+  properties:
+  - name: name
+  - name: __key__
+    direction: desc
+
 - kind: testapp_uuid
   properties:
   - name: __key__
