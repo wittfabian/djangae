@@ -44,7 +44,7 @@ class TestResult(models.Model):
 
 class UuidManager(models.Manager):
 
-    def create_entities(self, count=1000):
+    def create_entities(self, count=100):
         entities = []
         for i in range(count):
             entity = Uuid.objects.create()
