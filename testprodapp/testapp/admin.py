@@ -18,6 +18,7 @@ class TestResultAdmin(admin.ModelAdmin):
         'name',
         'last_modified',
         'status',
+        'score',
         'data',
     )
 

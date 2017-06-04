@@ -8,7 +8,7 @@ from ..models import Uuid
 
 def _test_count(method, name, pivot=None, use_gt=False):
     result_key = 'count.{0}().{1}'.format(method, name)
-    TestResult.objects.set_result(result_key, 'started', {})
+    TestResult.objects.set_result(result_key, 'started', -1, {})
     if pivot is None:
         query = Uuid.objects.all()
     elif use_gt:
@@ -27,6 +27,7 @@ def _test_count(method, name, pivot=None, use_gt=False):
     TestResult.objects.set_result(
         result_key,
         'success',
+        duration,
         dict(start=start, end=end, duration=duration, count=result),
         )
 

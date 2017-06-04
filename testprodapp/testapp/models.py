@@ -17,9 +17,10 @@ class TestResultManager(models.Manager):
         result, _ = TestResult.objects.get_or_create(name=name)
         return result
 
-    def set_result(self, name, status, data):
+    def set_result(self, name, status, score, data):
         result = TestResult.objects.get_result(name=name)
         result.status = status
+        result.score = score
         result.data = data
         result.save()
         return result
@@ -35,6 +36,7 @@ class TestResult(models.Model):
         default=test_result_choices[0][0],
         editable=False,
         )
+    score = models.FloatField(default=-1, editable=False)
     data = JSONField(default=dict, editable=False)
 
     objects = TestResultManager()
