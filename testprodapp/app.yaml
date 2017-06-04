@@ -43,3 +43,5 @@ skip_files:
 # no unit tests need to be included
 - ^(.*/)?tests.py$
 - ^(.*/)?tests/*$
+# don't upload google SDK
+- ^libs/google_appengine/*
