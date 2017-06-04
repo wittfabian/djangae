@@ -4,15 +4,22 @@ from .models import TestResult
 from .models import Uuid
 
 
+@admin.register(TestResult)
 class TestResultAdmin(admin.ModelAdmin):
-    pass
+
+    list_display = (
+        'id',
+        'name',
+        'last_modified',
+        'status',
+        'data',
+    )
 
 
-admin.site.register(TestResult, TestResultAdmin)
-
-
+@admin.register(Uuid)
 class UuidAdmin(admin.ModelAdmin):
-    pass
 
-
-admin.site.register(Uuid, UuidAdmin)
+    list_display = (
+        'id',
+        'value',
+    )
