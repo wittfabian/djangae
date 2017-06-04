@@ -31,7 +31,6 @@ if djangae.environment.is_production_environment():
     SESSION_COOKIE_SECURE = True
 else:
     DEBUG = True
-    TEMPLATE_DEBUG = True
     SECRET_KEY = '&x$ts1u)tx#5zsi84555$(@mydbz06&q23p8=c6fs1!d4%1a^u'
 
 # Application definition
@@ -106,6 +105,9 @@ TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
         'APP_DIRS': True,
+        'DIRS': [
+            'templates',
+        ],
         'OPTIONS': {
             'context_processors': [
                 'django.contrib.auth.context_processors.auth'
