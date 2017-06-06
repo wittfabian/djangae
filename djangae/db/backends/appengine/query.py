@@ -138,11 +138,12 @@ class WhereNode(object):
                     for x in value if x
                 ]
             else:
-                if (operator == "isnull" and value is True) or (operator in ("exact", "lt", "lte") and not value):
+                # Django 1.11 has operators as symbols, earlier versions use "exact" etc.
+                if (operator == "isnull" and value is True) or (operator in ("exact", "lt", "lte", "<", "<=", "=") and not value):
                     # id=None will never return anything and
                     # Empty strings and 0 are forbidden as keys
                     self.will_never_return_results = True
-                elif operator in ("gt", "gte") and not value:
+                elif operator in ("gt", "gte", ">", ">=") and not value:
                     # If the value is 0 or "", then we need to manipulate the value and operator here to
                     # get the right result (given that both are invalid keys) so for both we return
                     # >= 1 or >= "\0" for strings
