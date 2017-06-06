@@ -33,6 +33,7 @@
    if an exception occurs in a task
  - Ensure that the order of values in a RelatedListField are respected when updated via a form.
  - Make mapreduce optional again (#926).
+ - Fixed a bug where filter(pk__gt=0) would return no results, rather than all of them
 
 ## v0.9.9 (release date: 27th March 2017)
 
