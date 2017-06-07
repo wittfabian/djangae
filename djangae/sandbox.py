@@ -231,7 +231,7 @@ def _local(devappserver2=None, configuration=None, options=None, wsgi_request_in
     # have 10 modules then these values will shift, but it's better that they are predictable
     # in the common case)
     options.api_port = get_next_available_port(url, DEFAULT_API_PORT)
-    options.admin_port = get_next_available_port(url, DEFAULT_ADMIN_PORT)
+    options.admin_port = get_next_available_port(url, max(DEFAULT_ADMIN_PORT, options.api_port))
 
     if hasattr(api_server, "create_api_server"):
         current_version = _VersionList(GetVersionObject()['release'])
@@ -262,6 +262,7 @@ def _local(devappserver2=None, configuration=None, options=None, wsgi_request_in
         api_server.create_api_server = create_api_server_patch
 
     else:
+
         _API_SERVER = devappserver2.DevelopmentServer._create_api_server(
             request_data, storage_path, options, configuration
         )
