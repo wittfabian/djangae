@@ -1,9 +1,9 @@
 from django.contrib import admin
 from django.http import HttpResponseRedirect, Http404
-from django.conf.urls import patterns
-from django.conf.urls import url
 
-from django.shortcuts import redirect
+from django.conf.urls import url
+from django.utils.decorators import method_decorator
+from django.contrib.admin.views.decorators import staff_member_required
 
 from .models import TestResult
 from .prod_tests.entity_counting_test import test_entity_count_vs_length
@@ -42,6 +42,7 @@ class TestAdminSite(admin.AdminSite):
         ]
         return my_urls + urls
 
+    @method_decorator(staff_member_required)
     def trigger_test(self, request):
         try:
             test = self.tests[request.POST["name"]]
