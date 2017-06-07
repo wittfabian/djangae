@@ -34,6 +34,7 @@
    if an exception occurs in a task
  - Ensure that the order of values in a RelatedListField are respected when updated via a form.
  - Make mapreduce optional again (#926).
+ - We no longer cut truncate keys automatically and the max string key length is now the datastore supported 1500 bytes
 
 ## v0.9.9 (release date: 27th March 2017)
 
