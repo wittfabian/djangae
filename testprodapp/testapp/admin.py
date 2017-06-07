@@ -1,6 +1,6 @@
 from django.contrib import admin
-from django.http import HttpResponseRedirect, Http404
-
+from django.http import Http404
+from django.shortcuts import redirect
 from django.conf.urls import url
 from django.utils.decorators import method_decorator
 from django.contrib.admin.views.decorators import staff_member_required
@@ -51,7 +51,7 @@ class TestAdminSite(admin.AdminSite):
 
         test()
 
-        return HttpResponseRedirect("/admin/")
+        return redirect("admin:index")
 
 
 admin_site = TestAdminSite()
