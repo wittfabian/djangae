@@ -1,5 +1,6 @@
 import cPickle
 import pipeline
+
 from importlib import import_module
 from mapreduce import context
 from mapreduce.mapper_pipeline import MapperPipeline
@@ -7,6 +8,8 @@ from mapreduce.mapreduce_pipeline import MapreducePipeline
 from mapreduce import pipeline_base
 from mapreduce.model import MapreduceState
 from mapreduce.input_readers import RawDatastoreInputReader, GoogleCloudStorageInputReader
+
+from django.utils import six
 from djangae.contrib.processing.mapreduce.input_readers import DjangoInputReader
 
 from utils import qualname
@@ -22,7 +25,7 @@ class DynamicPipeline(pipeline_base.PipelineBase):
     def __init__(self, pipelines, *args, **kwargs):
         # This gets reinstantiated somewhere with the already-pickled pipelines argument
         # so we prevent double pickling by checking it's not a string
-        if not isinstance(pipelines, basestring):
+        if not isinstance(pipelines, six.string_types):
             pipelines = str(cPickle.dumps(pipelines))
         super(DynamicPipeline, self).__init__(pipelines, *args, **kwargs)
 
@@ -235,17 +238,18 @@ def map_entities(kind_name, namespace, processor_func, *args, **kwargs):
         on each one.
         Calls finalize_func when the iteration completes.
 
-        output_writer is optional, but should be a mapreduce
-        OutputWriter subclass
+        output_writer is optional, but should be a mapreduce OutputWriter subclass
+        _filters is an optional kwarg which will be passed directly to the input reader
 
         Returns the pipeline
     """
-    options = extract_options(kwargs, additional={"finalize_func"})
+    options = extract_options(kwargs, additional={"finalize_func", "_filters"})
 
     params = {
         'input_reader': {
             RawDatastoreInputReader.ENTITY_KIND_PARAM: kind_name,
-            RawDatastoreInputReader.NAMESPACE_PARAM: namespace
+            RawDatastoreInputReader.NAMESPACE_PARAM: namespace,
+            RawDatastoreInputReader.FILTERS_PARAM: options.pop("_filters", [])
         },
         'output_writer': options.pop("_output_writer_kwargs", {}) or {}
     }
@@ -304,11 +308,12 @@ def map_reduce_queryset(queryset, map_func, reduce_func, output_writer, *args, *
     return pipeline
 
 
-def map_reduce_entities(kind_name, map_func, reduce_func, output_writer, *args, **kwargs):
+def map_reduce_entities(kind_name, namespace, map_func, reduce_func, output_writer, *args, **kwargs):
     """
         Does a complete map-shuffle-reduce over the entities
 
         output_writer should be a mapreduce OutputWriter subclass
+        _filters is an optional kwarg which will be passed directly to the input reader
 
         Returns the pipeline
     """
@@ -316,7 +321,7 @@ def map_reduce_entities(kind_name, map_func, reduce_func, output_writer, *args, 
     reduce_func = qualname(reduce_func)
     output_writer = qualname(output_writer)
 
-    options = extract_options(kwargs)
+    options = extract_options(kwargs, additional={"_filters"})
 
     _shards = options.pop("_shards", None)
     _job_name = options.pop("_job_name", "Map reduce task over {}".format(kind_name))
@@ -330,7 +335,9 @@ def map_reduce_entities(kind_name, map_func, reduce_func, output_writer, *args, 
         output_writer,
         mapper_params={
             'input_reader': {
-                RawDatastoreInputReader.ENTITY_KIND_PARAM: kind_name
+                RawDatastoreInputReader.ENTITY_KIND_PARAM: kind_name,
+                RawDatastoreInputReader.NAMESPACE_PARAM: namespace,
+                RawDatastoreInputReader.FILTERS_PARAM: options.pop("_filters", [])
             },
         },
         reducer_params={

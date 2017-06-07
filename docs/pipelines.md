@@ -1,19 +1,21 @@
 # Pipelines and MapReduce
 
-Djangae now contains functionality to run Google's native Pipelines and MapReduce
+Djangae contains functionality to run Google's native Pipelines and MapReduce, as well as running MapReduce processes over Django querysets on the Datastore.
 
 ## MapReduce
 
 1. Add the MapReduce library to your project, e.g. `$ pip install GoogleAppEngineMapReduce` or from
 [https://github.com/GoogleCloudPlatform/appengine-mapreduce](https://github.com/GoogleCloudPlatform/appengine-mapreduce).
-2. Add `djangae.contrib.processing.mapreduce` to INSTALLED_APPS
+2. Add `"djangae.contrib.processing.mapreduce"` to INSTALLED_APPS
 3. Add the following rule to the top of your url patterns:
 
 ```
     url(r'^_ah/mapreduce/', include(djangae.contrib.processing.mapreduce.urls)),
 ```
 
-Now you can create native MapReduce tasks from inside your Django application, the requests will be handled and forwarded to correct handlers
+And ensure that the `/_ah/mapreduce` path is routed through to the normal WSGI handler (the same as your other Django views) in app.yaml, protected with `login: admin`.
+
+Now you can create native MapReduce tasks from inside your Django application, the requests will be handled and forwarded to correct handlers.
 
 Documentation for the MapReduce api functionality
 [https://github.com/GoogleCloudPlatform/appengine-mapreduce/wiki](https://github.com/GoogleCloudPlatform/appengine-mapreduce/wiki)
@@ -29,10 +31,12 @@ it uses a basic clustering algorithm similar to the `DatastoreInputReader` bundl
 map and mapreduce jobs. These functions are:
 
  - `map_queryset(qs, func, finalize_func=None)`: Call `func` on all instances in a queryset
- - `map_entities(kind, namespace, func, finalize_func=None)`: Call `func` entities in a kind + namespace
+ - `map_entities(kind, namespace, func, finalize_func=None, _filters=None)`: Call `func` entities in a kind + namespace
+    * `_filters` is a list of tuples in the format, `(field, operator, value)` e.g. `_filters=[("name", "=", "Lucy")]`.
  - `map_files(bucket, func, finalize_func=None, filenames=None)`: Call `func` on all files in a CloudStorage bucket
  - `map_reduce_queryset(queryset, map_func, reduce_func, output_writer)`
- - `map_reduce_entities(kind, namespace, map_func, reduce_func, output_writer)`
+ - `map_reduce_entities(kind, namespace, map_func, reduce_func, output_writer, _filters=None)`.
+    * `_filters` is a list of tuples in the format, `(field, operator, value)` e.g. `_filters=[("name", "=", "Lucy")]`.
 
 Each of these functions allows the following optional kwargs:
 
