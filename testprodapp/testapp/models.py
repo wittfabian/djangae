@@ -1,4 +1,6 @@
 import uuid
+import django
+import djangae
 
 from django.db import models
 from djangae.fields import JSONField
@@ -14,7 +16,15 @@ test_result_choices = [(x, x) for x in [
 class TestResultManager(models.Manager):
 
     def get_result(self, name):
-        result, _ = TestResult.objects.get_or_create(name=name)
+        django_version = u".".join([str(x) for x in django.VERSION])
+        djangae_version = djangae.VERSION
+
+        result, _ = TestResult.objects.get_or_create(
+            name=name,
+            django_version=django_version,
+            djangae_version=djangae_version
+        )
+
         return result
 
     def set_result(self, name, status, score, data):
@@ -27,33 +37,47 @@ class TestResultManager(models.Manager):
 
 
 class TestResult(models.Model):
+    name = models.CharField(max_length=500, editable=False)
+    django_version = models.CharField(max_length=10, editable=False)
+    djangae_version = models.CharField(max_length=10, editable=False)
+
+    class Meta:
+        unique_together = [
+            ("name", "django_version", "djangae_version")
+        ]
 
     last_modified = models.DateField(auto_now=True, editable=False)
-    name = models.CharField(max_length=500, editable=False)
     status = models.CharField(
         max_length=50,
         choices=test_result_choices,
         default=test_result_choices[0][0],
         editable=False,
-        )
+    )
     score = models.FloatField(default=-1, editable=False)
     data = JSONField(default=dict, editable=False)
 
     objects = TestResultManager()
+
+    def __unicode__(self):
+        return self.name
 
 
 class UuidManager(models.Manager):
 
     def create_entities(self, count=100):
         entities = []
+
+        batch_id = uuid.uuid4()
+
         for i in range(count):
-            entity = Uuid.objects.create()
+            entity = Uuid.objects.create(batch_uuid=batch_id)
             entities.append(entity.value)
-        return str(sorted(entities)[count/2])
+
+        return batch_id
 
 
 class Uuid(models.Model):
-
-    value = models.CharField(max_length=36, default=uuid.uuid4)
+    batch_uuid = models.UUIDField()
+    value = models.CharField(max_length=32, default=uuid.uuid4)
 
     objects = UuidManager()

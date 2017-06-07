@@ -1,56 +1,57 @@
 from django.contrib import admin
-
+from django.http import HttpResponseRedirect, Http404
 from django.conf.urls import patterns
 from django.conf.urls import url
 
 from django.shortcuts import redirect
 
 from .models import TestResult
-from .models import Uuid
 from .prod_tests.entity_counting_test import test_entity_count_vs_length
 
 
-@admin.register(TestResult)
 class TestResultAdmin(admin.ModelAdmin):
 
     list_display = (
-        'id',
         'name',
+        'django_version',
+        'djangae_version',
         'last_modified',
         'status',
-        'score',
-        'data',
+        'score'
     )
 
-    def get_urls(self):
-        urls = super(TestResultAdmin, self).get_urls()
-        my_urls = patterns(
-            '',
-            url(r'^count_test/$', self.bulk_create_view, name='test_counting'),
-        )
-        return my_urls + urls
 
-    def bulk_create_view(self, request):
-        test_entity_count_vs_length(create=False)
-        return redirect('admin:testapp_testresult_changelist')
+class TestAdminSite(admin.AdminSite):
+    index_template = "testapp/admin_index.html"
 
+    def __init__(self, *args, **kwargs):
+        self.tests = {
+            "Counting Performance": test_entity_count_vs_length
+        }
+        super(TestAdminSite, self).__init__(*args, **kwargs)
 
-@admin.register(Uuid)
-class UuidAdmin(admin.ModelAdmin):
-
-    list_display = (
-        'id',
-        'value',
-    )
+    def each_context(self, request):
+        return {
+            "admin_site": self
+        }
 
     def get_urls(self):
-        urls = super(UuidAdmin, self).get_urls()
-        my_urls = patterns(
-            '',
-            url(r'^create/$', self.bulk_create_view, name='bulk_create'),
-        )
+        urls = super(TestAdminSite, self).get_urls()
+        my_urls = [
+            url(r'^trigger/$', self.trigger_test),
+        ]
         return my_urls + urls
 
-    def bulk_create_view(self, request):
-        Uuid.objects.create_entities()
-        return redirect('admin:testapp_uuid_changelist')
+    def trigger_test(self, request):
+        try:
+            test = self.tests[request.POST["name"]]
+        except KeyError:
+            raise Http404("Invalid test")
+
+        test()
+
+        return HttpResponseRedirect("/admin/")
+
+
+admin_site = TestAdminSite()
+admin_site.register(TestResult, TestResultAdmin)
