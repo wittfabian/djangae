@@ -166,7 +166,7 @@ class AsyncMultiQuery(object):
         finally:
             self._query_decorator = None
 
-    def Run(self, **kwargs):
+    def Run(self, offset=None, limit=None):
         """
             Returns an iterator through the result set.
 
@@ -188,6 +188,11 @@ class AsyncMultiQuery(object):
             except StopIteration:
                 next_entries[i] = None
 
+        counters = {
+            'returned': 0,
+            'yielded': 0
+        }
+
         seen_keys = set() #For de-duping results
         while any(next_entries):
             def get_next():
@@ -206,6 +211,7 @@ class AsyncMultiQuery(object):
                         next_entries[idx] = results[idx].next()
                     except StopIteration:
                         next_entries[idx] = None
+
                 return lowest
 
             # Find the next entry from the available queues
@@ -222,8 +228,19 @@ class AsyncMultiQuery(object):
 
             # Make sure we haven't seen this result before before yielding
             if next_key not in seen_keys:
+                counters['returned'] += 1
+
+                if offset and counters['returned'] <= offset:
+                    # We haven't hit the offset yet, so just
+                    # keep fetching entities
+                    continue
+
                 seen_keys.add(next_key)
+                counters['yielded'] += 1
                 yield next_entity
+
+                if limit and counters['yielded'] == limit:
+                    raise StopIteration()
 
 
 def _convert_entity_based_on_query_options(entity, opts):
