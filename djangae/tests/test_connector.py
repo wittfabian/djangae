@@ -267,6 +267,31 @@ class PaginatorModel(models.Model):
 
 
 class BackendTests(TestCase):
+    def test_pk_gt_empty_returns_all(self):
+        for i in range(10):
+            TestFruit.objects.create(name=str(i), color=str(i))
+
+        self.assertEqual(10, TestFruit.objects.filter(pk__gt="").count())
+        self.assertEqual(10, TestFruit.objects.filter(pk__gte="").count())
+        self.assertEqual(0, TestFruit.objects.filter(pk__lt="").count())
+        self.assertEqual(0, TestFruit.objects.filter(pk__lte="").count())
+
+    def test_pk_gt_zero_returns_all(self):
+        IntegerModel.objects.create(pk=1, integer_field=1)
+        IntegerModel.objects.create(pk=2, integer_field=2)
+
+        results = IntegerModel.objects.filter(pk__gt=0)
+        self.assertEqual(2, len(results))
+
+        results = IntegerModel.objects.filter(pk__gte=0)
+        self.assertEqual(2, len(results))
+
+        results = IntegerModel.objects.filter(pk__lt=0)
+        self.assertEqual(0, len(results))
+
+        results = IntegerModel.objects.filter(pk__lte=0)
+        self.assertEqual(0, len(results))
+
     def test_entity_matches_query(self):
         entity = datastore.Entity("test_model")
         entity["name"] = "Charlie"

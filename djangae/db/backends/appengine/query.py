@@ -9,7 +9,7 @@ from django.db.models.sql.datastructures import EmptyResultSet
 
 from django.db import connections
 from django.db.models import AutoField
-
+from django.utils import six
 
 try:
     from django.db.models.query import FlatValuesListIterable
@@ -138,10 +138,22 @@ class WhereNode(object):
                     for x in value if x
                 ]
             else:
-                if (operator == "isnull" and value is True) or not value:
+                # Django 1.11 has operators as symbols, earlier versions use "exact" etc.
+                if (operator == "isnull" and value is True) or (operator in ("exact", "lt", "lte", "<", "<=", "=") and not value):
                     # id=None will never return anything and
                     # Empty strings and 0 are forbidden as keys
                     self.will_never_return_results = True
+                elif operator in ("gt", "gte", ">", ">=") and not value:
+                    # If the value is 0 or "", then we need to manipulate the value and operator here to
+                    # get the right result (given that both are invalid keys) so for both we return
+                    # >= 1 or >= "\0" for strings
+                    if isinstance(value, six.integer_types):
+                        value = 1
+                    else:
+                        value = "\0"
+
+                    value = datastore.Key.from_path(table, value, namespace=namespace)
+                    operator = "gte"
                 else:
                     value = datastore.Key.from_path(table, value, namespace=namespace)
             column = "__key__"
