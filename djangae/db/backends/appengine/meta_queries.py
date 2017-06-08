@@ -78,7 +78,7 @@ class AsyncMultiQuery(object):
         thread.start()
         return thread
 
-    def _fetch_results(self):
+    def _fetch_results(self, limit=None):
         """
             Returns a list of generators (one for each query in the multi query)
             which generate entity results (or keys if it's keys_only)
@@ -107,7 +107,7 @@ class AsyncMultiQuery(object):
                 threads.remove(complete)
 
             # Spawn a new thread
-            threads.append(self._spawn_thread(i, query, result_queues))
+            threads.append(self._spawn_thread(i, query, result_queues, limit=limit))
 
         [x.join() for x in threads] # Wait until all the threads are done
 
@@ -177,7 +177,13 @@ class AsyncMultiQuery(object):
             fills the slot from the counterpart result set until all the slots are None.
         """
         self._min_max_cache = []
-        results = self._fetch_results()
+
+        # We have to assume that one branch might return all the results and as
+        # offsetting is done by skipping results we need to get offset + limit results
+        # from each branch
+        results = self._fetch_results(
+            limit=(offset or 0) + limit if limit is not None else None
+        )
 
         # Go through each outstanding result queue and store
         # the next entry of each (None if the result queue is done)
