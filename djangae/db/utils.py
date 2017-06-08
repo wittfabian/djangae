@@ -10,7 +10,7 @@ from django.apps import apps
 from django.conf import settings
 from django.db.backends.utils import format_number
 from django.db import IntegrityError
-from django.utils import timezone
+from django.utils import timezone, six
 from google.appengine.api import datastore
 from google.appengine.api.datastore import Key, Query
 try:
@@ -250,15 +250,9 @@ def django_instance_to_entities(connection, fields, raw, instance, check_null=Tr
 
     kwargs = {}
     if primary_key:
-        if isinstance(primary_key, (int, long)):
+        if isinstance(primary_key, six.integer_types):
             kwargs["id"] = primary_key
-        elif isinstance(primary_key, basestring):
-            if len(primary_key) > 500:
-                warnings.warn("Truncating primary key that is over 500 characters. "
-                              "THIS IS AN ERROR IN YOUR PROGRAM.",
-                              RuntimeWarning)
-                primary_key = primary_key[:500]
-
+        elif isinstance(primary_key, six.string_types):
             kwargs["name"] = primary_key
         else:
             raise ValueError("Invalid primary key value")

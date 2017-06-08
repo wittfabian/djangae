@@ -17,6 +17,8 @@
 - Implemented an entirely new means of storing the indexes for contains and icontains queries. **If you have existing
   entities which use the current indexing, you MUST set `DJANGAE_USE_LEGACY_CONTAINS_LOGIC = True` in your settings!!**
   This will be removed in the next release of Djangae so you'll need to re-save your entities with this setting set to False before upgrading (see [detailed release notes](release_notes/0_9_10.md)).
+- Added support for the 1.9.54 SDK
+- Implemented a full application that can be deployed to production GAE for testing real-world scenarios against GCP environment
 
 ### Bug fixes:
 
@@ -34,6 +36,7 @@
  - Ensure that the order of values in a RelatedListField are respected when updated via a form.
  - Make mapreduce optional again (#926).
  - Fixed a bug where filter(pk__gt=0) would return no results, rather than all of them
+ - We no longer truncate string keys automatically and the max string key length is now the Datastore supported 1500 bytes
 
 ## v0.9.9 (release date: 27th March 2017)
 

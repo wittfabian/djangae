@@ -24,7 +24,7 @@ class TestModel(models.Model):
         app_label = "mapreduce"
 
     is_true = models.BooleanField(default=False)
-    text = models.CharField(null=True)
+    text = models.CharField(null=True, max_length=50)
 
 
 class Counter(models.Model):
@@ -33,6 +33,16 @@ class Counter(models.Model):
 
 def count(instance, counter_id):
     counter = Counter.objects.get(pk=counter_id)
+    counter.count = models.F('count') + 1
+    counter.save()
+
+
+def count_entity_to_default_counter(entity):
+    """ Dirty hack to work around the fact that when using  `map_reduce_entities` we cannot pass
+        any params to the map_func, and therefore this function only accepts a single arg of the
+        `entity` and just assumes that there's only 1 Counter object!
+    """
+    counter = Counter.objects.get()
     counter.count = models.F('count') + 1
     counter.save()
 
@@ -63,15 +73,40 @@ def delete(*args, **kwargs):
 class MapReduceEntityTests(TestCase):
 
     def setUp(self):
-        for i in xrange(5):
+        for i in range(5):
             TestModel.objects.create(
                 id=i+1,
-                text="abcc"
+                text="abcc-%s" % i
             )
+
+    def test_filters(self):
+        """ Passing the `_filters` kwarg to to `map_reduce_entities` should allow only some
+            entities to be processed.
+        """
+        counter = Counter.objects.create()
+        pipeline = map_reduce_entities(
+            TestModel._meta.db_table,
+            connection.settings_dict["NAMESPACE"],
+            count_entity_to_default_counter,
+            reduce_count,  # This is a no-op because count_entity doesn't return anything
+            output_writers.GoogleCloudStorageKeyValueOutputWriter,
+            _output_writer_kwargs={
+                'bucket_name': 'test-bucket'
+            },
+            _filters=[("text", "=", "abcc-3")]
+        )
+        self.process_task_queues()
+        # Refetch the pipeline record
+        pipeline = get_pipeline_by_id(pipeline.pipeline_id)
+        self.assertTrue(pipeline.has_finalized)
+        # We expect only the one entity to have been counted
+        counter.refresh_from_db()
+        self.assertEqual(counter.count, 1)
 
     def test_mapreduce_over_entities(self):
         pipeline = map_reduce_entities(
             TestModel._meta.db_table,
+            connection.settings_dict["NAMESPACE"],
             yield_letters,
             reduce_count,
             output_writers.GoogleCloudStorageKeyValueOutputWriter,
@@ -88,7 +123,7 @@ class MapReduceEntityTests(TestCase):
 class MapReduceQuerysetTests(TestCase):
 
     def setUp(self):
-        for i in xrange(5):
+        for i in range(5):
             TestModel.objects.create(
                 id=i+1,
                 text="abcc"
@@ -111,7 +146,7 @@ class MapReduceQuerysetTests(TestCase):
 
 class MapQuerysetTests(TestCase):
     def setUp(self):
-        for i in xrange(5):
+        for i in range(5):
             TestModel.objects.create(id=i+1)
 
     def test_filtering(self):
@@ -200,8 +235,28 @@ def count_entity(entity, counter_id):
 
 class MapEntitiesTests(TestCase):
     def setUp(self):
-        for i in xrange(5):
-            TestModel.objects.create(id=i+1)
+        for i in range(5):
+            TestModel.objects.create(id=i+1, text=str(i))
+
+    def test_filters(self):
+        counter = Counter.objects.create()
+
+        pipeline = map_entities(
+            TestModel._meta.db_table,
+            connection.settings_dict['NAMESPACE'],
+            count_entity,
+            finalize_func=delete,
+            counter_id=counter.pk,
+            _filters=[("text", "=", "3")]
+        )
+
+        self.process_task_queues()
+        pipeline = get_pipeline_by_id(pipeline.pipeline_id)
+        self.assertTrue(pipeline.has_finalized)
+        counter.refresh_from_db()
+
+        self.assertEqual(1, counter.count)
+        self.assertFalse(TestModel.objects.count())
 
     def test_mapping_over_entities(self):
         counter = Counter.objects.create()
