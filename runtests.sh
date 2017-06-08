@@ -10,6 +10,9 @@ for var in "$@"; do
     elif [ "$var" = '--install_sdk' ]; then
         INSTALL_DEPS=true
         INSTALL_SDK=true
+    elif [ "$var" = '--for-production-env' ]; then
+        PROD_APP=true
+        cd ../testprodapp
     else
         ARGS[${#ARGS[@]}]="$var"
     fi
