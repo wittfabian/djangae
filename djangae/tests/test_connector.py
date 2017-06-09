@@ -2032,6 +2032,42 @@ class SliceModel(models.Model):
 
 class SlicingTests(TestCase):
 
+    def test_big_slice(self):
+        SliceModel.objects.create(field1="test")
+        SliceModel.objects.create(field1="test2")
+
+        self.assertFalse(
+            SliceModel.objects.filter(field1__in=["test", "test2"])[9999:]
+        )
+
+        self.assertFalse(
+            SliceModel.objects.filter(field1__in=["test", "test2"])[9999:10000]
+        )
+
+    def test_slicing_multi_query(self):
+        SliceModel.objects.create(field1="test")
+        SliceModel.objects.create(field1="test2")
+
+        self.assertEqual(
+            1,
+            len(SliceModel.objects.filter(field1__in=["test", "test2"])[1:])
+        )
+
+        self.assertEqual(
+            1,
+            len(SliceModel.objects.filter(field1__in=["test", "test2"])[:1])
+        )
+
+        self.assertEqual(
+            2,
+            len(SliceModel.objects.filter(field1__in=["test", "test2"])[:2])
+        )
+
+        self.assertEqual(
+            0,
+            len(SliceModel.objects.filter(field1__in=["test", "test2"])[2:])
+        )
+
     def test_slice_params_are_passed_to_query(self):
         for i in range(15):
             SliceModel.objects.create(field1=str(i))

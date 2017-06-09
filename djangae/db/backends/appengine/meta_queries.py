@@ -78,7 +78,7 @@ class AsyncMultiQuery(object):
         thread.start()
         return thread
 
-    def _fetch_results(self):
+    def _fetch_results(self, limit=None):
         """
             Returns a list of generators (one for each query in the multi query)
             which generate entity results (or keys if it's keys_only)
@@ -107,7 +107,7 @@ class AsyncMultiQuery(object):
                 threads.remove(complete)
 
             # Spawn a new thread
-            threads.append(self._spawn_thread(i, query, result_queues))
+            threads.append(self._spawn_thread(i, query, result_queues, limit=limit))
 
         [x.join() for x in threads] # Wait until all the threads are done
 
@@ -166,7 +166,7 @@ class AsyncMultiQuery(object):
         finally:
             self._query_decorator = None
 
-    def Run(self, **kwargs):
+    def Run(self, offset=None, limit=None):
         """
             Returns an iterator through the result set.
 
@@ -177,7 +177,13 @@ class AsyncMultiQuery(object):
             fills the slot from the counterpart result set until all the slots are None.
         """
         self._min_max_cache = []
-        results = self._fetch_results()
+
+        # We have to assume that one branch might return all the results and as
+        # offsetting is done by skipping results we need to get offset + limit results
+        # from each branch
+        results = self._fetch_results(
+            limit=(offset or 0) + limit if limit is not None else None
+        )
 
         # Go through each outstanding result queue and store
         # the next entry of each (None if the result queue is done)
@@ -187,6 +193,11 @@ class AsyncMultiQuery(object):
                 next_entries[i] = results[i].next()
             except StopIteration:
                 next_entries[i] = None
+
+        counters = {
+            'returned': 0,
+            'yielded': 0
+        }
 
         seen_keys = set() #For de-duping results
         while any(next_entries):
@@ -206,6 +217,7 @@ class AsyncMultiQuery(object):
                         next_entries[idx] = results[idx].next()
                     except StopIteration:
                         next_entries[idx] = None
+
                 return lowest
 
             # Find the next entry from the available queues
@@ -222,8 +234,19 @@ class AsyncMultiQuery(object):
 
             # Make sure we haven't seen this result before before yielding
             if next_key not in seen_keys:
+                counters['returned'] += 1
+
+                if offset and counters['returned'] <= offset:
+                    # We haven't hit the offset yet, so just
+                    # keep fetching entities
+                    continue
+
                 seen_keys.add(next_key)
+                counters['yielded'] += 1
                 yield next_entity
+
+                if limit and counters['yielded'] == limit:
+                    raise StopIteration()
 
 
 def _convert_entity_based_on_query_options(entity, opts):

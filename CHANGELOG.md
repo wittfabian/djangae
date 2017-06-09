@@ -38,6 +38,7 @@
  - Make mapreduce optional again (#926).
  - Fixed a bug where filter(pk__gt=0) would return no results, rather than all of them
  - We no longer truncate string keys automatically and the max string key length is now the Datastore supported 1500 bytes
+ - Fixed AsyncMultiQuery offset and limiting
 
 ## v0.9.9 (release date: 27th March 2017)
 
