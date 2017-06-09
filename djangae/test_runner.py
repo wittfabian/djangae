@@ -11,6 +11,7 @@ from unittest import TextTestResult
 from django.test.runner import DiscoverRunner
 from django.db import NotSupportedError
 from django.conf import settings
+from django.utils.decorators import method_decorator
 
 from djangae import environment
 from djangae.db.backends.appengine.caching import get_context
@@ -132,12 +133,14 @@ def init_testbed():
 
 
 def bed_wrap(test):
+    import functools
+
+    @functools.wraps(test)
     def _wrapped(*args, **kwargs):
         bed = None
         try:
             # Init test stubs
             bed = init_testbed()
-
             return test(*args, **kwargs)
         finally:
             if bed:
@@ -218,7 +221,8 @@ class DjangaeTestSuiteRunner(DiscoverRunner):
             if test.id() in DJANGO_TESTS_TO_SKIP:
                 continue #FIXME: It would be better to wrap this in skipTest or something
 
-            new_tests.append(bed_wrap(test))
+            test.run = bed_wrap(test.run)
+            new_tests.append(test)
 
         suite._tests[:] = new_tests
 

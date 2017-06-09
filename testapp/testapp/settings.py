@@ -52,12 +52,16 @@ INSTALLED_APPS = [
 
 TO_TEST = []
 
+
+RUNTESTS_DIR = ''
 if "test" in sys.argv:
     import sys
     import tempfile
     import django
 
-    tests_dir = os.path.join(BASE_DIR, "libs", "django-stable-{}.{}.x/tests".format(*django.VERSION[:2]))
+    RUNTESTS_DIR = tests_dir = os.path.join(
+        BASE_DIR, "libs", "django-stable-{}.{}.x/tests".format(*django.VERSION[:2])
+    )
     if not os.path.exists(tests_dir):
         tests_dir = os.path.join(BASE_DIR, "libs", "django-{}/tests".format(django.get_version()))
         if not os.path.exists(tests_dir):
@@ -69,29 +73,28 @@ if "test" in sys.argv:
     os.environ['DJANGO_TEST_TEMP_DIR'] = TEMP_DIR
 
     TO_TEST = [
-        "basic",
-        "bulk_create",
-        "custom_managers",
-        "custom_pk",
-        "dates",
-        "datetimes",
-        "defer",
-        "delete",
-        "empty",
-        "force_insert_update",
-        "get_or_create",
-        "lookup",
-        "many_to_one",
-        "many_to_one_null",
-        "max_lengths",
-        "model_forms",
-        "model_inheritance",
-        "null_queries",
-        "one_to_one",
-        "or_lookups",
-        "ordering",
-        "proxy_models",
-        "update",
+        x for x in os.listdir(tests_dir)
+        if os.path.isdir(os.path.join(tests_dir, x))
+        and os.path.exists(os.path.join(tests_dir, x, "__init__.py"))
+        and x not in (
+            "pagination", # Name conflict with contrib.pagination
+            "file_uploads",
+            "admin_autodiscover",
+            "import_error_package",
+            "admin_filters", # Depends on User model
+            "admin_views", # Depends on User model
+            "admin_widgets", # Depends on User model
+            "extra_regress", # Depends on User model
+            "m2m_regress", # Depends on User model (wouldn't work anyway)
+            "fixtures_regress",
+            "m2m_through_regress",
+            "modeladmin",
+            "multiple_database",
+            "gis_tests", # Requires not-installed City model,
+            "test_discovery_sample",
+            "test_discovery_sample2",
+            "select_related", # Hard-disabled on the Datastore
+        )
     ]
 
     ADDITIONAL_INSTALLED_APPS = ["file_uploads"]
@@ -143,13 +146,13 @@ DATABASES = {
 # Internationalization
 # https://docs.djangoproject.com/en/dev/topics/i18n/
 
-LANGUAGE_CODE = 'en-us'
+LANGUAGE_CODE = 'en'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'America/Chicago'
 
 USE_I18N = True
 
-USE_L10N = True
+USE_L10N = False
 
 USE_TZ = False
 
@@ -170,17 +173,21 @@ DJANGAE_ADDITIONAL_TEST_APPS = ["djangae"] + TO_TEST
 
 DJANGAE_ADDITIONAL_MODULES = [os.path.join(BASE_DIR, "module.yaml")]
 
-# Here because of "You haven't defined a TEMPLATES setting" deprecation message
-TEMPLATES = [
-    {
+TEMPLATE_DIR = os.path.join(RUNTESTS_DIR, 'templates')
+# This is the templates setting from the Django tests
+TEMPLATES =  [{
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
+        'DIRS': [TEMPLATE_DIR],
+        'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
-                'django.contrib.auth.context_processors.auth'
+                'django.template.context_processors.debug',
+                'django.template.context_processors.request',
+                'django.contrib.auth.context_processors.auth',
+                'django.contrib.messages.context_processors.messages',
             ],
-            'debug': True
-        }
-    },
-]
+        },
+}]
 
 from djangae.contrib.gauth.settings import *
+
