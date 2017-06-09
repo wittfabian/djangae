@@ -4,6 +4,8 @@
 
 import unittest
 import os
+import logging
+
 from unittest import TextTestResult
 
 from django.test.runner import DiscoverRunner
@@ -90,8 +92,17 @@ DJANGO_TESTS_TO_SKIP = DJANGO_TESTS_WHICH_REQUIRE_ZERO_PKS.union(
     DJANGO_TESTS_WHICH_EXPECT_SEQUENTIAL_IDS
 )
 
+logger = logging.getLogger(__file__)
+
 def init_testbed():
-    IGNORED_STUBS = []
+    try:
+        import PIL
+        IGNORED_STUBS = []
+    except ImportError:
+        logger.warning("Unable to initialize the images stub as Pillow is unavailable")
+        IGNORED_STUBS = [
+            "init_images_stub"
+        ]
 
     # We allow users to disable scattered IDs in tests. This primarily for running Django tests that
     # assume implicit ordering (yeah, annoying)
@@ -149,6 +160,10 @@ class SkipUnsupportedTestResult(TextTestResult):
 
 
 class DjangaeTestSuiteRunner(DiscoverRunner):
+    def __init__(self, *a, **kw):
+        kw['pattern'] = '*tests.py'
+        super(DjangaeTestSuiteRunner, self).__init__(*a, **kw)
+
     def _discover_additional_tests(self):
         """
             Django's DiscoverRunner only detects apps that are below

@@ -2,18 +2,42 @@
 
 ### New features & improvements:
 
+ - A new contrib app `djangae.contrib.processing.mapreduce` has been added to provide a Django-friendly API to mapreduce. The existing
+   `djangae.contrib.mappers` API has been reimplemented in terms of `djangae.contrib.processing.mapreduce`
  - Add support for the latest App Engine SDK (1.9.51)
  - The default ports for the API server, admin server and blobstore service have changed to 8010, 8011, and 8012 respectively to avoid clashes with modules
  - Switched the default storage backend (in settings_base.py) to cloud storage. If you need to retain compatibility make sure you
  override the `DEFAULT_FILE_STORAGE` setting to point to `'djangae.storage.BlobstoreStorage'`.
  - Added AsyncMultiQuery as a replacement for Google's MultiQuery (which doesn't exist on Cloud Datastore).  This is the first step towards support for Cloud Datastore and therefore Flexible Environment.
+ - Added a configurable memory limit to the context cache, limited the number of instances cached from query results and corrected `disable_cache` behaviour.
+- Added support for running migrations on the Datastore using Django migrations.
+- Added a test to confirm query slicing works correctly.
+- Added `ComputedCollationField` to generate correct ordering for unicode strings.
+- Changed CloudStorage and BlobstoreStorage storage backends to return HTTPS URLs for images (instead of the previous protocol-relative URLs).
+- Implemented an entirely new means of storing the indexes for contains and icontains queries. **If you have existing
+  entities which use the current indexing, you MUST set `DJANGAE_USE_LEGACY_CONTAINS_LOGIC = True` in your settings!!**
+  This will be removed in the next release of Djangae so you'll need to re-save your entities with this setting set to False before upgrading (see [detailed release notes](release_notes/0_9_10.md)).
+- Added support for the 1.9.54 SDK
+- Implemented a full application that can be deployed to production GAE for testing real-world scenarios against GCP environment
 
 ### Bug fixes:
 
  - When running the local sandbox, if a port clash is detected then the next port will be used (this was broken before)
  - Accessing the Datastore from outside tests will no longer throw an error when using the test sandbox
- - The in-context cache is now reliably wiped when the testbed is initialized for each test
  - Fix an error which occurred when a migrations module is not importable
+ - The in-context cache is now reliably wiped when the testbed is initialized for each test.
+ - Fixed an ImportError when the SDK is not on sys.path.
+ - Fix issue where serialization of IterableFields resulted in invalid JSON
+ - Updated the documenation to say that DJANGAE_CREATE_UNKNOWN_USER defaults to True.
+ - Fixed a hard requirement on PIL/Pillow when running the tests. Now, the images stub will not be available if Pillow isn't installed.
+ - os.environ is now correctly updated with task headers when using process_task_queues in tests
+ - process_task_queues can now be controlled by passing the `failure_behaviour` argument as appropriate
+ - process_task_queues will no longer propagate exceptions from tasks, instead use the `failure_behaviour` to control what happens
+   if an exception occurs in a task
+ - Ensure that the order of values in a RelatedListField are respected when updated via a form.
+ - Make mapreduce optional again (#926).
+ - Fixed a bug where filter(pk__gt=0) would return no results, rather than all of them
+ - We no longer truncate string keys automatically and the max string key length is now the Datastore supported 1500 bytes
 
 ## v0.9.9 (release date: 27th March 2017)
 
@@ -75,8 +99,7 @@
 
 - Improved documentation for `djangae.contrib.mappers.defer_iteration`.
 - Changed the installation documentation to reflect the correct way to launch tests
-- Added documentation for local server port configuration.
-- Added documentation for `DJANGAE_ADDITIONAL_MODULES` setting.
+
 
 ## v0.9.8 (release date: 6th December 2016)
 

@@ -29,7 +29,7 @@ from djangae.db.utils import (
 class Parser(BaseParser):
 
     def _where_node_leaf_callback(self, node, negated, new_parent, connection, model, compiler):
-        new_node = WhereNode()
+        new_node = WhereNode(new_parent.using)
 
         if not hasattr(node, "lhs"):
             raise NotSupportedError("Attempted probable subquery, these aren't supported on the datastore")

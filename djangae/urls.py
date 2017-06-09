@@ -1,6 +1,6 @@
+from django.conf import settings
 from django.conf.urls import url, include
 
-import djangae.contrib.mappers.urls
 from . import views
 
 
@@ -11,5 +11,12 @@ urlpatterns = [
     url(r'^clearsessions$', views.clearsessions),
     url(r'^queue/deferred/?$', views.deferred),
     url(r'^internalupload/$', views.internalupload, name='djangae_internal_upload_handler'),
-    url(r'^mapreduce/', include(djangae.contrib.mappers.urls)),
 ]
+
+# Set up the mapreduce URLs if the mapreduce processing module is installed
+if 'djangae.contrib.processing.mapreduce' in settings.INSTALLED_APPS:
+    import djangae.contrib.processing.mapreduce.urls
+
+    urlpatterns.append(
+       url(r'^mapreduce/', include(djangae.contrib.processing.mapreduce.urls)),
+    )

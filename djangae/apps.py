@@ -12,11 +12,20 @@ class DjangaeConfig(AppConfig):
         json.patch()
 
         from djangae.db.backends.appengine.caching import reset_context
+        from djangae.db.migrations.signals import check_migrations
         from django.core.signals import request_finished, request_started
+        from django.db.models.signals import pre_migrate
 
         request_finished.connect(reset_context, dispatch_uid="request_finished_context_reset")
         request_started.connect(reset_context, dispatch_uid="request_started_context_reset")
+        pre_migrate.connect(check_migrations, dispatch_uid="pre_migrate_check_connections")
 
+        self._check_content_types()
+
+    def _check_content_types(self):
+        """ Check that if Django and/or Djangae contenttypes are being used that they are
+            configured correctly.
+        """
         from django.conf import settings
         contenttype_configuration_error = ImproperlyConfigured(
             "If you're using django.contrib.contenttypes, then you need "

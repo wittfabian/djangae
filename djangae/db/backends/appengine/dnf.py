@@ -31,7 +31,7 @@ def preprocess_node(node, negated):
             elif node.negated and child.operator == "=":
                 # Excluded equalities become inequalities
 
-                lhs, rhs = WhereNode(), WhereNode()
+                lhs, rhs = WhereNode(node.using), WhereNode(node.using)
                 lhs.column = rhs.column = child.column
                 lhs.value = rhs.value = child.value
                 lhs.operator = "<"
@@ -50,19 +50,19 @@ def preprocess_node(node, negated):
 
                 for value in child.value:
                     if node.negated:
-                        lhs, rhs = WhereNode(), WhereNode()
+                        lhs, rhs = WhereNode(node.using), WhereNode(node.using)
                         lhs.column = rhs.column = child.column
                         lhs.value = rhs.value = value
                         lhs.operator = "<"
                         rhs.operator = ">"
 
-                        bridge = WhereNode()
+                        bridge = WhereNode(node.using)
                         bridge.connector = "OR"
                         bridge.children = [lhs, rhs]
 
                         new_children.append(bridge)
                     else:
-                        new_node = WhereNode()
+                        new_node = WhereNode(node.using)
                         new_node.operator = "="
                         new_node.value = value
                         new_node.column = child.column
@@ -77,7 +77,7 @@ def preprocess_node(node, negated):
                 assert not child.is_leaf
 
             elif child.operator == "RANGE":
-                lhs, rhs = WhereNode(), WhereNode()
+                lhs, rhs = WhereNode(node.using), WhereNode(node.using)
                 lhs.column = rhs.column = child.column
                 if node.negated:
                     lhs.operator = "<"
@@ -138,7 +138,7 @@ def normalize_query(query):
             elif len(child.children) > 1 and child.connector == 'AND' and child.negated:
                 new_grandchildren = []
                 for grandchild in child.children:
-                    new_node = WhereNode()
+                    new_node = WhereNode(child.using)
                     new_node.negated = True
                     new_node.children = [grandchild]
                     new_grandchildren.append(new_node)
@@ -166,7 +166,7 @@ def normalize_query(query):
 
             new_children = []
             for branch in producted:
-                new_and = WhereNode()
+                new_and = WhereNode(where.using)
                 new_and.connector = 'AND'
                 new_and.children = list(copy.deepcopy(branch))
                 new_children.append(new_and)
@@ -187,7 +187,7 @@ def normalize_query(query):
     walk_tree(where)
 
     if where.connector != 'OR':
-        new_node = WhereNode()
+        new_node = WhereNode(where.using)
         new_node.connector = 'OR'
         new_node.children = [where]
         query._where = new_node

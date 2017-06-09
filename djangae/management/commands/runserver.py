@@ -1,9 +1,14 @@
 import os
 import re
+import logging
+
 from datetime import datetime
 
 from django.conf import settings
 from django.core.management.commands import runserver
+
+from djangae.sandbox import WHITELISTED_DEV_APPSERVER_OPTIONS
+
 from google.appengine.tools.devappserver2 import shutdown
 from google.appengine.tools.sdk_update_checker import (
     GetVersionObject,
@@ -75,40 +80,6 @@ class Command(runserver.Command):
     dev_appserver that emulates the live environment your application
     will be deployed to.
     """
-    # We use this list to prevent user using certain dev_appserver options that
-    # might collide with some Django settings.
-    WHITELISTED_DEV_APPSERVER_OPTIONS = [
-        'A',
-        'admin_host',
-        'admin_port',
-        'auth_domain',
-        'storage_path',
-        'log_level',
-        'max_module_instances',
-        'use_mtime_file_watcher',
-        'appidentity_email_address',
-        'appidentity_private_key_path',
-        'blobstore_path',
-        'datastore_path',
-        'clear_datastore',
-        'datastore_consistency_policy',
-        'require_indexes',
-        'auto_id_policy',
-        'logs_path',
-        'show_mail_body',
-        'enable_sendmail',
-        'prospective_search_path',
-        'clear_prospective_search',
-        'search_indexes_path',
-        'clear_search_indexes',
-        'enable_task_running',
-        'allow_skipped_files',
-        'api_port',
-        'dev_appserver_log_level',
-        'skip_sdk_update_check',
-        'default_gcs_bucket_name',
-    ]
-
     def add_arguments(self, parser):
         super(Command, self).add_arguments(parser)
 
@@ -116,7 +87,7 @@ class Command(runserver.Command):
 
         # Extra parameters that we're going to pass to GAE's `dev_appserver.py`.
         for option in sandbox_options:
-            if option in self.WHITELISTED_DEV_APPSERVER_OPTIONS:
+            if option in WHITELISTED_DEV_APPSERVER_OPTIONS:
                 parser.add_argument('--%s' % option, action='store', dest=option)
 
     @staticmethod
@@ -237,9 +208,64 @@ class Command(runserver.Command):
         from google.appengine.api.appinfo import EnvironmentVariables
 
         class NoConfigDevServer(devappserver2.DevelopmentServer):
-            def _create_api_server(self, request_data, storage_path, options, configuration):
+            """
+                This is horrible, but unfortunately necessary.
+
+                Because we want to enable a sandbox outside of runserver (both when
+                running different management commands, but also before/after dev_appserver)
+                we have to make sure the following are true:
+
+                1. There is only ever one api server
+                2. There is only ever one dispatcher
+
+                Unfortunately, most of the setup is done inside .start() of the DevelopmentServer
+                class, there is not really an easy way to hook into part of this without overriding the
+                whole .start() method which makes things even more brittle.
+
+                What we do here is hook in at the point that self._dispatcher is set. We ignore whatever
+                dispatcher is passed in, but user our own one. We patch api server creation in sandbox.py
+                so only ever one api server exists.
+            """
+            def __init__(self, *args, **kwargs):
+                self._patched_dispatcher = None
+                super(NoConfigDevServer, self).__init__(*args, **kwargs)
+
+            def start(self, options):
+                self.options = options
+                return super(NoConfigDevServer, self).start(options)
+
+            def _get_dispatcher(self):
+                return self._patched_dispatcher
+
+            def _set_dispatcher(self, dispatcher):
+                """
+                    Ignore explicit setting of _dispatcher, use our own
+                """
+
+                if dispatcher is None:
+                    # Allow wiping the patched dispatcher
+                    self._patched_dispatcher = None
+                    return
+
+                if self._patched_dispatcher:
+                    # We already created the dispatcher, ignore further sets
+                    logging.warning("Attempted to set _dispatcher twice")
+                    return
+
+
+                # When the dispatcher is created this property is set so we use it
+                # to construct *our* dispatcher
+                configuration = dispatcher._configuration
+
+                # We store options in .start() so it's available here
+                options = self.options
+
                 # sandbox._create_dispatcher returns a singleton dispatcher instance made in sandbox
-                self._dispatcher = sandbox._create_dispatcher(configuration, options)
+                self._patched_dispatcher = sandbox._create_dispatcher(
+                    configuration,
+                    options
+                )
+
                 # the dispatcher may have passed environment variables, it should be propagated
                 env_vars = self._dispatcher._configuration.modules[0]._app_info_external.env_variables or EnvironmentVariables()
                 for module in configuration.modules:
@@ -266,8 +292,8 @@ class Command(runserver.Command):
                     configuration.modules[0].module_name
                 ] = options.threadsafe_override
 
-                self._dispatcher.request_data = request_data
-                request_data._dispatcher = self._dispatcher
+#                self._dispatcher.request_data = request_data
+#                request_data._dispatcher = self._dispatcher
 
                 sandbox._API_SERVER._host = options.api_host
                 sandbox._API_SERVER.bind_addr = (options.api_host, options.api_port)
@@ -279,7 +305,7 @@ class Command(runserver.Command):
                     task_queue._auto_task_running = True
                     task_queue.StartBackgroundExecution()
 
-                return sandbox._API_SERVER
+            _dispatcher = property(fget=_get_dispatcher, fset=_set_dispatcher)
 
         from google.appengine.tools.devappserver2 import module
 

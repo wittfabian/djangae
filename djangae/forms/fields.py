@@ -1,3 +1,4 @@
+import copy
 import json
 import base64
 
@@ -94,6 +95,27 @@ class JSONFormField(forms.CharField):
             except ValueError:
                 raise forms.ValidationError("Could not parse value as JSON")
         return value
+
+
+class OrderedModelMultipleChoiceField(forms.ModelMultipleChoiceField):
+
+    def clean(self, value):
+        """
+        Maintain the order of the values passed in. Without this special casing,
+        _check_values() runs a pk__in query which under the hood gets
+        ordered by Djangae via its default model ordering (which has a PK
+        fallback if no ordering is explicit), and thus the original order of the
+        values passed in is lost.
+        """
+        # Make a copy of the value - we still run it via the normal clean
+        # so that validators are run - but we don't return the queryset like
+        # the vanilla ModelMultipleChoiceField as the ordering will be lost by
+        # doing that, so instead we return a list of the PK values, which is
+        # not strictly what we should do, but RelatedListField accepts it and
+        # so it makes this work
+        value_copy = copy.deepcopy(value)
+        super(OrderedModelMultipleChoiceField, self).clean(value_copy)
+        return [self.queryset.model._meta.pk.to_python(v) for v in value]
 
 
 #Basic obfuscation, just so that the db_table doesn't
