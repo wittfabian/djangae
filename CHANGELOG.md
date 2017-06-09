@@ -13,6 +13,7 @@
  - When running the local sandbox, if a port clash is detected then the next port will be used (this was broken before)
  - Accessing the Datastore from outside tests will no longer throw an error when using the test sandbox
  - The in-context cache is now reliably wiped when the testbed is initialized for each test
+ - Fix an error which occurred when a migrations module is not importable
 
 ## v0.9.9 (release date: 27th March 2017)
 
