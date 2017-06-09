@@ -24,6 +24,7 @@
 
  - When running the local sandbox, if a port clash is detected then the next port will be used (this was broken before)
  - Accessing the Datastore from outside tests will no longer throw an error when using the test sandbox
+ - Fix an error which occurred when a migrations module is not importable
  - The in-context cache is now reliably wiped when the testbed is initialized for each test.
  - Fixed an ImportError when the SDK is not on sys.path.
  - Fix issue where serialization of IterableFields resulted in invalid JSON
