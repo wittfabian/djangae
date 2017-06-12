@@ -52,6 +52,7 @@ class DatabaseWrapper(BaseDatabaseWrapper):
 
     Database = Database
     SchemaEditorClass = DatabaseSchemaEditor
+
     client_class = DatabaseClient
     creation_class = DatabaseCreation
     features_class = DatabaseFeatures
@@ -59,8 +60,22 @@ class DatabaseWrapper(BaseDatabaseWrapper):
     ops_class = DatabaseOperations
     validation_class = DatabaseValidation
 
+    def __init__(self, *args, **kwargs):
+        super(DatabaseWrapper, self).__init__(*args, **kwargs)
+
+        if not self.ops:
+            # If we're on a version of Django that doesn't do this automatically
+            # do it! We can remove this at some point in the distant future!
+            self.features = self.features_class(self)
+            self.ops = self.ops_class(self)
+            self.client = self.client_class(self)
+            self.creation = self.creation_class(self)
+            self.introspection = self.introspection_class(self)
+            self.validation = self.validation_class(self)
+
     def get_new_connection(self, conn_params):
-        return Database.connect(**conn_params)
+        connection = Database.connect(**conn_params)
+        return connection
 
     def create_cursor(self):
         cursor = self.connection.cursor()
