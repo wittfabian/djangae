@@ -11,12 +11,39 @@ from .schema import DatabaseSchemaEditor
 from .validation import DatabaseValidation
 
 
+from .constants import FieldTypes
+
+
 class DatabaseWrapper(BaseDatabaseWrapper):
     vendor = 'google'
     display_name = 'Cloud Spanner'
 
     _data_types = {
-
+        'AutoField': FieldTypes.INT64,
+        'BigAutoField': FieldTypes.INT64,
+        'BinaryField': FieldTypes.BYTES,
+        'BooleanField': FieldTypes.BOOL,
+        'CharField': FieldTypes.STRING,
+        'DateField': FieldTypes.TIMESTAMP,
+        'DateTimeField': FieldTypes.TIMESTAMP,
+        'DecimalField': FieldTypes.STRING,
+        'DurationField': FieldTypes.FLOAT64,
+        'FileField': FieldTypes.STRING,
+        'FilePathField': FieldTypes.STRING,
+        'FloatField': FieldTypes.FLOAT64,
+        'IntegerField': FieldTypes.INT64,
+        'BigIntegerField': FieldTypes.INT64,
+        'IPAddressField': FieldTypes.STRING,
+        'GenericIPAddressField': FieldTypes.STRING,
+        'NullBooleanField': FieldTypes.BOOL,
+        'OneToOneField': FieldTypes.INT64,
+        'PositiveIntegerField': FieldTypes.INT64,
+        'PositiveSmallIntegerField': FieldTypes.INT64,
+        'SlugField': FieldTypes.STRING,
+        'SmallIntegerField': FieldTypes.INT64,
+        'TextField': FieldTypes.STRING,
+        'TimeField': FieldTypes.TIMESTAMP,
+        'UUIDField': FieldTypes.STRING,
     }
 
     operators = {
