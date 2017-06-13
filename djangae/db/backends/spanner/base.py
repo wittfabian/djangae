@@ -92,7 +92,8 @@ class DatabaseWrapper(BaseDatabaseWrapper):
         return {
             'instance_id': settings_dict['INSTANCE'],
             'database_id': settings_dict['DATABASE'],
-            'project_id': settings_dict['PROJECT']
+            'project_id': settings_dict['PROJECT'],
+            'credentials_json': settings_dict.get('CREDENTIALS_JSON')
         }
 
     def create_cursor(self):

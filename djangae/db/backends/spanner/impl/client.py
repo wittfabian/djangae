@@ -111,10 +111,14 @@ class Cursor(object):
         data = {
             "session": self.session,
             "transaction": None,
-            "sql": sql,
-            "params": params,
-            "paramTypes": types
+            "sql": sql
         }
+
+        if params:
+            data.update({
+                "params": params,
+                "paramTypes": types
+            })
 
         url_params = self.connection.url_params()
         url_params["sid"] = self.session
@@ -166,17 +170,22 @@ class Connection(object):
             ENDPOINT_SESSION_CREATE.format(**params), {}
         )
 
-        return response["name"]
+        # For some bizarre reason, this returns the full URL to the session
+        # so we just extract the session ID here!
+        return response["name"].rsplit("/")[-1]
 
-    def _destroy_session(self):
+    def _destroy_session(self, session_id):
         pass
 
     def _send_request(self, url, data, method="POST"):
+        payload = json.dumps(data) if data else None
         response = urlfetch.fetch(
             url,
+            payload=payload,
             method=urlfetch.POST if method == "POST" else urlfetch.GET,
             headers={
-                'Authorization': 'Bearer {}'.format(self.auth_token)
+                'Authorization': 'Bearer {}'.format(self.auth_token),
+                'Content-Type': 'application/json'
             }
         )
         if not str(response.status_code).startswith("2"):
@@ -204,10 +213,17 @@ class Connection(object):
         pass
 
 
-def connect(project_id, instance_id, database_id):
-    auth_token, _ = app_identity.get_access_token(
-        'https://www.googleapis.com/auth/cloud-platform'
-    )
+def connect(project_id, instance_id, database_id, credentials_json=None):
+    if not credentials_json:
+        auth_token, _ = app_identity.get_access_token(
+            'https://www.googleapis.com/auth/cloud-platform'
+        )
+    else:
+        from oauth2client.client import GoogleCredentials
+        credentials = GoogleCredentials.from_stream(credentials_json)
+        credentials = credentials.create_scoped('https://www.googleapis.com/auth/cloud-platform')
+        access_token_info = credentials.get_access_token()
+        auth_token = access_token_info.access_token
 
     return Connection(
         project_id, instance_id, database_id, auth_token
