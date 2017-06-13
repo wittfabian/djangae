@@ -5,9 +5,17 @@
 """
 
 import json
+import string
+import threading
+
+try:
+    import six
+except ImportError:
+    from django.utils import six
 
 from google.appengine.api import app_identity
 from google.appengine.api import urlfetch
+from google.appengine.api import oauth
 
 from exceptions import StandardError
 
@@ -20,13 +28,102 @@ class DatabaseError(Error):
     pass
 
 
+class DataError(DatabaseError):
+    pass
+
+
+class OperationalError(DatabaseError):
+    pass
+
+
+class IntegrityError(DatabaseError):
+    pass
+
+
+class InternalError(DatabaseError):
+    pass
+
+
+class ProgrammingError(DatabaseError):
+    pass
+
+
+class NotSupportedError(DatabaseError):
+    pass
+
+
+class InterfaceError(Error):
+    pass
+
+
+ENDPOINT_PREFIX = "https://spanner.googleapis.com/v1/"
+ENDPOINT_SESSION_CREATE = (
+    ENDPOINT_PREFIX + "projects/{pid}/instances/{iid}/databases/{did}/sessions"
+)
+
+ENDPOINT_SQL_EXECUTE = (
+    ENDPOINT_PREFIX + "projects/{pid}/instances/{iid}/databases/{did}/sessions/{sid}:executeSql"
+)
+
+
 class Cursor(object):
     arraysize = 100
 
     def __init__(self, connection):
         self.connection = connection
+        self.session = connection._create_session()
+
+    def _format_query(self, sql, params):
+        """
+            Frustratingly, Cloud Spanner doesn't allow positional
+            arguments in the SQL query, instead you need to specify
+            named parameters (e.g. @msg_id) and params must be a dictionary.
+            On top of that, there is another params structure for specifying the
+            types of each parameter to avoid ambiguity (e.g. between bytes and string)
+
+            This function takes the sql, and a list of params, and converts
+            "%s" to "@a, "@b" etc. and returns a tuple of (sql, params, types)
+            ready to be send via the REST API
+        """
+
+        output_params = {}
+        param_types = {}
+
+        for i, val in enumerate(params):
+            letter = string.letters[i]
+            output_params[letter] = val
+
+            # Replace the next %s with a placeholder
+            placeholder = "@{}".format(letter)
+            sql = sql.replace("%s", placeholder, 1)
+
+            if isinstance(val, six.unicode_type):
+                param_types[letter] = "STRING"
+            elif isinstance(val, six.bytes_type):
+                param_types[letter] = "BYTES"
+
+        return sql, output_params, param_types
+
 
     def execute(self, sql, params):
+        sql, params, types = self._format_query(sql, params)
+
+        data = {
+            "session": self.session,
+            "transaction": None,
+            "sql": sql,
+            "params": params,
+            "paramTypes": types
+        }
+
+        url_params = self.connection.url_params()
+        url_params["sid"] = self.session
+        response = self.connection._send_request(
+            ENDPOINT_SQL_EXECUTE.format(**url_params),
+            data
+        )
+
+        print(response)
         pass
 
     def executemany(self, sql, seq_of_params):
@@ -43,12 +140,36 @@ class Cursor(object):
     def fetchall(self):
         pass
 
+    def close(self):
+        self.connection._destroy_session(self.session)
+        self.session = None
+
 
 class Connection(object):
-    def __init__(self, instance_id, database_id, auth_token):
+    def __init__(self, project_id, instance_id, database_id, auth_token):
+        self.project_id = project_id
         self.instance_id = instance_id
         self.database_id = database_id
         self.auth_token = auth_token
+        self._autocommit = False
+
+    def url_params(self):
+        return {
+            "pid": self.project_id,
+            "iid": self.instance_id,
+            "did": self.database_id
+        }
+
+    def _create_session(self):
+        params = self.url_params()
+        response = self._send_request(
+            ENDPOINT_SESSION_CREATE.format(**params), {}
+        )
+
+        return response["name"]
+
+    def _destroy_session(self):
+        pass
 
     def _send_request(self, url, data, method="POST"):
         response = urlfetch.fetch(
@@ -58,11 +179,17 @@ class Connection(object):
                 'Authorization': 'Bearer {}'.format(self.auth_token)
             }
         )
-
         if not str(response.status_code).startswith("2"):
-            raise DatabaseError("Error sending database request")
+            raise DatabaseError("Error sending database request: {}".format(response.content))
 
         return json.loads(response.content)
+
+    def autocommit(self, value):
+        """
+            Cloud Spanner doesn't support auto-commit, so if it's enabled we create
+            and commit a read-write transaction for each query.
+        """
+        self._autocommit = value
 
     def cursor(self):
         return Cursor(self)
@@ -77,12 +204,12 @@ class Connection(object):
         pass
 
 
-def connect(instance_id, database_id):
+def connect(project_id, instance_id, database_id):
     auth_token, _ = app_identity.get_access_token(
         'https://www.googleapis.com/auth/cloud-platform'
     )
 
     return Connection(
-        instance_id, database_id, auth_token
+        project_id, instance_id, database_id, auth_token
     )
 

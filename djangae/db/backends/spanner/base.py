@@ -73,9 +73,27 @@ class DatabaseWrapper(BaseDatabaseWrapper):
             self.introspection = self.introspection_class(self)
             self.validation = self.validation_class(self)
 
+    def _set_autocommit(self, autocommit):
+        with self.wrap_database_errors:
+            self.connection.autocommit(autocommit)
+
     def get_new_connection(self, conn_params):
         connection = Database.connect(**conn_params)
         return connection
+
+    def quote_name(self):
+        pass
+
+    def init_connection_state(self):
+        pass
+
+    def get_connection_params(self):
+        settings_dict = self.settings_dict
+        return {
+            'instance_id': settings_dict['INSTANCE'],
+            'database_id': settings_dict['DATABASE'],
+            'project_id': settings_dict['PROJECT']
+        }
 
     def create_cursor(self):
         cursor = self.connection.cursor()
