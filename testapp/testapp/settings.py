@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'django.contrib.humanize',
+    'djangae.contrib.backup',
     'djangae.contrib.locking',
     'djangae.contrib.processing.mapreduce',
     'djangae.contrib.pagination',
@@ -182,5 +183,7 @@ TEMPLATES = [
         }
     },
 ]
+
+DS_BACKUP_ENABLED = False
 
 from djangae.contrib.gauth.settings import *
