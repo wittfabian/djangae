@@ -65,6 +65,24 @@ ENDPOINT_SESSION_CREATE = (
 
 ENDPOINT_SQL_EXECUTE = ENDPOINT_SESSION_PREFIX + ":executeSql"
 ENDPOINT_COMMIT = ENDPOINT_SESSION_PREFIX + ":commit"
+ENDPOINT_UPDATE_DDL = ENDPOINT_PREFIX + "projects/{pid}/instances/{iid}/databases/{did}/ddl"
+
+class QueryType:
+    DDL = "DDL"
+    READ = "READ"
+    WRITE = "WRITE"
+    
+    
+def _determine_query_type(sql):
+    for keyword in ("DATABASE", "TABLE", "INDEX"):
+        if keyword in sql:
+            return QueryType.DDL
+            
+    for keyword in ("INSERT", "UPDATE", "REPLACE", "DELETE"):
+        if keyword in sql:
+            return QueryType.WRITE
+            
+    return QueryType.READ
 
 
 class Cursor(object):
@@ -111,7 +129,15 @@ class Cursor(object):
 
         sql, params, types = self._format_query(sql, params)
 
-        self._last_response = self.connection._run_query(sql, params, types)
+        query_type = _determine_query_type(sql)
+        if query_type == QueryType.DDL:
+            self._last_response = self.connection._run_ddl_update(sql)
+            
+            print self.connection._send_request(
+                "https://spanner.googleapis.com/v1/projects/djangae-cloud/instances/spanner-test/databases/spanner-test/operations", None, method="GET"
+            )
+        else:
+            self._last_response = self.connection._run_query(sql, params, types)
 
     def executemany(self, sql, seq_of_params):
         pass
@@ -162,7 +188,26 @@ class Connection(object):
     def _destroy_session(self, session_id):
         pass
 
+    def _run_ddl_update(self, sql):
+        print(sql)
+        assert(_determine_query_type(sql) == QueryType.DDL)
+    
+        data = {
+            "statements": [sql],
+            "operationId": "test"
+        }
+    
+        url_params = self.url_params()
+
+        return self._send_request(
+            ENDPOINT_UPDATE_DDL.format(**url_params),
+            data,
+            method="PATCH"
+        )
+
     def _run_query(self, sql, params, types):
+        print(sql)
+        
         data = {
             "session": self._session,
             "transaction": self._transaction_id,
@@ -178,9 +223,10 @@ class Connection(object):
         # If we're running a query, with no active transaction then start a transaction
         # as part of this query. We use readWrite if it's an INSERT or UPDATE or CREATE or whatever
         if not self._transaction_id:
-            is_select_query = data["sql"].lstrip().upper().startswith("SELECT")
+            query_type = _determine_query_type(data["sql"])
+       
             transaction_type = (
-                "readOnly" if is_select_query else "readWrite"
+                "readOnly" if query_type == QueryType.READ else "readWrite"
             )
             
             # Begin a transaction as part of this query if we are autocommitting
