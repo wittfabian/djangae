@@ -57,13 +57,14 @@ class InterfaceError(Error):
 
 
 ENDPOINT_PREFIX = "https://spanner.googleapis.com/v1/"
+ENDPOINT_SESSION_PREFIX = ENDPOINT_PREFIX + "projects/{pid}/instances/{iid}/databases/{did}/sessions/{sid}"
+
 ENDPOINT_SESSION_CREATE = (
     ENDPOINT_PREFIX + "projects/{pid}/instances/{iid}/databases/{did}/sessions"
 )
 
-ENDPOINT_SQL_EXECUTE = (
-    ENDPOINT_PREFIX + "projects/{pid}/instances/{iid}/databases/{did}/sessions/{sid}:executeSql"
-)
+ENDPOINT_SQL_EXECUTE = ENDPOINT_SESSION_PREFIX + ":executeSql"
+ENDPOINT_COMMIT = ENDPOINT_SESSION_PREFIX + ":commit"
 
 
 class Cursor(object):
@@ -71,7 +72,7 @@ class Cursor(object):
 
     def __init__(self, connection):
         self.connection = connection
-        self.session = connection._create_session()
+        self._last_response = None
 
     def _format_query(self, sql, params):
         """
@@ -105,30 +106,12 @@ class Cursor(object):
         return sql, output_params, param_types
 
 
-    def execute(self, sql, params):
+    def execute(self, sql, params=None):
+        params = None or []
+
         sql, params, types = self._format_query(sql, params)
 
-        data = {
-            "session": self.session,
-            "transaction": None,
-            "sql": sql
-        }
-
-        if params:
-            data.update({
-                "params": params,
-                "paramTypes": types
-            })
-
-        url_params = self.connection.url_params()
-        url_params["sid"] = self.session
-        response = self.connection._send_request(
-            ENDPOINT_SQL_EXECUTE.format(**url_params),
-            data
-        )
-
-        print(response)
-        pass
+        self._last_response = self.connection._run_query(sql, params, types)
 
     def executemany(self, sql, seq_of_params):
         pass
@@ -142,12 +125,11 @@ class Cursor(object):
         pass
 
     def fetchall(self):
-        pass
+        for row in self._last_response.get("rows", []):
+            yield row
 
     def close(self):
-        self.connection._destroy_session(self.session)
-        self.session = None
-
+        pass
 
 class Connection(object):
     def __init__(self, project_id, instance_id, database_id, auth_token):
@@ -156,12 +138,15 @@ class Connection(object):
         self.database_id = database_id
         self.auth_token = auth_token
         self._autocommit = False
+        self._transaction_id = None
+        self._session = self._create_session()
 
     def url_params(self):
         return {
             "pid": self.project_id,
             "iid": self.instance_id,
-            "did": self.database_id
+            "did": self.database_id,
+            "sid": getattr(self, "_session", None) # won't exist when creating a session
         }
 
     def _create_session(self):
@@ -176,6 +161,50 @@ class Connection(object):
 
     def _destroy_session(self, session_id):
         pass
+
+    def _run_query(self, sql, params, types):
+        data = {
+            "session": self._session,
+            "transaction": self._transaction_id,
+            "sql": sql
+        }
+
+        if params:
+            data.update({
+                "params": params,
+                "paramTypes": types
+            })
+
+        # If we're running a query, with no active transaction then start a transaction
+        # as part of this query. We use readWrite if it's an INSERT or UPDATE or CREATE or whatever
+        if not self._transaction_id:
+            is_select_query = data["sql"].lstrip().upper().startswith("SELECT")
+            transaction_type = (
+                "readOnly" if is_select_query else "readWrite"
+            )
+            
+            # Begin a transaction as part of this query if we are autocommitting
+            data["transaction"] = {"begin": {transaction_type: {}}}
+
+        url_params = self.url_params()
+        
+        result = self._send_request(
+            ENDPOINT_SQL_EXECUTE.format(**url_params),
+            data
+        )
+
+        transaction_id = result.get("transaction", {}).get("id")
+        
+        if transaction_id:
+            # Keep the current transaction id active
+            self._transaction_id = transaction_id
+
+        # If auto-commit is enabled, then commit the active transaction
+        if self.autocommit:
+            self.commit()
+
+        return result
+    
 
     def _send_request(self, url, data, method="POST"):
         payload = json.dumps(data) if data else None
@@ -193,6 +222,7 @@ class Connection(object):
 
         return json.loads(response.content)
 
+
     def autocommit(self, value):
         """
             Cloud Spanner doesn't support auto-commit, so if it's enabled we create
@@ -204,10 +234,15 @@ class Connection(object):
         return Cursor(self)
 
     def close(self):
-        pass
+        self._destroy_session(self._session)
+        self._session = None
 
     def commit(self):
-        pass
+        if not self._transaction_id:
+            return
+
+        self._send_request(ENDPOINT_COMMIT, {"transactionId": self._transaction_id})
+        self._transaction_id = None
 
     def rollback(self):
         pass

@@ -18,7 +18,7 @@ class DatabaseWrapper(BaseDatabaseWrapper):
     vendor = 'google'
     display_name = 'Cloud Spanner'
 
-    _data_types = {
+    _data_types = data_types = {
         'AutoField': FieldTypes.INT64,
         'BigAutoField': FieldTypes.INT64,
         'BinaryField': FieldTypes.BYTES,
