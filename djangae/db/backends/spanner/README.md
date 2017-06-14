@@ -20,12 +20,11 @@ A minor annoyance is that Spanner seems to use separate endpoints for queries wh
 kind of query is being run. There are 3 types of query: DDL, READ and WRITE.
 
 The separation between READ (SELECT) and WRITE (everything else) queries is necessary because Spanner has two different types
-of transaction; readOnly and readWrite. It's costly to use a readWrite transaction when it's not necessary so the connector
-only enables a readWrite transaction if it detects that the SQL is trying to manipulate data.
+of transaction; `readOnly` and `readWrite`. It's costly to use a `readWrite` transaction when it's not necessary so the connector
+only enables a `readWrite` transaction if it detects that the SQL is trying to manipulate data or if autocommit is disabled, 
+in which case we have to assume that subsequent queries may require writing so we use `readWrite`
 
 Autocommit is implemented in the connector by doing the following; if there is no active transaction when a query is run and new transaction is created by specifying `"transaction": {"begin": {}}` in the submitted POST data. This starts a new transaction, and returns the transactionId with the resultset. If autocommit is enabled, this transactionId is immediately committed otherwise the transactionId is stored.
-
-**PROBLEM: If you are not using autocommit, and you run a SELECT followed by an INSERT before calling commit, the transaction will fail as a readOnly transaction would have started, not a readWrite one. Needs some thought!**
 
 ## TODO
 

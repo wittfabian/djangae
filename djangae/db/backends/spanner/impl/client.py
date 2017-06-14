@@ -225,9 +225,17 @@ class Connection(object):
         if not self._transaction_id:
             query_type = _determine_query_type(data["sql"])
        
-            transaction_type = (
-                "readOnly" if query_type == QueryType.READ else "readWrite"
-            )
+            if self._autocommit:
+                # Autocommit means this is a single-use transaction, however passing singleUse
+                # to executeSql is apparently illegal... for some reason?
+                transaction_type = (
+                    "readOnly" if query_type == QueryType.READ else "readWrite"
+                )
+            else:
+                # If autocommit is disabled, we have to assume a readWrite transaction
+                # as even if the query type is READ, subsequent queries within the transaction
+                # may include UPDATEs
+                transaction_type = "readWrite"
             
             # Begin a transaction as part of this query if we are autocommitting
             data["transaction"] = {"begin": {transaction_type: {}}}
@@ -246,7 +254,7 @@ class Connection(object):
             self._transaction_id = transaction_id
 
         # If auto-commit is enabled, then commit the active transaction
-        if self.autocommit:
+        if self._autocommit:
             self.commit()
 
         return result
