@@ -21,29 +21,29 @@ class DatabaseWrapper(BaseDatabaseWrapper):
     _data_types = data_types = {
         'AutoField': FieldTypes.INT64,
         'BigAutoField': FieldTypes.INT64,
-        'BinaryField': FieldTypes.BYTES,
+        'BinaryField': FieldTypes.BYTES + "(%(max_length)s)",
         'BooleanField': FieldTypes.BOOL,
-        'CharField': FieldTypes.STRING,
+        'CharField': FieldTypes.STRING + "(%(max_length)s)",
         'DateField': FieldTypes.TIMESTAMP,
         'DateTimeField': FieldTypes.TIMESTAMP,
-        'DecimalField': FieldTypes.STRING,
+        'DecimalField': FieldTypes.STRING + "(%(max_length)s)",
         'DurationField': FieldTypes.FLOAT64,
-        'FileField': FieldTypes.STRING,
-        'FilePathField': FieldTypes.STRING,
+        'FileField': FieldTypes.STRING + "(%(max_length)s)",
+        'FilePathField': FieldTypes.STRING + "(%(max_length)s)",
         'FloatField': FieldTypes.FLOAT64,
         'IntegerField': FieldTypes.INT64,
         'BigIntegerField': FieldTypes.INT64,
-        'IPAddressField': FieldTypes.STRING,
-        'GenericIPAddressField': FieldTypes.STRING,
+        'IPAddressField': FieldTypes.STRING + "(%(max_length)s)",
+        'GenericIPAddressField': FieldTypes.STRING + "(%(max_length)s)",
         'NullBooleanField': FieldTypes.BOOL,
         'OneToOneField': FieldTypes.INT64,
         'PositiveIntegerField': FieldTypes.INT64,
         'PositiveSmallIntegerField': FieldTypes.INT64,
-        'SlugField': FieldTypes.STRING,
+        'SlugField': FieldTypes.STRING + "(%(max_length)s)",
         'SmallIntegerField': FieldTypes.INT64,
-        'TextField': FieldTypes.STRING,
+        'TextField': FieldTypes.STRING + "(%(max_length)s)",
         'TimeField': FieldTypes.TIMESTAMP,
-        'UUIDField': FieldTypes.STRING,
+        'UUIDField': FieldTypes.STRING + "(%(max_length)s)",
     }
 
     operators = {
@@ -99,4 +99,4 @@ class DatabaseWrapper(BaseDatabaseWrapper):
     def create_cursor(self):
         cursor = self.connection.cursor()
         return cursor
-    
+

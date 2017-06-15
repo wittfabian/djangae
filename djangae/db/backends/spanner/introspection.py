@@ -1,6 +1,6 @@
 
 from django.db.backends.base.introspection import (
-    BaseDatabaseIntrospection
+    BaseDatabaseIntrospection, TableInfo
 )
 
 

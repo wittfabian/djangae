@@ -7,6 +7,8 @@
 import json
 import string
 import threading
+import time
+import uuid
 
 try:
     import six
@@ -66,22 +68,23 @@ ENDPOINT_SESSION_CREATE = (
 ENDPOINT_SQL_EXECUTE = ENDPOINT_SESSION_PREFIX + ":executeSql"
 ENDPOINT_COMMIT = ENDPOINT_SESSION_PREFIX + ":commit"
 ENDPOINT_UPDATE_DDL = ENDPOINT_PREFIX + "projects/{pid}/instances/{iid}/databases/{did}/ddl"
+ENDPOINT_OPERATION_GET = ENDPOINT_PREFIX + "projects/{pid}/instances/{iid}/databases/{did}/operations/{oid}"
 
 class QueryType:
     DDL = "DDL"
     READ = "READ"
     WRITE = "WRITE"
-    
-    
+
+
 def _determine_query_type(sql):
     for keyword in ("DATABASE", "TABLE", "INDEX"):
         if keyword in sql:
             return QueryType.DDL
-            
+
     for keyword in ("INSERT", "UPDATE", "REPLACE", "DELETE"):
         if keyword in sql:
             return QueryType.WRITE
-            
+
     return QueryType.READ
 
 
@@ -91,6 +94,7 @@ class Cursor(object):
     def __init__(self, connection):
         self.connection = connection
         self._last_response = None
+        self._iterator = None
 
     def _format_query(self, sql, params):
         """
@@ -132,26 +136,27 @@ class Cursor(object):
         query_type = _determine_query_type(sql)
         if query_type == QueryType.DDL:
             self._last_response = self.connection._run_ddl_update(sql)
-            
-            print self.connection._send_request(
-                "https://spanner.googleapis.com/v1/projects/djangae-cloud/instances/spanner-test/databases/spanner-test/operations", None, method="GET"
-            )
         else:
             self._last_response = self.connection._run_query(sql, params, types)
+            self._iterator = iter(self._last_response.get("rows", []))
 
     def executemany(self, sql, seq_of_params):
         pass
 
     def fetchone(self):
-        pass
+        return self._iterator.next()
 
     def fetchmany(self, size=None):
         size = size or Cursor.arraysize
-
-        pass
+        results = []
+        for i, result in self._iterator:
+            if i == size:
+                return results
+            results.append(result)
+        return results
 
     def fetchall(self):
-        for row in self._last_response.get("rows", []):
+        for row in self._iterator:
             yield row
 
     def close(self):
@@ -188,26 +193,42 @@ class Connection(object):
     def _destroy_session(self, session_id):
         pass
 
-    def _run_ddl_update(self, sql):
-        print(sql)
+    def _run_ddl_update(self, sql, wait=True):
         assert(_determine_query_type(sql) == QueryType.DDL)
-    
+
+        # Operation IDs must start with a letter
+        operation_id = "x" + uuid.uuid4().hex.replace("-", "_")
+
         data = {
             "statements": [sql],
-            "operationId": "test"
+            "operationId": operation_id
         }
-    
+
         url_params = self.url_params()
 
-        return self._send_request(
+        response = self._send_request(
             ENDPOINT_UPDATE_DDL.format(**url_params),
             data,
             method="PATCH"
         )
 
+        if wait:
+            # Wait for the operation to finish
+            done = False
+            params = url_params.copy()
+            params["oid"] = operation_id
+            while not done:
+                status = self._send_request(
+                    ENDPOINT_OPERATION_GET.format(**params), data=None, method="GET"
+                )
+                done = status.get("done", False)
+                time.sleep(0.1)
+
+        return response
+
     def _run_query(self, sql, params, types):
         print(sql)
-        
+
         data = {
             "session": self._session,
             "transaction": self._transaction_id,
@@ -224,7 +245,7 @@ class Connection(object):
         # as part of this query. We use readWrite if it's an INSERT or UPDATE or CREATE or whatever
         if not self._transaction_id:
             query_type = _determine_query_type(data["sql"])
-       
+
             if self._autocommit:
                 # Autocommit means this is a single-use transaction, however passing singleUse
                 # to executeSql is apparently illegal... for some reason?
@@ -236,19 +257,19 @@ class Connection(object):
                 # as even if the query type is READ, subsequent queries within the transaction
                 # may include UPDATEs
                 transaction_type = "readWrite"
-            
+
             # Begin a transaction as part of this query if we are autocommitting
             data["transaction"] = {"begin": {transaction_type: {}}}
 
         url_params = self.url_params()
-        
+
         result = self._send_request(
             ENDPOINT_SQL_EXECUTE.format(**url_params),
             data
         )
 
         transaction_id = result.get("transaction", {}).get("id")
-        
+
         if transaction_id:
             # Keep the current transaction id active
             self._transaction_id = transaction_id
@@ -258,14 +279,18 @@ class Connection(object):
             self.commit()
 
         return result
-    
+
 
     def _send_request(self, url, data, method="POST"):
+        def get_method():
+            assert(method in ("GET", "POST", "PUT", "PATCH", "HEAD", "DELETE"))
+            return getattr(urlfetch, method)
+
         payload = json.dumps(data) if data else None
         response = urlfetch.fetch(
             url,
             payload=payload,
-            method=urlfetch.POST if method == "POST" else urlfetch.GET,
+            method=get_method(),
             headers={
                 'Authorization': 'Bearer {}'.format(self.auth_token),
                 'Content-Type': 'application/json'
