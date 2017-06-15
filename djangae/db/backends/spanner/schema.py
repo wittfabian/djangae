@@ -4,6 +4,9 @@ from django.db.backends.base.schema import BaseDatabaseSchemaEditor
 
 
 class DatabaseSchemaEditor(BaseDatabaseSchemaEditor):
+    sql_create_unique = "CREATE UNIQUE INDEX %(name)s ON %(table)s(%(columns)s)"
+    sql_delete_unique = "DROP INDEX %(name)s"
+
     sql_create_table = "CREATE TABLE %(table)s (%(definition)s) PRIMARY KEY(%%(_key_fields)s)"
 
     def create_model(self, model):

@@ -106,7 +106,6 @@ class Cursor(object):
             "%s" to "@a, "@b" etc. and returns a tuple of (sql, params, types)
             ready to be send via the REST API
         """
-
         output_params = {}
         param_types = {}
 
