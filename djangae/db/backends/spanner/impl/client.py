@@ -117,16 +117,18 @@ class Cursor(object):
             placeholder = "@{}".format(letter)
             sql = sql.replace("%s", placeholder, 1)
 
-            if isinstance(val, six.unicode_type):
-                param_types[letter] = "STRING"
-            elif isinstance(val, six.bytes_type):
-                param_types[letter] = "BYTES"
+            if isinstance(val, six.text_type):
+                param_types[letter] = {"code": "STRING"}
+            elif isinstance(val, six.binary_type):
+                param_types[letter] = {"code": "BYTES"}
 
+        if params:
+            print("%s - %s" % (output_params, param_types))
         return sql, output_params, param_types
 
 
     def execute(self, sql, params=None):
-        params = None or []
+        params = params or []
 
         sql, params, types = self._format_query(sql, params)
 
