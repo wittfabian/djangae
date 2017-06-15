@@ -254,7 +254,7 @@ class Connection(object):
         self._pk_lookup = self._query_pk_lookup()
 
         self._sequence_generator = lambda: (
-            (uuid.uuid4().int & (1 << 64) - 1) - ((1 ** 64) / 2)
+            (uuid.uuid4().int & (1 << 63) - 1) - ((1 ** 64) / 2)
         )
 
     def _query_pk_lookup(self):
