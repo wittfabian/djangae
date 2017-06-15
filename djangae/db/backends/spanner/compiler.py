@@ -9,9 +9,10 @@ class SQLCompiler(compiler.SQLCompiler):
 
 class SQLInsertCompiler(compiler.SQLInsertCompiler, SQLCompiler):
     def as_sql(self):
+        has_fields = bool(self.query.fields)
+
         queries = super(SQLInsertCompiler, self).as_sql()
 
-        has_fields = bool(self.query.fields)
         if not has_fields:
             return queries
 

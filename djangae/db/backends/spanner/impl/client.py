@@ -67,6 +67,7 @@ ENDPOINT_SQL_EXECUTE = ENDPOINT_SESSION_PREFIX + ":executeSql"
 ENDPOINT_COMMIT = ENDPOINT_SESSION_PREFIX + ":commit"
 ENDPOINT_UPDATE_DDL = ENDPOINT_PREFIX + "projects/{pid}/instances/{iid}/databases/{did}/ddl"
 ENDPOINT_OPERATION_GET = ENDPOINT_PREFIX + "projects/{pid}/instances/{iid}/databases/{did}/operations/{oid}"
+ENDPOINT_BEGIN_TRANSACTION = ENDPOINT_SESSION_PREFIX + ":beginTransaction"
 
 class QueryType:
     DDL = "DDL"
@@ -75,6 +76,9 @@ class QueryType:
 
 
 def _determine_query_type(sql):
+    if sql.strip().split()[0].upper() == "SELECT":
+        return QueryType.READ
+
     for keyword in ("DATABASE", "TABLE", "INDEX"):
         if keyword in sql:
             return QueryType.DDL
@@ -93,6 +97,11 @@ class Cursor(object):
         self.connection = connection
         self._last_response = None
         self._iterator = None
+        self._lastrowid = None
+
+    @property
+    def lastrowid(self):
+        return self._lastrowid
 
     def _format_query(self, sql, params):
         """
@@ -161,6 +170,77 @@ class Cursor(object):
     def close(self):
         pass
 
+
+class ParsedSQLInfo(object):
+    def __init__(self, method, table, columns):
+        self.method = method
+        self.table = table
+        self.columns = columns
+        self.row_values = []
+
+    def _add_row(self, values):
+        self.row_values.append(values)
+
+
+def parse_sql(sql, params):
+    """
+        Parses a restrictive subset of SQL for "write" queries (INSERT, UPDATE etc.)
+    """
+
+    parts = sql.split()
+
+    method = parts[0].upper().strip()
+    table = None
+    columns = []
+
+    rows = []
+
+    if method == "INSERT":
+        assert(parts[1].upper() == "INTO")
+        table = parts[2]
+
+        def parse_bracketed_list_from(start):
+            bracketed_list = []
+            for i in range(start, len(parts)):
+                if parts[i].endswith(")"):
+                    remainder = parts[i].rstrip(")").strip()
+                    if remainder:
+                        bracketed_list.append(remainder)
+                    break
+
+                remainder = parts[i].lstrip("(").strip()
+                # Depending on whether there was whitespace before/after brackets/commas
+                # remainder will either be a column, or a CSV of columns
+                if "," in remainder:
+                    bracketed_list.extend([x.strip() for x in remainder.split(",") if x.strip()])
+                elif remainder:
+                    bracketed_list.append(remainder)
+
+            return bracketed_list, i
+
+        columns, last = parse_bracketed_list_from(3)
+
+        assert(parts[last + 1] == "VALUES")
+
+        start = last + 2
+        while start < len(parts):
+            row, last = parse_bracketed_list_from(start)
+            rows.append(row)
+            start = last + 1
+
+    else:
+        raise NotImplementedError()
+
+    # Remove any backtick quoting
+    table = table.strip("`")
+    columns = [x.strip("`") for x in columns]
+    result = ParsedSQLInfo(method, table, columns)
+
+    for value_list in rows:
+        result._add_row([params[x.strip("@")] for x in value_list])
+    return result
+
+
 class Connection(object):
     def __init__(self, project_id, instance_id, database_id, auth_token):
         self.project_id = project_id
@@ -169,7 +249,36 @@ class Connection(object):
         self.auth_token = auth_token
         self._autocommit = False
         self._transaction_id = None
+        self._transaction_mutations = []
         self._session = self._create_session()
+        self._pk_lookup = self._query_pk_lookup()
+
+        self._sequence_generator = lambda: (
+            (uuid.uuid4().int & (1 << 64) - 1) - ((1 ** 64) / 2)
+        )
+
+    def _query_pk_lookup(self):
+        sql = """
+SELECT DISTINCT
+  I.TABLE_NAME,
+  IC.COLUMN_NAME
+FROM
+  information_schema.indexes AS I
+INNER JOIN
+  information_schema.index_columns as IC
+on I.INDEX_NAME = IC.INDEX_NAME and I.TABLE_NAME = IC.TABLE_NAME
+WHERE I.INDEX_TYPE = "PRIMARY_KEY"
+AND IC.TABLE_SCHEMA = ''
+""".strip()
+
+        self.autocommit(True)
+        results = self._run_query(sql, None, None)
+        self.autocommit(False)
+
+        return dict(results['rows'])
+
+    def set_sequence_generator(self, func):
+        self._sequence_generator = func
 
     def url_params(self):
         return {
@@ -188,6 +297,51 @@ class Connection(object):
         # For some bizarre reason, this returns the full URL to the session
         # so we just extract the session ID here!
         return response["name"].rsplit("/")[-1]
+
+    def _parse_mutation(self, sql, params, types):
+        """
+            Spanner doesn't support insert/update/delete/replace etc. queries
+            but it does support submitting "mutations" when a transaction is committed.
+
+            This function parses out the following information from write queries:
+             - table name
+             - columns
+             - values
+
+            ...and returns a dictionary in the correct format for the mutations list
+            in the commit() RPC call
+        """
+
+        parsed_output = parse_sql(sql, params)
+
+        return {
+            parsed_output.method.lower(): {
+                "table": parsed_output.table,
+                "columns": parsed_output.columns,
+                "values": parsed_output.row_values
+            }
+        }
+
+    def _generate_pk_for_insert(self, mutation):
+        """
+            If the mutation is an INSERT and the PK column is *NOT*
+            included, we generate a new random ID and insert that and the PK
+            column into the mutation.
+        """
+        if mutation.keys()[0] != "insert":
+            # Do nothing if this isn't an insert
+            return mutation
+
+        m = mutation['insert']
+        pk_column = self._pk_lookup[m['table']]
+        if pk_column not in m['columns']:
+            m['columns'].insert(0, pk_column)
+
+            for row in m['values']:
+                # INT64 must be sent as a string :(
+                row.insert(0, unicode(self._sequence_generator()))
+
+        return mutation
 
     def _destroy_session(self, session_id):
         pass
@@ -240,11 +394,11 @@ class Connection(object):
                 "paramTypes": types
             })
 
+        query_type = _determine_query_type(data["sql"])
+
         # If we're running a query, with no active transaction then start a transaction
         # as part of this query. We use readWrite if it's an INSERT or UPDATE or CREATE or whatever
         if not self._transaction_id:
-            query_type = _determine_query_type(data["sql"])
-
             if self._autocommit:
                 # Autocommit means this is a single-use transaction, however passing singleUse
                 # to executeSql is apparently illegal... for some reason?
@@ -262,12 +416,27 @@ class Connection(object):
 
         url_params = self.url_params()
 
-        result = self._send_request(
-            ENDPOINT_SQL_EXECUTE.format(**url_params),
-            data
-        )
+        if query_type == QueryType.READ:
+            result = self._send_request(
+                ENDPOINT_SQL_EXECUTE.format(**url_params),
+                data
+            )
 
-        transaction_id = result.get("transaction", {}).get("id")
+            transaction_id = result.get("transaction", {}).get("id")
+        else:
+            if not self._transaction_id:
+                # Start a new transaction, but store the mutation for the commit
+                result = self._send_request(
+                    ENDPOINT_BEGIN_TRANSACTION.format(**url_params),
+                    {"options": {"readWrite": {}}}
+                )
+
+                transaction_id = result["id"]
+
+            mutation = self._parse_mutation(sql, params, types)
+            mutation = self._generate_pk_for_insert(mutation)
+
+            self._transaction_mutations.append(mutation)
 
         if transaction_id:
             # Keep the current transaction id active
@@ -319,7 +488,18 @@ class Connection(object):
         if not self._transaction_id:
             return
 
-        self._send_request(ENDPOINT_COMMIT, {"transactionId": self._transaction_id})
+        print(self._transaction_mutations)
+
+        result = self._send_request(
+            ENDPOINT_COMMIT.format(**self.url_params()), {
+                "transactionId": self._transaction_id,
+                "mutations": self._transaction_mutations
+        })
+
+        if self._transaction_mutations:
+            import ipdb; ipdb.set_trace()
+
+        self._transaction_mutations = []
         self._transaction_id = None
 
     def rollback(self):
