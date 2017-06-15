@@ -31,8 +31,6 @@ Autocommit is implemented in the connector by doing the following; if there is n
 The following items are some of the things left to do, unfortunately we are blocked until we can work out why 
 DDL queries (for changing schema) are not having any effect.
 
- - Make schema changes work (e.g. CREATE TABLE) - currently fails, see: https://stackoverflow.com/questions/44545693/google-cloud-spanner-unable-to-create-table-with-rest-api?
- - Add `PRIMARY KEY(X)` to `CREATE TABLE` statements
  - Implement session closing on the connection
  - Implement transaction rollback
  - Check through database features and configure the flags (DatabaseFeatures.X) appropriately
