@@ -6,7 +6,6 @@
 
 import json
 import string
-import threading
 import time
 import uuid
 
@@ -17,7 +16,6 @@ except ImportError:
 
 from google.appengine.api import app_identity
 from google.appengine.api import urlfetch
-from google.appengine.api import oauth
 
 from exceptions import StandardError
 
