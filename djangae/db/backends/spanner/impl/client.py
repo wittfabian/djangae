@@ -8,6 +8,11 @@ import json
 import string
 import time
 import uuid
+import datetime
+import base64
+
+from pytz import utc
+
 
 try:
     import six
@@ -182,6 +187,29 @@ class ParsedSQLInfo(object):
         self.row_values.append(values)
 
 
+def _convert_for_json(values):
+    """
+        Cloud Spanner has a slightly bizarre system for sending different
+        types (e.g. integers must be strings) so this takes care of converting
+        Python types to the correct format for JSON
+    """
+
+    for i, value in enumerate(values):
+
+        if isinstance(value, six.integer_types):
+            values[i] = six.text_type(value) # Ints must be strings
+        elif isinstance(value, six.binary_type):
+            values[i] = base64.b64encode(value) # Bytes must be b64 encoded
+        elif isinstance(value, datetime.datetime):
+            # datetimes must send the Zulu (UTC) timezone...
+            if value.tzinfo:
+                value = value.astimezone(utc)
+            values[i] = value.isoformat("T") + "Z"
+        elif isinstance(value, datetime.date):
+            values[i] = value.isoformat()
+    return values
+
+
 def parse_sql(sql, params):
     """
         Parses a restrictive subset of SQL for "write" queries (INSERT, UPDATE etc.)
@@ -237,7 +265,10 @@ def parse_sql(sql, params):
     result = ParsedSQLInfo(method, table, columns)
 
     for value_list in rows:
-        result._add_row([params[x.strip("@")] for x in value_list])
+        values = [params[x.strip("@")] for x in value_list]
+        values = _convert_for_json(values)
+        result._add_row(values)
+
     return result
 
 
@@ -339,7 +370,7 @@ AND IC.TABLE_SCHEMA = ''
 
             for row in m['values']:
                 # INT64 must be sent as a string :(
-                row.insert(0, unicode(self._sequence_generator()))
+                row.insert(0, six.text_type(self._sequence_generator()))
 
         return mutation
 
@@ -347,13 +378,36 @@ AND IC.TABLE_SCHEMA = ''
         pass
 
     def _run_ddl_update(self, sql, wait=True):
+        print(sql)
+
         assert(_determine_query_type(sql) == QueryType.DDL)
 
         # Operation IDs must start with a letter
         operation_id = "x" + uuid.uuid4().hex.replace("-", "_")
 
+        def split_sql_on_semi_colons(_sql):
+            inside_quotes = False
+
+            results = []
+            buff = []
+
+            for c in sql:
+                if c in ("'", '"', "`"):
+                    inside_quotes = not inside_quotes
+
+                if c == ";" and not inside_quotes:
+                    results.append("".join(buff))
+                    buff = []
+                else:
+                    buff.append(c)
+
+            if buff:
+                results.append("".join(buff))
+
+            return results
+
         data = {
-            "statements": [sql],
+            "statements": split_sql_on_semi_colons(sql),
             "operationId": operation_id
         }
 
@@ -490,14 +544,11 @@ AND IC.TABLE_SCHEMA = ''
 
         print(self._transaction_mutations)
 
-        result = self._send_request(
+        self._send_request(
             ENDPOINT_COMMIT.format(**self.url_params()), {
                 "transactionId": self._transaction_id,
                 "mutations": self._transaction_mutations
         })
-
-        if self._transaction_mutations:
-            import ipdb; ipdb.set_trace()
 
         self._transaction_mutations = []
         self._transaction_id = None

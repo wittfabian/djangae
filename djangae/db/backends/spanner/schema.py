@@ -16,9 +16,11 @@ class DatabaseSchemaEditor(BaseDatabaseSchemaEditor):
         """
         try:
             self._creating_model = model
+            self._unique_disabled = True
             return super(DatabaseSchemaEditor, self).create_model(model)
         finally:
-            delattr(self, "_creating_model")
+            if hasattr(self, "_creating_model"):
+                delattr(self, "_creating_model")
 
     def execute(self, sql, *args, **kwargs):
         """
@@ -26,13 +28,44 @@ class DatabaseSchemaEditor(BaseDatabaseSchemaEditor):
             CREATE TABLE statement. Unfortunately Django doesn't provide an easy way to hook
             into this. So we add an additional format param _key_fields into the create table SQL
             and substitute it in here
+
+            Also unique and unique together constraints must be added in separate statements
+            so we also hack that in here rather than overriding the whole of create_model and column_sql
         """
 
         if getattr(self, "_creating_model", None):
+            # Add primary key
             pk = self._creating_model._meta.pk
             sql = sql % {"_key_fields": pk.column}
 
+            # add unique and unique together constraints
+            model = self._creating_model
+            delattr(self, "_unique_disabled")
+            unique_queries = []
+
+            for field in model._meta.local_fields:
+                if field.unique:
+                    unique_queries.append(self._create_unique_sql(model, [field.column]))
+
+            for fields in model._meta.unique_together:
+                columns = [model._meta.get_field(field).column for field in fields]
+                unique_queries.append(self._create_unique_sql(model, columns))
+
+            # Make a multi-statement query. The DB connector deals with splitting this
+            # when running DDL queries
+            if unique_queries:
+                sql = sql + "; " + "; ".join(unique_queries)
+
         return super(DatabaseSchemaEditor, self).execute(sql, *args, **kwargs)
+
+    def _create_unique_sql(self, model, columns):
+
+        # This flag is necessary to prevent create_model adding unique sql
+        # into the column definition
+        if getattr(self, "_unique_disabled", False):
+            return ""
+
+        return super(DatabaseSchemaEditor, self)._create_unique_sql(model, columns)
 
     def column_sql(self, model, field, include_default=False):
         sql, params = super(DatabaseSchemaEditor, self).column_sql(model, field, include_default)
@@ -40,5 +73,8 @@ class DatabaseSchemaEditor(BaseDatabaseSchemaEditor):
         # Cloud Spanner doesn't allow specifying a primary key alongside the column
         # it must instead by specified alongside indexes at the end of the create table statement
         sql = sql.replace(" PRIMARY KEY", "")
+
+        # Remove unique keyword from column, it gets added later
+        sql = sql.replace(" UNIQUE", "")
 
         return sql, params

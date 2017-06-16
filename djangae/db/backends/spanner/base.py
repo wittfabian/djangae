@@ -96,7 +96,7 @@ class DatabaseWrapper(BaseDatabaseWrapper):
             'credentials_json': settings_dict.get('CREDENTIALS_JSON')
         }
 
-    def create_cursor(self):
+    def create_cursor(self, name=None):
         cursor = self.connection.cursor()
         return cursor
 

@@ -23,7 +23,7 @@ class SQLInsertCompiler(compiler.SQLInsertCompiler, SQLCompiler):
 
         field_types = [x.db_type(self.connection) for x in self.query.fields]
 
-        # Go throug the queries, enforce the correct types
+        # Go through the queries, enforce the correct types
         for sql, params in queries:
             for i, field_type in enumerate(field_types):
                 if field_type.startswith("STRING("):

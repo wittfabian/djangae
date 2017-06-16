@@ -2,7 +2,6 @@ from django.conf.urls import include
 from django.conf.urls import url
 
 from django.contrib import admin
-from testapp.admin import admin_site
 
 import djangae.urls
 
@@ -15,5 +14,4 @@ urlpatterns = [
     url(r'^_ah/', include(djangae.urls)),
     url(r'^auth/', include('djangae.contrib.gauth.urls')),
     url(r'^locking/', include('djangae.contrib.locking.urls')),
-    url(r'^', include(admin_site.urls)),
 ]
