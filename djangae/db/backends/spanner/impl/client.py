@@ -11,6 +11,7 @@ import uuid
 import datetime
 import base64
 import random
+import re
 
 from pytz import utc
 
@@ -74,14 +75,25 @@ ENDPOINT_COMMIT = ENDPOINT_SESSION_PREFIX + ":commit"
 ENDPOINT_UPDATE_DDL = ENDPOINT_PREFIX + "projects/{pid}/instances/{iid}/databases/{did}/ddl"
 ENDPOINT_OPERATION_GET = ENDPOINT_PREFIX + "projects/{pid}/instances/{iid}/databases/{did}/operations/{oid}"
 ENDPOINT_BEGIN_TRANSACTION = ENDPOINT_SESSION_PREFIX + ":beginTransaction"
+ENDPOINT_GET_DDL = ENDPOINT_UPDATE_DDL #Same, just different method
+
 
 class QueryType:
     DDL = "DDL"
     READ = "READ"
     WRITE = "WRITE"
+    CUSTOM = "CUSTOM"
 
 
 def _determine_query_type(sql):
+    if sql.upper().startswith("SHOW DDL"):
+        # Special case for our custom SHOW DDL command
+        return QueryType.CUSTOM
+
+    if sql.upper().startswith("SHOW INDEX"):
+        # Special case
+        return QueryType.CUSTOM
+
     if sql.strip().split()[0].upper() == "SELECT":
         return QueryType.READ
 
@@ -442,6 +454,48 @@ AND IC.TABLE_SCHEMA = ''
 
         return response
 
+    def _run_custom_query(self, sql, params, types):
+        """
+            Exposes some functionality of Spanner via custom SQL
+            to make it accessible
+        """
+        regex = re.compile(
+            "\s*CREATE\s+TABLE\s+(?P<table>[a-zA-Z0-9_-]+)|"
+            "\s*CREATE\s+INDEX\s+(?P<index>[a-zA-Z0-9_-]+)"
+        )
+
+        sql = sql.strip()
+        if sql.upper().startswith("SHOW DDL"):
+            obj = sql[len("SHOW DDL"):].strip()
+
+            url_params = self.url_params()
+
+            response = self._send_request(
+                ENDPOINT_GET_DDL.format(**url_params),
+                None,
+                method="GET"
+            )
+
+            result = []
+
+            if obj:
+                for statement in response['statements']:
+                    match = regex.match(statement)
+                    if match and match.group(1) == obj:
+                        result = [statement]
+                        break
+            else:
+                result = ["; ".join(response['statements'])]
+
+            return {
+                "rows": result
+            }
+        elif sql.upper().startswith("SHOW INDEX"):
+            obj = sql[len("SHOW INDEX"):].strip()
+            raise NotImplementedError()
+        else:
+            raise DatabaseError("Unsupported custom SQL")
+
     def _run_query(self, sql, params, types):
         data = {
             "session": self._session,
@@ -456,6 +510,9 @@ AND IC.TABLE_SCHEMA = ''
             })
 
         query_type = _determine_query_type(data["sql"])
+
+        if query_type == QueryType.CUSTOM:
+            return self._run_custom_query(sql, params, types)
 
         # If we're running a query, with no active transaction then start a transaction
         # as part of this query. We use readWrite if it's an INSERT or UPDATE or CREATE or whatever
