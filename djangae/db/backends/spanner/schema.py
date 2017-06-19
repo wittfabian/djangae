@@ -9,6 +9,21 @@ class DatabaseSchemaEditor(BaseDatabaseSchemaEditor):
 
     sql_create_table = "CREATE TABLE %(table)s (%(definition)s) PRIMARY KEY(%%(_key_fields)s)"
 
+    # Cloud Spanner doesn't support foreign keys (in the traditional sense)
+    sql_create_fk = ""
+    sql_delete_fk = ""
+
+    sql_alter_column_type = "ALTER COLUMN %(column)s %(type)s"
+    sql_alter_column_null = "ALTER COLUMN %(column)s %(type)s"
+    sql_alter_column_null = "ALTER COLUMN %(column)s %(type)s NOT NULL"
+    sql_delete_column = "ALTER TABLE %(table)s DROP COLUMN %(column)s"
+
+    def skip_default(self, field):
+        """
+            Frustratingly, Cloud Spanner doesn't support DEFAULT at all
+        """
+        return True
+
     def create_model(self, model):
         """
             We have to store the model we are creating temporarily so that our hack in execute
@@ -32,6 +47,11 @@ class DatabaseSchemaEditor(BaseDatabaseSchemaEditor):
             Also unique and unique together constraints must be added in separate statements
             so we also hack that in here rather than overriding the whole of create_model and column_sql
         """
+
+        if not sql:
+            # Don't do anything if no SQL was provided which does happen
+            # because we disable FKs (for example)
+            return
 
         if getattr(self, "_creating_model", None):
             # Add primary key

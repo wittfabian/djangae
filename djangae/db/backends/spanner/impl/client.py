@@ -10,6 +10,7 @@ import time
 import uuid
 import datetime
 import base64
+import random
 
 from pytz import utc
 
@@ -135,6 +136,9 @@ class Cursor(object):
                 param_types[letter] = {"code": "STRING"}
             elif isinstance(val, six.binary_type):
                 param_types[letter] = {"code": "BYTES"}
+            elif isinstance(val, six.integer_types):
+                param_types[letter] = {'code': 'INT64'}
+                output_params[letter] = six.text_type(val)
 
         if params:
             print("%s - %s" % (output_params, param_types))
@@ -162,7 +166,7 @@ class Cursor(object):
     def fetchmany(self, size=None):
         size = size or Cursor.arraysize
         results = []
-        for i, result in self._iterator:
+        for i, result in enumerate(self._iterator):
             if i == size:
                 return results
             results.append(result)
@@ -284,8 +288,13 @@ class Connection(object):
         self._session = self._create_session()
         self._pk_lookup = self._query_pk_lookup()
 
+        half_sixty_four = ((2 ** 64) - 1) / 2
+
         self._sequence_generator = lambda: (
-            (uuid.uuid4().int & (1 << 63) - 1) - ((1 ** 64) / 2)
+            random.randint(
+                -half_sixty_four,
+                (half_sixty_four - 1)
+            )
         )
 
     def _query_pk_lookup(self):
@@ -434,8 +443,6 @@ AND IC.TABLE_SCHEMA = ''
         return response
 
     def _run_query(self, sql, params, types):
-        print(sql)
-
         data = {
             "session": self._session,
             "transaction": self._transaction_id,
@@ -470,6 +477,7 @@ AND IC.TABLE_SCHEMA = ''
 
         url_params = self.url_params()
 
+        transaction_id = None
         if query_type == QueryType.READ:
             result = self._send_request(
                 ENDPOINT_SQL_EXECUTE.format(**url_params),
@@ -486,6 +494,8 @@ AND IC.TABLE_SCHEMA = ''
                 )
 
                 transaction_id = result["id"]
+            else:
+                result = {}
 
             mutation = self._parse_mutation(sql, params, types)
             mutation = self._generate_pk_for_insert(mutation)

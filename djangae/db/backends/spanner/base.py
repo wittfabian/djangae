@@ -41,7 +41,7 @@ class DatabaseWrapper(BaseDatabaseWrapper):
         'PositiveSmallIntegerField': FieldTypes.INT64,
         'SlugField': FieldTypes.STRING + "(%(max_length)s)",
         'SmallIntegerField': FieldTypes.INT64,
-        'TextField': FieldTypes.STRING + "(%(max_length)s)",
+        'TextField': FieldTypes.STRING + "(MAX)",
         'TimeField': FieldTypes.TIMESTAMP,
         'UUIDField': FieldTypes.STRING + "(%(max_length)s)",
     }
