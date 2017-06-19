@@ -74,7 +74,10 @@ if __name__ == '__main__':
             if name in ('google_appengine', 'djangae'):
                 continue
             path = os.path.join(TARGET_DIR, name)
-            shutil.rmtree(path)
+            if os.path.isdir(path):
+                shutil.rmtree(path)
+            else:
+                os.remove(path)
 
     print('Running pip...')
     args = [
