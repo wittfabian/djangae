@@ -23,7 +23,7 @@ DATABASES = {
         'INSTANCE': 'spanner-test',
         'DATABASE': 'spanner-test',
         'PROJECT': 'djangae-cloud',
-        'CREDENTIALS_JSON': os.path.expanduser("~/.cloud-spanner-credentials")
+        'CREDENTIALS_JSON': ".cloud-spanner-credentials"
     }
 }
 
@@ -49,6 +49,7 @@ else:
 INSTALLED_APPS = (
     'djangae',
     'django.contrib.admin',
+    'djangae.contrib.gauth_sql',
     'django.contrib.auth',
     'djangae.contrib.security',
     'django.contrib.contenttypes',
@@ -62,7 +63,7 @@ MIDDLEWARE = (
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
-    'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'djangae.contrib.gauth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'session_csrf.CsrfMiddleware',
@@ -113,4 +114,11 @@ TEMPLATES = [
         },
     },
 ]
+
+AUTHENTICATION_BACKENDS = (
+    'djangae.contrib.gauth_sql.backends.AppEngineUserAPIBackend',
+)
+
+AUTH_USER_MODEL = 'gauth_sql.GaeUser'
+LOGIN_URL = 'djangae_login_redirect'
 
