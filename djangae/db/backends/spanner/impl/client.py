@@ -461,13 +461,12 @@ AND IC.TABLE_SCHEMA = ''
         """
         regex = re.compile(
             "\s*CREATE\s+TABLE\s+(?P<table>[a-zA-Z0-9_-]+)|"
-            "\s*CREATE\s+INDEX\s+(?P<index>[a-zA-Z0-9_-]+)"
+            "\s*CREATE\s+(UNIQUE\s+)?INDEX\s+(?P<index>[a-zA-Z0-9_-]+)"
         )
 
         sql = sql.strip()
         if sql.upper().startswith("SHOW DDL"):
             obj = sql[len("SHOW DDL"):].strip()
-
             url_params = self.url_params()
 
             response = self._send_request(
@@ -477,11 +476,11 @@ AND IC.TABLE_SCHEMA = ''
             )
 
             result = []
-
             if obj:
                 for statement in response['statements']:
                     match = regex.match(statement)
-                    if match and match.group(1) == obj:
+                    table_or_index = match and (match.group("table") or match.group("index"))
+                    if match and table_or_index == obj:
                         result = [statement]
                         break
             else:
@@ -490,9 +489,29 @@ AND IC.TABLE_SCHEMA = ''
             return {
                 "rows": result
             }
-        elif sql.upper().startswith("SHOW INDEX"):
-            obj = sql[len("SHOW INDEX"):].strip()
-            raise NotImplementedError()
+        elif sql.upper().startswith("SHOW INDEX FROM"):
+            obj = sql[len("SHOW INDEX FROM"):].strip()
+
+            sql = """
+SELECT DISTINCT
+  I.TABLE_NAME,
+  I.INDEX_NAME,
+  I.INDEX_TYPE,
+  I.IS_UNIQUE,
+  I.IS_NULL_FILTERED,
+  I.INDEX_STATE
+FROM
+  information_schema.indexes AS I
+INNER JOIN
+  information_schema.index_columns as IC
+on I.INDEX_NAME = IC.INDEX_NAME and I.TABLE_NAME = IC.TABLE_NAME
+WHERE I.TABLE_NAME = @table
+AND IC.TABLE_SCHEMA = ''
+""".lstrip()
+
+            return self._run_query(
+                sql, {"table": obj}, {"table": {"code": "STRING"}}
+            )
         else:
             raise DatabaseError("Unsupported custom SQL")
 

@@ -25,7 +25,9 @@ class DatabaseOperations(BaseDatabaseOperations):
         def list_indexes(table):
             with self.connection.cursor() as cursor:
                 cursor.execute("SHOW INDEX FROM %s" % table);
-                return [x[0] for x in cursor.fetchall()]
+
+                # Find all indexes on the table (excluding PRIMARY_KEY)
+                return [x[1] for x in cursor.fetchall() if x[2] == "INDEX"]
 
         def query_ddl(object_list):
             "Given a list of tables or indexes, return the DDL statements in a dictionary"
@@ -62,7 +64,7 @@ class DatabaseOperations(BaseDatabaseOperations):
             for obj, ddl in ddl_statements.items():
                 if obj not in tables:
                     sql.append(ddl)
-
+            return sql
         else:
             return []
 
