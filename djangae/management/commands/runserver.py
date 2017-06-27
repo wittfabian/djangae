@@ -237,6 +237,12 @@ class Command(runserver.Command):
             def _get_dispatcher(self):
                 return self._patched_dispatcher
 
+            def _create_api_server(self, *args, **kwargs):
+                """
+                    For SDK around 1.9.40 - just return the existing API server
+                """
+                return sandbox._API_SERVER
+
             def _set_dispatcher(self, dispatcher):
                 """
                     Ignore explicit setting of _dispatcher, use our own
