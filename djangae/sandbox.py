@@ -371,10 +371,11 @@ def _test(**kwargs):
     for init_name, stub_kwargs in MINIMAL_STUBS.items():
         getattr(testbed, init_name)(**stub_kwargs)
 
-    yield
-
-    if testbed:
-        testbed.deactivate()
+    try:
+        yield
+    finally:
+        if testbed:
+            testbed.deactivate()
 
 
 LOCAL = 'local'
