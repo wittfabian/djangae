@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 
 
 NAME = 'djangae'
-PACKAGES = find_packages()
+PACKAGES = find_packages(exclude=["testapp", "testprodapp"])
 DESCRIPTION = 'Django integration with Google App Engine'
 URL = "https://github.com/potatolondon/djangae"
 LONG_DESCRIPTION = open(os.path.join(os.path.dirname(__file__), 'README.md')).read()
