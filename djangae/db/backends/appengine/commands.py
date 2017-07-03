@@ -982,6 +982,11 @@ class UpdateCommand(object):
             # Update the entity we read above with the new values
             result.update(primary)
 
+            # Remove fields which have been marked to be unindexed
+            for col in getattr(primary, "_properties_to_remove", []):
+                if col in result:
+                    del result[col]
+
             # Make sure that any polymodel classes which were in the original entity are kept,
             # as django_instance_to_entities may have wiped them as well as added them.
             polymodel_classes = list(set(

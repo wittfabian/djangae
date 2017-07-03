@@ -179,7 +179,7 @@ def django_instance_to_entities(connection, fields, raw, instance, check_null=Tr
        is useful for special indexes (e.g. contains)
     """
 
-    from djangae.db.backends.appengine.indexing import special_indexes_for_column, get_indexer
+    from djangae.db.backends.appengine.indexing import special_indexes_for_column, get_indexer, IgnoreForIndexing
     from djangae.db.backends.appengine import POLYMODEL_CLASS_ATTRIBUTE
 
     model = model or type(instance)
@@ -209,6 +209,7 @@ def django_instance_to_entities(connection, fields, raw, instance, check_null=Tr
     primary_key = None
 
     descendents = []
+    fields_to_unindex = set()
 
     for field in fields:
         value, is_primary_key = value_from_instance(instance, field)
@@ -221,10 +222,13 @@ def django_instance_to_entities(connection, fields, raw, instance, check_null=Tr
         for index in special_indexes_for_column(model, field.column):
             indexer = get_indexer(field, index)
 
-            values = indexer.prep_value_for_database(value, index, model=model, column=field.column)
-
-            if values is None:
-                continue
+            unindex = False
+            try:
+                values = indexer.prep_value_for_database(value, index, model=model, column=field.column)
+            except IgnoreForIndexing as e:
+                # We mark this value as being wiped out for indexing
+                unindex = True
+                values = e.processed_value
 
             if not hasattr(values, "__iter__"):
                 values = [values]
@@ -236,6 +240,10 @@ def django_instance_to_entities(connection, fields, raw, instance, check_null=Tr
             else:
                 for i, v in enumerate(values):
                     column = indexer.indexed_column_name(field.column, v, index)
+
+                    if unindex:
+                        fields_to_unindex.add(column)
+                        continue
 
                     # If the column already exists in the values, then we convert it to a
                     # list and append the new value
@@ -260,6 +268,9 @@ def django_instance_to_entities(connection, fields, raw, instance, check_null=Tr
     namespace = connection.settings_dict.get("NAMESPACE")
     entity = datastore.Entity(db_table, namespace=namespace, **kwargs)
     entity.update(field_values)
+
+    if fields_to_unindex:
+        entity._properties_to_remove = fields_to_unindex
 
     classes = get_concrete_db_tables(model)
     if len(classes) > 1:

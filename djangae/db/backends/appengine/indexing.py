@@ -207,6 +207,26 @@ def add_special_index(model_class, field_name, indexer, operator, value=None):
     write_special_indexes()
 
 
+class IgnoreForIndexing(Exception):
+    """
+        An exception thrown from prep_value_for_database if the index column
+        should be removed from the entity.
+
+        Frustratingly, the legacy icontains and contains Indexers use 'value' when
+        determining the column name, and so you must pass the prepared value for the
+        column anyway, even though it won't be used.
+
+        When the legacy icontains/contains indexers are removed we should:
+
+         - Remove __init__ from this class
+         - Remove 'value' as an argument to indexed_column_name
+         - Stop setting 'values' from processed_value in django_instance_to_entity
+    """
+
+    def __init__(self, processed_value):
+        self.processed_value = processed_value
+
+
 class Indexer(object):
     # Set this to True if prep_value_for_database returns additional Entity instances
     # to save as descendents, rather than values to index as columns
@@ -552,7 +572,7 @@ class ContainsIndexer(StringIndexerMixin, Indexer):
 
     def prep_value_for_database(self, value, index, model, column):
         if value is None:
-            return None
+            raise IgnoreForIndexing([])
 
         # If this a date or a datetime, or something that supports isoformat, then use that
         if hasattr(value, "isoformat"):
@@ -564,7 +584,7 @@ class ContainsIndexer(StringIndexerMixin, Indexer):
             value = self._generate_permutations(value)
 
         if not value:
-            return None
+            raise IgnoreForIndexing([])
 
         value = list(set(value)) # De-duplicate
 
@@ -663,7 +683,7 @@ class LegacyContainsIndexer(StringIndexerMixin, Indexer):
                 results.extend(lists)
 
         if not results:
-            return None
+            raise IgnoreForIndexing([])
 
         return _deduplicate_list(results)
 
@@ -685,6 +705,7 @@ class LegacyContainsIndexer(StringIndexerMixin, Indexer):
         # This we use when we actually query to return the right field for a given
         # value length
         length = len(value)
+
         column_number = 0
         for x in CHARACTERS_PER_COLUMN:
             if length > x:
@@ -700,7 +721,7 @@ class LegacyIContainsIndexer(LegacyContainsIndexer):
 
     def prep_value_for_database(self, value, index, **kwargs):
         if value is None:
-            return None
+            raise IgnoreForIndexing("")
         value = _make_lower(value)
         result = super(LegacyIContainsIndexer, self).prep_value_for_database(value, index)
         return result if result else None
@@ -962,3 +983,4 @@ register_indexer(StartsWithIndexer)
 register_indexer(IStartsWithIndexer)
 register_indexer(RegexIndexer)
 register_indexer(IRegexIndexer)
+

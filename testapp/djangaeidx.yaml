@@ -12,6 +12,8 @@ djangae_containsmodel:
 djangae_datetimemodel:
   date_field: [contains]
   datetime_field: [contains]
+djangae_dog:
+  data: [json_path__breed, json_path__owner__other_pets__0__name, json_path__breed__isnull]
 djangae_integermodel:
   integer_field: [iexact]
 djangae_related:
