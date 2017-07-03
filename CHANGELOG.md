@@ -2,7 +2,8 @@
 
 ### New features & improvements:
 
- -
+- Add support for querying JSONFields in a similar way to the PostgreSQL JSONField
+- Allow special indexers to index `None` as well as remove unused index properties from the entity
 
 ### Bug fixes:
 
@@ -15,8 +16,6 @@
  - A new contrib app `djangae.contrib.processing.mapreduce` has been added to provide a Django-friendly API to mapreduce. The existing
    `djangae.contrib.mappers` API has been reimplemented in terms of `djangae.contrib.processing.mapreduce`
  - Add support for the latest App Engine SDK (1.9.51)
- - Add support for querying JSONFields in a similar way to the PostgreSQL JSONField
- - Allow special indexers to index `None` as well as remove unused index properties from the entity
  - The default ports for the API server, admin server and blobstore service have changed to 8010, 8011, and 8012 respectively to avoid clashes with modules
  - Switched the default storage backend (in settings_base.py) to cloud storage. If you need to retain compatibility make sure you
  override the `DEFAULT_FILE_STORAGE` setting to point to `'djangae.storage.BlobstoreStorage'`.
