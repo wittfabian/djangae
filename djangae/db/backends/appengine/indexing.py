@@ -4,15 +4,24 @@ import yaml
 import os
 import datetime
 import re
+from itertools import chain
 
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.apps import apps
 from django.conf import settings
 
 from djangae import environment
+from djangae.db.utils import get_top_concrete_parent
+from djangae.core.validators import MaxBytesValidator
 from djangae.fields import iterable
 from djangae.sandbox import allow_mode_write
 
+from google.appengine.api.datastore import (
+    Entity,
+    Delete,
+    Query
+)
 
 logger = logging.getLogger(__name__)
 _project_special_indexes = {}
@@ -219,6 +228,24 @@ class IgnoreForIndexing(Exception):
 
 
 class Indexer(object):
+    # Set this to True if prep_value_for_database returns additional Entity instances
+    # to save as descendents, rather than values to index as columns
+    PREP_VALUE_RETURNS_ENTITIES = False
+
+    # **IMPORTANT! If you return Entities from an indexer, the kind *must* start with
+    # _djangae_idx_XXXX where XXX is the top concrete model kind of the instance you
+    # are indexing. If you do not do this, then the tables will not be correctly flushed
+    # when the database is flushed**
+
+    @classmethod
+    def cleanup(cls, datastore_key):
+        """
+            Called when an instance is deleted, if the instances has an index
+            which uses this indexer. This is mainly for cleaning up descendent kinds
+            (e.g. like those used in contains + icontains)
+        """
+        pass
+
     def handles(self, field, operator):
         """
             When given a field instance and an operator (e.g. gt, month__gt etc.)
@@ -231,8 +258,8 @@ class Indexer(object):
         """Return True if the value is indexable, False otherwise"""
         raise NotImplementedError()
 
-    def prep_value_for_database(self, value, index): raise NotImplementedError()
-    def prep_value_for_query(self, value): raise NotImplementedError()
+    def prep_value_for_database(self, value, index, **kwargs): raise NotImplementedError()
+    def prep_value_for_query(self, value, **kwargs): raise NotImplementedError()
     def indexed_column_name(self, field_column, value, index): raise NotImplementedError()
     def prep_query_operator(self, op):
         if "__" in op:
@@ -326,7 +353,7 @@ class IExactIndexer(StringIndexerMixin, Indexer):
     def validate_can_be_indexed(self, value, negated):
         return len(value) < 500
 
-    def prep_value_for_database(self, value, index):
+    def prep_value_for_database(self, value, index, **kwargs):
         if value is None:
             return None
 
@@ -334,7 +361,7 @@ class IExactIndexer(StringIndexerMixin, Indexer):
             value = str(value)
         return value.lower()
 
-    def prep_value_for_query(self, value):
+    def prep_value_for_query(self, value, **kwargs):
         value = self.unescape(value)
         return value.lower()
 
@@ -348,12 +375,12 @@ class HourIndexer(TimeIndexerMixin, Indexer):
     def validate_can_be_indexed(self, value, negated):
         return isinstance(value, datetime.datetime)
 
-    def prep_value_for_database(self, value, index):
+    def prep_value_for_database(self, value, index, **kwargs):
         if value:
             return value.hour
         return None
 
-    def prep_value_for_query(self, value):
+    def prep_value_for_query(self, value, **kwargs):
         if isinstance(value, (int, long)):
             return value
 
@@ -371,12 +398,12 @@ class MinuteIndexer(TimeIndexerMixin, Indexer):
     def validate_can_be_indexed(self, value, negated):
         return isinstance(value, datetime.datetime)
 
-    def prep_value_for_database(self, value, index):
+    def prep_value_for_database(self, value, index, **kwargs):
         if value:
             return value.minute
         return None
 
-    def prep_value_for_query(self, value):
+    def prep_value_for_query(self, value, **kwargs):
         if isinstance(value, (int, long)):
             return value
 
@@ -393,12 +420,12 @@ class SecondIndexer(TimeIndexerMixin, Indexer):
     def validate_can_be_indexed(self, value, negated):
         return isinstance(value, datetime.datetime)
 
-    def prep_value_for_database(self, value, index):
+    def prep_value_for_database(self, value, index, **kwargs):
         if value:
             return value.second
         return None
 
-    def prep_value_for_query(self, value):
+    def prep_value_for_query(self, value, **kwargs):
         if isinstance(value, (int, long)):
             return value
 
@@ -416,12 +443,12 @@ class DayIndexer(DateIndexerMixin, Indexer):
     def validate_can_be_indexed(self, value, negated):
         return isinstance(value, (datetime.datetime, datetime.date))
 
-    def prep_value_for_database(self, value, index):
+    def prep_value_for_database(self, value, index, **kwargs):
         if value:
             return value.day
         return None
 
-    def prep_value_for_query(self, value):
+    def prep_value_for_query(self, value, **kwargs):
         if isinstance(value, (int, long)):
             return value
 
@@ -439,12 +466,12 @@ class YearIndexer(DateIndexerMixin, Indexer):
     def validate_can_be_indexed(self, value, negated):
         return isinstance(value, (datetime.datetime, datetime.date))
 
-    def prep_value_for_database(self, value, index):
+    def prep_value_for_database(self, value, index, **kwargs):
         if value:
             return value.year
         return None
 
-    def prep_value_for_query(self, value):
+    def prep_value_for_query(self, value, **kwargs):
         if isinstance(value, (int, long)):
             return value
 
@@ -463,12 +490,12 @@ class MonthIndexer(DateIndexerMixin, Indexer):
     def validate_can_be_indexed(self, value, negated):
         return isinstance(value, (datetime.datetime, datetime.date))
 
-    def prep_value_for_database(self, value, index):
+    def prep_value_for_database(self, value, index, **kwargs):
         if value:
             return value.month
         return None
 
-    def prep_value_for_query(self, value):
+    def prep_value_for_query(self, value, **kwargs):
         if isinstance(value, (int, long)):
             return value
 
@@ -487,7 +514,7 @@ class WeekDayIndexer(DateIndexerMixin, Indexer):
     def validate_can_be_indexed(self, value, negated):
         return isinstance(value, (datetime.datetime, datetime.date))
 
-    def prep_value_for_database(self, value, index):
+    def prep_value_for_database(self, value, index, **kwargs):
         if value:
             zero_based_weekday = value.weekday()
             if zero_based_weekday == 6:  # Sunday
@@ -497,7 +524,7 @@ class WeekDayIndexer(DateIndexerMixin, Indexer):
 
         return None
 
-    def prep_value_for_query(self, value):
+    def prep_value_for_query(self, value, **kwargs):
         return value
 
     def indexed_column_name(self, field_column, value, index):
@@ -505,6 +532,114 @@ class WeekDayIndexer(DateIndexerMixin, Indexer):
 
 
 class ContainsIndexer(StringIndexerMixin, Indexer):
+    PREP_VALUE_RETURNS_ENTITIES = True
+    OPERATOR = u'contains'
+    INDEXED_COLUMN_NAME = OPERATOR
+
+    def validate_can_be_indexed(self, value, negated):
+        if negated:
+            return False
+
+        try:
+            MaxBytesValidator(limit_value=1500)(value)
+            return True
+        except ValidationError:
+            return False
+
+    @classmethod
+    def cleanup(cls, datastore_key):
+
+        # Kindless query, we don't know the kinds because we don't know all the fields
+        # that use contains. But, we do know that all the things we need to delete are:
+        # a.) A descendent
+        # b.) Have a key name of whatever OPERATOR is
+
+        qry = Query(keys_only=True, namespace=datastore_key.namespace())
+        qry = qry.Ancestor(datastore_key)
+
+        # Delete all the entities matching the ancestor query
+        Delete([x for x in qry.Run() if x.name() == cls.OPERATOR])
+
+
+    def _generate_kind_name(self, model, column):
+        return "_djangae_idx_{}_{}".format(
+            get_top_concrete_parent(model)._meta.db_table,
+            column
+        )
+
+    def _generate_permutations(self, value):
+        return [value[i:] for i in range(len(value))]
+
+    def prep_value_for_database(self, value, index, model, column):
+        if value is None:
+            raise IgnoreForIndexing([])
+
+        # If this a date or a datetime, or something that supports isoformat, then use that
+        if hasattr(value, "isoformat"):
+            value = value.isoformat()
+
+        if _is_iterable(value):
+            value = list(chain(*[self._generate_permutations(v) for v in value]))
+        else:
+            value = self._generate_permutations(value)
+
+        if not value:
+            raise IgnoreForIndexing([])
+
+        value = list(set(value)) # De-duplicate
+
+        entity = Entity(self._generate_kind_name(model, column), name=self.OPERATOR)
+        entity[self.INDEXED_COLUMN_NAME] = value
+        return [entity]
+
+    def prep_query_operator(self, operator):
+        return "IN"
+
+    def indexed_column_name(self, field_column, value, index):
+        # prep_value_for_query returns a list PKs, so we return __key__ as the column
+        return "__key__"
+
+    def prep_value_for_query(self, value, model, column, connection):
+        """
+            Return a list of IDs of the associated contains models, these should
+            match up with the IDs from the parent entities
+        """
+
+        if hasattr(value, "isoformat"):
+            value = value.isoformat()
+        else:
+            value = unicode(value)
+        value = self.unescape(value)
+
+        if STRIP_PERCENTS:
+            # SQL does __contains by doing LIKE %value%
+            if value.startswith("%") and value.endswith("%"):
+                value = value[1:-1]
+
+        namespace = connection.settings_dict.get("NAMESPACE", "")
+        qry = Query(self._generate_kind_name(model, column), keys_only=True, namespace=namespace)
+        qry['{} >='.format(self.INDEXED_COLUMN_NAME)] = value
+        qry['{} <='.format(self.INDEXED_COLUMN_NAME)] = value + u'\ufffd'
+
+        # We can't filter on the 'name' as part of the query, because the name is the key and these
+        # are child entities of the ancestor entities which they are indexing, and as we don't know
+        # the keys of the ancestor entities we can't create the complete keys, hence the comparison
+        # of `x.name() == self.OPERATOR` happens here in python
+        resulting_keys = set([x.parent() for x in qry.Run() if x.name() == self.OPERATOR])
+        return resulting_keys
+
+
+class IContainsIndexer(ContainsIndexer):
+    OPERATOR = 'icontains'
+
+    def _generate_permutations(self, value):
+        return super(IContainsIndexer, self)._generate_permutations(value.lower())
+
+    def prep_value_for_query(self, value, model, column, connection):
+        return super(IContainsIndexer, self).prep_value_for_query(value.lower(), model, column, connection)
+
+
+class LegacyContainsIndexer(StringIndexerMixin, Indexer):
     OPERATOR = 'contains'
 
     def number_of_permutations(self, value):
@@ -515,7 +650,7 @@ class ContainsIndexer(StringIndexerMixin, Indexer):
             return False
         return isinstance(value, basestring) and len(value) <= 500
 
-    def prep_value_for_database(self, value, index):
+    def prep_value_for_database(self, value, index, **kwargs):
         results = []
         if value:
             # If this a date or a datetime, or something that supports isoformat, then use that
@@ -552,7 +687,7 @@ class ContainsIndexer(StringIndexerMixin, Indexer):
 
         return _deduplicate_list(results)
 
-    def prep_value_for_query(self, value):
+    def prep_value_for_query(self, value, **kwargs):
         if hasattr(value, "isoformat"):
             value = value.isoformat()
         else:
@@ -581,22 +716,22 @@ class ContainsIndexer(StringIndexerMixin, Indexer):
         return "exact"
 
 
-class IContainsIndexer(ContainsIndexer):
+class LegacyIContainsIndexer(LegacyContainsIndexer):
     OPERATOR = 'icontains'
 
-    def prep_value_for_database(self, value, index):
+    def prep_value_for_database(self, value, index, **kwargs):
         if value is None:
             raise IgnoreForIndexing("")
         value = _make_lower(value)
-        result = super(IContainsIndexer, self).prep_value_for_database(value, index)
+        result = super(LegacyIContainsIndexer, self).prep_value_for_database(value, index)
         return result if result else None
 
     def indexed_column_name(self, field_column, value, index):
-        column_name = super(IContainsIndexer, self).indexed_column_name(field_column, value, index)
+        column_name = super(LegacyIContainsIndexer, self).indexed_column_name(field_column, value, index)
         return column_name.replace('_idx_contains_', '_idx_icontains_')
 
-    def prep_value_for_query(self, value):
-        return super(IContainsIndexer, self).prep_value_for_query(value).lower()
+    def prep_value_for_query(self, value, **kwargs):
+        return super(LegacyIContainsIndexer, self).prep_value_for_query(value).lower()
 
 
 class EndsWithIndexer(StringIndexerMixin, Indexer):
@@ -615,7 +750,7 @@ class EndsWithIndexer(StringIndexerMixin, Indexer):
 
         return isinstance(value, basestring) and len(value) < 500
 
-    def prep_value_for_database(self, value, index):
+    def prep_value_for_database(self, value, index, **kwargs):
         if value is None:
             return None
 
@@ -636,7 +771,7 @@ class EndsWithIndexer(StringIndexerMixin, Indexer):
 
         return _deduplicate_list(results)
 
-    def prep_value_for_query(self, value):
+    def prep_value_for_query(self, value, **kwargs):
         value = self.unescape(value)
         if STRIP_PERCENTS:
             if value.startswith("%"):
@@ -656,12 +791,12 @@ class IEndsWithIndexer(EndsWithIndexer):
     """
     OPERATOR = 'iendswith'
 
-    def prep_value_for_database(self, value, index):
+    def prep_value_for_database(self, value, index, **kwargs):
         if value:
             value = _make_lower(value)
         return super(IEndsWithIndexer, self).prep_value_for_database(value, index)
 
-    def prep_value_for_query(self, value):
+    def prep_value_for_query(self, value, **kwargs):
         return super(IEndsWithIndexer, self).prep_value_for_query(value.lower())
 
     def indexed_column_name(self, field_column, value, index):
@@ -681,7 +816,7 @@ class StartsWithIndexer(StringIndexerMixin, Indexer):
 
         return isinstance(value, basestring) and len(value) < 500
 
-    def prep_value_for_database(self, value, index):
+    def prep_value_for_database(self, value, index, **kwargs):
         if value is None:
             return None
 
@@ -705,7 +840,7 @@ class StartsWithIndexer(StringIndexerMixin, Indexer):
 
         return _deduplicate_list(results)
 
-    def prep_value_for_query(self, value):
+    def prep_value_for_query(self, value, **kwargs):
         value = self.unescape(value)
         if STRIP_PERCENTS:
             if value.endswith("%"):
@@ -725,12 +860,12 @@ class IStartsWithIndexer(StartsWithIndexer):
     """
     OPERATOR = 'istartswith'
 
-    def prep_value_for_database(self, value, index):
+    def prep_value_for_database(self, value, index, **kwargs):
         if value:
             value = _make_lower(value)
         return super(IStartsWithIndexer, self).prep_value_for_database(value, index)
 
-    def prep_value_for_query(self, value):
+    def prep_value_for_query(self, value, **kwargs):
         return super(IStartsWithIndexer, self).prep_value_for_query(value.lower())
 
     def indexed_column_name(self, field_column, value, index):
@@ -773,10 +908,10 @@ class RegexIndexer(StringIndexerMixin, Indexer):
                 return bool(re.search(pattern, value, flags))
         return False
 
-    def prep_value_for_database(self, value, index):
+    def prep_value_for_database(self, value, index, **kwargs):
         return self.check_if_match(value, index)
 
-    def prep_value_for_query(self, value):
+    def prep_value_for_query(self, value, **kwargs):
         return True
 
     def indexed_column_name(self, field_column, value, index):
@@ -794,7 +929,7 @@ class IRegexIndexer(RegexIndexer):
     def prepare_index_type(self, index_type, value):
         return '{}__{}'.format(index_type, value.encode('hex'))
 
-    def prep_value_for_database(self, value, index):
+    def prep_value_for_database(self, value, index, **kwargs):
         return self.check_if_match(value, index, flags=re.IGNORECASE)
 
     def indexed_column_name(self, field_column, value, index):
@@ -815,10 +950,26 @@ def get_indexer(field, operator):
         if indexer.handles(field, operator):
             return indexer
 
+def indexers_for_model(model_class):
+    indexes = special_indexes_for_model(model_class)
+
+    indexers = []
+    for field in model_class._meta.fields:
+        if field.name in indexes:
+            for operator in indexes[field.name]:
+                indexers.append(get_indexer(field, operator))
+    return set(indexers)
+
 
 register_indexer(IExactIndexer)
-register_indexer(ContainsIndexer)
-register_indexer(IContainsIndexer)
+
+if getattr(settings, "DJANGAE_USE_LEGACY_CONTAINS_LOGIC", False):
+    register_indexer(LegacyContainsIndexer)
+    register_indexer(LegacyIContainsIndexer)
+else:
+    register_indexer(ContainsIndexer)
+    register_indexer(IContainsIndexer)
+
 register_indexer(HourIndexer)
 register_indexer(MinuteIndexer)
 register_indexer(SecondIndexer)

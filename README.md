@@ -2,9 +2,9 @@
 
 [![Join the chat at https://gitter.im/potatolondon/djangae](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/potatolondon/djangae?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 
-[![build-status-image]][travis] [![codecov.io](https://img.shields.io/codecov/c/github/potatolondon/djangae/master.svg)](http://codecov.io/github/potatolondon/djangae?branch=master)
+[![build-status-image]][travis] [![codecov.io](https://img.shields.io/codecov/c/github/potatolondon/djangae/master.svg)](https://codecov.io/github/potatolondon/djangae?branch=master)
 
-[![Issue Stats](http://issuestats.com/github/potatolondon/djangae/badge/pr)](http://issuestats.com/github/potatolondon/djangae) [![Issue Stats](http://issuestats.com/github/potatolondon/djangae/badge/issue)](http://issuestats.com/github/potatolondon/djangae)
+[![Issue Stats](https://issuestats.com/github/potatolondon/djangae/badge/pr)](https://issuestats.com/github/potatolondon/djangae) [![Issue Stats](https://issuestats.com/github/potatolondon/djangae/badge/issue)](https://issuestats.com/github/potatolondon/djangae)
 
 The best way to run Django on Google App Engine.
 
@@ -39,7 +39,7 @@ https://djangae.readthedocs.io/
 ## Supported Django Versions
 
 The intention is always to support the currently-supported versions of Django, although older versions may work. Currently
-Django 1.8, 1.9 and 1.10 are supported.
+Django 1.8, 1.9, 1.10 and 1.11 are supported.
 
 # Installation
 

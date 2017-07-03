@@ -1,4 +1,5 @@
-
+import os
+from google.appengine.ext.deferred import defer
 
 from djangae.environment import task_or_admin_only
 from djangae.test import TestCase
@@ -48,6 +49,27 @@ class TaskOrAdminOnlyTestCase(TestCase):
         def view(request):
             return HttpResponse("Hello")
 
-        with sleuth.fake("djangae.environment.users.is_current_user_admin", True):
+        with sleuth.fake("google.appengine.api.users.is_current_user_admin", True):
             response = view(None)
         self.assertEqual(response.status_code, 200)
+
+
+def deferred_func():
+    assert("HTTP_X_APPENGINE_TASKNAME" in os.environ)
+    assert("HTTP_X_APPENGINE_QUEUENAME" in os.environ)
+    assert("HTTP_X_APPENGINE_TASKEXECUTIONCOUNT" in os.environ)
+
+    # Deferred tasks aren't cron tasks, so shouldn't have this header
+    assert("HTTP_X_APPENGINE_CRON" not in os.environ)
+
+
+class TaskHeaderTest(TestCase):
+
+    def test_task_headers_are_available_in_tests(self):
+        defer(deferred_func)
+        self.process_task_queues()
+
+        # Check nothing lingers
+        self.assertFalse("HTTP_X_APPENGINE_TASKNAME" in os.environ)
+        self.assertFalse("HTTP_X_APPENGINE_QUEUENAME" in os.environ)
+        self.assertFalse("HTTP_X_APPENGINE_TASKEXECUTIONCOUNT" in os.environ)

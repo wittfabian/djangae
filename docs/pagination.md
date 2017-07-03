@@ -57,7 +57,7 @@ That's a hell of an annoying caveat. That's not to say our approach doesn't suff
 ## Caveats
 
 Because our pre-calculated fields are indexed, the combined length of the values (plus the unique ID and joining characters) you are
-ordering on must not exceed 500 characters. This will throw an error, and if that happens, you'll either need to use a slower paginator (e.g. djangae.core.paginator)
+ordering on must not exceed 1500 characters. This will throw an error, and if that happens, you'll either need to use a slower paginator (e.g. djangae.core.paginator)
 or rethink your design.
 
 ## Why didn't you update potatopage?

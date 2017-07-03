@@ -267,6 +267,31 @@ class PaginatorModel(models.Model):
 
 
 class BackendTests(TestCase):
+    def test_pk_gt_empty_returns_all(self):
+        for i in range(10):
+            TestFruit.objects.create(name=str(i), color=str(i))
+
+        self.assertEqual(10, TestFruit.objects.filter(pk__gt="").count())
+        self.assertEqual(10, TestFruit.objects.filter(pk__gte="").count())
+        self.assertEqual(0, TestFruit.objects.filter(pk__lt="").count())
+        self.assertEqual(0, TestFruit.objects.filter(pk__lte="").count())
+
+    def test_pk_gt_zero_returns_all(self):
+        IntegerModel.objects.create(pk=1, integer_field=1)
+        IntegerModel.objects.create(pk=2, integer_field=2)
+
+        results = IntegerModel.objects.filter(pk__gt=0)
+        self.assertEqual(2, len(results))
+
+        results = IntegerModel.objects.filter(pk__gte=0)
+        self.assertEqual(2, len(results))
+
+        results = IntegerModel.objects.filter(pk__lt=0)
+        self.assertEqual(0, len(results))
+
+        results = IntegerModel.objects.filter(pk__lte=0)
+        self.assertEqual(0, len(results))
+
     def test_entity_matches_query(self):
         entity = datastore.Entity("test_model")
         entity["name"] = "Charlie"
@@ -1999,6 +2024,70 @@ class TestSpecialIndexers(TestCase):
 
             qry = self.qry.filter(sample_list__item__iendswith=text)
             self.assertEqual(len(qry), 1)
+
+
+class SliceModel(models.Model):
+    field1 = models.CharField(max_length=32)
+
+
+class SlicingTests(TestCase):
+
+    def test_big_slice(self):
+        SliceModel.objects.create(field1="test")
+        SliceModel.objects.create(field1="test2")
+
+        self.assertFalse(
+            SliceModel.objects.filter(field1__in=["test", "test2"])[9999:]
+        )
+
+        self.assertFalse(
+            SliceModel.objects.filter(field1__in=["test", "test2"])[9999:10000]
+        )
+
+    def test_slicing_multi_query(self):
+        SliceModel.objects.create(field1="test")
+        SliceModel.objects.create(field1="test2")
+
+        self.assertEqual(
+            1,
+            len(SliceModel.objects.filter(field1__in=["test", "test2"])[1:])
+        )
+
+        self.assertEqual(
+            1,
+            len(SliceModel.objects.filter(field1__in=["test", "test2"])[:1])
+        )
+
+        self.assertEqual(
+            2,
+            len(SliceModel.objects.filter(field1__in=["test", "test2"])[:2])
+        )
+
+        self.assertEqual(
+            0,
+            len(SliceModel.objects.filter(field1__in=["test", "test2"])[2:])
+        )
+
+    def test_slice_params_are_passed_to_query(self):
+        for i in range(15):
+            SliceModel.objects.create(field1=str(i))
+
+        with sleuth.watch('google.appengine.api.datastore.Query.Run') as Run:
+            qs = SliceModel.objects.order_by("field1")[:5]
+
+            self.assertEqual(5, len(list(qs)))
+            self.assertEqual(Run.calls[0].kwargs['limit'], 5)
+            self.assertEqual(Run.calls[0].kwargs['offset'], 0)
+
+            qs = SliceModel.objects.order_by("field1")[5:]
+            self.assertEqual(10, len(list(qs)))
+            self.assertEqual(Run.calls[1].kwargs['limit'], None)
+            self.assertEqual(Run.calls[1].kwargs['offset'], 5)
+
+            qs = SliceModel.objects.order_by("field1")[5:10]
+            self.assertEqual(5, len(list(qs)))
+            self.assertEqual(Run.calls[2].kwargs['limit'], 5)
+            self.assertEqual(Run.calls[2].kwargs['offset'], 5)
 
 
 class NamespaceTests(TestCase):

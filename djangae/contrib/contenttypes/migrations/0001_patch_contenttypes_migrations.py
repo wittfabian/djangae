@@ -40,7 +40,10 @@ def get_installed_app_labels_with_migrations():
             if isinstance(migrations_module, tuple):
                 migrations_module = migrations_module[0]
 
-            module = import_module(migrations_module)
+            if migrations_module:
+                module = import_module(migrations_module)
+            else:
+                continue
         except ImportError:
             continue
 

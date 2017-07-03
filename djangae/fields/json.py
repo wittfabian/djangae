@@ -199,7 +199,7 @@ class JSONField(models.TextField):
                 return JSONKeyLookup("__".join(self.path))
 
         return LookupBuilder
-            
+
 
 class JSONKeyLookupIndexer(Indexer):
     OPERATOR = 'json_path'
@@ -213,13 +213,13 @@ class JSONKeyLookupIndexer(Indexer):
     def prepare_index_type(self, index_type, value):
         return index_type
 
-    def prep_value_for_query(self, value):
+    def prep_value_for_query(self, value, **kwargs):
         return value
 
     def prep_query_operator(self, op):
         return "exact"
 
-    def prep_value_for_database(self, value, index):
+    def prep_value_for_database(self, value, index, **kwargs):
         if isinstance(value, basestring):
             value = json.loads(value)
 

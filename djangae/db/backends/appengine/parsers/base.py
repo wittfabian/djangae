@@ -184,7 +184,7 @@ class BaseParser(object):
                 query.add_annotation(k, v)
 
     def _where_node_trunk_callback(self, node, negated, new_parent, **kwargs):
-        new_node = WhereNode()
+        new_node = WhereNode(new_parent.using)
         new_node.connector = node.connector
         new_node.negated = node.negated
 
@@ -193,7 +193,7 @@ class BaseParser(object):
         return new_node
 
     def _where_node_leaf_callback(self, node, negated, new_parent, connection, model, compiler):
-        new_node = WhereNode()
+        new_node = WhereNode(new_parent.using)
 
         def convert_rhs_op(node):
             db_rhs = getattr(node.rhs, '_db', None)
@@ -319,8 +319,8 @@ class BaseParser(object):
 
         new_parent.children.append(new_node)
 
-    def _generate_where_node(self):
-        output = WhereNode()
+    def _generate_where_node(self, query):
+        output = WhereNode(query.connection.alias)
         output.connector = self.django_query.where.connector
 
         _walk_django_where(
@@ -358,7 +358,7 @@ class BaseParser(object):
         ret.low_mark = self.django_query.low_mark
         ret.high_mark = self.django_query.high_mark
 
-        output = self._generate_where_node()
+        output = self._generate_where_node(ret)
 
         # If there no child nodes, just wipe out the where
         if not output.children:

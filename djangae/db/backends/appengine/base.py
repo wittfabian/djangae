@@ -19,7 +19,6 @@ from django.db.backends.base.creation import BaseDatabaseCreation
 from django.db.backends.base.schema import BaseDatabaseSchemaEditor
 
 from google.appengine.api.datastore_types import Blob, Text
-from google.appengine.datastore import datastore_stub_util
 from google.appengine.api import datastore, datastore_errors
 
 #DJANGAE
@@ -29,7 +28,6 @@ from djangae.db.utils import (
     get_datastore_key,
 )
 
-from djangae.db.backends.appengine.caching import get_context
 from djangae.db.backends.appengine.indexing import load_special_indexes
 from .commands import (
     SelectCommand,
@@ -240,7 +238,12 @@ class DatabaseOperations(BaseDatabaseOperations):
         return value
 
     def sql_flush(self, style, tables, seqs, allow_cascade=False):
-        return [FlushCommand(table, self.connection) for table in tables]
+        additional_djangaeidx_tables = [
+            x for x in self.connection.introspection.table_names()
+            if [y for y in tables if x.startswith("_djangae_idx_{}".format(y))]
+        ]
+
+        return [FlushCommand(table, self.connection) for table in tables + additional_djangaeidx_tables]
 
     def prep_lookup_key(self, model, value, field):
         if isinstance(value, basestring):
@@ -473,13 +476,10 @@ class DatabaseCreation(BaseDatabaseCreation):
         return []
 
     def _create_test_db(self, verbosity, autoclobber, *args):
-        if args:
-            logger.warning("'keepdb' argument is not currently supported on the AppEngine backend")
-
-        get_context().reset()
+        pass
 
     def _destroy_test_db(self, name, verbosity):
-        get_context().reset()
+        pass
 
 
 class DatabaseIntrospection(BaseDatabaseIntrospection):
