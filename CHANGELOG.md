@@ -7,7 +7,7 @@
 
 ### Bug fixes:
 
- -
+ - Fixed performance issues and bugs in the Djangae core paginator
 
 ## v0.9.10
 
