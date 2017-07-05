@@ -16,7 +16,7 @@ class DatastorePaginator(object):
 
     def __init__(self, object_list, per_page, orphans=0,
                  allow_empty_first_page=True):
-        self.fetched_objects = object_list
+        self.object_list = object_list
         self.per_page = int(per_page)
         self.allow_empty_first_page = allow_empty_first_page
 
@@ -40,11 +40,11 @@ class DatastorePaginator(object):
         bottom = (number - 1) * self.per_page
         top = bottom + self.per_page
 
-        fetched_objects = list(self.fetched_objects[bottom:top + 1])
-        object_list = fetched_objects[:self.per_page]
+        fetched_objects = list(self.object_list[bottom:top + 1])
         has_next = len(fetched_objects) > self.per_page
+        fetched_objects = fetched_objects[:self.per_page]
 
-        return DatastorePage(has_next, object_list, number, self)
+        return DatastorePage(has_next, fetched_objects, number, self)
 
     def _get_count(self):
         """
@@ -91,10 +91,7 @@ class DatastorePage(collections.Sequence):
     def __getitem__(self, index):
         if not isinstance(index, (slice,) + six.integer_types):
             raise TypeError
-        # The object_list is converted to a list so that if it was a QuerySet
-        # it won't be a database hit per __getitem__.
-        if not isinstance(self.object_list, list):
-            self.object_list = list(self.object_list)
+
         return self.object_list[index]
 
     def has_next(self):
