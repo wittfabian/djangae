@@ -4,8 +4,10 @@ from djangae.test import TestCase
 
 from djangae.db.backends.appengine.formatting import generate_sql_representation
 from djangae.db.backends.appengine.commands import (
-    SelectCommand, InsertCommand, DeleteCommand
+    SelectCommand, InsertCommand, DeleteCommand, UpdateCommand
 )
+
+from django.db.models.sql.subqueries import UpdateQuery
 
 
 class FormattingTestModel(models.Model):
@@ -144,3 +146,38 @@ DELETE FROM {} WHERE (field1=1)
 """.format(FormattingTestModel._meta.db_table).strip()
 
         self.assertEqual(expected, sql)
+
+
+class UpdateFormattingTest(TestCase):
+    def test_update_all(self):
+        query = FormattingTestModel.objects.all().query.clone(UpdateQuery)
+        query.add_update_values({"field1": 1})
+
+        command = UpdateCommand(
+            connections['default'],
+            query
+        )
+
+        sql = generate_sql_representation(command)
+
+        expected = """
+REPLACE INTO {} (field1) VALUES (1)
+""".format(FormattingTestModel._meta.db_table).strip()
+
+        self.assertEqual(expected, sql)
+
+    def test_update_filtered(self):
+        query = FormattingTestModel.objects.filter(field1=1).query.clone(UpdateQuery)
+        query.add_update_values({"field1": 2})
+
+        command = UpdateCommand(
+            connections['default'],
+            query
+        )
+        sql = generate_sql_representation(command)
+
+        expected = """
+REPLACE INTO {} (field1) VALUES (2) WHERE (field1=1)
+""".format(FormattingTestModel._meta.db_table).strip()
+
+        self.assertEqual(expected, sql)        

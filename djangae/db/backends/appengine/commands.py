@@ -890,9 +890,13 @@ class UpdateCommand(object):
     def __init__(self, connection, query):
         self.model = query.model
         self.select = SelectCommand(connection, query, keys_only=True)
+        self.query = self.select.query
         self.values = query.values
         self.connection = connection
         self.namespace = connection.ops.connection.settings_dict.get("NAMESPACE")
+
+    def __unicode__(self):
+        return generate_sql_representation(self)
 
     def lower(self):
         """
