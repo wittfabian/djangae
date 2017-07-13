@@ -33,6 +33,7 @@ from djangae.db.backends.appengine import POLYMODEL_CLASS_ATTRIBUTE
 from djangae.db import constraints, utils
 from djangae.db.backends.appengine import caching
 from djangae.db.unique_utils import query_is_unique
+from djangae.db.backends.appengine.formatting import generate_sql_representation
 
 from . import meta_queries
 
@@ -539,30 +540,7 @@ class SelectCommand(object):
         return self.results_returned
 
     def __unicode__(self):
-        # TODO: should we print out the namespace in here too?
-        try:
-            qry = json.loads(self.query.serialize())
-
-            result = u" ".join([
-                qry["kind"],
-                u", ".join(qry["columns"] if qry["projection_possible"] and qry["columns"] else ["*"]),
-                u"FROM",
-                qry["concrete_table"]
-            ])
-
-            if qry["where"]:
-                result += u" " + u" ".join([
-                    u"WHERE",
-                    u" OR ".join([
-                        u" AND ".join( [u"{} {}".format(k, v) for k, v in x.iteritems()])
-                        for x in qry["where"]
-                    ])
-                ])
-            return result
-        except:
-            # We never want this to cause things to die
-            logger.exception("Unable to translate query to string")
-            return "QUERY TRANSLATION ERROR"
+        return generate_sql_representation(self)
 
     def __repr__(self):
         return self.__unicode__().encode("utf-8")
