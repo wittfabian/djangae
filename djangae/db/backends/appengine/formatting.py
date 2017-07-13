@@ -56,6 +56,15 @@ def _generate_insert_sql(command):
     return (INSERT_PATTERN % params).replace("\n", " ").strip()
 
 
+def _generate_where_expression(representation):
+    where = []
+    for branch in representation["where"]:
+        branch = "(" + " AND ".join(["%s%s" % (k, v) for k, v in branch.items()]) + ")"
+        where.append(branch)
+
+    return " OR ".join(where)
+
+
 def _generate_select_sql(command, representation):
     has_offset = representation["low_mark"] > 0
     has_limit = representation["high_mark"] is not None
@@ -84,11 +93,6 @@ def _generate_select_sql(command, representation):
         else ", ".join(sorted(representation["columns"])) # Just to make the output predictable
     )
 
-    where = []
-    for branch in representation["where"]:
-        branch = "(" + " AND ".join(["%s%s" % (k, v) for k, v in branch.items()]) + ")"
-        where.append(branch)
-
     ordering = [
         ("%s %s" % (x.lstrip("-"), "DESC" if x.startswith("-") else "")).strip()
         for x in representation["order_by"]
@@ -99,7 +103,7 @@ def _generate_select_sql(command, representation):
         "columns": columns,
         "offset": representation["low_mark"],
         "limit": (representation["high_mark"] or 0) - (representation["low_mark"] or 0),
-        "where": " OR ".join(where),
+        "where": _generate_where_expression(representation),
         "order": ", ".join(ordering)
     }
 
@@ -107,7 +111,18 @@ def _generate_select_sql(command, representation):
 
 
 def _generate_delete_sql(command, representation):
-    return ""
+    has_where = bool(representation["where"])
+
+    lines = DELETE_PATTERN.split("\n")
+    if not has_where:
+        del lines[1]
+
+    sql = "\n".join(lines)
+
+    return (sql % {
+        "table": representation["table"],
+        "where": _generate_where_expression(representation)
+    }).replace("\n", " ").strip()
 
 
 def _generate_update_sql(command, representation):

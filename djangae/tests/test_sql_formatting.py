@@ -3,7 +3,9 @@ from django.db import connections, models
 from djangae.test import TestCase
 
 from djangae.db.backends.appengine.formatting import generate_sql_representation
-from djangae.db.backends.appengine.commands import SelectCommand, InsertCommand
+from djangae.db.backends.appengine.commands import (
+    SelectCommand, InsertCommand, DeleteCommand
+)
 
 
 class FormattingTestModel(models.Model):
@@ -115,3 +117,30 @@ INSERT INTO {} (field1, field2, field3) VALUES (1, "Two", "Three")
 
         self.assertEqual(expected, sql)
 
+
+class DeleteFormattingTest(TestCase):
+    def test_delete_all(self):
+        command = DeleteCommand(
+            connections['default'],
+            FormattingTestModel.objects.all().query
+        )
+        sql = generate_sql_representation(command)
+
+        expected = """
+DELETE FROM {}
+""".format(FormattingTestModel._meta.db_table).strip()
+
+        self.assertEqual(expected, sql)
+
+    def test_delete_filtered(self):
+        command = DeleteCommand(
+            connections['default'],
+            FormattingTestModel.objects.filter(field1=1).query
+        )
+        sql = generate_sql_representation(command)
+
+        expected = """
+DELETE FROM {} WHERE (field1=1)
+""".format(FormattingTestModel._meta.db_table).strip()
+
+        self.assertEqual(expected, sql)

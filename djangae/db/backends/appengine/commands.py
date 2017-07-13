@@ -763,8 +763,19 @@ class DeleteCommand(object):
     def __init__(self, connection, query):
         self.model = query.model
         self.select = SelectCommand(connection, query, keys_only=True)
+        self.query = self.select.query
         self.namespace = connection.ops.connection.settings_dict.get("NAMESPACE")
-        self.table_to_delete = query.tables[0]
+
+        # It seems query.tables is populated in most cases, but I have seen cases (albeit in testing)
+        # where this isn't the case (particularly when not filtering on anything). In that case
+        # fallback to the model table (perhaps we should do
+        self.table_to_delete = (
+            query.tables[0] if query.tables else
+            utils.get_top_concrete_parent(query.model)._meta.db_table
+        )
+
+    def __unicode__(self):
+        return generate_sql_representation(self)
 
     def execute(self):
         """
