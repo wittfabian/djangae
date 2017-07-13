@@ -4,6 +4,7 @@ import json
 SELECT_PATTERN = """
 SELECT (%(columns)s) FROM %(table)s
 WHERE %(where)s
+ORDER BY %(order)s
 OFFSET %(offset)s
 LIMIT %(limit)s
 """.lstrip()
@@ -32,15 +33,19 @@ def _generate_insert_sql(command):
 def _generate_select_sql(command, representation):
     has_offset = representation["low_mark"] > 0
     has_limit = representation["high_mark"] is not None
+    has_ordering = bool(representation["order_by"])
     has_where = bool(representation["where"])
 
     lines = SELECT_PATTERN.split("\n")
 
     # Remove limit and offset and where if we don't need them
     if not has_limit:
-        del lines[3]
+        del lines[4]
 
     if not has_offset:
+        del lines[3]
+
+    if not has_ordering:
         del lines[2]
 
     if not has_where:
@@ -58,12 +63,18 @@ def _generate_select_sql(command, representation):
         branch = "(" + " AND ".join(["%s%s" % (k, v) for k, v in branch.items()]) + ")"
         where.append(branch)
 
+    ordering = [
+        ("%s %s" % (x.lstrip("-"), "DESC" if x.startswith("-") else "")).strip()
+        for x in representation["order_by"]
+    ]
+
     replacements = {
         "table": representation["table"],
         "columns": columns,
         "offset": representation["low_mark"],
         "limit": (representation["high_mark"] or 0) - (representation["low_mark"] or 0),
-        "where": " OR ".join(where)
+        "where": " OR ".join(where),
+        "order": ", ".join(ordering)
     }
 
     return (sql % replacements).replace("\n", " ").strip()

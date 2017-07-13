@@ -66,4 +66,30 @@ SELECT (*) FROM {} OFFSET 10 LIMIT 5
 """.format(FormattingTestModel._meta.db_table).strip()
 
         self.assertEqual(expected, sql)
-    
+
+    def test_ordering_applied(self):
+        command = SelectCommand(
+            connections['default'],
+            FormattingTestModel.objects.order_by("-field1").query
+        )
+        sql = generate_sql_representation(command)
+
+        expected = """
+SELECT (*) FROM {} ORDER BY field1 DESC
+""".format(FormattingTestModel._meta.db_table).strip()
+
+        self.assertEqual(expected, sql)
+
+
+        command = SelectCommand(
+            connections['default'],
+            FormattingTestModel.objects.order_by("field1", "-field2").query
+        )
+        sql = generate_sql_representation(command)
+
+        expected = """
+SELECT (*) FROM {} ORDER BY field1, field2 DESC
+""".format(FormattingTestModel._meta.db_table).strip()
+
+        self.assertEqual(expected, sql)
+
