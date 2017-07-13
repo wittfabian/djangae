@@ -3,7 +3,7 @@ from django.db import connections, models
 from djangae.test import TestCase
 
 from djangae.db.backends.appengine.formatting import generate_sql_representation
-from djangae.db.backends.appengine.commands import SelectCommand
+from djangae.db.backends.appengine.commands import SelectCommand, InsertCommand
 
 
 class FormattingTestModel(models.Model):
@@ -80,7 +80,6 @@ SELECT (*) FROM {} ORDER BY field1 DESC
 
         self.assertEqual(expected, sql)
 
-
         command = SelectCommand(
             connections['default'],
             FormattingTestModel.objects.order_by("field1", "-field2").query
@@ -89,6 +88,29 @@ SELECT (*) FROM {} ORDER BY field1 DESC
 
         expected = """
 SELECT (*) FROM {} ORDER BY field1, field2 DESC
+""".format(FormattingTestModel._meta.db_table).strip()
+
+        self.assertEqual(expected, sql)
+
+
+class InsertFormattingTest(TestCase):
+    def test_single_insert(self):
+        instance = FormattingTestModel(field1=1, field2="Two", field3="Three")
+
+        command = InsertCommand(
+            connections["default"],
+            FormattingTestModel,
+            [instance],
+            [
+                FormattingTestModel._meta.get_field(x)
+                for x in ("field1", "field2", "field3")
+            ], True
+        )
+
+        sql = generate_sql_representation(command)
+
+        expected = """
+INSERT INTO {} (field1, field2, field3) VALUES (1, "Two", "Three")
 """.format(FormattingTestModel._meta.db_table).strip()
 
         self.assertEqual(expected, sql)

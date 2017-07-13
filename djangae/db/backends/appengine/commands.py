@@ -753,23 +753,7 @@ class InsertCommand(object):
         return unicode(self).lower()
 
     def __unicode__(self):
-        try:
-            keys = self.entities[0].keys()
-            result = u" ".join([
-                u"INSERT INTO",
-                self.entities[0].kind(),
-                u"(" + u", ".join(keys) + u")",
-                u"VALUES"
-            ])
-
-            for entity in self.entities:
-                result += u"(" + u", ".join([unicode(entity[x]) for x in keys]) + u")"
-
-            return result
-        except:
-            # We never want this to cause things to die
-            logger.info("InsertCommand is unable to translate query to string")
-            return u"QUERY TRANSLATION ERROR"
+        return generate_sql_representation(self)
 
     def __repr__(self):
         return self.__unicode__().encode("utf-8")

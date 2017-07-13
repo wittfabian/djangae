@@ -1,5 +1,8 @@
+from __future__ import unicode_literals
+
 import json
 
+from django.utils import six
 
 SELECT_PATTERN = """
 SELECT (%(columns)s) FROM %(table)s
@@ -11,12 +14,12 @@ LIMIT %(limit)s
 
 INSERT_PATTERN = """
 INSERT INTO %(table)s (%(columns)s)
-VALUES (%(values)s)
+VALUES %(values)s
 """.lstrip()
 
 UPDATE_PATTERN = """
 UPDATE %(table)s (%(columns)s)
-VALUES (%(values)s)
+VALUES %(values)s
 WHERE %(where)s
 """.lstrip()
 
@@ -27,7 +30,30 @@ WHERE %(where)s
 
 
 def _generate_insert_sql(command):
-    return ""
+    columns = sorted([x.column for x in command.fields])
+
+    values = []
+    for instance in command.objs:
+        row = []
+        for column in columns:
+            # FIXME: should this use get_default as a default?
+            value = getattr(instance, column, None)
+            needs_quoting = isinstance(value, six.string_types)
+
+            if needs_quoting:
+                row.append('"%s"' % value)
+            else:
+                row.append(six.text_type(value))
+
+        values.append("(" + ", ".join(row) + ")")
+
+    params = {
+        "table": command.model._meta.db_table,
+        "columns": ", ".join(columns),
+        "values": ", ".join(values)
+    }
+
+    return (INSERT_PATTERN % params).replace("\n", " ").strip()
 
 
 def _generate_select_sql(command, representation):
@@ -93,7 +119,7 @@ def generate_sql_representation(command):
 
     if isinstance(command, InsertCommand):
         # Inserts don't have a .query so we have to deal with them
-        # seprately
+        # separately
         return _generate_insert_sql(command)
 
     representation = json.loads(command.query.serialize())
