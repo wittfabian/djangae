@@ -6,7 +6,7 @@ from ..utils import get_datastore_setting
 
 class GetDatastoreSettingTest(TestCase):
     def test_set_as_expected(self):
-        with self.settings(DS_BACKUP_FOO=True):
+        with self.settings(DJANGAE_BACKUP_FOO=True):
             self.assertTrue(
                 get_datastore_setting('FOO')
             )

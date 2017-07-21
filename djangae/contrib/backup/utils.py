@@ -1,6 +1,6 @@
 from django.conf import settings
 
-SETTINGS_PREFIX = "DS_BACKUP_"
+SETTINGS_PREFIX = "DJANGAE_BACKUP_"
 
 
 def get_datastore_setting(name, required=True, default=None):

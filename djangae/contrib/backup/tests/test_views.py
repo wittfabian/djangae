@@ -24,13 +24,13 @@ class DataStoreBackupTest(TestCase):
         ]
         with sleuth.fake('django.apps.apps.get_models', models):
             with self.settings(
-                    DS_BACKUP_ENABLED=True,
-                    DS_BACKUP_GCS_BUCKET='testapp',
-                    DS_BACKUP_NAME='testapp-bk',
-                    DS_BACKUP_EXCLUDE_APPS=[
+                    DJANGAE_BACKUP_ENABLED=True,
+                    DJANGAE_BACKUP_GCS_BUCKET='testapp',
+                    DJANGAE_BACKUP_NAME='testapp-bk',
+                    DJANGAE_BACKUP_EXCLUDE_APPS=[
                         'sites'
                     ],
-                    DS_BACKUP_EXCLUDE_MODELS=[
+                    DJANGAE_BACKUP_EXCLUDE_MODELS=[
                         'gauth_datastore.Group'
                     ]):
                 create_datastore_backup(None)
