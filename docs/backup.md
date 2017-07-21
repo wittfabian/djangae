@@ -21,13 +21,13 @@ cron:
 * Add backup queue to queue.yaml:
 ```yaml
 - name: backups
-  rate: 1/s
+  rate: 50/s
 ```
 * Add required settings to settings.py"
 ```python
-DS_BACKUP_ENABLED = True
-DS_BACKUP_GCS_BUCKET = "my-application-bucket"
-DS_BACKUP_QUEUE = "backups"
+DJANGAE_BACKUP_ENABLED = True
+DJANGAE_BACKUP_GCS_BUCKET = "my-application-bucket"
+DJANGAE_BACKUP_QUEUE = "backups"
 ```
 * Add `'djangae.contrib.backup'` to `settings.INSTALLED_APPS` (if you want the tests to run)
 
@@ -36,7 +36,7 @@ DS_BACKUP_QUEUE = "backups"
 ### Exclude all models from certain applications:
 
 ```python
-DS_BACKUP_EXCLUDE_APPS = [
+DJANGAE_BACKUP_EXCLUDE_APPS = [
     "contenttypes",
     "cspreports",
     "djangae",
@@ -49,7 +49,7 @@ DS_BACKUP_EXCLUDE_APPS = [
 ### Exclude specific models
 
 ```python
-DS_BACKUP_EXCLUDE_MODELS = [
+DJANGAE_BACKUP_EXCLUDE_MODELS = [
     'sessions.Session',
 ]
 ```
