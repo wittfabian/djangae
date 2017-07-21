@@ -6,7 +6,7 @@ from django.conf import settings
 from django.http import HttpResponse
 from djangae.environment import application_id
 
-from .utils import get_datastore_setting
+from .utils import get_backup_setting
 
 logger = logging.getLogger(__name__)
 
@@ -23,17 +23,17 @@ def create_datastore_backup(request):
         backup_handler=BACKUP_HANDLER
     )
 
-    enabled = get_datastore_setting("ENABLED")
+    enabled = get_backup_setting("ENABLED")
     if not enabled:
         msg = "DS_BACKUP_ENABLED is False. Not backing up"
         logger.info(msg)
         return HttpResponse(msg)
 
-    gcs_bucket = get_datastore_setting("GCS_BUCKET")
-    backup_name = get_datastore_setting("NAME")
-    queue = get_datastore_setting("QUEUE", required=False)
-    exclude_models = get_datastore_setting("EXCLUDE_MODELS", required=False, default=[])
-    exclude_apps = get_datastore_setting("EXCLUDE_APPS", required=False, default=[])
+    gcs_bucket = get_backup_setting("GCS_BUCKET")
+    backup_name = get_backup_setting("NAME")
+    queue = get_backup_setting("QUEUE", required=False)
+    exclude_models = get_backup_setting("EXCLUDE_MODELS", required=False, default=[])
+    exclude_apps = get_backup_setting("EXCLUDE_APPS", required=False, default=[])
 
     models = []
     for model in apps.get_models(include_auto_created=True):
