@@ -30,6 +30,7 @@
   This will be removed in the next release of Djangae so you'll need to re-save your entities with this setting set to False before upgrading (see [detailed release notes](docs/release_notes/0_9_10.md)).
 - Added support for the 1.9.54 SDK
 - Implemented a full application that can be deployed to production GAE for testing real-world scenarios against GCP environment
+- Added `djangae.contrib.backup` app
 
 ### Bug fixes:
 
