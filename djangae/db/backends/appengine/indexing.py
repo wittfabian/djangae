@@ -14,7 +14,6 @@ from django.conf import settings
 from djangae import environment
 from djangae.db.utils import get_top_concrete_parent
 from djangae.core.validators import MaxBytesValidator
-from djangae.fields import iterable
 from djangae.sandbox import allow_mode_write
 
 from google.appengine.api.datastore import (
@@ -290,6 +289,7 @@ class StringIndexerMixin(object):
     )
 
     def handles(self, field, operator):
+        from djangae.fields import iterable
         try:
             # Make sure the operator is in there
             operator.split("__").index(self.OPERATOR)
@@ -308,6 +308,7 @@ class StringIndexerMixin(object):
 
 class DateIndexerMixin(object):
     def handles(self, field, operator):
+        from djangae.fields import iterable
         DATE_FIELDS = (
             models.DateField,
             models.DateTimeField
@@ -329,6 +330,8 @@ class DateIndexerMixin(object):
 
 class TimeIndexerMixin(object):
     def handles(self, field, operator):
+        from djangae.fields import iterable
+
         TIME_FIELDS = (
             models.TimeField,
             models.DateTimeField
