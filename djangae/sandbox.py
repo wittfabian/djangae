@@ -368,6 +368,9 @@ def _test(**kwargs):
 
     from .blobstore_service import start_blobstore_service, stop_blobstore_service
 
+    # Dummy values for testing, based on the defaults for dev_appserver
+    # (differentiating between the default runserver port of 8000 can also be useful
+    # for picking up hard-coding issues etc.)
     os.environ["HTTP_HOST"] = "localhost:8080"
     os.environ['SERVER_NAME'] = "localhost"
     os.environ['SERVER_PORT'] = "8080"
