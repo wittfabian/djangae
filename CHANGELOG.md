@@ -8,6 +8,7 @@
 ### Bug fixes:
 
  - Fixed performance issues and bugs in the Djangae core paginator
+ - Fix several issues with the test sandbox
 
 ## v0.9.10
 
