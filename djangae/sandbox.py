@@ -366,14 +366,26 @@ def _test(**kwargs):
         }
     }
 
+    from .blobstore_service import start_blobstore_service, stop_blobstore_service
+
+    os.environ["HTTP_HOST"] = "localhost:8080"
+    os.environ['SERVER_NAME'] = "localhost"
+    os.environ['SERVER_PORT'] = "8080"
+
+    os.environ['DEFAULT_VERSION_HOSTNAME'] = '%s:%s' % (
+        os.environ['SERVER_NAME'], os.environ['SERVER_PORT']
+    )
+
     testbed = testbed.Testbed()
     testbed.activate()
     for init_name, stub_kwargs in MINIMAL_STUBS.items():
         getattr(testbed, init_name)(**stub_kwargs)
 
+    start_blobstore_service()
     try:
         yield
     finally:
+        stop_blobstore_service()
         if testbed:
             testbed.deactivate()
 
