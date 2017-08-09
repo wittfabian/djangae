@@ -1867,7 +1867,7 @@ class BlobstoreFileUploadHandlerTest(TestCase):
     def test_blobstore_upload_url_templatetag(self):
         template = """{% load storage %}{% blobstore_upload_url '/something/' %}"""
         response = Template(template).render(Context({}))
-        self.assertTrue(response.startswith("http://localhost:8012/_ah/upload/"))
+        self.assertTrue(response.startswith("http://localhost:8080/_ah/upload/"))
 
 
 class DatastorePaginatorTest(TestCase):
