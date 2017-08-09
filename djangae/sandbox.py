@@ -358,6 +358,7 @@ def _test(**kwargs):
     from google.appengine.datastore import datastore_stub_util
 
     MINIMAL_STUBS = {
+        "init_app_identity_stub": {},
         "init_memcache_stub": {},
         "init_datastore_v3_stub": {
             "use_sqlite": True,
