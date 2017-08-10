@@ -9,6 +9,7 @@
 
  - Fixed performance issues and bugs in the Djangae core paginator
  - Fix several issues with the test sandbox
+ - Initialize the app_identity stub in the test sandbox
 
 ## v0.9.10
 
