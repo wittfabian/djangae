@@ -37,6 +37,7 @@ def check_session_csrf_enabled(app_configs, **kwargs):
         errors.append(Error(
             "SESSION_CSRF_DISABLED",
             hint="Please add 'session_csrf.CsrfMiddleware' to MIDDLEWARE_CLASSES",
+            id='djangae.E001',
         ))
     return errors
 
@@ -48,6 +49,7 @@ def check_csp_is_not_report_only(app_configs, **kwargs):
         errors.append(Error(
             "CSP_REPORT_ONLY_ENABLED",
             hint="Please set 'CSP_REPORT_ONLY' to False",
+            id='djangae.E002',
         ))
     return errors
 
@@ -61,6 +63,7 @@ def check_csp_sources_not_unsafe(app_configs, **kwargs):
             errors.append(Error(
                 csp_src_name + "_UNSAFE",
                 hint="Please remove 'unsafe-inline'/'unsafe-eval' from your CSP policies",
+                id='djangae.E01%s' % CSP_SOURCE_NAMES.index(csp_src_name),
             ))
     return errors
 
@@ -77,7 +80,8 @@ def check_cached_template_loader_used(app_configs, **kwargs):
                 return []
         error = Error(
             "CACHED_TEMPLATE_LOADER_NOT_USED",
-            hint="Please use 'django.template.loaders.cached.Loader' for Django templates"
+            hint="Please use 'django.template.loaders.cached.Loader' for Django templates",
+            id='djangae.E003',
         )
         return [error]
 
