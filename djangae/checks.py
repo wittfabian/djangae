@@ -25,7 +25,7 @@ CSP_SOURCE_NAMES = [
 
 
 @register(Tags.security)
-def check_session_csrf_enabled(app_configs, **kwargs):
+def check_session_csrf_enabled(app_configs=None, **kwargs):
     errors = []
 
     # Django >= 1.10 has a MIDDLEWARE setting, which is None by default. Convert
@@ -43,7 +43,7 @@ def check_session_csrf_enabled(app_configs, **kwargs):
 
 
 @register(Tags.security)
-def check_csp_is_not_report_only(app_configs, **kwargs):
+def check_csp_is_not_report_only(app_configs=None, **kwargs):
     errors = []
     if getattr(settings, "CSP_REPORT_ONLY", False):
         errors.append(Error(
@@ -55,7 +55,7 @@ def check_csp_is_not_report_only(app_configs, **kwargs):
 
 
 @register(Tags.security, deploy=True)
-def check_csp_sources_not_unsafe(app_configs, **kwargs):
+def check_csp_sources_not_unsafe(app_configs=None, **kwargs):
     errors = []
     for csp_src_name in CSP_SOURCE_NAMES:
         csp_src_values = getattr(settings, csp_src_name, [])
@@ -63,13 +63,13 @@ def check_csp_sources_not_unsafe(app_configs, **kwargs):
             errors.append(Error(
                 csp_src_name + "_UNSAFE",
                 hint="Please remove 'unsafe-inline'/'unsafe-eval' from your CSP policies",
-                id='djangae.E01%s' % CSP_SOURCE_NAMES.index(csp_src_name),
+                id='djangae.E1%02d' % CSP_SOURCE_NAMES.index(csp_src_name),
             ))
     return errors
 
 
 @register(Tags.caches, deploy=True)
-def check_cached_template_loader_used(app_configs, **kwargs):
+def check_cached_template_loader_used(app_configs=None, **kwargs):
     """ Ensure that the cached template loader is used for Django's template system. """
     for template in settings.TEMPLATES:
         if template['BACKEND'] != "django.template.backends.django.DjangoTemplates":
@@ -84,6 +84,7 @@ def check_cached_template_loader_used(app_configs, **kwargs):
             id='djangae.E003',
         )
         return [error]
+    return []
 
 
 @register(Tags.urls)
