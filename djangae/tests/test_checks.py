@@ -64,6 +64,11 @@ class ChecksTestCase(TestCase):
             errors = checks.check_csp_sources_not_unsafe()
             self.assertEqual(len(errors), 9)
 
+            # this assumes that errors come through in the same order as
+            # checks.CSP_SOURCE_NAMES
+            for idx, err in enumerate(errors):
+                self.assertEqual(err.id, 'djangae.E1%02d' % idx)
+
     def test_template_loader_present(self):
         template_setting = [{
             'BACKEND': 'django.template.backends.django.DjangoTemplates',
@@ -74,8 +79,6 @@ class ChecksTestCase(TestCase):
         with override_settings(TEMPLATES=template_setting):
             errors = checks.check_cached_template_loader_used()
             self.assertEqual(len(errors), 0)
-            for idx, err in enumerate(errors):
-                self.assertTrue(err.idi, 'djangae.E1%02d' % idx)
 
     def test_template_loader_missing(self):
         template_setting = [{
@@ -90,7 +93,7 @@ class ChecksTestCase(TestCase):
     def test_template_loader_skips_non_django_backends(self):
         template_setting = [{
             'BACKEND': 'nondjango.templates',
-            'OPTIONS': {'loaders': [('nondjango.templates.Loaders',)]},
+            'OPTIONS': {'loaders': [('nondjango.templates.Loader',)]},
         }]
         with override_settings(TEMPLATES=template_setting):
             errors = checks.check_cached_template_loader_used()
