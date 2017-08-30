@@ -31,16 +31,3 @@ GitHub: [https://github.com/potatolondon/djangae](https://github.com/potatolondo
 The intention is always to support the last two versions of Django, although older versions may work.
 
 **Currently Django 1.8, 1.10 and 1.11 are supported. 1.9 works but is unsupported by Django so not recommended.**
-
-## Release Notes
- - [v0.9.10](release_notes/0_9_10.md)
-
-## Contrib Applications
-
- - [Authentication with djangae.contrib.gauth](gauth.md)
- - [Security enhancements with djangae.contrib.security](security.md)
- - [Map-reduce integration with djangae.contrib.mappers](mappers.md)
- - [Pagination with djangae.contrib.pagination](pagination.md)
- - [Unique constraint repairs with djangae.contrib.uniquetool](uniquetool.md)
- - [Help with Datastore eventual consistency with djangae.contrib.consistency](consistency.md)
- - [Concurrent thread locking with djangae.contrib.locking](locking.md)
