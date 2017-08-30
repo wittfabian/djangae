@@ -13,7 +13,7 @@ pages:
 - Storage backends: storage.md
 - Contrib apps:
   - Pagination: pagination.md
-  - Gauth: gauth.md
+  - Gauth authentication: gauth.md
   - Map Reduce: mappers.md
   - Unique constraint tool: uniquetool.md
   - Security: security.md
