@@ -20,4 +20,6 @@ pages:
   - Datastore eventual consistency: consistency.md
   - Thread locking: locking.md
 - Contributing & Testing: contributing.md
+- Release notes:
+  - "0.9.10": release_notes/0_9_10.md
 theme: readthedocs
