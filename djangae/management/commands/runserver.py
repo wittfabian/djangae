@@ -3,6 +3,7 @@ import re
 from datetime import datetime
 
 from django.conf import settings
+from django.core.management.base import CommandError
 from django.core.management.commands import runserver
 from google.appengine.tools.devappserver2 import shutdown
 from google.appengine.tools.sdk_update_checker import (
@@ -119,7 +120,16 @@ class Command(runserver.Command):
                 self.gae_options[option] = value
 
         if addrport:
-            self.gae_options['port'] = int(addrport)
+            try:
+                parts = addrport.split(':')
+                if len(parts) == 1:
+                    port = parts[0]
+                else:
+                    self.gae_options['host'] = parts[0]
+                    port = parts[1]
+                self.gae_options['port'] = int(port)
+            except ValueError:
+                raise CommandError('port value {} is invalid, should be an integer'.format(port))
 
         super(Command, self).handle(addrport=addrport, *args, **options)
 
