@@ -1,19 +1,122 @@
-## v0.9.9 (in development)
+## v0.9.11 (in development)
 
 ### New features & improvements:
 
--
+- Add support for querying JSONFields in a similar way to the PostgreSQL JSONField
+- Allow special indexers to index `None` as well as remove unused index properties from the entity
+- Added IDs to system check errors, allowing them to be silenced
+
+### Bug fixes:
+
+ - Fixed performance issues and bugs in the Djangae core paginator
+ - Fix several issues with the test sandbox
+ - Initialize the app_identity stub in the test sandbox
+
+## v0.9.10
+
+### New features & improvements:
+
+ - A new contrib app `djangae.contrib.processing.mapreduce` has been added to provide a Django-friendly API to mapreduce. The existing
+   `djangae.contrib.mappers` API has been reimplemented in terms of `djangae.contrib.processing.mapreduce`
+ - Add support for the latest App Engine SDK (1.9.51)
+ - The default ports for the API server, admin server and blobstore service have changed to 8010, 8011, and 8012 respectively to avoid clashes with modules
+ - Switched the default storage backend (in settings_base.py) to cloud storage. If you need to retain compatibility make sure you
+ override the `DEFAULT_FILE_STORAGE` setting to point to `'djangae.storage.BlobstoreStorage'`.
+ - Added AsyncMultiQuery as a replacement for Google's MultiQuery (which doesn't exist on Cloud Datastore).  This is the first step towards support for Cloud Datastore and therefore Flexible Environment.
+ - Added a configurable memory limit to the context cache, limited the number of instances cached from query results and corrected `disable_cache` behaviour.
+- Added support for running migrations on the Datastore using Django migrations.
+- Added a test to confirm query slicing works correctly.
+- Added `ComputedCollationField` to generate correct ordering for unicode strings.
+- Changed CloudStorage and BlobstoreStorage storage backends to return HTTPS URLs for images (instead of the previous protocol-relative URLs).
+- Implemented an entirely new means of storing the indexes for contains and icontains queries. **If you have existing
+  entities which use the current indexing, you MUST set `DJANGAE_USE_LEGACY_CONTAINS_LOGIC = True` in your settings!!**
+  This will be removed in the next release of Djangae so you'll need to re-save your entities with this setting set to False before upgrading (see [detailed release notes](docs/release_notes/0_9_10.md)).
+- Added support for the 1.9.54 SDK
+- Implemented a full application that can be deployed to production GAE for testing real-world scenarios against GCP environment
+- Added `djangae.contrib.backup` app
+
+### Bug fixes:
+
+ - When running the local sandbox, if a port clash is detected then the next port will be used (this was broken before)
+ - Accessing the Datastore from outside tests will no longer throw an error when using the test sandbox
+ - Fix an error which occurred when a migrations module is not importable
+ - The in-context cache is now reliably wiped when the testbed is initialized for each test.
+ - Fixed an ImportError when the SDK is not on sys.path.
+ - Fix issue where serialization of IterableFields resulted in invalid JSON
+ - Updated the documenation to say that DJANGAE_CREATE_UNKNOWN_USER defaults to True.
+ - Fixed a hard requirement on PIL/Pillow when running the tests. Now, the images stub will not be available if Pillow isn't installed.
+ - os.environ is now correctly updated with task headers when using process_task_queues in tests
+ - process_task_queues can now be controlled by passing the `failure_behaviour` argument as appropriate
+ - process_task_queues will no longer propagate exceptions from tasks, instead use the `failure_behaviour` to control what happens
+   if an exception occurs in a task
+ - Ensure that the order of values in a RelatedListField are respected when updated via a form.
+ - Make mapreduce optional again (#926).
+ - Fixed a bug where filter(pk__gt=0) would return no results, rather than all of them
+ - We no longer truncate string keys automatically and the max string key length is now the Datastore supported 1500 bytes
+ - Fixed AsyncMultiQuery offset and limiting
+
+## v0.9.9 (release date: 27th March 2017)
+
+### New features & improvements:
+
+- Added preliminary support for Django 1.11 (not yet released, don't upgrade yet!)
+- The system check for session_csrf now works with the MIDDLEWARE setting when using Django >= 1.10.
+- System check for deferred builtin which should always be switched off.
+- Implemented weak (memcache) locking to contrib.locking
+- The `disable_cache` decorator now wraps the returned function with functools.wraps
+- `prefetch_related()` now works on RelatedListField and RelatedSetField
+- Added a test for Model.objects.none().filter(pk=xyz) type filters
+- Use `user.is_authenticated` instead of `user.is_authenticated()` when using Django >= 1.10.
+- Added `max_length` and `min_length` validation support to `ListField`, `SetField`, `RelatedListField` and `RelatedSetField`.
+- Moved checks verifying csrf, csp and template loader configuration from djangae-scaffold into Djangae.
+- Renamed `contrib.gauth.datastore` and `contrib.gauth.sql` to `contrib.gauth_datastore` and `contrib.gauth_sql` respectively.
+    - This change requires you to update your settings to reference the new app names.
+    - The old names still work for now but will trigger deprecation warnings.
+    - DB table names for Datastore-based models have not changed.  DB table name for the SQL User model has changed, but wasn't entirely usable before anyway.
+- Moved everything from `contrib.gauth.common.*` to the parent `contrib.gauth` module.  I.e. removed the `.common` part.
+    - This change requires you to update your application to reference/import from the new paths.
+    - The old paths still work for now but will trigger deprecation warnings.
+- Cleaned up the query fetching code to be more readable. Moved where result fetching happens to be inline with other backends, which makes Django Debug Toolbar query profiling output correct
+- Cleaned up app_id handling in --sandbox management calls
+- The default GCS bucket name is now cached when first read, saving on RPC calls
+- Updated `AppEngineSecurityMiddleware` to work with Django >= 1.10
+- Added a test for prefetching via RelatedSetField/RelatedListField. Cleaned up some related code.
+- Allow the sandbox argument to be at any position.
+- Added some tests for the management command code.
+- Added a test to prove that the ordering specified on a model's `_meta` is used for pagination, when no custom order has been specified on the query set.
+- Added a `@task_or_admin_only` decorator to `djangae.environment` to allow restricting views to tasks (including crons) or admins of the application.
 
 ### Bug fixes:
 
 - Fixed a minor bug where entities were still added to memcache (but not fetched from it) with `DJANGAE_CACHE_ENABLED=False`.  This fix now allows disabling the cache to be a successful workaround for https://code.google.com/p/googleappengine/issues/detail?id=7876.
 - Fixed a bug where entities could still be fetched from memcache with `DJANGAE_CACHE_ENABLED=False` when saving in a transaction or deleting them.
 - Fixed overlap filtering on RelatedListField and RelatedSetField (Thanks Grzes!)
+- Fixed various issues with `djangae.contrib.mappers.defer_iteration`, so that it no longers gets stuck deferring tasks or hitting memory limit errors when uses on large querysets.
+- Fixed an issue where having a ForeignKey to a ContentType would cause an issue when querying due to the large IDs produced by djangae.contrib.contenttypes's SimulatedContentTypesManager.
+- Fix a problem with query parsing which would throw a NotSupportedError on Django 1.8 if you used an empty Q() object in a filter
+- Cascade deletions will now correctly batch object collection within the datastore query limits, fixing errors on deletion.
+- Fixed missing `_deferred` attribute in Django models for versions >= 1.10
+- Fixed an error when submitting an empty JSONFormField
+- Fixed a bug where an error would be thrown if you loaded an entity with a JSONField that had non-JSON data, now the data is returned unaltered
+- Fixed a bug where only("pk") wouldn't perform a keys_only query
+- Dropped the deprecated patterns() from contrib.locking.urls
+- Fixed a bug where search indexes weren't saved when they were generated in the local shell
+- Fixed a bug where permissions wouldn't be created when using Django's PermissionsMixin on the datastore (for some reason)
+- Fixed a bug where a user's username would be set to the string 'None' if username was not populated on an admin form
+- Fixed `djangae.contrib.mappers.defer.defer_iteration` to allow inequality filters in querysets
+- Fixed a bug in `djangae.contrib.mappers.defer.defer_iteration` where `_shard` would potentially ignore the first element of the queryset
+- Fixed an incompatibility between appstats and the cloud storage backend due to RPC calls being made in the __init__ method
+- Fixed a bug where it wasn't possible to add validators to djangae.fields.CharField
+- Fixed a bug where entries in `RelatedSetField`s and `RelatedListField`s weren't being converted to the same type as the primary key of the model
+- Fixed a bug where running tests would incorrectly load the real search stub before the test version
+- Fixed a bug where IDs weren't reserved with the datastore allocator immediately and so could end up with a race-condition where an ID could be reused
 - Fixed runserver port not being passed to devappserver
 
 ### Documentation:
 
--
+- Improved documentation for `djangae.contrib.mappers.defer_iteration`.
+- Changed the installation documentation to reflect the correct way to launch tests
+
 
 ## v0.9.8 (release date: 6th December 2016)
 
@@ -202,3 +305,4 @@ If you're still using Django 1.7 in your project:
 - Fixed bug when using `RelatedListField` on a form
 - Don't allow ordering by a `TextField`
 - Properly limiting number of results when excludes are used
+- Allow migrations to work on gauth sql User model

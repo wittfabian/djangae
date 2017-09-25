@@ -5,9 +5,9 @@ import logging
 from django.conf import settings
 from django.http import HttpResponse
 from django.utils import timezone
+from google.appengine.ext.deferred import defer
 
 # DJANGAE
-from djangae.contrib.mappers import defer_iteration
 from .models import DatastoreLock
 
 
@@ -23,11 +23,22 @@ QUEUE = getattr(settings, 'DJANGAE_CLEANUP_LOCKS_QUEUE', 'default')
 
 def cleanup_locks(request):
     """ Delete all Lock objects that are older than 10 minutes. """
+    logger.info("Deferring djangae.contrib.lock cleanup task")
+    defer(cleanup_locks_task, _queue=QUEUE)
+    return HttpResponse("Cleanup locks task is running")
+
+
+def cleanup_locks_task():
+    """ Task function that deletes lock objects that are older than 10 minutes.
+        Due to its restriction of not being able to use an inequality filter, we can' use
+        defer_iteration for this, but if we can't delete all the objects in this one task then it
+        will just fail and retry, and everntually it will get through all of them.
+    """
     logger.info("Starting djangae.contrib.lock cleanup task")
     cut_off = timezone.now() - timezone.timedelta(seconds=DELETE_LOCKS_OLDER_THAN_SECONDS)
     queryset = DatastoreLock.objects.filter(timestamp__lt=cut_off)
-    defer_iteration(queryset, _delete_lock, _queue=QUEUE)
-    return HttpResponse("Cleanup locks task is running")
+    queryset.delete()
+    logger.info("Finished djangae.contrib.lock cleanup task")
 
 
 def _delete_lock(lock):

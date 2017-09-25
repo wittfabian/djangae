@@ -3,18 +3,24 @@ repo_url: https://github.com/potatolondon/djangae
 pages:
 - Home: index.md
 - Installation & Deployment: installation.md
-- The Database Backend: db_backend.md
+- Datastore & Django Integration:
+  - The Database Backend: db_backend.md
+  - Migrations: migrations.md
+  - Migration examples: migration_examples.md
 - Djangae Model Fields: fields.md
 - Local/remote management commands: sandbox.md
 - Environment: environment.md
 - Storage backends: storage.md
 - Contrib apps:
   - Pagination: pagination.md
-  - Gauth: gauth.md
+  - Gauth authentication: gauth.md
   - Map Reduce: mappers.md
   - Unique constraint tool: uniquetool.md
   - Security: security.md
   - Datastore eventual consistency: consistency.md
   - Thread locking: locking.md
 - Contributing & Testing: contributing.md
+- Release notes:
+  - Overview: release_notes/index.md
+  - "Version 0.9.10": release_notes/0_9_10.md
 theme: readthedocs

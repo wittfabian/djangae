@@ -29,7 +29,7 @@ from djangae.db.utils import (
 class Parser(BaseParser):
 
     def _where_node_leaf_callback(self, node, negated, new_parent, connection, model, compiler):
-        new_node = WhereNode()
+        new_node = WhereNode(new_parent.using)
 
         if not hasattr(node, "lhs"):
             raise NotSupportedError("Attempted probable subquery, these aren't supported on the datastore")
@@ -66,7 +66,9 @@ class Parser(BaseParser):
         # Make sure we don't let people try to filter on a text field, otherwise they just won't
         # get any results!
 
-        if field.db_type(connection) in ("bytes", "text"):
+        lookup_supports_text = getattr(node, "lookup_supports_text", False)
+
+        if field.db_type(connection) in ("bytes", "text") and not lookup_supports_text:
             raise NotSupportedError("You can't filter on text or blob fields on the datastore")
 
         if operator == "isnull" and field.model._meta.parents.values():
@@ -119,7 +121,7 @@ class Parser(BaseParser):
 
         new_node.set_leaf(
             lhs,
-            operator,
+            "__".join([operator, node.path]) if hasattr(node, "path") else operator,
             rhs,
             is_pk_field=field==model._meta.pk,
             negated=negated,

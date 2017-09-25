@@ -3,9 +3,15 @@ import logging
 import os
 
 from django import test
-from django.test import Client
+from django.http import Http404
+from django.test import Client, RequestFactory
+from django.test.runner import DiscoverRunner
+from djangae.test_runner import bed_wrap
 
 from djangae.environment import get_application_root
+
+from django.conf.urls import handler404, handler500
+from django.utils.module_loading import import_string
 
 from google.appengine.api import apiproxy_stub_map, appinfo
 from google.appengine.datastore import datastore_stub_util
@@ -19,14 +25,6 @@ def inconsistent_db(probability=0, connection='default'):
         A context manager that allows you to make the datastore inconsistent during testing.
         This is vital for writing applications that deal with the Datastore's eventual consistency
     """
-
-    from django.db import connections
-
-    conn = connections[connection]
-
-    if not hasattr(conn.creation, "testbed") or "datastore_v3" not in conn.creation.testbed._enabled_stubs:
-        raise RuntimeError("Tried to use the inconsistent_db stub when not testing")
-
 
     stub = apiproxy_stub_map.apiproxy.GetStub('datastore_v3')
 
@@ -63,10 +61,51 @@ def _flush_tasks(stub, queue_name=None):
         for queue in stub.GetQueues():
             stub.FlushQueue(queue["name"])
 
-def process_task_queues(queue_name=None):
+
+@contextlib.contextmanager
+def environ_override(**kwargs):
+    original = os.environ.copy()
+    os.environ.update(kwargs)
+
+    yield
+
+    # Delete any keys that were introduced in kwargs
+    for key in kwargs:
+        if key not in original:
+            del os.environ[key]
+
+    # Restore original values
+    os.environ.update(original)
+
+
+class TaskFailedBehaviour:
+    DO_NOTHING = 0
+    RETRY_TASK = 1
+    RAISE_ERROR = 2
+
+
+class TaskFailedError(Exception):
+    def __init__(self, task_name, status_code, original_exception=None):
+        self.task_name = task_name
+        self.status_code = status_code
+        self.original_exception = original_exception
+
+        super(TaskFailedError, self).__init__(
+            "Task {} failed with status code: {}".format(task_name, status_code)
+        )
+
+
+def process_task_queues(queue_name=None, failure_behaviour=TaskFailedBehaviour.DO_NOTHING):
     """
         Processes any queued tasks inline without a server.
         This is useful for end-to-end testing background tasks.
+
+        failure_behaviour: This controls the behaviour of the task processing in the case
+        that the task returns a status_code other than 2xx. Options are:
+
+        1. Do nothing (a message will be logged at INFO level though)
+        2. Retry the task (WARNING! This will result in an infinite loop if the task fails forever)
+        3. Throw a TaskFailedError
     """
 
     stub = apiproxy_stub_map.apiproxy.GetStub("taskqueue")
@@ -82,35 +121,93 @@ def process_task_queues(queue_name=None):
         post_data = decoded_body
         headers = { "HTTP_{}".format(x.replace("-", "_").upper()): y for x, y in task['headers'] }
 
-        #FIXME: set headers like the queue name etc.
         method = task['method']
 
-        if method.upper() == "POST":
-            #Fixme: post data?
-            response = client.post(task['url'], data=post_data, content_type=headers['HTTP_CONTENT_TYPE'], **headers)
-        else:
-            response = client.get(task['url'], **headers)
+        # AppEngine sets the task headers in the environment, so we should do the same
+        with environ_override(**headers):
+            try:
+                # The Django test client (which we use to call the task URL) doesn't handle
+                # errors in the same way as traditional Django would; it lets exceptions propagate.
+                # What we do here is wrap the client call in a try/except and then call either
+                # handler404 or handler500 to get the appropriate response. We then pass any
+                # original exception to TaskFailedError if the failure_behaviour is RAISE_ERROR
 
-        if response.status_code != 200:
-            logging.info("Unexpected status (%r) while simulating task with url: %r", response.status_code, task['url'])
+                original_exception = None
+                factory = RequestFactory()
+
+                if method.upper() == "POST":
+                    request_kwargs = {
+                        "path": task['url'],
+                        "data": post_data,
+                        "content_type": headers['HTTP_CONTENT_TYPE']
+                    }
+                    request_kwargs.update(headers)
+
+                    #Fixme: post data?
+                    request = factory.post(**request_kwargs)
+                    response = client.post(**request_kwargs)
+                else:
+                    request_kwargs = {
+                        "path": task['url']
+                    }
+                    request_kwargs.update(headers)
+
+                    request = factory.get(**request_kwargs)
+                    response = client.get(**request_kwargs)
+            except Http404 as e:
+                original_exception = e
+                handler = import_string(handler404)
+                response = handler(request, e)
+            except Exception as e:
+                original_exception = e
+                handler = import_string(handler500)
+                response = handler(request)
+
+        if not str(response.status_code).startswith("2"):
+            # If the response wasn't a 2xx return code, then handle as required
+
+            if failure_behaviour == TaskFailedBehaviour.DO_NOTHING:
+                # Log a message if the task fails
+                logging.info("Unexpected status (%r) while simulating task with url: %r", response.status_code, task['url'])
+            elif failure_behaviour == TaskFailedBehaviour.RETRY_TASK:
+                # Add the task to the end of the task queue
+                tasks.append(task)
+            else:
+                raise TaskFailedError(
+                    headers['HTTP_X_APPENGINE_TASKNAME'],
+                    response.status_code,
+                    original_exception
+                )
 
         if not tasks:
             #The map reduce may have added more tasks, so refresh the list
             tasks = _get_queued_tasks(stub, queue_name)
 
 
+def get_task_count(queue_name=None):
+    stub = apiproxy_stub_map.apiproxy.GetStub("taskqueue")
+    return len(_get_queued_tasks(stub, queue_name, flush=False))
+
+
 class TestCaseMixin(object):
     def setUp(self):
         super(TestCaseMixin, self).setUp()
         self.taskqueue_stub = apiproxy_stub_map.apiproxy.GetStub("taskqueue")
-        if self.taskqueue_stub:
-            _flush_tasks(self.taskqueue_stub) # Make sure we clear the queue before every test
+        # Make sure we clear the queue before every test
+        self.flush_task_queues()
 
     def assertNumTasksEquals(self, num, queue_name='default'):
         self.assertEqual(num, len(_get_queued_tasks(self.taskqueue_stub, queue_name, flush=False)))
 
-    def process_task_queues(self, queue_name=None):
-        process_task_queues(queue_name)
+    def flush_task_queues(self, queue_name=None):
+        if self.taskqueue_stub:
+            _flush_tasks(self.taskqueue_stub, queue_name)
+
+    def process_task_queues(self, queue_name=None, failure_behaviour=TaskFailedBehaviour.DO_NOTHING):
+        process_task_queues(queue_name, failure_behaviour)
+
+    def get_task_count(self, queue_name=None):
+        return get_task_count(queue_name)
 
 
 class HandlerAssertionsMixin(object):
@@ -175,3 +272,10 @@ class TestCase(HandlerAssertionsMixin, TestCaseMixin, test.TestCase):
 
 class TransactionTestCase(HandlerAssertionsMixin, TestCaseMixin, test.TransactionTestCase):
     pass
+
+
+class DjangaeDiscoverRunner(DiscoverRunner):
+    def build_suite(self, *args, **kwargs):
+        suite = super(DjangaeDiscoverRunner, self).build_suite(*args, **kwargs)
+        suite._tests[:] = [bed_wrap(test) for test in suite._tests]
+        return suite

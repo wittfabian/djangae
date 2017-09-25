@@ -5,3 +5,6 @@ GoogleAppEngineCloudStorageClient==1.9.22.1
 Pillow
 webtest
 beautifulsoup4
+pytz
+django-session-csrf
+pyuca

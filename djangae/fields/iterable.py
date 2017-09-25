@@ -1,12 +1,22 @@
+# STANDARD LIB
 import copy
+from decimal import Decimal
 from itertools import chain
 
+# THIRD PARTY
 from django import forms
 from django.db import models
 from django.db.models.lookups import Lookup, Transform
 from django.core.exceptions import ValidationError, ImproperlyConfigured
-from djangae.forms.fields import ListFormField
+from django.utils import six
 from django.utils.text import capfirst
+
+# DJANGAE
+from djangae.core.validators import MinItemsValidator, MaxItemsValidator
+from djangae.forms.fields import ListFormField
+
+# types that don't need to be quoted when serializing an iterable field
+_SERIALIZABLE_TYPES = six.integer_types + (float, Decimal,)
 
 
 class _FakeModel(object):
@@ -154,7 +164,26 @@ class IterableField(models.Field):
         assert not hasattr(self.item_field_type, 'attname')
         self.item_field_type.set_attributes_from_name('value')
 
+        # Pop the 'min_length' and 'max_length' from the kwargs, if they're there, as this avoids
+        # 'min_length' causing an error when calling super()
+        min_length = kwargs.pop("min_length", None)
+        max_length = kwargs.pop("max_length", None)
+
+        # Check that if there's a min_length that blank is not True.  This is partly because it
+        # doesn't make sense, and partly because if the value (i.e. the list or set) is empty then
+        # Django will skip the validators, thereby skipping the min_length check.
+        if min_length and kwargs.get("blank"):
+            raise ImproperlyConfigured(
+                "Setting blank=True and min_length=%d is contradictory." % min_length
+            )
+
         super(IterableField, self).__init__(*args, **kwargs)
+
+        # Now that self.validators has been set up, we can add the min/max legnth validators
+        if min_length is not None:
+            self.validators.append(MinItemsValidator(min_length))
+        if max_length is not None:
+            self.validators.append(MaxItemsValidator(max_length))
 
     def deconstruct(self):
         name, path, args, kwargs = super(IterableField, self).deconstruct()
@@ -177,9 +206,14 @@ class IterableField(models.Field):
         # If possible, parse the string into the iterable
         if not hasattr(value, "__iter__"): # Allows list/set, not string
             if isinstance(value, basestring):
-                if (self._iterable_type == set and value.startswith("{") and value.endswith("}")) or \
-                   (self._iterable_type == list and value.startswith("[") and value.endswith("]")):
-                    value = [x.strip() for x in value[1:-1].split(",") ]
+                if value.startswith("[") and value.endswith("]"):
+                    value = value[1:-1].strip()
+
+                    value = [
+                        x.strip("'").strip("\"")
+                        for x in value.split(",")
+                        if len(value) > 2
+                    ]
                 else:
                     raise ValueError("Unable to parse string into iterable field")
             else:
@@ -281,6 +315,11 @@ class IterableField(models.Field):
         defaults.update(**kwargs)
         return form_field_class(**defaults)
 
+    def value_to_string(self, obj):
+        return "[" + ",".join(
+            _serialize_value(o) for o in self._get_val_from_obj(obj)
+        ) + "]"
+
 
 # New API
 IterableField.register_lookup(ContainsLookup)
@@ -340,9 +379,15 @@ class SetField(IterableField):
             ret = list(ret)
         return ret
 
-    def value_to_string(self, obj):
-        """
-        Custom method for serialization, as JSON doesn't support
-        serializing sets.
-        """
-        return str(list(self._get_val_from_obj(obj)))
+
+def _serialize_value(value):
+    if isinstance(value, _SERIALIZABLE_TYPES):
+        return str(value)
+
+    if hasattr(value, 'isoformat'):
+        # handle datetime, date, and time objects
+        value = value.isoformat()
+    elif not isinstance(value, basestring):
+        value = str(value)
+
+    return "'{0}'".format(value.encode('utf-8'))

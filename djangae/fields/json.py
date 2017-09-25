@@ -22,6 +22,7 @@ from django.conf import settings
 from django.utils import six
 from django.core.serializers.json import DjangoJSONEncoder
 
+from djangae.db.backends.appengine.indexing import Indexer, register_indexer, IgnoreForIndexing
 from djangae.forms.fields import JSONFormField, JSONWidget
 
 __all__ = ( 'JSONField',)
@@ -73,6 +74,24 @@ class JSONOrderedDict(OrderedDict):
         return dumps(self)
 
 
+class JSONKeyLookup(models.Lookup):
+    lookup_name = 'json_path'
+    operator = 'json_path'
+    bilateral_transforms = False
+    lookup_supports_text = True # Tell Djangae connector that we are OK on text fields
+
+    def __init__(self, path):
+        self.path = path
+
+    def get_rhs_op(self, connection, rhs):
+        return "__".join([self.operator, self.path])
+
+    def __call__(self, lhs, rhs):
+        self.lhs = lhs
+        self.rhs = rhs
+        return self
+
+
 class JSONField(models.TextField):
     """JSONField is a generic textfield that neatly serializes/unserializes
     JSON objects seamlessly.  Main thingy must be a dict object."""
@@ -94,10 +113,15 @@ class JSONField(models.TextField):
         if value is None or value == '':
             return {}
         elif isinstance(value, six.string_types):
-            if self.use_ordered_dict:
-                res = loads(value, object_pairs_hook=OrderedDict)
-            else:
-                res = loads(value)
+            try:
+                if self.use_ordered_dict:
+                    res = loads(value, object_pairs_hook=OrderedDict)
+                else:
+                    res = loads(value)
+            except ValueError:
+                # If we can't parse as JSON, just return the value as-is
+                return value
+
             if isinstance(res, OrderedDict) and self.use_ordered_dict:
                 return JSONOrderedDict(res)
             elif isinstance(res, dict):
@@ -120,6 +144,7 @@ class JSONField(models.TextField):
         """Convert our JSON object to a string before we save"""
         if value is None and self.null:
             return None
+
         return super(JSONField, self).get_db_prep_save(dumps(value), connection=connection)
 
     def south_field_triple(self):
@@ -144,3 +169,94 @@ class JSONField(models.TextField):
         }
         defaults.update(kwargs)
         return super(JSONField, self).formfield(**defaults)
+
+    def get_lookup(self, lookup):
+        ret = super(JSONField, self).get_lookup(lookup)
+        if ret:
+            return ret
+        return JSONKeyLookup(lookup)
+
+    def get_transform(self, lookup):
+        ret = super(JSONField, self).get_transform(lookup)
+        if ret:
+            return ret
+
+        # Assume a key path lookup
+        class LookupBuilder(models.Transform):
+            source_expressions = []
+            lookup_name = 'json_path'
+
+            def __init__(self, *args, **kwargs):
+                super(LookupBuilder, self).__init__(*args, **kwargs)
+                self.path = [lookup]
+
+            def get_transform(self, lookup):
+                self.path.append(lookup)
+                return lambda lhs, *args, **kwargs: self
+
+            def get_lookup(self, lookup):
+                self.path.append(lookup)
+                return JSONKeyLookup("__".join(self.path))
+
+        return LookupBuilder
+
+
+class JSONKeyLookupIndexer(Indexer):
+    OPERATOR = 'json_path'
+
+    def handles(self, field, operator):
+        from djangae.fields import JSONField
+
+        operator_part = operator.split("__", 1)[0]
+        return isinstance(field, JSONField) and operator_part == self.OPERATOR
+
+    def prepare_index_type(self, index_type, value):
+        return index_type
+
+    def prep_value_for_query(self, value, **kwargs):
+        return value
+
+    def prep_query_operator(self, op):
+        return "exact"
+
+    def prep_value_for_database(self, value, index, **kwargs):
+        if isinstance(value, basestring):
+            value = json.loads(value)
+
+        index_part = index.split("__", 1)[1]
+        path = index_part.split("__")
+
+        is_isnull = False
+        # Ignore isnull on the end of a path, it's not a value lookup
+        if len(path) > 1 and path[-1] == "isnull":
+            is_isnull = True
+            path.pop()
+
+        # Go through the path and look up the value from each
+        # dictionary/list if we fail to find a value we raise
+        # a IgnoreForIndexing exception which tells the special indexer
+        # to not save *anything*
+        for i, section in enumerate(path):
+            try:
+                section = int(section)
+            except (TypeError, ValueError):
+                pass
+
+            try:
+                value = value[section]
+            except (KeyError, IndexError, TypeError):
+                raise IgnoreForIndexing("")
+
+        if is_isnull:
+            return value is None
+
+        return value
+
+    def indexed_column_name(self, field_column, value, index):
+        return "_idx_json_path_{}_{}".format(
+            field_column,
+            index.split("__", 1)[-1]
+        )
+
+# Especially for JSON fields
+register_indexer(JSONKeyLookupIndexer)

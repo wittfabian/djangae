@@ -2,22 +2,20 @@
 
 [![Join the chat at https://gitter.im/potatolondon/djangae](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/potatolondon/djangae?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 
-[![build-status-image]][travis] [![codecov.io](https://img.shields.io/codecov/c/github/potatolondon/djangae/master.svg)](http://codecov.io/github/potatolondon/djangae?branch=master)
+[![build-status-image]][travis] [![codecov.io](https://img.shields.io/codecov/c/github/potatolondon/djangae/master.svg)](https://codecov.io/github/potatolondon/djangae?branch=master)
 
-[![Issue Stats](http://issuestats.com/github/potatolondon/djangae/badge/pr)](http://issuestats.com/github/potatolondon/djangae) [![Issue Stats](http://issuestats.com/github/potatolondon/djangae/badge/issue)](http://issuestats.com/github/potatolondon/djangae)
+[![Issue Stats](https://issuestats.com/github/potatolondon/djangae/badge/pr)](https://issuestats.com/github/potatolondon/djangae) [![Issue Stats](https://issuestats.com/github/potatolondon/djangae/badge/issue)](https://issuestats.com/github/potatolondon/djangae)
 
 The best way to run Django on Google App Engine.
 
 Djangae (djan-gee) is a Django app that allows you to run Django applications on Google App Engine, including (if you
 want to) using Django's models with the App Engine Datastore as the underlying database.
 
-Documentation: https://djangae.readthedocs.io/
-
-Google Group: https://groups.google.com/forum/#!forum/djangae-users
-
-Website: https://potatolondon.github.io/djangae/
-
-GitHub: https://github.com/potatolondon/djangae
+- Documentation: https://djangae.readthedocs.io/
+- Google Group: https://groups.google.com/forum/#!forum/djangae-users
+- Website: https://potatolondon.github.io/djangae/
+- GitHub: https://github.com/potatolondon/djangae
+- Slack: https://djangae.slack.com
 
 **Note: Djangae is under heavy development, stability is not guaranteed. See [1.0 release changes issue](https://github.com/potatolondon/djangae/issues/593) to follow progress on Djangae 1.0 release.**
 
@@ -41,7 +39,7 @@ https://djangae.readthedocs.io/
 ## Supported Django Versions
 
 The intention is always to support the currently-supported versions of Django, although older versions may work. Currently
-Django 1.8, 1.9 and 1.10 are supported.
+Django 1.8, 1.9, 1.10 and 1.11 are supported.
 
 # Installation
 

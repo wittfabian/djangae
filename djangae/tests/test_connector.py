@@ -267,6 +267,31 @@ class PaginatorModel(models.Model):
 
 
 class BackendTests(TestCase):
+    def test_pk_gt_empty_returns_all(self):
+        for i in range(10):
+            TestFruit.objects.create(name=str(i), color=str(i))
+
+        self.assertEqual(10, TestFruit.objects.filter(pk__gt="").count())
+        self.assertEqual(10, TestFruit.objects.filter(pk__gte="").count())
+        self.assertEqual(0, TestFruit.objects.filter(pk__lt="").count())
+        self.assertEqual(0, TestFruit.objects.filter(pk__lte="").count())
+
+    def test_pk_gt_zero_returns_all(self):
+        IntegerModel.objects.create(pk=1, integer_field=1)
+        IntegerModel.objects.create(pk=2, integer_field=2)
+
+        results = IntegerModel.objects.filter(pk__gt=0)
+        self.assertEqual(2, len(results))
+
+        results = IntegerModel.objects.filter(pk__gte=0)
+        self.assertEqual(2, len(results))
+
+        results = IntegerModel.objects.filter(pk__lt=0)
+        self.assertEqual(0, len(results))
+
+        results = IntegerModel.objects.filter(pk__lte=0)
+        self.assertEqual(0, len(results))
+
     def test_entity_matches_query(self):
         entity = datastore.Entity("test_model")
         entity["name"] = "Charlie"
@@ -346,16 +371,15 @@ class BackendTests(TestCase):
                 # Make sure the query is an ancestor of the key
                 self.assertEqual(query_anc.calls[0].args[1], datastore.Key.from_path(TestFruit._meta.db_table, "0", namespace=DEFAULT_NAMESPACE))
 
-        # Now check projections work with more than 30 things
-        with sleuth.watch('google.appengine.api.datastore.MultiQuery.__init__') as query_init:
+        # Now check projections work with fewer than 100 things
+        with sleuth.watch('djangae.db.backends.appengine.meta_queries.AsyncMultiQuery.__init__') as query_init:
             with sleuth.watch('google.appengine.api.datastore.Query.Ancestor') as query_anc:
                 keys = [str(x) for x in range(32)]
                 results = list(TestFruit.objects.only("color").filter(pk__in=keys).order_by("name"))
 
-                self.assertEqual(query_init.call_count, 2) # Two multi queries
+                self.assertEqual(query_init.call_count, 1) # One multiquery
                 self.assertEqual(query_anc.call_count, 32) # 32 Ancestor calls
-                self.assertEqual(len(query_init.calls[0].args[1]), 30)
-                self.assertEqual(len(query_init.calls[1].args[1]), 2)
+                self.assertEqual(len(query_init.calls[0].args[1]), 32)
 
                 # Confirm the ordering is correct
                 self.assertEqual(sorted(keys), [ x.pk for x in results ])
@@ -445,7 +469,7 @@ class BackendTests(TestCase):
             list(TestUser.objects.filter(username="test"))
             self.assertEqual(1, query_mock.call_count)
 
-        with sleuth.switch("djangae.db.backends.appengine.commands.datastore.MultiQuery.Run", lambda *args, **kwargs: []) as query_mock:
+        with sleuth.switch("djangae.db.backends.appengine.meta_queries.AsyncMultiQuery.Run", lambda *args, **kwargs: []) as query_mock:
             list(TestUser.objects.filter(username__in=["test", "cheese"]))
             self.assertEqual(1, query_mock.call_count)
 
@@ -453,7 +477,7 @@ class BackendTests(TestCase):
             list(TestUser.objects.filter(pk=1))
             self.assertEqual(1, get_mock.call_count)
 
-        with sleuth.switch("djangae.db.backends.appengine.commands.datastore.MultiQuery.Run", lambda *args, **kwargs: []) as query_mock:
+        with sleuth.switch("djangae.db.backends.appengine.meta_queries.AsyncMultiQuery.Run", lambda *args, **kwargs: []) as query_mock:
             list(TestUser.objects.exclude(username__startswith="test"))
             self.assertEqual(1, query_mock.call_count)
 
@@ -462,6 +486,12 @@ class BackendTests(TestCase):
                 filter(username__in=["test", "test2", "test3"]).filter(email__in=["test@example.com", "test2@example.com"]))
 
             self.assertEqual(1, get_mock.call_count)
+
+    def test_gae_query_display(self):
+        # Shouldn't raise any exceptions:
+        representation = str(TestUser.objects.filter(username='test').query)
+        self.assertTrue('test' in representation)
+        self.assertTrue('username' in representation)
 
     def test_range_behaviour(self):
         IntegerModel.objects.create(integer_field=5)
@@ -474,7 +504,7 @@ class BackendTests(TestCase):
 
     def test_exclude_nullable_field(self):
         instance = ModelWithNullableCharField.objects.create(some_id=999) # Create a nullable thing
-        instance2 = ModelWithNullableCharField.objects.create(some_id=999, field1="test") # Create a nullable thing
+        ModelWithNullableCharField.objects.create(some_id=999, field1="test") # Create a nullable thing
         self.assertItemsEqual([instance], ModelWithNullableCharField.objects.filter(some_id=999).exclude(field1="test").all())
 
         instance.field1 = "bananas"
@@ -739,6 +769,40 @@ class BackendTests(TestCase):
         expected = [(t, dt)]
         self.assertItemsEqual(result, expected)
 
+    def test_filter_with_empty_q(self):
+        t1 = TestUser.objects.create(username='foo', field2='bar')
+        condition = Q() | Q(username='foo')
+        self.assertEqual(t1, TestUser.objects.filter(condition).first())
+
+        condition = Q()
+        self.assertEqual(t1, TestUser.objects.filter(condition).first())
+
+    def test_only_defer_does_project(self):
+        with sleuth.watch("google.appengine.api.datastore.Query.__init__") as watcher:
+            list(TestUser.objects.only("pk").all())
+            self.assertTrue(watcher.calls[0].kwargs["keys_only"])
+            self.assertFalse(watcher.calls[0].kwargs["projection"])
+
+        with sleuth.watch("google.appengine.api.datastore.Query.__init__") as watcher:
+            list(TestUser.objects.values("pk"))
+            self.assertTrue(watcher.calls[0].kwargs["keys_only"])
+            self.assertFalse(watcher.calls[0].kwargs["projection"])
+
+        with sleuth.watch("google.appengine.api.datastore.Query.__init__") as watcher:
+            list(TestUser.objects.only("username").all())
+            self.assertFalse(watcher.calls[0].kwargs["keys_only"])
+            self.assertItemsEqual(watcher.calls[0].kwargs["projection"], ["username"])
+
+        with sleuth.watch("google.appengine.api.datastore.Query.__init__") as watcher:
+            list(TestUser.objects.defer("username").all())
+            self.assertFalse(watcher.calls[0].kwargs["keys_only"])
+            self.assertTrue(watcher.calls[0].kwargs["projection"])
+            self.assertFalse("username" in watcher.calls[0].kwargs["projection"])
+
+    def test_chaining_none_filter(self):
+        t1 = TestUser.objects.create()
+        self.assertFalse(TestUser.objects.none().filter(pk=t1.pk))
+
 
 class ModelFormsetTest(TestCase):
     def test_reproduce_index_error(self):
@@ -937,7 +1001,7 @@ class ConstraintTests(TestCase):
                 # Make sure bulk creates are limited when there are unique constraints
                 # involved
                 ModelWithUniques.objects.bulk_create(
-                    [ ModelWithUniques(name=str(x)) for x in xrange(26) ]
+                    [ ModelWithUniques(name=str(x)) for x in range(26) ]
                 )
 
         finally:
@@ -1067,7 +1131,7 @@ class ConstraintTests(TestCase):
                 raise AssertionError()
             return datastore.Put(*args, **kwargs)
 
-        with sleuth.switch("djangae.db.backends.appengine.commands.datastore.Put", wrapped_put) as put_mock:
+        with sleuth.switch("djangae.db.backends.appengine.commands.datastore.Put", wrapped_put):
             with self.assertRaises(Exception):
                 instance.save()
 
@@ -1094,7 +1158,7 @@ class ConstraintTests(TestCase):
                 raise AssertionError()
             return datastore.Put(*args, **kwargs)
 
-        with sleuth.switch("djangae.db.backends.appengine.commands.datastore.Put", wrapped_put) as put_mock:
+        with sleuth.switch("djangae.db.backends.appengine.commands.datastore.Put", wrapped_put):
             with self.assertRaises(Exception):
                 ModelWithUniques.objects.create(name="One")
 
@@ -1648,6 +1712,7 @@ class EdgeCaseTests(TestCase):
             list(dates)
         )
 
+    @override_settings(DJANGAE_MAX_QUERY_BRANCHES=30)
     def test_in_query(self):
         """ Test that the __in filter works, and that it cannot be used with more than 30 values,
             unless it's used on the PK field.
@@ -1660,10 +1725,9 @@ class EdgeCaseTests(TestCase):
         self.assertItemsEqual(results, [self.u1, self.u2])
         # Check that using more than 30 items in an __in query not on the pk causes death
         query = TestUser.objects.filter(username__in=list([x for x in letters[:31]]))
-        # This currently raises an error from App Engine, should we raise our own?
         self.assertRaises(Exception, list, query)
         # Check that it's ok with PKs though
-        query = TestUser.objects.filter(pk__in=list(xrange(1, 32)))
+        query = TestUser.objects.filter(pk__in=list(range(1, 32)))
         list(query)
         # Check that it's ok joining filters with pks
         results = list(TestUser.objects.filter(
@@ -1962,6 +2026,70 @@ class TestSpecialIndexers(TestCase):
             self.assertEqual(len(qry), 1)
 
 
+class SliceModel(models.Model):
+    field1 = models.CharField(max_length=32)
+
+
+class SlicingTests(TestCase):
+
+    def test_big_slice(self):
+        SliceModel.objects.create(field1="test")
+        SliceModel.objects.create(field1="test2")
+
+        self.assertFalse(
+            SliceModel.objects.filter(field1__in=["test", "test2"])[9999:]
+        )
+
+        self.assertFalse(
+            SliceModel.objects.filter(field1__in=["test", "test2"])[9999:10000]
+        )
+
+    def test_slicing_multi_query(self):
+        SliceModel.objects.create(field1="test")
+        SliceModel.objects.create(field1="test2")
+
+        self.assertEqual(
+            1,
+            len(SliceModel.objects.filter(field1__in=["test", "test2"])[1:])
+        )
+
+        self.assertEqual(
+            1,
+            len(SliceModel.objects.filter(field1__in=["test", "test2"])[:1])
+        )
+
+        self.assertEqual(
+            2,
+            len(SliceModel.objects.filter(field1__in=["test", "test2"])[:2])
+        )
+
+        self.assertEqual(
+            0,
+            len(SliceModel.objects.filter(field1__in=["test", "test2"])[2:])
+        )
+
+    def test_slice_params_are_passed_to_query(self):
+        for i in range(15):
+            SliceModel.objects.create(field1=str(i))
+
+        with sleuth.watch('google.appengine.api.datastore.Query.Run') as Run:
+            qs = SliceModel.objects.order_by("field1")[:5]
+
+            self.assertEqual(5, len(list(qs)))
+            self.assertEqual(Run.calls[0].kwargs['limit'], 5)
+            self.assertEqual(Run.calls[0].kwargs['offset'], 0)
+
+            qs = SliceModel.objects.order_by("field1")[5:]
+            self.assertEqual(10, len(list(qs)))
+            self.assertEqual(Run.calls[1].kwargs['limit'], None)
+            self.assertEqual(Run.calls[1].kwargs['offset'], 5)
+
+            qs = SliceModel.objects.order_by("field1")[5:10]
+            self.assertEqual(5, len(list(qs)))
+            self.assertEqual(Run.calls[2].kwargs['limit'], 5)
+            self.assertEqual(Run.calls[2].kwargs['offset'], 5)
+
+
 class NamespaceTests(TestCase):
     multi_db = True
 
@@ -2063,3 +2191,32 @@ class TestHelperTests(TestCase):
         self.process_task_queues()
 
         self.assertNumTasksEquals(0) #No tasks
+
+
+class Zoo(models.Model):
+    pass
+
+
+class Enclosure(models.Model):
+    zoo = models.ForeignKey(Zoo)
+
+
+class Animal(models.Model):
+    enclosure = models.ForeignKey(Enclosure)
+
+
+class CascadeDeletionTests(TestCase):
+    def test_deleting_more_than_30_items(self):
+        zoo = Zoo.objects.create()
+
+        for i in range(40):
+            enclosure = Enclosure.objects.create(zoo=zoo)
+            for i in range(2):
+                Animal.objects.create(enclosure=enclosure)
+
+        self.assertEqual(Animal.objects.count(), 80)
+
+        zoo.delete()
+
+        self.assertEqual(Enclosure.objects.count(), 0)
+        self.assertEqual(Animal.objects.count(), 0)

@@ -7,9 +7,13 @@ basic_article:
   headline: [startswith]
   pub_date: [year, month, day, week_day, month__exact, year__exact, week_day__exact,
     day__exact]
+djangae_containsmodel:
+  field1: [contains]
 djangae_datetimemodel:
   date_field: [contains]
   datetime_field: [contains]
+djangae_dog:
+  data: [json_path__breed, json_path__owner__other_pets__0__name, json_path__breed__isnull]
 djangae_integermodel:
   integer_field: [iexact]
 djangae_related:
@@ -52,6 +56,8 @@ many_to_one_null_article:
   headline: [startswith]
 many_to_one_reporter:
   first_name: [startswith]
+model_forms_category:
+  slug: [contains]
 model_forms_post:
   posted: [day, year, month, day__exact, year__exact, month__exact]
 model_inheritance_place:

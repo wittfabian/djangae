@@ -5,16 +5,15 @@
 These allows you to store a list/set of values (strings, floats, integers dates) in a single field.
 This is often useful when structuring data for a non-relational database. [See example usage](fields.md#example-usages).
 
-### ListField(item_field_type, **kwargs)
+### `ListField(item_field, **kwargs)`
 
 
-* `item_field_type`: An instance of a Django model field which defines the data type and validation for each item in the list.
+* `item_field`: An instance of a Django model field which defines the data type and validation for each item in the list.
 * `ordering`: A callable which allows the items in the list to be automatically sorted.
 
+### `SetField(item_field, **kwargs)`
 
-### SetField(item_field_type, **kwargs)
-
-* `item_field_type`: An instance of a Django model field which defines the data type and validation for each item in the list.
+* `item_field`: An instance of a Django model field which defines the data type and validation for each item in the list.
 
 
 Both fields also accept the following standard Django model field kwargs:
@@ -28,6 +27,11 @@ Both fields also accept the following standard Django model field kwargs:
 * `editable`: works as normal.
 * `help_text`: works as normal.
 * `verbose_name`: works as normal.
+* `max_length`: limits the number of items allowed in the list/set.  Note that this is separate to any `max_length` that you might have on the nested `item_field`.
+
+Both fields also accept the following additional kwargs:
+
+* `min_length`: Set the minimum number of items allowed in the list/set.
 
 Djangae makes some effort to provide a sensible form field for `ListField`/`SetField`, but you may find that in some cases you need to customise or change this behaviour to suit your usage.
 
@@ -195,6 +199,20 @@ class MyModelAdmin(admin.ModelAdmin):
     }
 ```
 
+If a JSONField is set to blank=False, then any form submitted value must be a valid JSON object which is not empty (e.g. not `{}` or `[]`) if
+  a JSONField is nullable and blank=True then a None will be saved in the empty case. An empty string is not a valid value for a JSONField.
+
+### Querying
+
+You can query JSONField contents using a similar format to the that used by Django's [PostgreSQL JSONField](https://docs.djangoproject.com/en/1.10/ref/contrib/postgres/fields/#querying-jsonfield).
+Only direct path lookups are implemented, so no `contains`, `contained_by`, `has_key` etc.
+
+There are some limitations:
+
+ - The only possible lookups are 'exact' lookups, or `isnull`
+ - If a path contains an integer, it's assumed to be an integer index into a list (you can't query a key of "1" for example)
+ - You can't query paths where the final part of the path is "isnull"... for obvious reasons
+ - Paths must be added to djangaeidx.yaml (automatic after first use) and your entities must be resaved for the queries to return values
 
 ## TrueOrNullField
 
@@ -256,3 +274,37 @@ def log_meow(sanctuary):
     # Note that we don't need to save the object
     print sanctuary.number_of_meows.value()
 ```
+
+## djangae.fields.language.ComputedCollationField
+
+This is a specialized computed field which is used so you can have correct alphabetical ordering of non-ASCII strings.
+
+*Note: use of this field requires the 'pyuca' package be installed*
+
+### Explanation
+
+SQL databases (such as MySQL) use various 'collations' for determining how one string is ordered relative to another. The Datastore
+does not have this functionality. On the Datastore all strings are ordered by their unicode code point, which means that non-ASCII characters
+are always ordered after ASCII ones, and the ordering of unicode chars is not alphabetical.
+
+This means that if you (for example) want to order users by their first name this would give the wrong result:
+
+```
+   User.objects.create(first_name="Vera")
+   User.objects.create(first_name="Łukasz")
+   User.objects.order_by("first_name")
+```
+
+ComputedCollationField fixes this by calculating a suitable 'sort key' from the source value, you would then use the
+ComputedCollationField when specifying the order. For example:
+
+```
+from djangae.fields import CharField, ComputedCollationField
+
+class User(models.Model):
+    first_name = CharField() # This is the field you work with
+    first_name_order = ComputedCollationField('first_name') # This is what you order by
+
+User.objects.order_by("first_name_order") # Now correctly orders alphabetically
+```
+

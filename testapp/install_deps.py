@@ -18,7 +18,7 @@ TARGET_DIR = os.path.join(PROJECT_DIR, "libs")
 APPENGINE_TARGET_DIR = os.path.join(TARGET_DIR, "google_appengine")
 
 DJANGO_VERSION = os.environ.get("DJANGO_VERSION", "1.8")
-APPENGINE_SDK_VERSION = os.environ.get("SDK_VERSION", "1.9.40")
+APPENGINE_SDK_VERSION = os.environ.get("SDK_VERSION", "1.9.54")
 APPENGINE_SDK_FILENAME = "google_appengine_%s.zip" % APPENGINE_SDK_VERSION
 INSTALL_APPENGINE_SDK = "--install_sdk" in sys.argv
 
