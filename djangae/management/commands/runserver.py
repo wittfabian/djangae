@@ -118,6 +118,9 @@ class Command(runserver.Command):
             if option in sandbox_options and value is not None:
                 self.gae_options[option] = value
 
+        if addrport:
+            self.gae_options['port'] = int(addrport)
+
         super(Command, self).handle(addrport=addrport, *args, **options)
 
     def run(self, *args, **options):
