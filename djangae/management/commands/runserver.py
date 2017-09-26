@@ -107,21 +107,15 @@ class Command(runserver.Command):
             if option in sandbox_options and value is not None:
                 self.gae_options[option] = value
 
-        if addrport:
-            try:
-                parts = addrport.split(':')
-                if len(parts) == 1:
-                    port = parts[0]
-                else:
-                    self.gae_options['host'] = parts[0]
-                    port = parts[1]
-                self.gae_options['port'] = int(port)
-            except ValueError:
-                raise CommandError('port value {} is invalid, should be an integer'.format(port))
-
         super(Command, self).handle(addrport=addrport, *args, **options)
 
     def run(self, *args, **options):
+        if self.addr:
+            self.gae_options['host'] = self.addr
+
+        if self.port:
+            self.gae_options['port'] = self.port
+
         # These options are Django options which need to have corresponding args
         # passed down to the dev_appserver
         self.use_reloader = options.get("use_reloader")
