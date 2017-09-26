@@ -110,6 +110,7 @@
 - Fixed a bug where entries in `RelatedSetField`s and `RelatedListField`s weren't being converted to the same type as the primary key of the model
 - Fixed a bug where running tests would incorrectly load the real search stub before the test version
 - Fixed a bug where IDs weren't reserved with the datastore allocator immediately and so could end up with a race-condition where an ID could be reused
+- Fixed runserver port not being passed to devappserver
 
 ### Documentation:
 
