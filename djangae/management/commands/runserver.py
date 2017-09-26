@@ -114,7 +114,7 @@ class Command(runserver.Command):
             self.gae_options['host'] = self.addr
 
         if self.port:
-            self.gae_options['port'] = self.port
+            self.gae_options['port'] = int(self.port)
 
         # These options are Django options which need to have corresponding args
         # passed down to the dev_appserver
