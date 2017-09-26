@@ -5,6 +5,8 @@
 - Add support for querying JSONFields in a similar way to the PostgreSQL JSONField
 - Allow special indexers to index `None` as well as remove unused index properties from the entity
 - Added IDs to system check errors, allowing them to be silenced
+- `ListField` and `SetField` can now still be pickled when a non-callable default is specified. This was preventing them being used
+ in migrations.
 
 ### Bug fixes:
 

@@ -141,12 +141,9 @@ class IterableField(models.Field):
 
         kwargs["null"] = True
 
-        default = kwargs.get("default", [])
+        kwargs["default"] = kwargs.get("default", [])
 
         self._original_item_field_type = copy.deepcopy(item_field_type) # For deconstruction purposes
-
-        if default is not None and not callable(default):
-            kwargs["default"] = lambda: self._iterable_type(default)
 
         if hasattr(item_field_type, 'attname'):
             item_field_type = item_field_type.__class__
@@ -184,6 +181,15 @@ class IterableField(models.Field):
             self.validators.append(MinItemsValidator(min_length))
         if max_length is not None:
             self.validators.append(MaxItemsValidator(max_length))
+
+    def get_default(self):
+        if self.default is None:
+            return None
+        if callable(self.default):
+            return self.default()
+        # If the default is an mutable iterable (e.g. list) then we need to make a new instance of
+        # it each time we use it
+        return self._iterable_type(self.default)
 
     def deconstruct(self):
         name, path, args, kwargs = super(IterableField, self).deconstruct()
