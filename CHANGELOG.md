@@ -6,6 +6,8 @@
 - Allow special indexers to index `None` as well as remove unused index properties from the entity
 - Added IDs to system check errors, allowing them to be silenced
 - Computed fields now allow the computing function to be passed as a string containing the name of a method, rather than the function object itself.
+- `ListField` and `SetField` can now still be pickled when a non-callable default is specified. This was preventing them being used
+ in migrations.
 
 ### Bug fixes:
 
@@ -111,6 +113,7 @@
 - Fixed a bug where entries in `RelatedSetField`s and `RelatedListField`s weren't being converted to the same type as the primary key of the model
 - Fixed a bug where running tests would incorrectly load the real search stub before the test version
 - Fixed a bug where IDs weren't reserved with the datastore allocator immediately and so could end up with a race-condition where an ID could be reused
+- Fixed runserver port not being passed to devappserver
 
 ### Documentation:
 

@@ -1,6 +1,7 @@
 # -*- encoding: utf-8 -*
 from collections import OrderedDict
 import datetime
+import pickle
 
 # LIBRARIES
 from django import forms
@@ -10,13 +11,17 @@ from django.db.utils import IntegrityError
 from django.conf import settings
 from django.core.exceptions import ValidationError, ImproperlyConfigured
 from django.core.validators import EmailValidator
+import django
 
 # DJANGAE
 from djangae.contrib import sleuth
 from djangae.db import transaction
 from djangae.fields import (
+    ComputedBooleanField,
     ComputedCharField,
+    ComputedIntegerField,
     ComputedPositiveIntegerField,
+    ComputedTextField,
     GenericRelationField,
     JSONField,
     ListField,
@@ -1395,3 +1400,34 @@ class RelatedFieldPrefetchTests(TestCase):
 
         with self.assertNumQueries(0):
             awards = list(posts[0].authors.all()[0].awards.all())
+
+
+class PickleTests(TestCase):
+
+    def test_all_fields_are_pickleable(self):
+        """ In order to work with Djangae's migrations, all fields must be pickeable. """
+        fields = [
+            CharField(),
+            CharOrNoneField(),
+            ComputedBooleanField("method_name"),
+            ComputedCharField("method_name"),
+            ComputedIntegerField("method_name"),
+            ComputedPositiveIntegerField("method_name"),
+            ComputedTextField("method_name"),
+            GenericRelationField(),
+            JSONField(default=list),
+            ListField(CharField(), default=["badger"]),
+            SetField(CharField(), default=set(["badger"])),
+        ]
+        if django.VERSION[1] > 8:
+            # These 2 fields have different logic for Django 1.8, which prevents them being pickled
+            fields.extend([
+                RelatedListField(ModelWithCharField),
+                RelatedSetField(ModelWithCharField),
+                ShardedCounterField(),
+            ])
+        for field in fields:
+            try:
+                pickle.dumps(field)
+            except (pickle.PicklingError, TypeError) as e:
+                self.fail("Could not pickle %r: %s" % (field, e))
