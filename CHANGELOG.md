@@ -5,6 +5,7 @@
 - Add support for querying JSONFields in a similar way to the PostgreSQL JSONField
 - Allow special indexers to index `None` as well as remove unused index properties from the entity
 - Added IDs to system check errors, allowing them to be silenced
+- Computed fields now allow the computing function to be passed as a string containing the name of a method, rather than the function object itself.
 
 ### Bug fixes:
 

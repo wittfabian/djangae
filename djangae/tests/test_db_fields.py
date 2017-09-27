@@ -16,6 +16,7 @@ from djangae.contrib import sleuth
 from djangae.db import transaction
 from djangae.fields import (
     ComputedCharField,
+    ComputedPositiveIntegerField,
     GenericRelationField,
     JSONField,
     ListField,
@@ -40,6 +41,7 @@ class ComputedFieldModel(models.Model):
     int_field = models.IntegerField()
     char_field = models.CharField(max_length=50)
     test_field = ComputedCharField(computer, max_length=50)
+    method_calc_field = ComputedCharField("computer", max_length=50)
 
     class Meta:
         app_label = "djangae"
@@ -54,6 +56,14 @@ class ComputedFieldTests(TestCase):
         # Try getting and saving the instance again
         instance = ComputedFieldModel.objects.get(test_field="1_test")
         instance.save()
+
+    def test_computed_by_method_name_field(self):
+        """ Test that a computed field which specifies its "computer" function as a string of
+            the name of a method on the model.
+        """
+        instance = ComputedFieldModel(int_field=2, char_field="test")
+        instance.save()
+        self.assertEqual(instance.method_calc_field, "2_test")
 
 
 class ModelWithCounter(models.Model):
