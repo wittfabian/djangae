@@ -14,6 +14,8 @@
  - Fixed performance issues and bugs in the Djangae core paginator
  - Fix several issues with the test sandbox
  - Initialize the app_identity stub in the test sandbox
+ - Replace `print()` statements with `logging.debug()` in all unittests
+ - Silence stdout output during testing
 
 ## v0.9.10
 
