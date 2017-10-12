@@ -16,6 +16,7 @@
  - Initialize the app_identity stub in the test sandbox
  - Replace `print()` statements with `logging.debug()` in all unittests
  - Silence stdout output during testing
+ - Logging output silenced during `manage.py test` execution
 
 ## v0.9.10
 
