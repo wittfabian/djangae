@@ -14,6 +14,7 @@
  - Fixed performance issues and bugs in the Djangae core paginator
  - Fix several issues with the test sandbox
  - Initialize the app_identity stub in the test sandbox
+ - Logging output silenced during `manage.py test` execution
 
 ## v0.9.10
 
