@@ -230,8 +230,8 @@ def _local(devappserver2=None, configuration=None, options=None, wsgi_request_in
     # We set the API and Admin ports so that they are beyond any modules (if you
     # have 10 modules then these values will shift, but it's better that they are predictable
     # in the common case)
-    options.api_port = get_next_available_port(url, DEFAULT_API_PORT)
-    options.admin_port = get_next_available_port(url, max(DEFAULT_ADMIN_PORT, options.api_port))
+    options.api_port = get_next_available_port(url, max(DEFAULT_API_PORT, port + 1))
+    options.admin_port = get_next_available_port(url, max(DEFAULT_ADMIN_PORT, options.api_port + 1))
 
     if hasattr(api_server, "create_api_server"):
         current_version = _VersionList(GetVersionObject()['release'])
@@ -358,6 +358,7 @@ def _test(**kwargs):
     from google.appengine.datastore import datastore_stub_util
 
     MINIMAL_STUBS = {
+        "init_app_identity_stub": {},
         "init_memcache_stub": {},
         "init_datastore_v3_stub": {
             "use_sqlite": True,
@@ -366,14 +367,29 @@ def _test(**kwargs):
         }
     }
 
+    from .blobstore_service import start_blobstore_service, stop_blobstore_service
+
+    # Dummy values for testing, based on the defaults for dev_appserver
+    # (differentiating between the default runserver port of 8000 can also be useful
+    # for picking up hard-coding issues etc.)
+    os.environ["HTTP_HOST"] = "localhost:8080"
+    os.environ['SERVER_NAME'] = "localhost"
+    os.environ['SERVER_PORT'] = "8080"
+
+    os.environ['DEFAULT_VERSION_HOSTNAME'] = '%s:%s' % (
+        os.environ['SERVER_NAME'], os.environ['SERVER_PORT']
+    )
+
     testbed = testbed.Testbed()
     testbed.activate()
     for init_name, stub_kwargs in MINIMAL_STUBS.items():
         getattr(testbed, init_name)(**stub_kwargs)
 
+    start_blobstore_service()
     try:
         yield
     finally:
+        stop_blobstore_service()
         if testbed:
             testbed.deactivate()
 

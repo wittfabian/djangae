@@ -1,4 +1,5 @@
 import warnings
+from functools import partial
 
 from django.db.models.query_utils import Q
 from django.db.utils import IntegrityError
@@ -62,7 +63,7 @@ def should_create_unknown_user():
 
 
 class BaseAppEngineUserAPIBackend(ModelBackend):
-    atomic = transaction.atomic
+    atomic = partial(transaction.atomic)
     atomic_kwargs = {}
 
     def authenticate(self, google_user=None):

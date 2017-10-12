@@ -4,11 +4,18 @@
 
 - Add support for querying JSONFields in a similar way to the PostgreSQL JSONField
 - Allow special indexers to index `None` as well as remove unused index properties from the entity
+- Added IDs to system check errors, allowing them to be silenced
+- Computed fields now allow the computing function to be passed as a string containing the name of a method, rather than the function object itself.
+- `ListField` and `SetField` can now still be pickled when a non-callable default is specified. This was preventing them being used
+ in migrations.
 - Improve the approx SQL representation of Datastore commands (update, delete etc.)
 
 ### Bug fixes:
 
  - Fixed performance issues and bugs in the Djangae core paginator
+ - Fix several issues with the test sandbox
+ - Initialize the app_identity stub in the test sandbox
+ - Logging output silenced during `manage.py test` execution
 
 ## v0.9.10
 
@@ -31,6 +38,7 @@
   This will be removed in the next release of Djangae so you'll need to re-save your entities with this setting set to False before upgrading (see [detailed release notes](docs/release_notes/0_9_10.md)).
 - Added support for the 1.9.54 SDK
 - Implemented a full application that can be deployed to production GAE for testing real-world scenarios against GCP environment
+- Added `djangae.contrib.backup` app
 
 ### Bug fixes:
 
@@ -107,6 +115,7 @@
 - Fixed a bug where entries in `RelatedSetField`s and `RelatedListField`s weren't being converted to the same type as the primary key of the model
 - Fixed a bug where running tests would incorrectly load the real search stub before the test version
 - Fixed a bug where IDs weren't reserved with the datastore allocator immediately and so could end up with a race-condition where an ID could be reused
+- Fixed runserver port not being passed to devappserver
 
 ### Documentation:
 

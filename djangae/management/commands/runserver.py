@@ -5,6 +5,7 @@ import logging
 from datetime import datetime
 
 from django.conf import settings
+from django.core.management.base import CommandError
 from django.core.management.commands import runserver
 
 from djangae.sandbox import WHITELISTED_DEV_APPSERVER_OPTIONS
@@ -109,6 +110,12 @@ class Command(runserver.Command):
         super(Command, self).handle(addrport=addrport, *args, **options)
 
     def run(self, *args, **options):
+        if self.addr:
+            self.gae_options['host'] = self.addr
+
+        if self.port:
+            self.gae_options['port'] = int(self.port)
+
         # These options are Django options which need to have corresponding args
         # passed down to the dev_appserver
         self.use_reloader = options.get("use_reloader")

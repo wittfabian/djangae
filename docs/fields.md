@@ -228,7 +228,7 @@ This can be particularly useful with the Datastore where there are limitations t
 For example, you can't do `.filter(a__gte=x, b__gte=y)`, but if `x` and `y` are constant then you could add a computed field which stores a boolean value to indicate whether or not an object meets these criteria.
 So you could then do `.filter(a_is_gte_x_and_b_is_gte_y=True)`.
 
-Each computed field takes a single argument of a "computer" function. This function is called each time the model instance is saved with the model instance passed as a single argument.
+Each computed field takes a single argument of a "computer" function.  This can be passed either as a callable object, or as a string containing the name of a method on the model. This "computer" function or method is called each time the model instance is saved, with the model instance passed as a single argument (this is just the normal `self` in the case of a method).
 The value which the function returns is what is stored in the computed field.
 
 Computed fields are:

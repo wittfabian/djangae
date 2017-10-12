@@ -1,5 +1,6 @@
 # STANDARD LIB
 from itertools import chain
+from functools import partial
 
 # DJANGAE
 from djangae.db import transaction
@@ -8,7 +9,7 @@ from djangae.contrib.gauth_datastore.permissions import get_permission_choices
 
 
 class AppEngineUserAPIBackend(BaseAppEngineUserAPIBackend):
-    atomic = transaction.atomic
+    atomic = partial(transaction.atomic)
     atomic_kwargs = {'xg': True}
 
     def get_group_permissions(self, user_obj, obj=None):
