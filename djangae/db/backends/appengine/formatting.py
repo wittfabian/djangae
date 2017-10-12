@@ -60,10 +60,10 @@ def _generate_insert_sql(command):
 
 
 def _generate_where_expression(representation):
-    where = []
-    for branch in representation["where"]:
-        branch = "(" + " AND ".join(["%s%s" % (k, v) for k, v in branch.items()]) + ")"
-        where.append(branch)
+    where = [
+        "(" + " AND ".join(["%s%s" % (k, v) for k, v in branch.items()]) + ")"
+        for branch in representation["where"]
+    ]
 
     return " OR ".join(where)
 
