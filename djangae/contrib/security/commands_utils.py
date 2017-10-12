@@ -60,12 +60,11 @@ def extract_views_from_urlpatterns(urlpatterns, base='', namespace=None, ignored
     return views
 
 
-def display_as_table(views):
+def display_as_table(views, headers=('URL', 'Handler path', 'Decorators & Mixins')):
     """
         Get list of views from dumpurls security management command
         and returns them in the form of table to print in command line
     """
-    headers = ('URL', 'Handler path', 'Decorators & Mixins')
     views = [row.split('||', 3) for row in sorted(views)]
     # Find the longest value in each column
     widths = [len(max(columns, key=len)) for columns in zip(*[headers] + views)]
