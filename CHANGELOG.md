@@ -8,6 +8,7 @@
 - Computed fields now allow the computing function to be passed as a string containing the name of a method, rather than the function object itself.
 - `ListField` and `SetField` can now still be pickled when a non-callable default is specified. This was preventing them being used
  in migrations.
+ - Added support for named class-based views to dumpurls.  Also now supports export to either json or csv 
 
 ### Bug fixes:
 
