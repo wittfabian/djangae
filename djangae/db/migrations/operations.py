@@ -1,4 +1,6 @@
 # STANDARD LIB
+from __future__ import print_function
+
 import logging
 import sys
 import time
@@ -49,12 +51,15 @@ class BaseEntityMapperOperation(Operation, DjangaeMigration):
             to do any altering of the model state.
         """
         pass
+    
+    def _print(self, *objects):
+        if not TESTING:
+            print(*objects)
 
     def database_forwards(self, app_label, schema_editor, from_state, to_state):
         # Django's `migrate` command writes to stdout without a trailing line break, which means
         # that unless we print a blank line our first print statement is on the same line
-        if not TESTING:
-            print("")   # yay
+        self._print("")   # yay
 
         self.identifier = self._get_identifier(app_label, schema_editor, from_state, to_state)
         if self.uid:
@@ -68,8 +73,7 @@ class BaseEntityMapperOperation(Operation, DjangaeMigration):
             self._wait_until_task_finished()
             return
 
-        if not TESTING:
-            print("Deferring migration operation task for %s" % self.identifier)
+        self._print("Deferring migration operation task for %s" % self.identifier)
         self._start_task()
 
     def database_backwards(self, app_label, schema_editor, from_state, to_state):
@@ -77,17 +81,14 @@ class BaseEntityMapperOperation(Operation, DjangaeMigration):
 
     def _wait_until_task_finished(self):
         if mapper_library.is_mapper_finished(self.identifier, self.namespace):
-            if not TESTING:
-                print("Task for migration operation '%s' already finished. Skipping." % self.identifier)
+            self._print("Task for migration operation '%s' already finished. Skipping." % self.identifier)
             return
 
         while mapper_library.is_mapper_running(self.identifier, self.namespace):
-            if not TESTING:
-                print("Waiting for migration operation '%s' to complete." % self.identifier)
+            self._print("Waiting for migration operation '%s' to complete." % self.identifier)
             time.sleep(TASK_RECHECK_INTERVAL)
 
-        if not TESTING:
-            print("Migration operation '%s' completed!" % self.identifier)
+        self._print("Migration operation '%s' completed!" % self.identifier)
 
     def _start_task(self):
         assert not mapper_library.is_mapper_running(self.identifier, self.namespace), "Migration started by separate thread?"
