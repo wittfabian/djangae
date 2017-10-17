@@ -1,3 +1,5 @@
+import mock
+
 from django.db import connections, models
 
 from djangae.test import TestCase
@@ -180,4 +182,14 @@ REPLACE INTO {} (field1) VALUES (1)
 REPLACE INTO {} (field1) VALUES (2) WHERE (field1=1)
 """.format(FormattingTestModel._meta.db_table).strip()
 
-        self.assertEqual(expected, sql)        
+        self.assertEqual(expected, sql)
+
+
+class UnrecognisedQueryTypeErrorTest(TestCase):
+
+    def test_unrecognised_type_raises_not_implemented_error(self):
+        command = mock.Mock()
+        command.query.serialize.return_value = '{}'
+
+        with self.assertRaises(NotImplementedError):
+            generate_sql_representation(command)
