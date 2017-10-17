@@ -18,6 +18,7 @@
  - Replace `print()` statements with `logging.debug()` in all unittests
  - Silence stdout output during testing
  - Logging output silenced during `manage.py test` execution
+ - Create .editorconfig to ensure basic editor settings are consistent between users
 
 ## v0.9.10
 
