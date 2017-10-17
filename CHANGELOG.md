@@ -8,12 +8,15 @@
 - Computed fields now allow the computing function to be passed as a string containing the name of a method, rather than the function object itself.
 - `ListField` and `SetField` can now still be pickled when a non-callable default is specified. This was preventing them being used
  in migrations.
+- Improve the approx SQL representation of Datastore commands (update, delete etc.)
 
 ### Bug fixes:
 
  - Fixed performance issues and bugs in the Djangae core paginator
  - Fix several issues with the test sandbox
  - Initialize the app_identity stub in the test sandbox
+ - Replace `print()` statements with `logging.debug()` in all unittests
+ - Silence stdout output during testing
  - Logging output silenced during `manage.py test` execution
 
 ## v0.9.10

@@ -662,8 +662,12 @@ class Query(object):
                 assert node.connector == 'AND'
 
                 query = {}
-                for lookup in node.children:
-                    query[''.join([lookup.column, lookup.operator])] = unicode(lookup.value)
+
+                if node.children:
+                    for lookup in node.children:
+                        query[''.join([lookup.column, lookup.operator])] = six.text_type("NULL" if lookup.value is None else lookup.value)
+                else:
+                    query[''.join([node.column, node.operator])] = six.text_type("NULL" if node.value is None else node.value)
 
                 where.append(query)
 
