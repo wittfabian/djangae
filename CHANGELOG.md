@@ -15,6 +15,7 @@
  - Fix several issues with the test sandbox
  - Initialize the app_identity stub in the test sandbox
  - Logging output silenced during `manage.py test` execution
+ - Fix management command `--help` output
 
 ## v0.9.10
 
