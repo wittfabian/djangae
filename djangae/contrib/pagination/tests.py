@@ -1,5 +1,6 @@
 from django.core import paginator as django_paginator
 from django.db import models
+from djangae.fields import computed
 from djangae.test import TestCase
 from djangae.contrib import sleuth
 from djangae.contrib.pagination import (
@@ -12,7 +13,7 @@ from .paginator import (
     queryset_identifier,
     _get_marker,
 )
-
+from .decorators import generator
 
 @paginated_model(orderings=[
     "first_name",  # single field declared as a string
@@ -225,3 +226,40 @@ class DatastorePaginatorTests(TestCase):
 
         paginator = Paginator(TestUser.objects.all().order_by("-first_name"), 1)
         self.assertEqual(paginator.page(5).object_list, [])
+
+
+@paginated_model(orderings=['count_computed'])
+class ComputedFieldModel(SimpleModelWithoutOrdering):
+    count_computed = computed.ComputedIntegerField(lambda x: x.count)
+    count = models.IntegerField()
+
+
+class ComputedFieldPaginationTest(TestCase):
+
+    def test_ascending(self):
+        numbers = [1, 1, 1, 13, 16, 2, 5, 6]
+
+        for i in numbers:
+            obj = ComputedFieldModel.objects.create(count=i)
+            assert obj.count == obj.count_computed
+
+        paginator = Paginator(ComputedFieldModel.objects.order_by('count_computed'), 10)
+        page = paginator.page(1)
+
+        self.assertEqual(
+            [obj.count for obj in page.object_list], sorted(numbers)
+        )
+
+    def test_descending(self):
+        numbers = [1, 1, 1, 13, 16, 2, 5, 6]
+
+        for i in numbers:
+            obj = ComputedFieldModel.objects.create(count=i)
+            assert obj.count == obj.count_computed
+
+        paginator = Paginator(ComputedFieldModel.objects.order_by('-count_computed'), 10)
+        page = paginator.page(1)
+
+        self.assertEqual(
+            [obj.count for obj in page.object_list], sorted(numbers, reverse=True)
+        )

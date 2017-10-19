@@ -24,12 +24,16 @@ def generator(fields, instance):
         if hasattr(value, "isoformat"):
             value = value.isoformat()
 
-        value = unicode(value)
+        if isinstance(value, int):
+            value = '{:05d}'.format(value)
+        else:
+            value = unicode(value)
 
-        if neg:
-            # this creates the alphabetical mirror of a string, e.g. ab => zy, but for the full
-            # range of unicode characters, e.g. first unicode char => last unicode char, etc
-            value = u"".join([ unichr(0xffff - ord(x)) for x in value ])
+            if neg:
+                # this creates the alphabetical mirror of a string, e.g. ab => zy, but for the full
+                # range of unicode characters, e.g. first unicode char => last unicode char, etc
+                value = u"".join([ unichr(0xffff - ord(x)) for x in value ])
+
         values.append(value)
 
     values.append(unicode(instance.pk) if instance.pk else unicode(random.randint(0, 1000000000)))
