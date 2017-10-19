@@ -113,11 +113,7 @@ def _create_dispatcher(configuration, options):
     from google.appengine.tools.devappserver2 import dispatcher
     from google.appengine.tools.devappserver2.devappserver2 import DevelopmentServer
 
-    try:
-        from google.appengine.tools.devappserver2.devappserver2 import _LOG_LEVEL_TO_RUNTIME_CONSTANT
-    except ImportError:
-        from google.appengine.tools.devappserver2.constants import LOG_LEVEL_TO_RUNTIME_CONSTANT
-        _LOG_LEVEL_TO_RUNTIME_CONSTANT = LOG_LEVEL_TO_RUNTIME_CONSTANT
+    from djangae.compat import _LOG_LEVEL_TO_RUNTIME_CONSTANT
 
     from google.appengine.tools.sdk_update_checker import GetVersionObject, \
                                                           _VersionList
@@ -498,11 +494,11 @@ def activate(sandbox_name, add_sdk_to_path=False, new_env_vars=None, **overrides
     # Initialize as though `dev_appserver.py` is about to run our app, using all the
     # configuration provided in app.yaml.
     import google.appengine.tools.devappserver2.application_configuration as application_configuration
-    import google.appengine.tools.devappserver2.python.sandbox as sandbox
     import google.appengine.tools.devappserver2.devappserver2 as devappserver2
     import google.appengine.tools.devappserver2.wsgi_request_info as wsgi_request_info
     import google.appengine.ext.remote_api.remote_api_stub as remote_api_stub
     import google.appengine.api.apiproxy_stub_map as apiproxy_stub_map
+    from djangae.compat import sandbox
 
     gae_args = [
         s for s in sys.argv
