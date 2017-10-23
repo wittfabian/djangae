@@ -18,6 +18,8 @@
  - Replace `print()` statements with `logging.debug()` in all unittests
  - Silence stdout output during testing
  - Logging output silenced during `manage.py test` execution
+ - Fix management command `--help` output
+ - Create .editorconfig to ensure basic editor settings are consistent between users
  - Add .flake8 file to move towards enforcement code standard
 
 ## v0.9.10
