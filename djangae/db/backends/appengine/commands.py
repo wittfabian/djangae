@@ -33,6 +33,7 @@ from djangae.db.backends.appengine import POLYMODEL_CLASS_ATTRIBUTE
 from djangae.db import constraints, utils
 from djangae.db.backends.appengine import caching
 from djangae.db.unique_utils import query_is_unique
+from djangae.db.backends.appengine.formatting import generate_sql_representation
 
 from . import meta_queries
 
@@ -539,30 +540,7 @@ class SelectCommand(object):
         return self.results_returned
 
     def __unicode__(self):
-        # TODO: should we print out the namespace in here too?
-        try:
-            qry = json.loads(self.query.serialize())
-
-            result = u" ".join([
-                qry["kind"],
-                u", ".join(qry["columns"] if qry["projection_possible"] and qry["columns"] else ["*"]),
-                u"FROM",
-                qry["concrete_table"]
-            ])
-
-            if qry["where"]:
-                result += u" " + u" ".join([
-                    u"WHERE",
-                    u" OR ".join([
-                        u" AND ".join( [u"{} {}".format(k, v) for k, v in x.iteritems()])
-                        for x in qry["where"]
-                    ])
-                ])
-            return result
-        except:
-            # We never want this to cause things to die
-            logger.exception("Unable to translate query to string")
-            return "QUERY TRANSLATION ERROR"
+        return generate_sql_representation(self)
 
     def __repr__(self):
         return self.__unicode__().encode("utf-8")
@@ -775,23 +753,7 @@ class InsertCommand(object):
         return unicode(self).lower()
 
     def __unicode__(self):
-        try:
-            keys = self.entities[0].keys()
-            result = u" ".join([
-                u"INSERT INTO",
-                self.entities[0].kind(),
-                u"(" + u", ".join(keys) + u")",
-                u"VALUES"
-            ])
-
-            for entity in self.entities:
-                result += u"(" + u", ".join([unicode(entity[x]) for x in keys]) + u")"
-
-            return result
-        except:
-            # We never want this to cause things to die
-            logger.info("InsertCommand is unable to translate query to string")
-            return u"QUERY TRANSLATION ERROR"
+        return generate_sql_representation(self)
 
     def __repr__(self):
         return self.__unicode__().encode("utf-8")
@@ -801,8 +763,19 @@ class DeleteCommand(object):
     def __init__(self, connection, query):
         self.model = query.model
         self.select = SelectCommand(connection, query, keys_only=True)
+        self.query = self.select.query
         self.namespace = connection.ops.connection.settings_dict.get("NAMESPACE")
-        self.table_to_delete = query.tables[0]
+
+        # It seems query.tables is populated in most cases, but I have seen cases (albeit in testing)
+        # where this isn't the case (particularly when not filtering on anything). In that case
+        # fallback to the model table (perhaps we should do
+        self.table_to_delete = (
+            query.tables[0] if query.tables else
+            utils.get_top_concrete_parent(query.model)._meta.db_table
+        )
+
+    def __unicode__(self):
+        return generate_sql_representation(self)
 
     def execute(self):
         """
@@ -917,9 +890,13 @@ class UpdateCommand(object):
     def __init__(self, connection, query):
         self.model = query.model
         self.select = SelectCommand(connection, query, keys_only=True)
+        self.query = self.select.query
         self.values = query.values
         self.connection = connection
         self.namespace = connection.ops.connection.settings_dict.get("NAMESPACE")
+
+    def __unicode__(self):
+        return generate_sql_representation(self)
 
     def lower(self):
         """
