@@ -95,7 +95,7 @@ class TaskFailedError(Exception):
         )
 
 
-def process_task_queues(queue_name=None, failure_behaviour=TaskFailedBehaviour.DO_NOTHING):
+def process_task_queues(queue_name=None, failure_behaviour=TaskFailedBehaviour.RAISE_ERROR):
     """
         Processes any queued tasks inline without a server.
         This is useful for end-to-end testing background tasks.
