@@ -229,21 +229,21 @@ class DatastorePaginatorTests(TestCase):
 
 
 @paginated_model(orderings=['count_computed'])
-class ComputedFieldModel(SimpleModelWithoutOrdering):
+class ComputedIntegerFieldModel(SimpleModelWithoutOrdering):
     count_computed = computed.ComputedIntegerField(lambda x: x.count)
     count = models.IntegerField()
 
 
-class ComputedFieldPaginationTest(TestCase):
+class ComputedIntegerFieldPaginationTest(TestCase):
 
     def test_ascending(self):
         numbers = [1, 1, 1, 13, 16, 2, 5, 6]
 
         for i in numbers:
-            obj = ComputedFieldModel.objects.create(count=i)
+            obj = ComputedIntegerFieldModel.objects.create(count=i)
             assert obj.count == obj.count_computed
 
-        paginator = Paginator(ComputedFieldModel.objects.order_by('count_computed'), 10)
+        paginator = Paginator(ComputedIntegerFieldModel.objects.order_by('count_computed'), 10)
         page = paginator.page(1)
 
         self.assertEqual(
@@ -254,12 +254,63 @@ class ComputedFieldPaginationTest(TestCase):
         numbers = [1, 1, 1, 13, 16, 2, 5, 6]
 
         for i in numbers:
-            obj = ComputedFieldModel.objects.create(count=i)
+            obj = ComputedIntegerFieldModel.objects.create(count=i)
             assert obj.count == obj.count_computed
 
-        paginator = Paginator(ComputedFieldModel.objects.order_by('-count_computed'), 10)
+        paginator = Paginator(ComputedIntegerFieldModel.objects.order_by('-count_computed'), 10)
         page = paginator.page(1)
 
         self.assertEqual(
             [obj.count for obj in page.object_list], sorted(numbers, reverse=True)
+        )
+
+    def test_negatives(self):
+        numbers = [89898989898989, -1, 1, 1, -13, 16, 2, 5, -6, -6666666]
+
+        for i in numbers:
+            obj = ComputedIntegerFieldModel.objects.create(count=i)
+            assert obj.count == obj.count_computed
+
+        paginator = Paginator(ComputedIntegerFieldModel.objects.order_by('count_computed'), 10)
+        page = paginator.page(1)
+
+        self.assertEqual(
+            [obj.count for obj in page.object_list], sorted(numbers)
+        )
+
+
+@paginated_model(orderings=['title_computed'])
+class ComputedCharFieldModel(SimpleModelWithoutOrdering):
+    title_computed = computed.ComputedCharField(lambda x: x.title)
+    title = models.CharField()
+
+
+class ComputedCharFieldPaginationTest(TestCase):
+
+    def test_ascending(self):
+        titles = ['foo', 'bar', 'car']
+
+        for i in titles:
+            obj = ComputedCharFieldModel.objects.create(title=i)
+            assert obj.title == obj.title_computed
+
+        paginator = Paginator(ComputedCharFieldModel.objects.order_by('title_computed'), 10)
+        page = paginator.page(1)
+
+        self.assertEqual(
+            [obj.title_computed for obj in page.object_list], sorted(titles)
+        )
+
+    def test_descending(self):
+        titles = ['foo', 'bar', 'car']
+
+        for i in titles:
+            obj = ComputedCharFieldModel.objects.create(title=i)
+            assert obj.title == obj.title_computed
+
+        paginator = Paginator(ComputedCharFieldModel.objects.order_by('-title_computed'), 10)
+        page = paginator.page(1)
+
+        self.assertEqual(
+            [obj.title_computed for obj in page.object_list], sorted(titles, reverse=True)
         )

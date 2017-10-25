@@ -20,25 +20,42 @@ def generator(fields, instance):
             field = instance._meta.pk.name
 
         value = instance._meta.get_field(field.lstrip("-")).value_from_object(instance)
-
-        if hasattr(value, "isoformat"):
-            value = value.isoformat()
-
-        if isinstance(value, int):
-            value = '{:05d}'.format(value)
-        else:
-            value = unicode(value)
-
-            if neg:
-                # this creates the alphabetical mirror of a string, e.g. ab => zy, but for the full
-                # range of unicode characters, e.g. first unicode char => last unicode char, etc
-                value = u"".join([ unichr(0xffff - ord(x)) for x in value ])
-
+        value = convert_to_paginatable_value(value, neg)
         values.append(value)
 
     values.append(unicode(instance.pk) if instance.pk else unicode(random.randint(0, 1000000000)))
 
     return NULL_CHARACTER.join(values)
+
+
+def convert_to_paginatable_value(value, neg=False):
+    if hasattr(value, "isoformat"):
+        value = value.isoformat()
+
+    if isinstance(value, int):
+        value += 2 ** 63  # use two's compliment to ensure int is positive
+
+        # we really just want the unicode value for the integer, however unichr() only supports
+        # 2**15, so we chunk the integer into approximately four parts
+        # and concatenate the unicode values
+        # unichr() max value depends on the Python build.  Narrow (UCS-2) 16-bit, Wide (UCS-4) 32-bit
+        value = u''.join([unichr(int(i)) for i in _chunks(str(value), n=5)])
+    elif isinstance(value, float):
+        raise NotImplementedError('Floats are currently not supported for pagination')
+    else:
+        value = unicode(value)
+
+        if neg:
+            # this creates the alphabetical mirror of a string, e.g. ab => zy, but for the full
+            # range of unicode characters, e.g. first unicode char => last unicode char, etc
+            value = u"".join([ unichr(0xffff - ord(x)) for x in value ])
+
+    return value
+
+
+def _chunks(string, n=2):
+    for i in range(0, len(string), n):
+        yield string[i:i + n]
 
 
 def _field_name_for_ordering(ordering):
