@@ -1,5 +1,6 @@
 from django.core import paginator as django_paginator
 from django.db import models
+from django.test import SimpleTestCase
 from djangae.fields import computed
 from djangae.test import TestCase
 from djangae.contrib import sleuth
@@ -13,7 +14,10 @@ from .paginator import (
     queryset_identifier,
     _get_marker,
 )
-from .decorators import generator
+from .decorators import (
+    generator,
+    convert_to_paginatable_value
+)
 
 @paginated_model(orderings=[
     "first_name",  # single field declared as a string
@@ -314,3 +318,20 @@ class ComputedCharFieldPaginationTest(TestCase):
         self.assertEqual(
             [obj.title_computed for obj in page.object_list], sorted(titles, reverse=True)
         )
+
+
+class ConvertToPaginatableValueTest(SimpleTestCase):
+
+    def test_long_and_int_are_treated_the_same(self):
+        self.assertEqual(
+            convert_to_paginatable_value(long(13)),
+            convert_to_paginatable_value(int(13))
+        )
+
+    def test_float_not_implemented(self):
+        with self.assertRaises(NotImplementedError):
+            convert_to_paginatable_value(1.23)
+
+    def test_boolean_not_implemented(self):
+        with self.assertRaises(NotImplementedError):
+            convert_to_paginatable_value(True)

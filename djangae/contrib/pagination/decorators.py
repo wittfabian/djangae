@@ -29,28 +29,40 @@ def generator(fields, instance):
 
 
 def convert_to_paginatable_value(value, neg=False):
+    if value is None:
+        return unicode(None)
+
     if hasattr(value, "isoformat"):
         value = value.isoformat()
 
-    if isinstance(value, int):
-        value += 2 ** 63  # use two's compliment to ensure int is positive
+    try:
+        if isinstance(value, bool):
+            # catch this first as boolean is a subclass of int
+            raise NotImplementedError
+        elif isinstance(value, (int, long)):
+            value += 2 ** 63  # use two's compliment to ensure int is positive
 
-        # we really just want the unicode value for the integer, however unichr() only supports
-        # 2**15, so we chunk the integer into approximately four parts
-        # and concatenate the unicode values
-        # unichr() max value depends on the Python build.  Narrow (UCS-2) 16-bit, Wide (UCS-4) 32-bit
-        value = u''.join([unichr(int(i)) for i in _chunks(str(value), n=5)])
-    elif isinstance(value, float):
-        raise NotImplementedError('Floats are currently not supported for pagination')
-    else:
-        value = unicode(value)
+            # we really just want the unicode value for the integer, however unichr() only supports
+            # 2**15, so we chunk the integer into approximately four parts
+            # and concatenate the unicode values
+            # unichr() max value depends on the Python build.  Narrow (UCS-2) 16-bit, Wide (UCS-4) 32-bit
+            value = u''.join([unichr(int(i)) for i in _chunks(str(value), n=5)])
+        elif isinstance(value, (str, unicode)):
+            value = unicode(value)
 
-        if neg:
-            # this creates the alphabetical mirror of a string, e.g. ab => zy, but for the full
-            # range of unicode characters, e.g. first unicode char => last unicode char, etc
-            value = u"".join([ unichr(0xffff - ord(x)) for x in value ])
+            if neg:
+                # this creates the alphabetical mirror of a string, e.g. ab => zy, but for the full
+                # range of unicode characters, e.g. first unicode char => last unicode char, etc
+                value = u"".join([ unichr(0xffff - ord(x)) for x in value ])
+        else:
+            # catch-all for other non-supported types
+            raise NotImplementedError
 
-    return value
+        return value
+    except NotImplementedError as e:
+        err_msg = u'Djangae\'s pagination does not currently support {}'.format(type(value))
+        e.args = (e.args if e.args else tuple()) + (err_msg,)
+        raise
 
 
 def _chunks(string, n=2):
