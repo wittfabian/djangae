@@ -9,6 +9,7 @@
 - `ListField` and `SetField` can now still be pickled when a non-callable default is specified. This was preventing them being used
  in migrations.
 - Improve the approx SQL representation of Datastore commands (update, delete etc.)
+- Default value for failure_behaviour in `process_task_queues` is now `RAISE_ERROR`. Tasks will no longer fail silently when processed using this method in unit tests.
 
 ### Bug fixes:
 
@@ -18,6 +19,8 @@
  - Replace `print()` statements with `logging.debug()` in all unittests
  - Silence stdout output during testing
  - Logging output silenced during `manage.py test` execution
+ - Fix management command `--help` output
+ - Create .editorconfig to ensure basic editor settings are consistent between users
 
 ## v0.9.10
 
