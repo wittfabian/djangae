@@ -281,8 +281,8 @@ class ComputedIntegerFieldPaginationTest(TestCase):
 
 @paginated_model(orderings=['title_computed'])
 class ComputedCharFieldModel(SimpleModelWithoutOrdering):
-    title_computed = computed.ComputedCharField(lambda x: x.title)
-    title = models.CharField()
+    title_computed = computed.ComputedCharField(lambda x: x.title, max_length=255)
+    title = models.CharField(max_length=255)
 
 
 class ComputedCharFieldPaginationTest(TestCase):
