@@ -203,7 +203,7 @@ class TestCaseMixin(object):
         if self.taskqueue_stub:
             _flush_tasks(self.taskqueue_stub, queue_name)
 
-    def process_task_queues(self, queue_name=None, failure_behaviour=TaskFailedBehaviour.DO_NOTHING):
+    def process_task_queues(self, queue_name=None, failure_behaviour=TaskFailedBehaviour.RAISE_ERROR):
         process_task_queues(queue_name, failure_behaviour)
 
     def get_task_count(self, queue_name=None):
