@@ -744,6 +744,35 @@ class RelatedIterableFieldTests(TestCase):
 
 class RelatedListFieldModelTests(TestCase):
 
+    def test_values_list_queries_work(self):
+        a, b = ISOther.objects.create(name="A"), ISOther.objects.create(name="B")
+        thing = ISModel.objects.create(related_list_ids=[a.pk, b.pk])
+
+        result = list(thing.related_list.values_list("pk"))
+        self.assertEqual(result, [(a.pk,), (b.pk,)])
+
+        result = list(thing.related_list.values_list("pk", flat=True))
+        self.assertEqual(result, [a.pk, b.pk])
+
+        result = list(thing.related_list.values_list("name", flat=True))
+        self.assertEqual(result, ["A", "B"])
+
+        result = list(thing.related_list.values_list("name"))
+        self.assertEqual(result, [("A",), ("B",)])
+
+        result = list(thing.related_list.values_list("pk", "name"))
+        self.assertEqual(result, [(a.pk, "A"), (b.pk, "B")])
+
+    def test_indexing_doesnt_over_fetch(self):
+        a, b = ISOther.objects.create(), ISOther.objects.create()
+        thing = ISModel.objects.create(related_list_ids=[a.pk, b.pk])
+
+        with sleuth.watch('djangae.db.backends.appengine.meta_queries.QueryByKeys.__init__') as get:
+            ret = thing.related_list.all()[0]
+
+            self.assertEqual(1, get.call_count)
+            self.assertEqual(1, len(get.calls[0].args[2]))
+
     def test_can_update_related_field_from_form(self):
         related = ISOther.objects.create()
         thing = ISModel.objects.create(related_list=[related])
