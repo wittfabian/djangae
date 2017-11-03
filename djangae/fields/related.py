@@ -4,7 +4,7 @@ import copy
 # THIRD PARTY
 from django import forms
 from django.db import router, models
-from django.db.models.query import QuerySet, FlatValuesListIterable
+from django.db.models.query import QuerySet
 from django.db.models.fields.related import ForeignObject, ForeignObjectRel
 from django.utils.functional import cached_property
 from django.core.exceptions import ImproperlyConfigured, ValidationError
@@ -13,6 +13,15 @@ from djangae.forms.fields import (
     GenericRelationFormfield,
     OrderedModelMultipleChoiceField,
 )
+
+
+try:
+    from django.db.models.query import FlatValuesListIterable
+except ImportError:
+    # Django 1.8 only
+    from django.db.models.query import ValuesListQuerySet
+
+
 from django.utils import six
 import django
 
@@ -59,6 +68,19 @@ class OrderedQuerySet(QuerySet):
             Fetch all uses the standard iterator but sorts the values on the
             way out, this maintains the lazy evaluation of querysets
         """
+
+        def locate_pk_column(query):
+            pk_name = self.model._meta.pk.name
+            if django.VERSION >= (1, 9):
+                if "pk" in query.values_select:
+                    return query.values_select.index("pk")
+                elif pk_name in query.values_select:
+                    return query.values_select.index(pk_name)
+            else:
+                for i, col in enumerate(query.select):
+                    if hasattr(col, "field") and col.field.name == pk_name:
+                        return i
+
         if self._result_cache is None:
             # Making this work efficiently is tricky. We never want to fetch more than self.ordered_pks
             # and the __getitem__ implementation sets this to a single item, so in that case we only want
@@ -72,26 +94,37 @@ class OrderedQuerySet(QuerySet):
             # There are various combinations to handle depending on whether it's a "flat" values_list or
             # whether or not we added the PK manually to the result set
 
-            clone = QuerySet(model=self.model, query=self.query, using=self._db)
-            clone._iterable_class = self._iterable_class
+
+            if django.VERSION >= (1, 9):
+                clone = QuerySet(model=self.model, query=self.query, using=self._db)
+                clone._iterable_class = self._iterable_class
+            else:
+                if isinstance(self, ValuesListQuerySet):
+                    clone = ValuesListQuerySet(model=self.model, query=self.query, using=self._db)
+                    clone._fields = self._fields
+                    clone.field_names = self.field_names
+                    clone.extra_names = self.extra_names
+                    clone.annotation_names = self.annotation_names
+                    clone.flat = self.flat
+                else:
+                    clone = QuerySet(model=self.model, query=self.query, using=self._db)
+
             clone = clone.filter(pk__in=self.ordered_pks)
 
-            pk_name = self.model._meta.pk.name
             pk_col = 0
             pk_added = False
 
-            values_select = clone.query.values_select
+            if django.VERSION >= (1, 9):
+                values_select = clone.query.values_select
+            else:
+                values_select = [x.field.name for x in clone.query.select]
 
             if values_select:
-                if pk_name in values_select:
-                    # PK already included, store which column it's in
-                    pk_col = values_select.index(pk_name)
-                elif "pk" in values_select:
-                    # PK included under the name "pk"
-                    pk_col = values_select.index("pk")
-                else:
+                pk_col = locate_pk_column(clone.query)
+                if pk_col is None:
                     # Manually add the PK to the result set
                     clone = clone.values_list(*(["pk"] + values_select))
+                    values_select = [x.field.name for x in clone.query.select]
                     pk_col = 0
                     pk_added = True
 
@@ -100,13 +133,18 @@ class OrderedQuerySet(QuerySet):
 
             ordered_results = []
             pk_hash = {}
-            flat = self._iterable_class == FlatValuesListIterable
+
+            if django.VERSION >= (1, 9):
+                flat = self._iterable_class == FlatValuesListIterable
+            else:
+                # On Django 1.8 things are different
+                flat = getattr(self, "flat", False)
 
             for x in results:
                 if isinstance(x, models.Model):
                     # standard query case
                     pk_hash[x.pk] = x
-                elif len(clone.query.values_select) == 1:
+                elif len(values_select) == 1:
                     # Only PK case
                     pk_hash[x if flat else x[pk_col]] = x
                 else:
