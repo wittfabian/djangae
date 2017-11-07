@@ -22,6 +22,8 @@
  - Fix management command `--help` output
  - Create .editorconfig to ensure basic editor settings are consistent between users
  - Add .flake8 file to move towards enforcement code standard
+ - Previously `instance.relatedlistfield.all()[0]` would retrieve all items before indexing, now it only grabs the first
+ - Fixed `instance.relatedlistfield.values_list(...)` which would die with an error in 0.9.10 and earlier
 
 ## v0.9.10
 
