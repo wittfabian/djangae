@@ -1,4 +1,5 @@
 import random
+import sys
 from functools import partial
 from djangae.fields import ComputedCharField
 from django.db.models.fields import FieldDoesNotExist
@@ -40,7 +41,10 @@ def convert_to_paginatable_value(value, neg=False):
             # catch this first as boolean is a subclass of int
             raise NotImplementedError
         elif isinstance(value, (int, long)):
-            value += 2 ** 63  # use two's compliment to ensure int is positive
+            is_narrow_build = sys.maxunicode < 0x10ffff
+
+            # use two's compliment to ensure int is positive
+            value += (2 ** 16 - 1) if is_narrow_build else (2 ** 63 - 1)
 
             # we really just want the unicode value for the integer, however unichr() only supports
             # 2**15, so we chunk the integer into approximately four parts
