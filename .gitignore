@@ -10,6 +10,7 @@ __pycache__/
 !/.travis.yml
 !/.coveragerc
 !/.editorconfig
+!/.flake8
 
 # C extensions
 *.so
