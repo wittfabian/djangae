@@ -9,6 +9,15 @@ from google.appengine.api import urlfetch
 from django.conf import settings
 from django.core.exceptions import MiddlewareNotUsed
 
+try:
+    from django.utils.deprecation import MiddlewareMixin
+except ImportError:
+    MiddlewareMixin = object
+
+
+logger = logging.getLogger(__name__)
+
+
 class ApiSecurityException(Exception):
     """Error when attempting to call an unsafe API."""
     pass
@@ -79,13 +88,13 @@ def _HttpUrlLoggingWrapper(func):
             arg_value = get_default_argument(func, 'url')
 
         if arg_value and not arg_value.startswith('https://'):
-            logging.warn('SECURITY : fetching non-HTTPS url %s' % (arg_value))
+            logger.warn('SECURITY : fetching non-HTTPS url %r', arg_value)
         return func(*args, **kwargs)
     return _CheckAndLog
 
 PATCHES_APPLIED = False
 
-class AppEngineSecurityMiddleware(object):
+class AppEngineSecurityMiddleware(MiddlewareMixin):
     """
         This middleware patches over some more insecure parts of the Python and AppEngine libraries.
 
@@ -119,7 +128,7 @@ class AppEngineSecurityMiddleware(object):
 
             for setting in ("CSRF_COOKIE_SECURE", "SESSION_COOKIE_HTTPONLY", "SESSION_COOKIE_SECURE"):
                 if not getattr(settings, setting, False):
-                    logging.warning("settings.%s is not set to True, this is insecure", setting)
+                    logger.warning("settings.%s is not set to True, this is insecure", setting)
 
             PATCHES_APPLIED = True
         raise MiddlewareNotUsed()

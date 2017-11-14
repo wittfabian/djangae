@@ -1,8 +1,15 @@
 import copy
 from itertools import  product
+
+from django.conf import settings
 from django.db.models.sql.datastructures import EmptyResultSet
 from djangae.db.backends.appengine.query import WhereNode
 from django.db import NotSupportedError
+
+
+# Maximum number of subqueries in a multiquery
+DEFAULT_MAX_ALLOWABLE_QUERIES = 100
+
 
 def preprocess_node(node, negated):
 
@@ -24,7 +31,7 @@ def preprocess_node(node, negated):
             elif node.negated and child.operator == "=":
                 # Excluded equalities become inequalities
 
-                lhs, rhs = WhereNode(), WhereNode()
+                lhs, rhs = WhereNode(node.using), WhereNode(node.using)
                 lhs.column = rhs.column = child.column
                 lhs.value = rhs.value = child.value
                 lhs.operator = "<"
@@ -43,19 +50,19 @@ def preprocess_node(node, negated):
 
                 for value in child.value:
                     if node.negated:
-                        lhs, rhs = WhereNode(), WhereNode()
+                        lhs, rhs = WhereNode(node.using), WhereNode(node.using)
                         lhs.column = rhs.column = child.column
                         lhs.value = rhs.value = value
                         lhs.operator = "<"
                         rhs.operator = ">"
 
-                        bridge = WhereNode()
+                        bridge = WhereNode(node.using)
                         bridge.connector = "OR"
-                        bridge.children = [ lhs, rhs ]
+                        bridge.children = [lhs, rhs]
 
                         new_children.append(bridge)
                     else:
-                        new_node = WhereNode()
+                        new_node = WhereNode(node.using)
                         new_node.operator = "="
                         new_node.value = value
                         new_node.column = child.column
@@ -70,7 +77,7 @@ def preprocess_node(node, negated):
                 assert not child.is_leaf
 
             elif child.operator == "RANGE":
-                lhs, rhs = WhereNode(), WhereNode()
+                lhs, rhs = WhereNode(node.using), WhereNode(node.using)
                 lhs.column = rhs.column = child.column
                 if node.negated:
                     lhs.operator = "<"
@@ -84,7 +91,7 @@ def preprocess_node(node, negated):
                 rhs.value = child.value[1]
 
                 child.column = child.operator = child.value = None
-                child.children = [ lhs, rhs ]
+                child.children = [lhs, rhs]
 
                 assert not child.is_leaf
         elif node.negated:
@@ -131,9 +138,9 @@ def normalize_query(query):
             elif len(child.children) > 1 and child.connector == 'AND' and child.negated:
                 new_grandchildren = []
                 for grandchild in child.children:
-                    new_node = WhereNode()
+                    new_node = WhereNode(child.using)
                     new_node.negated = True
-                    new_node.children = [ grandchild ]
+                    new_node.children = [grandchild]
                     new_grandchildren.append(new_node)
                 child.children = new_grandchildren
                 child.connector = 'OR'
@@ -159,7 +166,7 @@ def normalize_query(query):
 
             new_children = []
             for branch in producted:
-                new_and = WhereNode()
+                new_and = WhereNode(where.using)
                 new_and.connector = 'AND'
                 new_and.children = list(copy.deepcopy(branch))
                 new_children.append(new_and)
@@ -180,15 +187,15 @@ def normalize_query(query):
     walk_tree(where)
 
     if where.connector != 'OR':
-        new_node = WhereNode()
+        new_node = WhereNode(where.using)
         new_node.connector = 'OR'
-        new_node.children = [ where ]
+        new_node.children = [where]
         query._where = new_node
 
     all_pks = True
     for and_branch in query.where.children:
         if and_branch.is_leaf:
-            children = [ and_branch ]
+            children = [and_branch]
         else:
             children = and_branch.children
 
@@ -199,8 +206,17 @@ def normalize_query(query):
             all_pks = False
             break
 
-    if (not all_pks) and len(query.where.children) > 30:
-        raise NotSupportedError("Unable to run query as it required more than 30 subqueries")
+    MAX_ALLOWABLE_QUERIES = getattr(
+        settings,
+        "DJANGAE_MAX_QUERY_BRANCHES", DEFAULT_MAX_ALLOWABLE_QUERIES
+    )
+
+    if (not all_pks) and len(query.where.children) > MAX_ALLOWABLE_QUERIES:
+        raise NotSupportedError(
+            "Unable to run query as it required more than {} subqueries (limit is configurable with DJANGAE_MAX_QUERY_BRANCHES)".format(
+                MAX_ALLOWABLE_QUERIES
+            )
+        )
 
     def remove_empty_in(node):
         """

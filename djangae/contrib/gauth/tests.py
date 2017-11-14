@@ -1,20 +1,32 @@
-#STANDARD LIB
+# STANDARD LIB
 from urlparse import urlparse
 
 # LIBRARIES
 from django.contrib.auth import get_user_model, get_user, BACKEND_SESSION_KEY
 from django.contrib.sessions.middleware import SessionMiddleware
+from django.core.exceptions import ValidationError
 from django.http import HttpRequest
 from django.test import TestCase
 from django.test.utils import override_settings
 from django.contrib.auth.models import AnonymousUser
 from django.contrib.auth.hashers import make_password
 from google.appengine.api import users
+from google.appengine.tools.sdk_update_checker import (
+    GetVersionObject,
+    _VersionList,
+)
+
 
 # DJANGAE
-from djangae.contrib.gauth.datastore.models import GaeDatastoreUser, Group, get_permission_choices
-from djangae.contrib.gauth.datastore.backends import AppEngineUserAPIBackend
-from djangae.contrib.gauth.middleware import AuthenticationMiddleware
+from djangae.contrib.gauth_datastore.models import GaeDatastoreUser, Group, get_permission_choices
+from djangae.contrib.gauth_datastore.backends import AppEngineUserAPIBackend
+from djangae.contrib.gauth.middleware import (
+    AuthenticationMiddleware,
+    # this could be removed after we stop supporting Django version < 1.10.
+    # we should then replace all calls to this function with
+    # `user.is_authenticated`
+    user_is_authenticated
+)
 from djangae.contrib.gauth.settings import AUTHENTICATION_BACKENDS
 from djangae.contrib.gauth.utils import get_switch_accounts_url
 from djangae.contrib import sleuth
@@ -31,25 +43,27 @@ class BackendTests(TestCase):
         credentials = {'username': 'ted', 'password': 'secret'}
         self.assertRaises(TypeError, backend.authenticate, **credentials)
 
+    @override_settings(DJANGAE_CREATE_UNKNOWN_USER=True)
     def test_authenticate_creates_user_object(self):
         """ If `authenticate` is called with valid credentials then a User object should be created
         """
         User = get_user_model()
         self.assertEqual(User.objects.count(), 0)
-        email = 'UpperCasedAddress@example.com'
+        email = 'UpperCasedAddress@Example.Com'
         google_user = users.User(email, _user_id='111111111100000000001')
         backend = AppEngineUserAPIBackend()
         user = backend.authenticate(google_user=google_user,)
-        self.assertEqual(user.email, email.lower())
+        self.assertEqual(user.email, 'UpperCasedAddress@example.com')  # Domain is lower cased
+        self.assertEqual(user.email_lower, email.lower())
         self.assertEqual(User.objects.count(), 1)
         # Calling authenticate again with the same credentials should not create another user
         user2 = backend.authenticate(google_user=google_user)
         self.assertEqual(user.pk, user2.pk)
 
-    @override_settings(ALLOW_USER_PRE_CREATION=True)
-    def test_user_pre_creation(self):
+    @override_settings(DJANGAE_CREATE_UNKNOWN_USER=True)
+    def test_user_pre_creation_create_unknown(self):
         """ User objects for Google-Accounts-based users should be able to be pre-created in DB and
-            then matched by email address when they log in.
+            then matched by email address when they log in - even if unknown users are allowed.
         """
         User = get_user_model()
         backend = AppEngineUserAPIBackend()
@@ -64,7 +78,45 @@ class BackendTests(TestCase):
         self.assertIsNotNone(user.last_login)
         self.assertFalse(user.has_usable_password())
 
-    @override_settings(ALLOW_USER_PRE_CREATION=True)
+    @override_settings(DJANGAE_CREATE_UNKNOWN_USER=False)
+    def test_user_pre_creation_no_create_unknown(self):
+        """ User objects for Google-Accounts-based users should be able to be pre-created in DB and
+            then matched by email address when they log in - even if unknown users are not allowed.
+        """
+        User = get_user_model()
+        backend = AppEngineUserAPIBackend()
+        email = '1@example.com'
+        # Pre-create our user
+        User.objects.pre_create_google_user(email)
+        # Now authenticate this user via the Google Accounts API
+        google_user = users.User(email=email, _user_id='111111111100000000001')
+        user = backend.authenticate(google_user=google_user)
+        # Check things
+        self.assertEqual(user.email, email)
+        self.assertIsNotNone(user.last_login)
+        self.assertFalse(user.has_usable_password())
+
+    def test_user_pre_created_users_are_authenticated_case_insensitively(self):
+        """ When a user is pre-created their email address may not have been saved with the same
+            upper/lower case-ness as that which they end up logging in with.  So the matching needs
+            to be done case insensitively.
+        """
+        User = get_user_model()
+        backend = AppEngineUserAPIBackend()
+        email = 'SomePerson@example.com'
+        # Pre-create our user
+        User.objects.pre_create_google_user(email)
+        # Now authenticate this user via the Google Accounts API
+        google_user = users.User(email='somEpersoN@example.com', _user_id='111111111100000000001')
+        user = backend.authenticate(google_user=google_user)
+        # Check things
+        self.assertEqual(user.username, '111111111100000000001')
+        # We expect the email address to have been updated to the one which they logged in with
+        self.assertEqual(user.email, google_user.email())
+        self.assertIsNotNone(user.last_login)
+        self.assertFalse(user.has_usable_password())
+
+    @override_settings(DJANGAE_CREATE_UNKNOWN_USER=True)
     def test_user_id_switch(self):
         """ Users sometimes login with the same email, but a different google user id. We handle those cases by
             blanking out the email on the old user object and creating a new one with the new user id.
@@ -88,7 +140,7 @@ class BackendTests(TestCase):
 
         # The old account is kept around, but the email is blanked
         user1 = User.objects.get(pk=user1.pk)
-        self.assertEqual(user1.email, None)
+        self.assertEqual(user1.email, "")
 
     @override_settings(DJANGAE_FORCE_USER_PRE_CREATION=True)
     def test_force_user_pre_creation(self):
@@ -107,11 +159,40 @@ class BackendTests(TestCase):
         self.assertEqual(User.objects.count(), 1)
         self.assertEquals(User.objects.get(), user)
 
+    @override_settings(DJANGAE_CREATE_UNKNOWN_USER=True)
+    def test_user_creation_race_condition(self):
+        """ If a user double clicks a 'login' button or something, causing 2 threads to be
+            authenticating the same user at the same time, ensure it doesn't die.
+        """
+        email = "test@example.com"
+        user_id = "111111111100000000001"
+        original_user_get = get_user_model().objects.get
+
+        def crazy_user_get_patch(*args, **kwargs):
+            """ Patch for User.objects.get which simulates another thread creating the same user
+                immedidately after this is called (by doing it as part of this function). """
+            User = get_user_model()
+            try:
+                return original_user_get(*args, **kwargs)  # We patched .get()
+            except User.DoesNotExist:
+                # This is horrible, but... the backend first tries get() by username and then tries
+                # get() by email, and we only want to create our user after that second call
+                if kwargs.keys() != ['username']:
+                    User.objects.create_user(username=user_id, email=email)
+                raise
+
+        backend = AppEngineUserAPIBackend()
+        google_user = users.User(email, _user_id=user_id)
+        user_class_path = "djangae.contrib.gauth_datastore.models.GaeDatastoreUser.objects.get"
+        with sleuth.switch(user_class_path, crazy_user_get_patch):
+            backend.authenticate(google_user)
+
 
 @override_settings(AUTHENTICATION_BACKENDS=AUTHENTICATION_BACKENDS)
 class MiddlewareTests(TestCase):
     """ Tests for the AuthenticationMiddleware. """
 
+    @override_settings(DJANGAE_CREATE_UNKNOWN_USER=True)
     def test_login(self):
 
         def _get_current_user():
@@ -119,11 +200,11 @@ class MiddlewareTests(TestCase):
 
         request = HttpRequest()
         SessionMiddleware().process_request(request) # Make the damn sessions work
-        request.session[BACKEND_SESSION_KEY] = 'djangae.contrib.gauth.datastore.backends.AppEngineUserAPIBackend'
+        request.session[BACKEND_SESSION_KEY] = 'djangae.contrib.gauth_datastore.backends.AppEngineUserAPIBackend'
         middleware = AuthenticationMiddleware()
         # Check that we're not logged in already
         user = get_user(request)
-        self.assertFalse(user.is_authenticated())
+        self.assertFalse(user_is_authenticated(user))
 
         # Check that running the middleware when the Google users API doesn't know the current
         # user still leaves us as an anonymous users.
@@ -132,7 +213,7 @@ class MiddlewareTests(TestCase):
 
         # Check that the middleware successfully logged us in
         user = get_user(request)
-        self.assertFalse(user.is_authenticated())
+        self.assertFalse(user_is_authenticated(user))
 
         # Now check that when the Google users API *does* know who we are, that we are logged in.
         with sleuth.switch('djangae.contrib.gauth.middleware.users.get_current_user', _get_current_user):
@@ -140,17 +221,18 @@ class MiddlewareTests(TestCase):
 
         # Check that the middleware successfully logged us in
         user = get_user(request)
-        self.assertTrue(user.is_authenticated())
+        self.assertTrue(user_is_authenticated(user))
         self.assertEqual(user.email, '1@example.com')
         self.assertEqual(user.username, '111111111100000000001')
 
+    @override_settings(DJANGAE_CREATE_UNKNOWN_USER=True)
     def test_account_switch(self):
         user1 = users.User('1@example.com', _user_id='111111111100000000001')
         user2 = users.User('2@example.com', _user_id='222222222200000000002')
 
         request = HttpRequest()
         SessionMiddleware().process_request(request)  # Make the damn sessions work
-        request.session[BACKEND_SESSION_KEY] = 'djangae.contrib.gauth.datastore.backends.AppEngineUserAPIBackend'
+        request.session[BACKEND_SESSION_KEY] = 'djangae.contrib.gauth_datastore.backends.AppEngineUserAPIBackend'
         middleware = AuthenticationMiddleware()
 
         with sleuth.switch('djangae.contrib.gauth.middleware.users.get_current_user', lambda: user1):
@@ -163,6 +245,7 @@ class MiddlewareTests(TestCase):
 
         self.assertEqual(user2.user_id(), request.user.username)
 
+    @override_settings(DJANGAE_CREATE_UNKNOWN_USER=True)
     def test_user_id_switch(self):
         """ Users sometimes login with the same email, but a different google user id. We handle those cases by
             blanking out the email on the old user object and creating a new one with the new user id.
@@ -174,7 +257,7 @@ class MiddlewareTests(TestCase):
         User = get_user_model()
         request = HttpRequest()
         SessionMiddleware().process_request(request)  # Make the damn sessions work
-        request.session[BACKEND_SESSION_KEY] = 'djangae.contrib.gauth.datastore.backends.AppEngineUserAPIBackend'
+        request.session[BACKEND_SESSION_KEY] = 'djangae.contrib.gauth_datastore.backends.AppEngineUserAPIBackend'
         middleware = AuthenticationMiddleware()
 
         with sleuth.switch('djangae.contrib.gauth.middleware.users.get_current_user', lambda: user1):
@@ -194,7 +277,7 @@ class MiddlewareTests(TestCase):
         self.assertEqual(user2.email(), django_user2.email)
 
         django_user1 = User.objects.get(pk=django_user1.pk)
-        self.assertEqual(django_user1.email, None)
+        self.assertEqual(django_user1.email, "")
 
     @override_settings(DJANGAE_FORCE_USER_PRE_CREATION=True)
     def test_force_user_pre_creation(self):
@@ -210,30 +293,42 @@ class MiddlewareTests(TestCase):
         # and so with pre-creation required, authentication should have failed
         self.assertTrue(isinstance(request.user, AnonymousUser))
 
-    def test_middleware_resaves_email(self):
-        # Create user with uppercased email
+    @override_settings(DJANGAE_CREATE_UNKNOWN_USER=True)
+    def test_user_email_update(self):
+        """ Users can alter their Google account's primary email address. Make sure that we update
+            it on the Django model.
+        """
         email = 'User@example.com'
-        google_user = users.User(email, _user_id='111111111100000000001')
-        backend = AppEngineUserAPIBackend()
-        user = backend.authenticate(google_user=google_user,)
-        # Normalize_email should save a user with lowercase email
-        self.assertEqual(user.email, email.lower())
+        user = users.User(email, _user_id='111111111100000000001')
 
-        # Run AuthenticationMiddleware, if email are mismatched
-        with sleuth.switch('djangae.contrib.gauth.middleware.users.get_current_user', lambda: google_user):
-            request = HttpRequest()
-            SessionMiddleware().process_request(request)  # Make the damn sessions work
-            middleware = AuthenticationMiddleware()
+        User = get_user_model()
+        request = HttpRequest()
+        SessionMiddleware().process_request(request)  # Make the damn sessions work
+        request.session[BACKEND_SESSION_KEY] = 'djangae.contrib.gauth_datastore.backends.AppEngineUserAPIBackend'
+        middleware = AuthenticationMiddleware()
+
+        with sleuth.switch('djangae.contrib.gauth.middleware.users.get_current_user', lambda: user):
             middleware.process_request(request)
 
-        # Middleware should resave to uppercased email, keeping user the same
-        self.assertEqual(request.user.email, email)
-        self.assertEqual(request.user.pk, user.pk)
+        self.assertEqual(1, User.objects.count())
+        django_user = request.user
+        self.assertEqual(email, django_user.email)
+
+        new_email = 'User-Updated@example2.com'
+        user = users.User(new_email, _user_id=user.user_id())
+
+        with sleuth.switch('djangae.contrib.gauth.middleware.users.get_current_user', lambda: user):
+            middleware.process_request(request)
+
+        self.assertEqual(1, User.objects.count())
+        django_user = request.user
+        self.assertEqual(new_email, django_user.email)
+        self.assertEqual(new_email.lower(), django_user.email_lower)
 
 
 @override_settings(
     AUTH_USER_MODEL='djangae.GaeDatastoreUser',
-    AUTHENTICATION_BACKENDS=('djangae.contrib.gauth.datastore.backends.AppEngineUserAPIBackend',)
+    AUTHENTICATION_BACKENDS=('djangae.contrib.gauth_datastore.backends.AppEngineUserAPIBackend',)
 )
 class CustomPermissionsUserModelBackendTest(TestCase):
     """
@@ -252,7 +347,8 @@ class CustomPermissionsUserModelBackendTest(TestCase):
         super(CustomPermissionsUserModelBackendTest, self).setUp()
 
         GaeDatastoreUser.objects = GaeDatastoreUser._default_manager
-        GaeDatastoreUser._base_manager = GaeDatastoreUser._default_manager
+        GaeDatastoreUser.base_manager_name = 'objects'
+
         self.user = GaeDatastoreUser.objects.create(
             username='test1',
             email='test@example.com',
@@ -344,11 +440,12 @@ class CustomPermissionsUserModelBackendTest(TestCase):
 
 @override_settings(
     AUTH_USER_MODEL='djangae.GaeDatastoreUser',
-    AUTHENTICATION_BACKENDS=('djangae.contrib.gauth.datastore.backends.AppEngineUserAPIBackend',)
+    AUTHENTICATION_BACKENDS=('djangae.contrib.gauth_datastore.backends.AppEngineUserAPIBackend',)
 )
 class SwitchAccountsTests(TestCase):
     """ Tests for the switch accounts functionality. """
 
+    @override_settings(DJANGAE_CREATE_UNKNOWN_USER=True)
     def test_switch_accounts(self):
         gcu = 'djangae.contrib.gauth.middleware.users.get_current_user'
         final_destination = '/death/' # there's no escaping it
@@ -363,7 +460,7 @@ class SwitchAccountsTests(TestCase):
             # Check that the user is logged in
             expected_user_query = GaeDatastoreUser.objects.filter(username=jekyll.user_id())
             self.assertEqual(len(expected_user_query), 1)
-            self.assertEqual(int(self.client._session()['_auth_user_id']), expected_user_query[0].pk)
+            self.assertEqual(int(self.client.session['_auth_user_id']), expected_user_query[0].pk)
             # Now call the switch_accounts view, which should give us a redirect to the login page
             response = self.client.get(switch_accounts_url, follow=False)
             self.assertEqual(response.status_code, 302)
@@ -389,4 +486,60 @@ class SwitchAccountsTests(TestCase):
             self.assertEqual(redirect_path, final_destination)
             expected_user_query = GaeDatastoreUser.objects.filter(username=hyde.user_id())
             self.assertEqual(len(expected_user_query), 1)
-            self.assertEqual(int(self.client._session()['_auth_user_id']), expected_user_query[0].pk)
+            self.assertEqual(int(self.client.session['_auth_user_id']), expected_user_query[0].pk)
+
+    @override_settings(DJANGAE_CREATE_UNKNOWN_USER=True)
+    def test_switch_to_same_account(self):
+        gcu = 'djangae.contrib.gauth.middleware.users.get_current_user'
+        final_destination = '/death/'
+        switch_accounts_url = get_switch_accounts_url(next=final_destination)
+        any_url = '/_ah/warmup'
+        jekyll = users.User(email='jekyll@gmail.com', _user_id='1')
+
+        with sleuth.switch(gcu, lambda: jekyll):
+            response = self.client.get(any_url)
+            # Check that the user is logged in
+            expected_user_query = GaeDatastoreUser.objects.filter(username=jekyll.user_id())
+            self.assertEqual(len(expected_user_query), 1)
+
+            self.assertEqual(int(self.client.session['_auth_user_id']), expected_user_query[0].pk)
+            # Call switch_accounts view, which should give a redirect to login url
+            response = self.client.get(switch_accounts_url, follow=False)
+            self.assertEqual(response.status_code, 302)
+            self.assertEqual(response['location'], users.create_login_url(switch_accounts_url))
+            # Assume the user is signed in to one account, so it should redirect to logout url
+            response = self.client.get(switch_accounts_url)
+            self.assertEqual(response.status_code, 302)
+            self.assertEqual(
+                response['location'],
+                users.create_logout_url(users.create_login_url(switch_accounts_url))
+            )
+            # Now the user decides against switching accounts and comes back with the same account
+            response = self.client.get(switch_accounts_url)
+            redirect_path = urlparse(response['location']).path
+            self.assertEqual(redirect_path, final_destination)
+            expected_user_query = GaeDatastoreUser.objects.filter(username=jekyll.user_id())
+            self.assertEqual(len(expected_user_query), 1)
+            self.assertEqual(int(self.client.session['_auth_user_id']), expected_user_query[0].pk)
+
+
+class ModelTests(TestCase):
+
+    def test_email_uniqueness_validation_raised_correctly(self):
+        """ GaeAbstractBaseUser has an `email_lower` field whcih is unique, but it's really a proxy
+            for uniqueness on the `email` field.
+        """
+        no_pass = make_password(None)
+        User = get_user_model()
+        user1 = User.objects.create_user("111111111111111111111", email="ab@example.com", password=no_pass)
+        user2 = User(username="111111111111111111112", email="AB@example.com", password=no_pass)
+        # We expect the second user to have a unique violation on the `email_lower` field, but it
+        # should be attached to the (editable) `email` field
+        try:
+            user2.full_clean()
+        except ValidationError as e:
+            self.assertTrue("email" in e.error_dict)
+            self.assertFalse("email_lower" in e.error_dict)
+        # We should still be able to edit the existing user though
+        user1.email = "AB@example.com"
+        user1.full_clean()

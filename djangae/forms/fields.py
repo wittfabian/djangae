@@ -1,13 +1,18 @@
+import copy
 import json
 import base64
 
 from django import forms
 from django.contrib import admin
 from django.db import models
+from django.utils import six
 from django.utils.safestring import mark_safe
 from django.core.urlresolvers import reverse
 from django.contrib.admin.templatetags.admin_static import static
+
+# DJANGAE
 from djangae.utils import memoized
+
 
 class TrueOrNullFormField(forms.BooleanField):
     def clean(self, value):
@@ -29,7 +34,7 @@ class ListWidget(forms.TextInput):
             of this widget. Returns None if it's not provided.
         """
         value = data.get(name, '')
-        if isinstance(value, (str, unicode)):
+        if isinstance(value, six.string_types):
             value = value.split(',')
         return [v.strip() for v in value if v.strip()]
 
@@ -46,12 +51,71 @@ class ListFormField(forms.Field):
                 self._check_values_against_delimiter(value)
                 return value
             return [v.strip() for v in value.split(',') if v.strip()]
-        return None
+        return []
 
     def _check_values_against_delimiter(self, values):
         delimiter = self.delimiter  # faster
         for value in values:
             assert delimiter not in value
+
+
+class JSONWidget(forms.Textarea):
+    """ A widget for being able to display a JSONField in a form. """
+
+    def render(self, name, value, attrs=None):
+        """ Dump the python object to JSON if it hasn't been done yet. """
+        from djangae.fields.json import dumps
+        if not isinstance(value, six.string_types):
+            value = dumps(value)
+        return super(JSONWidget, self).render(name, value, attrs)
+
+
+class JSONFormField(forms.CharField):
+    """ A form field for being able to display a JSONField in a form.
+        The JSON is rendered as string in a textarea, but is parsed to python (be)for validation.
+     """
+
+    widget = JSONWidget
+
+    def clean(self, value):
+        """ (Try to) parse JSON string back to python. """
+        assert isinstance(value, six.string_types) or value is None, "JSONField value must be a string or None"
+
+        value = super(JSONFormField, self).clean(value)
+
+        if not value:
+            value = None
+
+        if value:
+            try:
+                value = json.loads(value)
+                if not value and self.required:
+                    raise forms.ValidationError("Non-empty JSON object is required")
+
+            except ValueError:
+                raise forms.ValidationError("Could not parse value as JSON")
+        return value
+
+
+class OrderedModelMultipleChoiceField(forms.ModelMultipleChoiceField):
+
+    def clean(self, value):
+        """
+        Maintain the order of the values passed in. Without this special casing,
+        _check_values() runs a pk__in query which under the hood gets
+        ordered by Djangae via its default model ordering (which has a PK
+        fallback if no ordering is explicit), and thus the original order of the
+        values passed in is lost.
+        """
+        # Make a copy of the value - we still run it via the normal clean
+        # so that validators are run - but we don't return the queryset like
+        # the vanilla ModelMultipleChoiceField as the ordering will be lost by
+        # doing that, so instead we return a list of the PK values, which is
+        # not strictly what we should do, but RelatedListField accepts it and
+        # so it makes this work
+        value_copy = copy.deepcopy(value)
+        super(OrderedModelMultipleChoiceField, self).clean(value_copy)
+        return [self.queryset.model._meta.pk.to_python(v) for v in value]
 
 
 #Basic obfuscation, just so that the db_table doesn't

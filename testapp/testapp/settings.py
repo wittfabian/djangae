@@ -25,9 +25,7 @@ SECRET_KEY = '&x$ts1u)tx#5zsi84555$(@mydbz06&q23p8=c6fs1!d4%1a^u'
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-TEMPLATE_DEBUG = True
-
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['*']
 
 # Application definition
 
@@ -35,16 +33,19 @@ INSTALLED_APPS = [
     'djangae',
     'django.contrib.admin',
     'django.contrib.auth',
-    'djangae.contrib.gauth.datastore',
+    'djangae.contrib.gauth_datastore',
     'djangae.contrib.security',
     'djangae.contrib.consistency',
     'django.contrib.contenttypes',
+    'djangae.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.sites',
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'django.contrib.humanize',
-    'djangae.contrib.mappers',
+    'djangae.contrib.backup',
+    'djangae.contrib.locking',
+    'djangae.contrib.processing.mapreduce',
     'djangae.contrib.pagination',
     'djangae.contrib.uniquetool',
     'testapp'
@@ -59,7 +60,9 @@ if "test" in sys.argv:
 
     tests_dir = os.path.join(BASE_DIR, "libs", "django-stable-{}.{}.x/tests".format(*django.VERSION[:2]))
     if not os.path.exists(tests_dir):
-        tests_dir = os.path.join(BASE_DIR, "libs", "django-master/tests")
+        tests_dir = os.path.join(BASE_DIR, "libs", "django-{}/tests".format(django.get_version()))
+        if not os.path.exists(tests_dir):
+            tests_dir = os.path.join(BASE_DIR, "libs", "django-master/tests")
 
     sys.path.insert(0, tests_dir)
 
@@ -100,7 +103,7 @@ if "test" in sys.argv:
 
 INSTALLED_APPS = tuple(INSTALLED_APPS)
 
-MIDDLEWARE_CLASSES = (
+MIDDLEWARE = (
     'djangae.contrib.security.middleware.AppEngineSecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -108,7 +111,13 @@ MIDDLEWARE_CLASSES = (
     'djangae.contrib.gauth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'session_csrf.CsrfMiddleware'
 )
+
+if tuple(django.VERSION[:2]) < (1, 10):
+    MIDDLEWARE_CLASSES = MIDDLEWARE
+
+
 
 ROOT_URLCONF = 'testapp.urls'
 SITE_ID = 1
@@ -152,21 +161,29 @@ USE_TZ = False
 STATIC_ROOT = BASE_DIR + 'static'
 STATIC_URL = '/static/'
 
-AUTH_USER_MODEL = 'djangae.GaeDatastoreUser'
+AUTH_USER_MODEL = 'gauth_datastore.GaeDatastoreUser'
 GENERATE_SPECIAL_INDEXES_DURING_TESTING = True
 COMPLETE_FLUSH_WHILE_TESTING = True
 DJANGAE_SEQUENTIAL_IDS_IN_TESTS = True
-DJANGAE_SIMULATE_CONTENTTYPES = True
 
 TEST_RUNNER = 'djangae.test_runner.SkipUnsupportedRunner'
 DJANGAE_ADDITIONAL_TEST_APPS = ["djangae"] + TO_TEST
 
+DJANGAE_ADDITIONAL_MODULES = [os.path.join(BASE_DIR, "module.yaml")]
 
 # Here because of "You haven't defined a TEMPLATES setting" deprecation message
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
+        'OPTIONS': {
+            'context_processors': [
+                'django.contrib.auth.context_processors.auth'
+            ],
+            'debug': True
+        }
     },
 ]
+
+DS_BACKUP_ENABLED = False
 
 from djangae.contrib.gauth.settings import *

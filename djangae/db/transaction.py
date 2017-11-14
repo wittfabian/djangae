@@ -21,6 +21,15 @@ def in_atomic_block():
     return IsInTransaction()
 
 
+# Because decorators are only instantiated once per function, we need to make sure any state
+# stored on them is both thread-local (to prevent function calls in different threads
+# interacting with each other) and safe to use recursively (by using a stack of state)
+
+class ContextState(object):
+    "Stores state per-call of the ContextDecorator"
+    pass
+
+
 class ContextDecorator(object):
     """
         A thread-safe ContextDecorator. Subclasses should implement classmethods
@@ -46,6 +55,7 @@ class ContextDecorator(object):
         # Add thread local state for variables that change per-call rather than
         # per insantiation of the decorator
         self.state = threading.local()
+        self.state.stack = []
 
     def __get__(self, obj, objtype=None):
         """ Implement descriptor protocol to support instance methods. """
@@ -62,15 +72,14 @@ class ContextDecorator(object):
         def decorated(*_args, **_kwargs):
             decorator_args = self.decorator_args.copy()
             exception = False
+            self.__class__._do_enter(self._push_state(), decorator_args)
             try:
-                self.__class__._do_enter(self.state, decorator_args)
-                try:
-                    return self.func(*_args, **_kwargs)
-                except:
-                    exception = True
-                    raise
+                return self.func(*_args, **_kwargs)
+            except:
+                exception = True
+                raise
             finally:
-                self.__class__._do_exit(self.state, decorator_args, exception)
+                self.__class__._do_exit(self._pop_state(), decorator_args, exception)
 
         if not self.func:
             # We were instantiated with args
@@ -79,11 +88,25 @@ class ContextDecorator(object):
         else:
             return decorated(*args, **kwargs)
 
+    def _push_state(self):
+        "We need a stack for state in case a decorator is called recursively"
+        # self.state is a threading.local() object, so if the current thread is not the one in
+        # which ContextDecorator.__init__ was called (e.g. is not the thread in which the function
+        # was decorated), then the 'stack' attribute may not exist
+        if not hasattr(self.state, 'stack'):
+            self.state.stack = []
+
+        self.state.stack.append(ContextState())
+        return self.state.stack[-1]
+
+    def _pop_state(self):
+        return self.state.stack.pop()
+
     def __enter__(self):
-        self.__class__._do_enter(self.state, self.decorator_args.copy())
+        self.__class__._do_enter(self._push_state(), self.decorator_args.copy())
 
     def __exit__(self, exc_type, exc_value, traceback):
-        self.__class__._do_exit(self.state, self.decorator_args.copy(), exc_type)
+        self.__class__._do_exit(self._pop_state(), self.decorator_args.copy(), exc_type)
 
 
 class TransactionFailedError(Exception):

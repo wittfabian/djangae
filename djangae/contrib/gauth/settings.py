@@ -1,11 +1,11 @@
 
 AUTHENTICATION_BACKENDS = (
-    'djangae.contrib.gauth.datastore.backends.AppEngineUserAPIBackend',
+    'djangae.contrib.gauth_datastore.backends.AppEngineUserAPIBackend',
 )
 
-AUTH_USER_MODEL = 'djangae.GaeDatastoreUser'
+AUTH_USER_MODEL = 'gauth_datastore.GaeDatastoreUser'
 LOGIN_URL = 'djangae_login_redirect'
 
-# This allows you to create User objects for Google-Accounts-based users before they have logged in.
-# When pre-creating a Google user, you must set the `username` to None.  Matching is done by email.
-DJANGAE_ALLOW_USER_PRE_CREATION = False
+# Set this to True to allow unknown Google users to sign in. Matching is done
+# by email.
+# DJANGAE_CREATE_UNKNOWN_USER = True

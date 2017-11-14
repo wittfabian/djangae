@@ -1,16 +1,27 @@
 # -*- encoding: utf-8 -*
 from collections import OrderedDict
+import datetime
+import pickle
 
 # LIBRARIES
 from django import forms
+from django.core import serializers
 from django.db import models
 from django.db.utils import IntegrityError
-from django.core.exceptions import ValidationError
+from django.conf import settings
+from django.core.exceptions import ValidationError, ImproperlyConfigured
+from django.core.validators import EmailValidator
+import django
 
 # DJANGAE
+from djangae.contrib import sleuth
 from djangae.db import transaction
 from djangae.fields import (
+    ComputedBooleanField,
     ComputedCharField,
+    ComputedIntegerField,
+    ComputedPositiveIntegerField,
+    ComputedTextField,
     GenericRelationField,
     JSONField,
     ListField,
@@ -19,10 +30,13 @@ from djangae.fields import (
     ShardedCounterField,
     SetField,
     CharField,
+    CharOrNoneField,
 )
 from djangae.fields.counting import DEFAULT_SHARD_COUNT
 from djangae.models import CounterShard
 from djangae.test import TestCase
+
+from google.appengine.api import datastore
 
 
 class ComputedFieldModel(models.Model):
@@ -32,6 +46,7 @@ class ComputedFieldModel(models.Model):
     int_field = models.IntegerField()
     char_field = models.CharField(max_length=50)
     test_field = ComputedCharField(computer, max_length=50)
+    method_calc_field = ComputedCharField("computer", max_length=50)
 
     class Meta:
         app_label = "djangae"
@@ -47,6 +62,14 @@ class ComputedFieldTests(TestCase):
         instance = ComputedFieldModel.objects.get(test_field="1_test")
         instance.save()
 
+    def test_computed_by_method_name_field(self):
+        """ Test that a computed field which specifies its "computer" function as a string of
+            the name of a method on the model.
+        """
+        instance = ComputedFieldModel(int_field=2, char_field="test")
+        instance.save()
+        self.assertEqual(instance.method_calc_field, "2_test")
+
 
 class ModelWithCounter(models.Model):
     counter = ShardedCounterField()
@@ -58,6 +81,24 @@ class ModelWithCounter(models.Model):
 class ModelWithManyCounters(models.Model):
     counter1 = ShardedCounterField()
     counter2 = ShardedCounterField()
+
+    class Meta:
+        app_label = "djangae"
+
+
+def update_denormalized_counter(instance, step, is_reset=False):
+    instance.denormalized_counter += step
+
+    if is_reset:
+        instance.reset_count += 1
+
+    instance.save()
+
+
+class ModelWithCountersWithCallback(models.Model):
+    counter = ShardedCounterField(on_change=update_denormalized_counter)
+    denormalized_counter = models.IntegerField(default=0)
+    reset_count = models.IntegerField(default=0)
 
     class Meta:
         app_label = "djangae"
@@ -79,6 +120,9 @@ class ISOther(models.Model):
 
     class Meta:
         app_label = "djangae"
+
+class StringPkModel(models.Model):
+    name = models.CharField(max_length=500, primary_key=True)
 
 
 class RelationWithoutReverse(models.Model):
@@ -115,13 +159,50 @@ class ISModel(models.Model):
 class IterableFieldModel(models.Model):
     set_field = SetField(models.CharField(max_length=1))
     list_field = ListField(models.CharField(max_length=1))
+    set_field_int = SetField(models.BigIntegerField(max_length=1))
+    list_field_int = ListField(models.BigIntegerField(max_length=1))
+    set_field_dt = SetField(models.DateTimeField())
+    list_field_dt = ListField(models.DateTimeField())
 
     class Meta:
         app_label = "djangae"
 
+class IterableRelatedModel(models.Model):
+    related_set = RelatedListField(ISOther, related_name="+")
+    related_list = RelatedListField(ISOther, related_name="+")
+
+class IterableRelatedWithNonIntPkModel(models.Model):
+    related_set = RelatedListField(StringPkModel, related_name="+")
+    related_list = RelatedListField(StringPkModel, related_name="+")
+
+class IterableFieldsWithValidatorsModel(models.Model):
+    set_field = SetField(models.CharField(max_length=100), min_length=2, max_length=3, blank=False)
+    list_field = ListField(models.CharField(max_length=100), min_length=2, max_length=3, blank=False)
+    related_set = RelatedSetField(ISOther, min_length=2, max_length=3, blank=False)
+    related_list = RelatedListField(ISOther, related_name="iterable_list", min_length=2, max_length=3, blank=False)
+
 
 class JSONFieldModel(models.Model):
+    json_field = JSONField(use_ordered_dict=True, blank=True)
+
+
+class NullableJSONFieldModel(models.Model):
+    json_field = JSONField(null=True, blank=True)
+
+
+class JSONFieldWithDefaultModel(models.Model):
     json_field = JSONField(use_ordered_dict=True)
+
+
+class ModelWithCharField(models.Model):
+    char_field_with_max = CharField(max_length=10, default='', blank=True)
+    char_field_without_max = CharField(default='', blank=True)
+    char_field_as_email = CharField(validators=[EmailValidator(message='failed')], blank=True)
+
+
+class ModelWithCharOrNoneField(models.Model):
+
+    char_or_none_field = CharOrNoneField(max_length=100)
 
 
 class ShardedCounterTest(TestCase):
@@ -161,7 +242,6 @@ class ShardedCounterTest(TestCase):
         instance.counter.increment(3)
         instance.counter.increment(2)
         self.assertEqual(instance.counter.value(), 5)
-
 
     def test_decrement_step(self):
         """ Test the behvaviour of decrementing in steps of more than 1. """
@@ -222,7 +302,6 @@ class ShardedCounterTest(TestCase):
         instance = ModelWithCounter.objects.get()
         self.assertEqual(instance.counter.all().count(), DEFAULT_SHARD_COUNT)
 
-
     def test_label_reference_is_saved(self):
         """ Test that each CounterShard which the field creates is saved with the label of the
             model and field to which it belongs.
@@ -250,6 +329,47 @@ class ShardedCounterTest(TestCase):
         self.assertEqual(instance.counter1.value(), 0)
         self.assertEqual(instance.counter2.value(), 1)
 
+    def test_count_issues_deprecation_warning(self):
+        """ The RelatedShardManager should warn you when using the deprecated `count()` method
+            because its purpose is unclear.
+        """
+        instance = ModelWithCounter.objects.create()
+        self.assertEqual(instance.counter.value(), 0)
+        with sleuth.watch("djangae.fields.counting.warnings.warn") as warn:
+            instance.counter.count()
+            self.assertTrue(warn.called)
+
+    def test_shard_count(self):
+        """ The shard_count() method should return the number of CounterShard objects. """
+        instance = ModelWithCounter.objects.create()
+        self.assertEqual(instance.counter.shard_count(), 0)
+        instance.counter.populate()
+        self.assertEqual(instance.counter.shard_count(), 24)  # The default shard count is 24
+
+    def test_on_change_callback_called(self):
+        """ Test that if ShardedCounter has on_change callback specified, it
+            will be called after any change to the counter.
+        """
+        instance = ModelWithCountersWithCallback.objects.create()
+        self.assertEquals(instance.denormalized_counter, 0)
+
+        # callback called after increment
+        instance.counter.increment(5)
+        instance.refresh_from_db()
+        self.assertEquals(instance.denormalized_counter, 5)
+
+        # after decrement
+        instance.counter.decrement(1)
+        instance.refresh_from_db()
+        self.assertEquals(instance.denormalized_counter, 4)
+
+        # and reset
+        self.assertEquals(instance.reset_count, 0)
+        instance.counter.reset()
+        instance.refresh_from_db()
+        self.assertEquals(instance.denormalized_counter, 0)
+        self.assertEquals(instance.reset_count, 1)
+
 
 class IterableFieldTests(TestCase):
     def test_filtering_on_iterable_fields(self):
@@ -260,29 +380,29 @@ class IterableFieldTests(TestCase):
             list_field=['A', 'B', 'C', 'H', 'I', 'J'],
             set_field=set(['A', 'B', 'C', 'H', 'I', 'J']))
 
-        # filtering using exact lookup with ListField:
-        qry = IterableFieldModel.objects.filter(list_field='A')
+        # filtering using __contains lookup with ListField:
+        qry = IterableFieldModel.objects.filter(list_field__contains='A')
         self.assertEqual(sorted(x.pk for x in qry), sorted([list1.pk, list2.pk]))
-        qry = IterableFieldModel.objects.filter(list_field='H')
-        self.assertEqual(sorted(x.pk for x in qry), [list2.pk,])
+        qry = IterableFieldModel.objects.filter(list_field__contains='H')
+        self.assertEqual(sorted(x.pk for x in qry), [list2.pk])
 
-        # filtering using exact lookup with SetField:
-        qry = IterableFieldModel.objects.filter(set_field='A')
+        # filtering using __contains lookup with SetField:
+        qry = IterableFieldModel.objects.filter(set_field__contains='A')
         self.assertEqual(sorted(x.pk for x in qry), sorted([list1.pk, list2.pk]))
-        qry = IterableFieldModel.objects.filter(set_field='H')
-        self.assertEqual(sorted(x.pk for x in qry), [list2.pk,])
+        qry = IterableFieldModel.objects.filter(set_field__contains='H')
+        self.assertEqual(sorted(x.pk for x in qry), [list2.pk])
 
-        # filtering using in lookup with ListField:
-        qry = IterableFieldModel.objects.filter(list_field__in=['A', 'B', 'C'])
-        self.assertEqual(sorted(x.pk for x in qry), sorted([list1.pk, list2.pk,]))
-        qry = IterableFieldModel.objects.filter(list_field__in=['H', 'I', 'J'])
-        self.assertEqual(sorted(x.pk for x in qry), sorted([list2.pk,]))
-
-        # filtering using in lookup with SetField:
-        qry = IterableFieldModel.objects.filter(set_field__in=set(['A', 'B']))
+        # filtering using __overlap lookup with ListField:
+        qry = IterableFieldModel.objects.filter(list_field__overlap=['A', 'B', 'C'])
         self.assertEqual(sorted(x.pk for x in qry), sorted([list1.pk, list2.pk]))
-        qry = IterableFieldModel.objects.filter(set_field__in=set(['H']))
-        self.assertEqual(sorted(x.pk for x in qry), [list2.pk,])
+        qry = IterableFieldModel.objects.filter(list_field__overlap=['H', 'I', 'J'])
+        self.assertEqual(sorted(x.pk for x in qry), sorted([list2.pk]))
+
+        # filtering using __overlap lookup with SetField:
+        qry = IterableFieldModel.objects.filter(set_field__overlap=set(['A', 'B']))
+        self.assertEqual(sorted(x.pk for x in qry), sorted([list1.pk, list2.pk]))
+        qry = IterableFieldModel.objects.filter(set_field__overlap=['H'])
+        self.assertEqual(sorted(x.pk for x in qry), [list2.pk])
 
     def test_empty_iterable_fields(self):
         """ Test that an empty set field always returns set(), not None """
@@ -309,7 +429,7 @@ class IterableFieldTests(TestCase):
         instance = IterableFieldModel.objects.get(pk=instance.pk)
         self.assertEqual(["One"], instance.list_field)
 
-        results = IterableFieldModel.objects.filter(list_field="One")
+        results = IterableFieldModel.objects.filter(list_field__contains="One")
         self.assertEqual([instance], list(results))
 
         self.assertEqual([1, 2], ListField(models.IntegerField).to_python("[1, 2]"))
@@ -326,21 +446,39 @@ class IterableFieldTests(TestCase):
         instance = IterableFieldModel.objects.get(pk=instance.pk)
         self.assertEqual(set(["One"]), instance.set_field)
 
-        self.assertEqual({1, 2}, SetField(models.IntegerField).to_python("{1, 2}"))
+        self.assertEqual({1, 2}, SetField(models.IntegerField).to_python("[1, 2]"))
 
     def test_empty_list_queryable_with_is_null(self):
         instance = IterableFieldModel.objects.create()
 
-        self.assertTrue(IterableFieldModel.objects.filter(set_field__isnull=True).exists())
+        self.assertTrue(IterableFieldModel.objects.filter(set_field__isempty=True).exists())
 
         instance.set_field.add(1)
         instance.save()
 
-        self.assertFalse(IterableFieldModel.objects.filter(set_field__isnull=True).exists())
-        self.assertTrue(IterableFieldModel.objects.filter(set_field__isnull=False).exists())
+        self.assertFalse(IterableFieldModel.objects.filter(set_field__isempty=True).exists())
+        self.assertTrue(IterableFieldModel.objects.filter(set_field__isempty=False).exists())
 
-        self.assertFalse(IterableFieldModel.objects.exclude(set_field__isnull=False).exists())
-        self.assertTrue(IterableFieldModel.objects.exclude(set_field__isnull=True).exists())
+        self.assertFalse(IterableFieldModel.objects.exclude(set_field__isempty=False).exists())
+        self.assertTrue(IterableFieldModel.objects.exclude(set_field__isempty=True).exists())
+
+    def test_serialization(self):
+        dt = datetime.datetime(2017, 1, 1, 12)
+        instance = IterableFieldModel.objects.create(
+            set_field={u"foo"},
+            list_field=[u"bar"],
+            set_field_int={123L},
+            list_field_int=[456L],
+            set_field_dt={dt},
+            list_field_dt=[dt],
+        )
+
+        self.assertEqual("['foo']", instance._meta.get_field("set_field").value_to_string(instance))
+        self.assertEqual("['bar']", instance._meta.get_field("list_field").value_to_string(instance))
+        self.assertEqual("[123]", instance._meta.get_field("set_field_int").value_to_string(instance))
+        self.assertEqual("[456]", instance._meta.get_field("list_field_int").value_to_string(instance))
+        self.assertEqual("['2017-01-01T12:00:00']", instance._meta.get_field("set_field_dt").value_to_string(instance))
+        self.assertEqual("['2017-01-01T12:00:00']", instance._meta.get_field("list_field_dt").value_to_string(instance))
 
     def test_saving_forms(self):
         class TestForm(forms.ModelForm):
@@ -357,6 +495,252 @@ class IterableFieldTests(TestCase):
         self.assertTrue(form.is_valid())
         self.assertTrue(form.save())
 
+    def test_cannot_have_min_length_and_blank(self):
+        """ Having min_length=X, blank=True doesn't make any sense, especially when you consider
+            that django will skip the min_length check when the value (list/set)is empty.
+        """
+        self.assertRaises(
+            ImproperlyConfigured,
+            ListField,
+            CharField(max_length=100),
+            min_length=1,
+            blank=True
+        )
+        self.assertRaises(
+            ImproperlyConfigured,
+            SetField,
+            CharField(max_length=100),
+            min_length=1,
+            blank=True
+        )
+
+    def test_list_field_set_field_min_max_lengths_valid(self):
+        """ Test that when the min_legnth and max_length of a ListField and SetField are correct
+            that no validation error is rasied.
+        """
+        others = []
+        for x in range(2):
+            others.append(ISOther.objects.create())
+        instance = IterableFieldsWithValidatorsModel(
+            related_set=set(others),  # not being tested here
+            related_list=others,  # not being tested here
+            set_field=set(["1", "2"]),
+            list_field=["1", "2"],
+        )
+        instance.full_clean()
+
+    def test_list_field_max_length_invalid(self):
+        others = []
+        for x in range(2):
+            others.append(ISOther.objects.create())
+        instance = IterableFieldsWithValidatorsModel(
+            related_set=set(others),  # not being tested here
+            related_list=others,  # not being tested here
+            set_field=set(["1", "2"]),  # not being tested here
+            list_field=["1", "2", "3", "4", "5"],
+        )
+        self.assertRaisesMessage(
+            ValidationError,
+            "{'list_field': [u'Ensure this field has at most 3 items (it has 5).']}",
+            instance.full_clean,
+        )
+
+    def test_list_field_min_length_invalid(self):
+        others = []
+        for x in range(2):
+            others.append(ISOther.objects.create())
+        instance = IterableFieldsWithValidatorsModel(
+            related_set=set(others),  # not being tested here
+            related_list=others,  # not being tested here
+            set_field=set(["1", "2"]),  # not being tested here
+            list_field=["1"],
+        )
+        self.assertRaisesMessage(
+            ValidationError,
+            "{'list_field': [u'Ensure this field has at least 2 items (it has 1).']}",
+            instance.full_clean,
+        )
+
+    def test_set_field_max_length_invalid(self):
+        others = []
+        for x in range(2):
+            others.append(ISOther.objects.create())
+        instance = IterableFieldsWithValidatorsModel(
+            related_set=set(others),  # not being tested here
+            related_list=others,  # not being tested here
+            list_field=["1", "2"],  # not being tested here
+            set_field=set(["1", "2", "3", "4", "5"]),
+        )
+        self.assertRaisesMessage(
+            ValidationError,
+            "{'set_field': [u'Ensure this field has at most 3 items (it has 5).']}",
+            instance.full_clean,
+        )
+
+    def test_set_field_min_length_invalid(self):
+        others = []
+        for x in range(2):
+            others.append(ISOther.objects.create())
+        instance = IterableFieldsWithValidatorsModel(
+            related_set=set(others),  # not being tested here
+            related_list=others,  # not being tested here
+            list_field=["1", "2"],  # not being tested here
+            set_field=set(["1"]),
+        )
+        self.assertRaisesMessage(
+            ValidationError,
+            "{'set_field': [u'Ensure this field has at least 2 items (it has 1).']}",
+            instance.full_clean,
+        )
+
+    def test_list_field_serializes_and_deserializes(self):
+        obj = IterableFieldModel(list_field=['foo', 'bar'])
+        data = serializers.serialize('json', [obj])
+
+        new_obj = serializers.deserialize('json', data).next().object
+        self.assertEqual(new_obj.list_field, ['foo', 'bar'])
+
+    def test_set_field_serializes_and_deserializes(self):
+        obj = IterableFieldModel(set_field=set(['foo', 'bar']))
+        data = serializers.serialize('json', [obj])
+
+        new_obj = serializers.deserialize('json', data).next().object
+        self.assertEqual(new_obj.set_field, set(['foo', 'bar']))
+
+
+class RelatedIterableFieldTests(TestCase):
+    """ Combined tests for common RelatedListField and RelatedSetField tests. """
+
+    def test_cannot_have_min_length_and_blank(self):
+        """ Having min_length=X, blank=True doesn't make any sense, especially when you consider
+            that django will skip the min_length check when the value (list/set)is empty.
+        """
+        self.assertRaises(
+            ImproperlyConfigured,
+            RelatedListField,
+            ISModel,
+            min_length=1,
+            blank=True
+        )
+        self.assertRaises(
+            ImproperlyConfigured,
+            RelatedSetField,
+            ISModel,
+            min_length=1,
+            blank=True
+        )
+
+    def test_related_list_field_set_field_min_max_lengths_valid(self):
+        """ Test that when the min_legnth and max_length of a ListField and SetField are correct
+            that no validation error is rasied.
+        """
+        others = []
+        for x in range(2):
+            others.append(ISOther.objects.create())
+        instance = IterableFieldsWithValidatorsModel(
+            list_field=["1", "2"],  # not being tested here
+            set_field=set(["1", "2"]),  # not being tested here
+            related_set=set(others),
+            related_list=others,
+        )
+        instance.full_clean()
+
+    def test_related_list_field_max_length_invalid(self):
+        others = []
+        for x in range(5):
+            others.append(ISOther.objects.create())
+        instance = IterableFieldsWithValidatorsModel(
+            list_field=["1", "2"],  # not being tested here
+            set_field=set(["1", "2"]),  # not being tested here
+            related_set=set(others[:2]),  # not being tested here
+            related_list=others,
+        )
+        self.assertRaisesMessage(
+            ValidationError,
+            "{'related_list': [u'Ensure this field has at most 3 items (it has 5).']}",
+            instance.full_clean,
+        )
+
+    def test_related_list_field_min_length_invalid(self):
+        others = []
+        for x in range(2):
+            others.append(ISOther.objects.create())
+        instance = IterableFieldsWithValidatorsModel(
+            list_field=["1", "2"],  # not being tested here
+            set_field=set(["1", "2"]),  # not being tested here
+            related_set=set(others),
+            related_list=others[:1],
+        )
+        self.assertRaisesMessage(
+            ValidationError,
+            "{'related_list': [u'Ensure this field has at least 2 items (it has 1).']}",
+            instance.full_clean,
+        )
+
+    def test_related_set_field_max_length_invalid(self):
+        others = []
+        for x in range(5):
+            others.append(ISOther.objects.create())
+        instance = IterableFieldsWithValidatorsModel(
+            list_field=["1", "2"],  # not being tested here
+            set_field=set(["1", "2"]),  # not being tested here
+            related_list=others[:2],  # not being tested here
+            related_set=set(others),
+        )
+        self.assertRaisesMessage(
+            ValidationError,
+            "{'related_set': [u'Ensure this field has at most 3 items (it has 5).']}",
+            instance.full_clean,
+        )
+
+    def test_related_set_field_min_length_invalid(self):
+        others = []
+        for x in range(2):
+            others.append(ISOther.objects.create())
+        instance = IterableFieldsWithValidatorsModel(
+            list_field=["1", "2"],  # not being tested here
+            set_field=set(["1", "2"]),  # not being tested here
+            related_list=others,  # not being tested here
+            related_set=set(others[:1]),
+        )
+        self.assertRaisesMessage(
+            ValidationError,
+            "{'related_set': [u'Ensure this field has at least 2 items (it has 1).']}",
+            instance.full_clean,
+        )
+
+    def test_model_stores_ids_as_integers_when_saving(self):
+        others = []
+        for x in range(2):
+            others.append(ISOther.objects.create())
+
+        instance = IterableRelatedModel(
+            related_set_ids=[str(x.pk) for x in others],
+            related_list_ids=[str(x.pk) for x in others],
+        )
+
+        instance.save()
+        instance.refresh_from_db()
+
+        self.assertEqual(instance.related_set_ids, [int(x.pk) for x in others])
+        self.assertEqual(instance.related_list_ids, [int(x.pk) for x in others])
+
+    def test_model_stores_ids_as_non_integers(self):
+        others = []
+        for x in range(2):
+            others.append(StringPkModel.objects.create(name=str(x)))
+
+        instance = IterableRelatedWithNonIntPkModel(
+            related_set_ids=[x.pk for x in others],
+            related_list_ids=[x.pk for x in others],
+        )
+
+        instance.save()
+        instance.refresh_from_db()
+
+        self.assertEqual(instance.related_set_ids, [x.pk for x in others])
+        self.assertEqual(instance.related_list_ids, [x.pk for x in others])
+
 
 class RelatedListFieldModelTests(TestCase):
 
@@ -366,6 +750,18 @@ class RelatedListFieldModelTests(TestCase):
         before_list = thing.related_list
         thing.related_list.field.save_form_data(thing, [])
         self.assertNotEqual(before_list.all(), thing.related_list.all())
+
+    def test_filtering_on_iterable_fields(self):
+        related1 = ISOther.objects.create()
+        related2 = ISOther.objects.create()
+        related3 = ISOther.objects.create()
+        thing = ISModel.objects.create(related_list=[related1, related2])
+        # filtering using __contains lookup with ListField:
+        qry = ISModel.objects.filter(related_list__contains=related1)
+        self.assertEqual(sorted(x.pk for x in qry), [thing.pk])
+        # filtering using __overlap lookup with ListField:
+        qry = ISModel.objects.filter(related_list__overlap=[related2, related3])
+        self.assertEqual(sorted(x.pk for x in qry), [thing.pk])
 
     def test_saving_forms(self):
         class TestForm(forms.ModelForm):
@@ -384,6 +780,16 @@ class RelatedListFieldModelTests(TestCase):
         self.assertEqual([related.pk], instance.related_list_ids)
 
 
+class Post(models.Model):
+    content = models.TextField()
+    tags = RelatedSetField('Tag', related_name='posts')
+    ordered_tags = RelatedListField('Tag')
+
+
+class Tag(models.Model):
+    name = models.CharField(max_length=64)
+
+
 class RelatedSetFieldModelTests(TestCase):
 
     def test_can_update_related_field_from_form(self):
@@ -393,6 +799,15 @@ class RelatedSetFieldModelTests(TestCase):
         thing.related_list.field.save_form_data(thing, set())
         thing.save()
         self.assertNotEqual(before_set.all(), thing.related_things.all())
+
+    def test_prefetch_related(self):
+        tag = Tag.objects.create(name="Apples")
+
+        for i in range(2):
+            Post.objects.create(content="Bananas", tags={tag})
+
+        posts = list(Post.objects.prefetch_related('tags').all())
+        self.assertNumQueries(0, list, posts[0].tags.all())
 
     def test_saving_forms(self):
         class TestForm(forms.ModelForm):
@@ -419,6 +834,32 @@ class InstanceListFieldTests(TestCase):
         # Does the to_python need to return ordered list? SetField test only passes because the set
         # happens to order it correctly
         self.assertItemsEqual([i1, i2], ISModel._meta.get_field("related_list").to_python("[1, 2]"))
+
+    def test_prefetch_related(self):
+        tags = [
+            Tag.objects.create(name="1"),
+            Tag.objects.create(name="2"),
+            Tag.objects.create(name="3")
+        ]
+
+        # Extra one to make sure we're filtering properly
+        Tag.objects.create(name="unused")
+
+        for i in range(3):
+            Post.objects.create(content="Bananas", ordered_tags=tags)
+
+        with self.assertNumQueries(2):
+            # 1 query on Posts + 1 query on Tags
+            posts = list(Post.objects.prefetch_related('ordered_tags').all())
+
+        with self.assertNumQueries(0):
+            posts[0].tags.all()
+            posts[1].tags.all()
+            posts[2].tags.all()
+
+        self.assertEqual(posts[0].ordered_tags.all()[0].name, "1")
+        self.assertEqual(posts[0].ordered_tags.all()[1].name, "2")
+        self.assertEqual(posts[0].ordered_tags.all()[2].name, "3")
 
     def test_default_on_delete_does_nothing(self):
         child = ISOther.objects.create(pk=1)
@@ -565,11 +1006,24 @@ class InstanceListFieldTests(TestCase):
         other = ISOther.objects.create(name="one")
         other1 = ISOther.objects.create(name="two")
         other2 = ISOther.objects.create(name="one")
-        other3 = ISOther.objects.create(name="three")
+        ISOther.objects.create(name="three")
         main.related_list.add(other, other1, other2, other1, other2,)
         main.save()
         self.assertItemsEqual([other, other2, other2], main.related_list.filter(name="one"))
 
+    def test_related_list_field_serializes_and_deserializes(self):
+        obj = ISModel.objects.create()
+        foo = ISOther.objects.create(name='foo')
+        bar = ISOther.objects.create(name='bar')
+        obj.related_list.add(foo, bar)
+        obj.save()
+
+        data = serializers.serialize('json', [obj])
+        new_obj = serializers.deserialize('json', data).next().object
+        self.assertEqual(
+            list(new_obj.related_list.all()),
+            [foo, bar],
+        )
 
 
 class InstanceSetFieldTests(TestCase):
@@ -591,7 +1045,7 @@ class InstanceSetFieldTests(TestCase):
         self.assertEqual({other.pk}, main.related_things_ids)
         self.assertEqual(list(ISOther.objects.filter(pk__in=main.related_things_ids)), list(main.related_things.all()))
 
-        self.assertItemsEqual([main], ISModel.objects.filter(related_things=other).all())
+        self.assertItemsEqual([main], ISModel.objects.filter(related_things__contains=other).all())
         self.assertItemsEqual([main], list(other.ismodel_set.all()))
 
         main.related_things.remove(other)
@@ -671,8 +1125,23 @@ class InstanceSetFieldTests(TestCase):
     def test_querying_with_isnull(self):
         obj = ISModel.objects.create()
 
-        self.assertItemsEqual([obj], ISModel.objects.filter(related_things__isnull=True))
-        self.assertItemsEqual([obj], ISModel.objects.filter(related_things_ids__isnull=True))
+        self.assertItemsEqual([obj], ISModel.objects.filter(related_things__isempty=True))
+        self.assertItemsEqual([obj], ISModel.objects.filter(related_things_ids__isempty=True))
+
+    def test_related_set_field_serializes_and_deserializes(self):
+        obj = ISModel.objects.create()
+        foo = ISOther.objects.create(name='foo')
+        bar = ISOther.objects.create(name='bar')
+        obj.related_things.add(foo, bar)
+        obj.save()
+
+        data = serializers.serialize('json', [obj])
+
+        new_obj = serializers.deserialize('json', data).next().object
+        self.assertEqual(
+            set(new_obj.related_things.all()),
+            set([foo, bar]),
+        )
 
 
 class TestGenericRelationField(TestCase):
@@ -721,6 +1190,24 @@ class TestGenericRelationField(TestCase):
 
 
 class JSONFieldModelTests(TestCase):
+
+    def test_invalid_data_in_datastore_doesnt_throw_an_error(self):
+        """
+            If invalid data is found while reading the entity data, then
+            we should silently ignore the error and just return the data as-is
+            rather than converting to list/dict.
+
+            The reason is that if we blow up on load, then there's no way to load the
+            entity (in Django) to repair the data. This is also consistent with the behaviour
+            of Django when (for example) you load a NULL from the database into a field that is
+            non-nullable. The field value will still be None when read.
+        """
+        entity = datastore.Entity(JSONFieldModel._meta.db_table, id=1, namespace=settings.DATABASES["default"]["NAMESPACE"])
+        entity["json_field"] = "bananas"
+        datastore.Put(entity)
+
+        instance = JSONFieldModel.objects.get(pk=1)
+        self.assertEqual(instance.json_field, "bananas")
 
     def test_object_pairs_hook_with_ordereddict(self):
         items = [('first', 1), ('second', 2), ('third', 3), ('fourth', 4)]
@@ -775,10 +1262,14 @@ class JSONFieldModelTests(TestCase):
         thing = JSONFieldModel()
         self.assertEqual(thing.json_field, {})
 
-
-class ModelWithCharField(models.Model):
-    char_field_with_max = CharField(max_length=10, default='', blank=True)
-    char_field_without_max = CharField(default='', blank=True)
+    def test_default_value_correctly_handled_as_data_structure(self):
+        """ Test that default value - if provided is not transformed into
+            string anymore. Previously we needed string, since we used
+            SubfieldBase in JSONField. Since it is now deprecated we need
+            to change handling of default value.
+        """
+        thing = JSONFieldWithDefaultModel()
+        self.assertEqual(thing.json_field, {})
 
 
 class CharFieldModelTests(TestCase):
@@ -815,12 +1306,128 @@ class CharFieldModelTests(TestCase):
             test_instance.full_clean,
          )
 
+    def test_additional_validators_work(self):
+        test_instance = ModelWithCharField(char_field_as_email='bananas')
+        self.assertRaisesMessage(ValidationError, 'failed', test_instance.full_clean)
+
     def test_too_long_max_value_set(self):
         try:
             class TestModel(models.Model):
                 test_char_field = CharField(max_length=1501)
-        except AssertionError, e:
+        except AssertionError as e:
             self.assertEqual(
                 e.message,
                 'CharFields max_length must not be grater than 1500 bytes.',
             )
+
+
+class CharOrNoneFieldTests(TestCase):
+
+    def test_char_or_none_field(self):
+        # Ensure that empty strings are coerced to None on save
+        obj = ModelWithCharOrNoneField.objects.create(char_or_none_field="")
+        obj.refresh_from_db()
+        self.assertIsNone(obj.char_or_none_field)
+
+
+class ISStringReferenceModel(models.Model):
+    related_things = RelatedSetField('ISOther')
+    related_list = RelatedListField('ISOther', related_name="ismodel_list_string")
+    limted_related = RelatedSetField('RelationWithoutReverse', limit_choices_to={'name': 'banana'}, related_name="+")
+    children = RelatedSetField("self", related_name="+")
+
+    class Meta:
+        app_label = "djangae"
+
+
+class StringReferenceRelatedSetFieldModelTests(TestCase):
+
+    def test_can_update_related_field_from_form(self):
+        related = ISOther.objects.create()
+        thing = ISStringReferenceModel.objects.create(related_things={related})
+        before_set = thing.related_things
+        thing.related_list.field.save_form_data(thing, set())
+        thing.save()
+        self.assertNotEqual(before_set.all(), thing.related_things.all())
+
+    def test_saving_forms(self):
+        class TestForm(forms.ModelForm):
+            class Meta:
+                model = ISStringReferenceModel
+                fields = ("related_things", )
+
+        related = ISOther.objects.create()
+        post_data = {
+            "related_things": [ str(related.pk) ],
+        }
+
+        form = TestForm(post_data)
+        self.assertTrue(form.is_valid())
+        instance = form.save()
+        self.assertEqual({related.pk}, instance.related_things_ids)
+
+
+
+class PFPost(models.Model):
+    content = models.TextField()
+    authors = RelatedSetField('PFAuthor', related_name='posts')
+
+    class Meta:
+        app_label = "djangae"
+
+class PFAuthor(models.Model):
+    name = models.CharField(max_length=32)
+    awards = RelatedSetField('PFAwards')
+
+    class Meta:
+        app_label = "djangae"
+
+class PFAwards(models.Model):
+    name = models.CharField(max_length=32)
+
+    class Meta:
+        app_label = "djangae"
+
+
+class RelatedFieldPrefetchTests(TestCase):
+
+    def test_prefetch_related(self):
+        award = PFAwards.objects.create(name="award")
+        author = PFAuthor.objects.create(awards={award})
+        post = PFPost.objects.create(authors={author})
+
+        posts = list(PFPost.objects.all().prefetch_related('authors__awards'))
+
+        with self.assertNumQueries(0):
+            awards = list(posts[0].authors.all()[0].awards.all())
+
+
+class PickleTests(TestCase):
+
+    def test_all_fields_are_pickleable(self):
+        """ In order to work with Djangae's migrations, all fields must be pickeable. """
+        fields = [
+            CharField(),
+            CharOrNoneField(),
+            ComputedBooleanField("method_name"),
+            ComputedCharField("method_name"),
+            ComputedIntegerField("method_name"),
+            ComputedPositiveIntegerField("method_name"),
+            ComputedTextField("method_name"),
+            GenericRelationField(),
+            JSONField(default=list),
+            ListField(CharField(), default=["badger"]),
+            SetField(CharField(), default=set(["badger"])),
+        ]
+        if django.VERSION[1] > 8:
+            # These 2 fields have different logic for Django 1.8, which prevents them being pickled
+            fields.extend([
+                RelatedListField(ModelWithCharField),
+                RelatedSetField(ModelWithCharField),
+                ShardedCounterField(),
+            ])
+        for field in fields:
+            try:
+                pickle.dumps(field)
+            except (pickle.PicklingError, TypeError) as e:
+                self.fail("Could not pickle %r: %s" % (field, e))

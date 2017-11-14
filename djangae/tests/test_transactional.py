@@ -1,14 +1,17 @@
-from djangae.test import TestCase
+# STANDARD LIB
+import threading
 
+# DJANGAE
 from djangae.db import transaction
 from djangae.contrib import sleuth
+from djangae.test import TestCase
 
 
 class TransactionTests(TestCase):
     def test_repeated_usage_in_a_loop(self):
         from .test_connector import TestUser
         pk = TestUser.objects.create(username="foo").pk
-        for i in xrange(4):
+        for i in range(4):
             with transaction.atomic(xg=True):
                 TestUser.objects.get(pk=pk)
                 continue
@@ -16,6 +19,57 @@ class TransactionTests(TestCase):
         with transaction.atomic(xg=True):
             TestUser.objects.get(pk=pk)
 
+    def test_recursive_atomic(self):
+        l = []
+
+        @transaction.atomic
+        def txn():
+            l.append(True)
+            if len(l) == 3:
+                return
+            else:
+                txn()
+
+        txn()
+
+    def test_recursive_non_atomic(self):
+        l = []
+
+        @transaction.non_atomic
+        def txn():
+            l.append(True)
+            if len(l) == 3:
+                return
+            else:
+                txn()
+
+        txn()
+
+    def test_atomic_in_separate_thread(self):
+        """ Regression test.  See #668. """
+        @transaction.atomic
+        def txn():
+            return
+
+        def target():
+            txn()
+
+        thread = threading.Thread(target=target)
+        thread.start()
+        thread.join()
+
+    def test_non_atomic_in_separate_thread(self):
+        """ Regression test.  See #668. """
+        @transaction.non_atomic
+        def txn():
+            return
+
+        def target():
+            txn()
+
+        thread = threading.Thread(target=target)
+        thread.start()
+        thread.join()
 
     def test_atomic_decorator(self):
         from .test_connector import TestUser
@@ -59,7 +113,6 @@ class TransactionTests(TestCase):
         with transaction.atomic():
             double_nested_transactional()
 
-
         @db.transactional()
         def something_containing_atomic():
             with transaction.atomic():
@@ -88,7 +141,6 @@ class TransactionTests(TestCase):
 
         self.assertEqual(0, TestUser.objects.count())
 
-
     def test_non_atomic_context_manager(self):
         from .test_connector import TestUser
         existing = TestUser.objects.create(username="existing", field2="exists")
@@ -104,7 +156,7 @@ class TransactionTests(TestCase):
                 self.assertFalse(transaction.in_atomic_block())
 
                 with sleuth.watch("google.appengine.api.datastore.Get") as datastore_get:
-                    TestUser.objects.get(pk=existing.pk) #Should hit the cache, not the datastore
+                    TestUser.objects.get(pk=existing.pk)  # Should hit the cache, not the datastore
 
                 self.assertFalse(datastore_get.called)
 
@@ -121,14 +173,14 @@ class TransactionTests(TestCase):
                         self.assertRaises(TestUser.DoesNotExist, TestUser.objects.get, pk=user2.pk)
 
                         with sleuth.watch("google.appengine.api.datastore.Get") as datastore_get:
-                            TestUser.objects.get(pk=existing.pk) #Should hit the cache, not the datastore
+                            # Should hit the cache, not the Datastore
+                            TestUser.objects.get(pk=existing.pk)
 
                     self.assertFalse(transaction.in_atomic_block())
                     self.assertRaises(TestUser.DoesNotExist, TestUser.objects.get, pk=user2.pk)
 
                 self.assertTrue(TestUser.objects.filter(pk=user2.pk).exists())
                 self.assertTrue(transaction.in_atomic_block())
-
 
     def test_xg_argument(self):
         from .test_connector import TestUser, TestFruit
@@ -161,10 +213,8 @@ class TransactionTests(TestCase):
             TestUser.objects.create(username=_username)
             txn2(_fruit)
 
-
         with self.assertRaises(ValueError):
             txn1("test", "banana")
-
 
     def test_nested_decorator(self):
         # Nested decorator pattern we discovered can cause a connection_stack

@@ -1,4 +1,4 @@
-DEFAULT_FILE_STORAGE = 'djangae.storage.BlobstoreStorage'
+DEFAULT_FILE_STORAGE = 'djangae.storage.CloudStorage'
 FILE_UPLOAD_MAX_MEMORY_SIZE = 1024 * 1024
 FILE_UPLOAD_HANDLERS = (
     'djangae.storage.BlobstoreFileUploadHandler',
@@ -48,9 +48,14 @@ LOGGING = {
 
 EMAIL_BACKEND = 'djangae.mail.AsyncEmailBackend'
 
-# Setting to *.appspot.com is OK, because GAE takes care of domain routing
-# it needs to be like this because of the syntax of addressing non-default versions
-# (e.g. -dot-)
-ALLOWED_HOSTS = (".appspot.com", )
+# Setting to * is OK, because GAE takes care of domain routing - setting it to anything
+# else just causes unnecessary pain when something isn't accessible under a custom domain
+ALLOWED_HOSTS = ("*",)
 
 DJANGAE_RUNSERVER_IGNORED_FILES_REGEXES = ['^.+$(?<!\.py)(?<!\.yaml)(?<!\.html)']
+# Note that these should match a directory name, not directory path:
+DJANGAE_RUNSERVER_IGNORED_DIR_REGEXES = [r"^google_appengine$"]
+
+TEST_RUNNER = 'djangae.test.DjangaeDiscoverRunner'
+
+DJANGAE_USE_LEGACY_CONTAINS_LOGIC = False 

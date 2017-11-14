@@ -3,16 +3,16 @@ import threading
 import itertools
 
 from google.appengine.api import datastore
-from google.appengine.api import namespace_manager
 from google.appengine.api import memcache
 from google.appengine.api.memcache import Client
-from django.core.cache.backends.base import default_key_func
-
 
 from django.conf import settings
+from django.core.exceptions import ImproperlyConfigured
+from django.core.cache.backends.base import default_key_func
+
 from djangae.db import utils
 from djangae.db.unique_utils import unique_identifiers_from_entity, _format_value_for_identifier
-from djangae.db.backends.appengine.context import ContextCache
+from djangae.db.backends.appengine.context import ContextCache, key_or_entity_compare
 
 _local = threading.local()
 
@@ -105,7 +105,7 @@ class KeyPrefixedClient(Client):
             )
 
     def delete_multi_async(self, keys, seconds=0, key_prefix='', namespace=None, rpc=None):
-        keys = [ default_key_func(x, KEY_PREFIX, VERSION) for x in keys ]
+        keys = [default_key_func(x, KEY_PREFIX, VERSION) for x in keys]
 
         if self.sync_mode:
             # We don't call up, because delete_multi calls delete_multi_async
@@ -150,12 +150,24 @@ def _add_entity_to_memcache(model, mc_key_entity_map, namespace):
 
 
 def _get_cache_key_and_model_from_datastore_key(key):
-    model = utils.get_model_from_db_table(key.kind())
+    from django.db.migrations.recorder import MigrationRecorder
+
+    # The django migration model isn't registered with the app registry so this
+    # is special cased here
+    MODELS_WHICH_ARENT_REGISTERED_WITH_DJANGO = {
+        MigrationRecorder.Migration._meta.db_table: MigrationRecorder.Migration
+    }
+
+    kind = key.kind()
+    model = utils.get_model_from_db_table(kind)
 
     if not model:
-        # This should never happen.. if it does then we can edit get_model_from_db_table to pass
-        # include_deferred=True/included_swapped=True to get_models, whichever makes it better
-        raise AssertionError("Unable to locate model for db_table '{}' - item won't be evicted from the cache".format(key.kind()))
+        if kind in MODELS_WHICH_ARENT_REGISTERED_WITH_DJANGO:
+            model = MODELS_WHICH_ARENT_REGISTERED_WITH_DJANGO[kind]
+        else:
+            # This should never happen.. if it does then we can edit get_model_from_db_table to pass
+            # include_deferred=True/included_swapped=True to get_models, whichever makes it better
+            raise ImproperlyConfigured("Unable to locate model for db_table '{}' - are you missing an INSTALLED_APP?".format(key.kind()))
 
     # We build the cache key for the ID of the instance
     cache_key = "|".join(
@@ -203,6 +215,15 @@ def _get_entity_from_memcache_by_key(key):
 
 
 def add_entities_to_cache(model, entities, situation, namespace, skip_memcache=False):
+    if not CACHE_ENABLED:
+        return None
+
+    context = get_context()
+
+    if not (context.context_enabled or context.memcache_enabled):
+        # Don't cache anything if caching is disabled
+        return
+
     # Don't cache on Get if we are inside a transaction, even in the context
     # This is because transactions don't see the current state of the datastore
     # We can still cache in the context on Put() but not in memcache
@@ -245,10 +266,13 @@ def remove_entities_from_cache_by_key(keys, namespace, memcache_only=False):
         Given an iterable of datastore.Keys objects, remove the corresponding entities from caches,
         both context and memcache, or just memcache if specified.
     """
+    if not CACHE_ENABLED:
+        return None
+
     context = get_context()
     if not memcache_only:
         for key in keys:
-            identifiers = context.stack.top.reverse_cache.get(key, [])
+            identifiers = context.stack.top.cache.get_reversed(key, compare_func=key_or_entity_compare)
             for identifier in identifiers:
                 if identifier in context.stack.top.cache:
                     del context.stack.top.cache[identifier]

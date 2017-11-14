@@ -1,12 +1,21 @@
+## The test runner in here is for running the Djangae test suite itself. Projects using Djangae
+## should either use djangae.test.DjangaeDiscoverRunner or if using Nose, use the noseplugin
+## both of which will setup and teardown the App Engine testbed for each test
+
 import unittest
 import os
+import logging
+
 from unittest import TextTestResult
 
 from django.test.runner import DiscoverRunner
-
 from django.db import NotSupportedError
-from djangae.utils import find_project_root
+from django.conf import settings
 
+from djangae import environment
+from djangae.db.backends.appengine.caching import get_context
+
+from google.appengine.datastore import datastore_stub_util
 from google.appengine.ext import testbed
 
 
@@ -32,6 +41,10 @@ DJANGO_TESTS_WHICH_REQUIRE_AUTH_USER = {
 
 DJANGO_TESTS_WHICH_HAVE_BUGS = {
     'one_to_one.tests.OneToOneTests.test_foreign_key', # Uses the wrong IDs, fixed in 1.8+
+
+    # Fails to recognize deprecation warning is emitted, even though it is... must be
+    # something to do with our setup
+    'many_to_one.tests.ManyToOneTests.test_reverse_assignment_deprecation',
 }
 
 # This is potentially fixable by us. sql_with_params returns a tuple of
@@ -49,29 +62,64 @@ DJANGO_TESTS_WHICH_EXPECT_SQL_PARAMS = {
 # tests which depend on it
 DJANGO_TESTS_WHICH_USE_SELECT_RELATED = {
     'defer.tests.DeferTests.test_defer_with_select_related',
+    'defer.tests.DeferTests.test_defer_foreign_keys_are_deferred_and_not_traversed',
     'defer.tests.DeferTests.test_defer_select_related_raises_invalid_query',
     'defer.tests.DeferTests.test_only_select_related_raises_invalid_query',
     'defer.tests.DeferTests.test_only_with_select_related',
     'model_inheritance.tests.ModelInheritanceDataTests.test_select_related_works_on_parent_model_fields'
 }
 
+# These tests expect a certain number of queries to run, because they hardcode the expected
+# batchsize and due to datastore limitations (e.g. MAX_ALLOWABLE_QUERIES) we need more queries
+# (we test the bulk delete behaviour in djangae.tests.test_connector.CascadeDeletionTests instead).
+DJANGO_TESTS_WHICH_COUNT_QUERIES = {
+    'delete.tests.DeletionTests.test_bulk',
+    'delete.tests.DeletionTests.test_large_delete_related'
+}
+
+
+DJANGO_TESTS_WHICH_EXPECT_SEQUENTIAL_IDS = {
+    'ordering.tests.OrderingTests.test_order_by_pk',
+    'ordering.tests.OrderingTests.test_order_by_fk_attname',
+}
 
 DJANGO_TESTS_TO_SKIP = DJANGO_TESTS_WHICH_REQUIRE_ZERO_PKS.union(
     DJANGO_TESTS_WHICH_REQUIRE_AUTH_USER).union(
     DJANGO_TESTS_WHICH_HAVE_BUGS).union(
     DJANGO_TESTS_WHICH_EXPECT_SQL_PARAMS).union(
-    DJANGO_TESTS_WHICH_USE_SELECT_RELATED
+    DJANGO_TESTS_WHICH_USE_SELECT_RELATED).union(
+    DJANGO_TESTS_WHICH_COUNT_QUERIES).union(
+    DJANGO_TESTS_WHICH_EXPECT_SEQUENTIAL_IDS
 )
 
+logger = logging.getLogger(__file__)
+
 def init_testbed():
-    # We don't initialize the datastore stub here, that needs to be done by Django's create_test_db and destroy_test_db.
-    IGNORED_STUBS = [ "init_datastore_v3_stub" ]
+    try:
+        import PIL
+        IGNORED_STUBS = []
+    except ImportError:
+        logger.warning("Unable to initialize the images stub as Pillow is unavailable")
+        IGNORED_STUBS = [
+            "init_images_stub"
+        ]
+
+    # We allow users to disable scattered IDs in tests. This primarily for running Django tests that
+    # assume implicit ordering (yeah, annoying)
+    use_scattered = not getattr(settings, "DJANGAE_SEQUENTIAL_IDS_IN_TESTS", False)
 
     stub_kwargs = {
         "init_taskqueue_stub": {
-            "root_path": find_project_root()
+            "root_path": environment.get_application_root()
+        },
+        "init_datastore_v3_stub": {
+            "use_sqlite": True,
+            "auto_id_policy": testbed.AUTO_ID_POLICY_SCATTERED if use_scattered else testbed.AUTO_ID_POLICY_SEQUENTIAL,
+            "consistency_policy": datastore_stub_util.PseudoRandomHRConsistencyPolicy(probability=1)
         }
     }
+
+    get_context().reset(); # Reset any context caching
     bed = testbed.Testbed()
     bed.activate()
     for init_name in testbed.INIT_STUB_METHOD_NAMES.values():
@@ -112,6 +160,10 @@ class SkipUnsupportedTestResult(TextTestResult):
 
 
 class DjangaeTestSuiteRunner(DiscoverRunner):
+    def __init__(self, *a, **kw):
+        kw['pattern'] = '*tests.py'
+        super(DjangaeTestSuiteRunner, self).__init__(*a, **kw)
+
     def _discover_additional_tests(self):
         """
             Django's DiscoverRunner only detects apps that are below
@@ -180,3 +232,4 @@ class SkipUnsupportedRunner(DjangaeTestSuiteRunner):
             failfast=self.failfast,
             resultclass=SkipUnsupportedTestResult
         ).run(suite)
+

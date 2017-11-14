@@ -1,11 +1,14 @@
 language: python
 sudo: false
 python:
-- '2.7'
+- 2.7
 env:
-  - "DJANGO_VERSION=1.8"
-  - "DJANGO_VERSION=1.9"
-
+  - DJANGO_VERSION=1.8
+  - DJANGO_VERSION=1.9
+  - DJANGO_VERSION=1.10
+  - DJANGO_VERSION=1.11
+matrix:
+  fast_finish: true
 before_install:
 - pip install codecov
 
@@ -21,4 +24,6 @@ after_success:
 - codecov
 notifications:
   slack:
-    secure: UBhOWAtUrp9sqN6hm4PWir23GK67wo3tb0Ic7tXLpvKYnACz8kjRIiLUMZjl6kftwO+hwhVQdyZ2iSD6isGfB8Q/CyKCej693N2GZ7wxl/dCGqm6CmKrTQZ7Bkwov22fe1/j8U1fhIuR2j/qkFPkvONi+fXirQqFYxmqor1I9a0=
+    rooms:
+      - djangae:3tHoJEVCSGLDrLj9ZZAOSMhr#general
+      - secure: UBhOWAtUrp9sqN6hm4PWir23GK67wo3tb0Ic7tXLpvKYnACz8kjRIiLUMZjl6kftwO+hwhVQdyZ2iSD6isGfB8Q/CyKCej693N2GZ7wxl/dCGqm6CmKrTQZ7Bkwov22fe1/j8U1fhIuR2j/qkFPkvONi+fXirQqFYxmqor1I9a0=

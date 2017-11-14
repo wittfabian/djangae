@@ -3,6 +3,7 @@ import threading
 import logging
 import re
 
+logger = logging.getLogger(__name__)
 blobstore_service = None
 server = None
 
@@ -70,11 +71,11 @@ def start_blobstore_service():
 
     port = int(os.environ['SERVER_PORT'])
     host = os.environ['SERVER_NAME']
-    logging.info("Starting blobstore service on %s:%s", host, port)
+    logger.info("Starting blobstore service on %s:%s", host, port)
     try:
         server = make_server(host, port, handler, handler_class=NoLogRequestHandler)
     except socket_error:
-        logging.warning("Not starting blobstore service, it may already be running")
+        logger.warning("Not starting blobstore service, it may already be running")
         return
 
     blobstore_service = threading.Thread(target=server.serve_forever)

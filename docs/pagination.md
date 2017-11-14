@@ -57,12 +57,12 @@ That's a hell of an annoying caveat. That's not to say our approach doesn't suff
 ## Caveats
 
 Because our pre-calculated fields are indexed, the combined length of the values (plus the unique ID and joining characters) you are
-ordering on must not exceed 500 characters. This will throw an error, and if that happens, you'll either need to use a slower paginator (e.g. djangae.core.paginator)
+ordering on must not exceed 1500 characters. This will throw an error, and if that happens, you'll either need to use a slower paginator (e.g. djangae.core.paginator)
 or rethink your design.
 
 ## Why didn't you update potatopage?
 
-[Potatopage](http://github.com/potatolondon/potatopage) supports different backends for pagination. I didn't extend that for the following reasons:
+[Potatopage](https://github.com/potatolondon/potatopage) supports different backends for pagination. I didn't extend that for the following reasons:
 
  - Efficient pagination is something that pretty much any Djangae-based app needs and should come built-in, moving potatopage into Djangae wouldn't make
  sense as it has backends for Djangoappengine and NDB and they don't belong in Djangae. Potatopage is better as a standalone library anyway.

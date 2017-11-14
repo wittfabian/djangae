@@ -1,11 +1,22 @@
+# STANDARD LIB
 import copy
+from decimal import Decimal
+from itertools import chain
 
+# THIRD PARTY
 from django import forms
 from django.db import models
+from django.db.models.lookups import Lookup, Transform
 from django.core.exceptions import ValidationError, ImproperlyConfigured
-from django.db.models.fields.subclassing import Creator
-from djangae.forms.fields import ListFormField
+from django.utils import six
 from django.utils.text import capfirst
+
+# DJANGAE
+from djangae.core.validators import MinItemsValidator, MaxItemsValidator
+from djangae.forms.fields import ListFormField
+
+# types that don't need to be quoted when serializing an iterable field
+_SERIALIZABLE_TYPES = six.integer_types + (float, Decimal,)
 
 
 class _FakeModel(object):
@@ -19,6 +30,76 @@ class _FakeModel(object):
         setattr(self, field.attname, value)
 
 
+class ContainsLookup(Lookup):
+    lookup_name = 'contains'
+
+    def get_rhs_op(self, connection, rhs):
+        return '= %s' % rhs
+
+    def get_prep_lookup(self):
+        if hasattr(self.rhs, "__iter__"):
+            raise ValueError("__contains cannot take an iterable")
+
+        # Currently, we cannot differentiate between an empty list (which we store as None) and a
+        # list which contains None.  Once we move to storing empty lists as empty lists (now that
+        # GAE allows it) we can remove this restriction.
+        if self.rhs is None:
+            raise ValueError("__contains cannot take None, use __isempty instead")
+
+        return self.rhs
+
+
+class IsEmptyLookup(Lookup):
+    lookup_name = 'isempty'
+
+    def get_rhs_op(self, connection, rhs):
+        return 'isnull %s' % rhs
+
+    def get_prep_lookup(self):
+        if self.rhs not in (True, False):
+            raise ValueError("__isempty takes a boolean as a value")
+
+        return self.rhs
+
+
+class OverlapLookup(Lookup):
+    lookup_name = 'overlap'
+    get_db_prep_lookup_value_is_iterable = False
+
+    def get_rhs_op(self, connection, rhs):
+        return 'IN %s' % rhs
+
+    def get_db_prep_lookup(self, value, connection):
+        # the In lookup wraps each element in a list, so we unwrap here
+        ret = super(OverlapLookup, self).get_db_prep_lookup(value, connection)
+        return (ret[0], [x for x in chain(*ret[-1])])
+
+    def get_prep_lookup(self):
+        if not isinstance(self.rhs, (list, set)):
+            raise ValueError("__overlap takes a list or set as a value")
+
+        return [self.lhs.output_field.get_prep_value(v) for v in self.rhs]
+
+
+class IterableTransform(Transform):
+    lookup_name = 'item'
+
+    def __init__(self, item_field_type, *args, **kwargs):
+        super(IterableTransform, self).__init__(*args, **kwargs)
+        self.item_field_type = item_field_type
+
+    def get_lookup(self, name):
+        return self.item_field_type.get_lookup(name)
+
+
+class IterableTransformFactory(object):
+    def __init__(self, base_field):
+        self.base_field = base_field
+
+    def __call__(self, *args, **kwargs):
+        return IterableTransform(self.base_field, *args, **kwargs)
+
+
 class IterableField(models.Field):
     @property
     def _iterable_type(self): raise NotImplementedError()
@@ -29,37 +110,26 @@ class IterableField(models.Field):
     def db_type(self, connection):
         return 'list'
 
-    def get_prep_lookup(self, lookup_type, value):
-        if hasattr(value, 'prepare'):
-            return value.prepare()
-        if hasattr(value, '_prepare'):
-            return value._prepare()
+    def get_lookup(self, name):
+        # isnull is explitly not blocked here, because annoyingly Django adds isnull lookups implicitly on
+        # excluded nullable with no way of switching it off!
 
-        if value is None:
-            raise ValueError("You can't query an iterable field with None")
+        if name == "exact":
+            raise ValueError("You can't perform __{} on an iterable field, did you mean __contains?".format(name))
 
-        if lookup_type == 'isnull' and value in (True, False):
-            return value
+        if name == "in":
+            raise ValueError("You can't perform __{} on an iterable field, did you mean __overlap?".format(name))
 
-        if lookup_type not in ['exact', 'in', 'regex', 'iregex']:
-            raise ValueError("You can only query using exact and in lookups on iterable fields")
+        if name in ("regex", "startswith", "endswith", "iexact", "istartswith", "icontains", "iendswith"):
+            raise ValueError("You can't perform __{} on an iterable field, did you mean __item__{}?".format(name, name))
 
-        if isinstance(value, (list, set)):
-            return [ self.item_field_type.to_python(x) for x in value ]
+        return super(IterableField, self).get_lookup(name)
 
-        return self.item_field_type.to_python(value)
+    def get_transform(self, name):
+        if name == "item":
+            return IterableTransformFactory(self.item_field_type)
 
-    def get_prep_value(self, value):
-        if value is None:
-            raise ValueError("You can't set a {} to None (did you mean {}?)".format(
-                self.__class__.__name__, str(self._iterable_type())
-            ))
-
-        if isinstance(value, basestring):
-            # Catch accidentally assigning a string to a ListField
-            raise ValueError("Tried to assign a string to a {}".format(self.__class__.__name__))
-
-        return super(IterableField, self).get_prep_value(value)
+        return super(IterableField, self).get_transform(name)
 
     def __init__(self, item_field_type, *args, **kwargs):
 
@@ -71,12 +141,9 @@ class IterableField(models.Field):
 
         kwargs["null"] = True
 
-        default = kwargs.get("default", [])
+        kwargs["default"] = kwargs.get("default", [])
 
         self._original_item_field_type = copy.deepcopy(item_field_type) # For deconstruction purposes
-
-        if default is not None and not callable(default):
-            kwargs["default"] = lambda: self._iterable_type(default)
 
         if hasattr(item_field_type, 'attname'):
             item_field_type = item_field_type.__class__
@@ -94,7 +161,35 @@ class IterableField(models.Field):
         assert not hasattr(self.item_field_type, 'attname')
         self.item_field_type.set_attributes_from_name('value')
 
+        # Pop the 'min_length' and 'max_length' from the kwargs, if they're there, as this avoids
+        # 'min_length' causing an error when calling super()
+        min_length = kwargs.pop("min_length", None)
+        max_length = kwargs.pop("max_length", None)
+
+        # Check that if there's a min_length that blank is not True.  This is partly because it
+        # doesn't make sense, and partly because if the value (i.e. the list or set) is empty then
+        # Django will skip the validators, thereby skipping the min_length check.
+        if min_length and kwargs.get("blank"):
+            raise ImproperlyConfigured(
+                "Setting blank=True and min_length=%d is contradictory." % min_length
+            )
+
         super(IterableField, self).__init__(*args, **kwargs)
+
+        # Now that self.validators has been set up, we can add the min/max legnth validators
+        if min_length is not None:
+            self.validators.append(MinItemsValidator(min_length))
+        if max_length is not None:
+            self.validators.append(MaxItemsValidator(max_length))
+
+    def get_default(self):
+        if self.default is None:
+            return None
+        if callable(self.default):
+            return self.default()
+        # If the default is an mutable iterable (e.g. list) then we need to make a new instance of
+        # it each time we use it
+        return self._iterable_type(self.default)
 
     def deconstruct(self):
         name, path, args, kwargs = super(IterableField, self).deconstruct()
@@ -117,9 +212,14 @@ class IterableField(models.Field):
         # If possible, parse the string into the iterable
         if not hasattr(value, "__iter__"): # Allows list/set, not string
             if isinstance(value, basestring):
-                if (self._iterable_type == set and value.startswith("{") and value.endswith("}")) or \
-                   (self._iterable_type == list and value.startswith("[") and value.endswith("]")):
-                    value = [x.strip() for x in value[1:-1].split(",") ]
+                if value.startswith("[") and value.endswith("]"):
+                    value = value[1:-1].strip()
+
+                    value = [
+                        x.strip("'").strip("\"")
+                        for x in value.split(",")
+                        if len(value) > 2
+                    ]
                 else:
                     raise ValueError("Unable to parse string into iterable field")
             else:
@@ -134,7 +234,13 @@ class IterableField(models.Field):
         """
         value = getattr(model_instance, self.attname)
         if value is None:
-            return None
+            raise ValueError("You can't set a {} to None (did you mean {}?)".format(
+                self.__class__.__name__, str(self._iterable_type())
+            ))
+
+        if isinstance(value, basestring):
+            # Catch accidentally assigning a string to a ListField
+            raise ValueError("Tried to assign a string to a {}".format(self.__class__.__name__))
 
         return self._map(lambda item: self.item_field_type.pre_save(_FakeModel(self.item_field_type, item), add), value)
 
@@ -215,6 +321,17 @@ class IterableField(models.Field):
         defaults.update(**kwargs)
         return form_field_class(**defaults)
 
+    def value_to_string(self, obj):
+        return "[" + ",".join(
+            _serialize_value(o) for o in self._get_val_from_obj(obj)
+        ) + "]"
+
+
+# New API
+IterableField.register_lookup(ContainsLookup)
+IterableField.register_lookup(OverlapLookup)
+IterableField.register_lookup(IsEmptyLookup)
+
 
 class ListField(IterableField):
     def __init__(self, *args, **kwargs):
@@ -244,6 +361,7 @@ class ListField(IterableField):
         kwargs['ordering'] = self.ordering
         return name, path, args, kwargs
 
+
 class SetField(IterableField):
     @property
     def _iterable_type(self):
@@ -262,14 +380,20 @@ class SetField(IterableField):
         return ret
 
     def get_db_prep_lookup(self, *args, **kwargs):
-        ret =  super(SetField, self).get_db_prep_lookup(*args, **kwargs)
+        ret = super(SetField, self).get_db_prep_lookup(*args, **kwargs)
         if ret:
             ret = list(ret)
         return ret
 
-    def value_to_string(self, obj):
-        """
-        Custom method for serialization, as JSON doesn't support
-        serializing sets.
-        """
-        return str(list(self._get_val_from_obj(obj)))
+
+def _serialize_value(value):
+    if isinstance(value, _SERIALIZABLE_TYPES):
+        return str(value)
+
+    if hasattr(value, 'isoformat'):
+        # handle datetime, date, and time objects
+        value = value.isoformat()
+    elif not isinstance(value, basestring):
+        value = str(value)
+
+    return "'{0}'".format(value.encode('utf-8'))

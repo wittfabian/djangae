@@ -1,3 +1,6 @@
+import warnings
+from collections import deque
+
 from django.db.models.query import QuerySet
 
 
@@ -15,7 +18,7 @@ def _clone_queryset(qs, klass):
     return cloned_qs
 
 
-def ensure_instance_included(queryset, included_id):
+def ensure_instances_consistent(queryset, instance_pks):
     """
         HRD fighting generate for iterating querysets.
         In the common case of having just created an item, this
@@ -25,7 +28,7 @@ def ensure_instance_included(queryset, included_id):
         in the right place as per the queryset ordering. Only takes into account
         the query.order_by and not default ordering. Patches welcome!
 
-        If the instance specified by the included_id was deleted, and it comes back
+        If the instance specified by the consistently_got_id was deleted, and it comes back
         in the subsequent query, it is removed from the resultset. This might cause an
         off-by-one number of results if you are slicing the queryset.
     """
@@ -34,13 +37,10 @@ def ensure_instance_included(queryset, included_id):
         def _fetch_all(self):
             super(EnsuredQuerySet, self)._fetch_all()
 
-            try:
-                new_qs = _clone_queryset(qs=self, klass=queryset.__class__)
-                new_qs.query.high_mark = None
-                new_qs.query.low_mark = 0
-                included = new_qs.get(pk=included_id)
-            except self.model.DoesNotExist:
-                included = None
+            new_qs = _clone_queryset(qs=self, klass=queryset.__class__)
+            new_qs.query.high_mark = None
+            new_qs.query.low_mark = 0
+            consistently_got = list(new_qs.filter(pk__in=instance_pks))
 
             def is_less(lhs, rhs):
                 for field in queryset.query.order_by:
@@ -60,24 +60,42 @@ def ensure_instance_included(queryset, included_id):
 
             new_result_cache = []
             count = self.query.high_mark
-            included_added = False
-            for item in self._result_cache:
-                # It was returned in the queryset but `created` will
-                # be consistent, so replace `item`
-                if included and item.pk == included.pk:
-                    if included_added:
-                        continue
 
-                if not included and item.pk == included_id:
-                    # The specified object was deleted but came back, so just ignore it
+            # We sort by the is_less function and use a deque so we can pop from the
+            # front
+            consistently_got = deque(sorted(consistently_got, cmp=is_less))
+
+            # Go through each item in the result set and peek at the first item in the
+            # deque. If the item is the same, or the item in the deque should appear before
+            # 'item' then add the consistent item. If the consistent item is == item then
+            # continue so we don't add a duplicate
+            for item in self._result_cache:
+                try:
+                    consistent_item = consistently_got[0]
+
+                    # Should the consistent item be added?
+                    if item == consistent_item or is_less(consistent_item, item):
+                        new_result_cache.append(consistent_item)
+                        consistently_got.popleft()
+                        if item == consistent_item:
+                            # Prevent adding a stale duplicate
+                            continue
+                except IndexError:
+                    # No consistent items left, so just append all the things
+                    # remaining in the original result set
+                    pass
+
+                # Item was deleted, otherwise we would have seen it in consistent_item
+                if item.pk in instance_pks:
                     continue
 
-                if included and (is_less(included, item) or included == item) and not included_added:
-                    included_added = True
-                    new_result_cache.append(included)
-
-                if item != included:
-                    new_result_cache.append(item)
+                new_result_cache.append(item)
+            else:
+                # Finally, if we've been through the entire result set, and we still
+                # have consistent things remaining, they must be new and at the end of the
+                # ordering so just add them to the end of the result set
+                if consistently_got:
+                    new_result_cache.extend(list(consistently_got))
 
             self._result_cache = new_result_cache[:count]
 
@@ -85,3 +103,10 @@ def ensure_instance_included(queryset, included_id):
         return _clone_queryset(qs=queryset, klass=EnsuredQuerySet)
     else:
         return queryset
+
+def ensure_instance_consistent(queryset, instance_id):
+    return ensure_instances_consistent(queryset, [ instance_id ])
+
+def ensure_instance_included(queryset, instance_id):
+    warnings.warn("ensure_instance_included is deprecated, use ensure_instance_consistent instead", DeprecationWarning)
+    return ensure_instance_consistent(queryset, instance_id)

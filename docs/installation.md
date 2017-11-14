@@ -4,19 +4,17 @@
 
 Alternatively, you can also follow this guide:
 
-1. Create a Django project, add app.yaml to the root. Make sure Django 1.7+ is in your project and importable
- 
-
-2. Install Djangae into your project, make sure it's importable (you'll likely need to manipulate the path in manage.py and wsgi.py)
- 
-
-3. Add djangae to `INSTALLED_APPS`.
- 
- 
-4. At the top of your `settings.py`, insert the following line to setup some default settings: 
+1. Create a Django project, add app.yaml to the root. Make sure Django 1.8+ is in your project and importable.
+1. Install Djangae into your project, make sure it's importable (you'll likely need to manipulate the path in manage.py and wsgi.py).
+1. Add `'djangae'` to `INSTALLED_APPS`.  This must come before any `django` apps.
+1. We also recommend that you:
+    - Add `'djangae.contrib.contenttypes'` to `INSTALLED_APPS`.  This must come after `'django.contrib.contenttypes'`.
+    - Add `'djangae.contrib.security'` to `INSTALLED_APPS'`.
+    - Add `'djangae.contrib.security.middleware.AppEngineSecurityMiddleware'` to `MIDDLEWARE_CLASSES`.
+1. At the top of your `settings.py`, insert the following line to setup some default settings: 
 
 ```python
-from djangae.settings_base import *`
+from djangae.settings_base import *
 ```
 
 In `app.yaml` add the following handlers:
@@ -36,9 +34,13 @@ Make your `manage.py` look something like this:
 if __name__ == "__main__":
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "myapp.settings")
 
-    from djangae.core.management import execute_from_command_line
+    from djangae.core.management import execute_from_command_line, test_execute_from_command_line
 
-    execute_from_command_line(sys.argv)
+    if "test" in sys.argv:
+        # This prevents the local sandbox initializing when running tests
+        test_execute_from_command_line(sys.argv)
+    else:
+        execute_from_command_line(sys.argv)
 ```
 
 Use the Djangae WSGI handler in your wsgi.py, something like
@@ -81,10 +83,6 @@ application: your-app-id
 Then run:
 
     $ appcfg.py update ./
-
-If you have two-factor authentication enabled in your Google account, run:
-
-    $ appcfg.py --oauth2 update ./
 
 ## Modules
 

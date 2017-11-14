@@ -1,18 +1,18 @@
+# STANDARD LIB
 from email.MIMEBase import MIMEBase
+import logging
 
+# THIRD PARTY
+from django.conf import settings
 from django.core.mail.backends.base import BaseEmailBackend
 from django.core.mail import EmailMultiAlternatives
-
 from google.appengine.api import mail as aeemail
+from google.appengine.ext import deferred
+from google.appengine.api.mail_errors import InvalidSenderError
 from google.appengine.runtime import apiproxy_errors
 
 
-def _send_deferred(message, fail_silently=False):
-    try:
-        message.send()
-    except (aeemail.Error, apiproxy_errors.Error):
-        if not fail_silently:
-            raise
+logger = logging.getLogger(__name__)
 
 
 class EmailBackend(BaseEmailBackend):
@@ -60,31 +60,30 @@ class EmailBackend(BaseEmailBackend):
     def _send(self, message):
         try:
             message = self._copy_message(message)
-        except (ValueError, aeemail.InvalidEmailError), err:
-            import logging
-            logging.warn(err)
+        except (ValueError, aeemail.InvalidEmailError) as err:
+            logger.warn(err)
             if not self.fail_silently:
                 raise
             return False
         if self.can_defer:
-            self._defer_message(message)
+            self._defer_send(message)
             return True
+        return self._do_send(message)
+
+    def _do_send(self, message):
         try:
             message.send()
-        except (aeemail.Error, apiproxy_errors.Error):
+        except (aeemail.Error, apiproxy_errors.Error) as e:
+            if isinstance(e, InvalidSenderError):
+                logger.error("Invalid 'from' address: %s", message.sender)
             if not self.fail_silently:
                 raise
             return False
         return True
 
-    def _defer_message(self, message):
-        from google.appengine.ext import deferred
-        from django.conf import settings
+    def _defer_send(self, message):
         queue_name = getattr(settings, 'EMAIL_QUEUE_NAME', 'default')
-        deferred.defer(_send_deferred,
-                       message,
-                       fail_silently=self.fail_silently,
-                       _queue=queue_name)
+        deferred.defer(self._do_send, message, _queue=queue_name)
 
 
 class AsyncEmailBackend(EmailBackend):

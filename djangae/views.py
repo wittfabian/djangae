@@ -7,8 +7,11 @@ from django.http import HttpResponse, HttpResponseServerError
 from django.views.decorators.http import require_POST
 from django.views.decorators.csrf import csrf_exempt
 
-from djangae.utils import on_production
+from djangae import environment
 from djangae.core.signals import module_started, module_stopped
+
+
+logger = logging.getLogger(__name__)
 
 
 def warmup(request):
@@ -46,27 +49,27 @@ def deferred(request):
     response = HttpResponse()
 
     if 'HTTP_X_APPENGINE_TASKEXECUTIONCOUNT' in request.META:
-        logging.debug("[DEFERRED] Retry %s of deferred task", request.META['HTTP_X_APPENGINE_TASKEXECUTIONCOUNT'])
+        logger.debug("[DEFERRED] Retry %s of deferred task", request.META['HTTP_X_APPENGINE_TASKEXECUTIONCOUNT'])
 
     if 'HTTP_X_APPENGINE_TASKNAME' not in request.META:
-        logging.critical('Detected an attempted XSRF attack. The header "X-AppEngine-Taskname" was not set.')
+        logger.critical('Detected an attempted XSRF attack. The header "X-AppEngine-Taskname" was not set.')
         response.status_code = 403
         return response
 
-    in_prod = on_production()
+    in_prod = environment.is_production_environment()
 
     if in_prod and os.environ.get("REMOTE_ADDR") != "0.1.0.2":
-        logging.critical('Detected an attempted XSRF attack. This request did not originate from Task Queue.')
+        logger.critical('Detected an attempted XSRF attack. This request did not originate from Task Queue.')
         response.status_code = 403
         return response
 
     try:
         run(request.body)
     except SingularTaskFailure:
-        logging.debug("Failure executing task, task retry forced")
+        logger.debug("Failure executing task, task retry forced")
         response.status_code = 408
     except PermanentTaskFailure:
-        logging.exception("Permanent failure attempting to execute task")
+        logger.exception("Permanent failure attempting to execute task")
 
     return response
 
@@ -77,5 +80,17 @@ def internalupload(request):
     try:
         return HttpResponse(str(request.FILES['file'].blobstore_info.key()))
     except Exception:
-        logging.exception("DJANGAE UPLOAD FAILED: The internal upload handler couldn't retrieve the blob info key.")
+        logger.exception("DJANGAE UPLOAD FAILED: The internal upload handler couldn't retrieve the blob info key.")
         return HttpResponseServerError()
+
+
+def clearsessions(request):
+    if not environment.is_in_cron():
+        return HttpResponse(status=403)
+    engine = import_module(settings.SESSION_ENGINE)
+    try:
+        engine.SessionStore.clear_expired()
+    except NotImplementedError:
+        logger.exception("Session engine '%s' doesn't support clearing "
+                          "expired sessions.\n", settings.SESSION_ENGINE)
+    return HttpResponse("Ok.")

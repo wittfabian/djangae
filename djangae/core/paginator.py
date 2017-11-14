@@ -16,8 +16,7 @@ class DatastorePaginator(object):
 
     def __init__(self, object_list, per_page, orphans=0,
                  allow_empty_first_page=True):
-        self.fetched_objects = object_list
-        self.object_list = []
+        self.object_list = object_list
         self.per_page = int(per_page)
         self.allow_empty_first_page = allow_empty_first_page
 
@@ -40,10 +39,12 @@ class DatastorePaginator(object):
         number = self.validate_number(number)
         bottom = (number - 1) * self.per_page
         top = bottom + self.per_page
-        self.fetched_objects = self.fetched_objects[bottom:top + 1]
-        self.object_list = self.fetched_objects[:self.per_page]
 
-        return DatastorePage(self.fetched_objects, self.object_list, number, self)
+        fetched_objects = list(self.object_list[bottom:top + 1])
+        has_next = len(fetched_objects) > self.per_page
+        fetched_objects = fetched_objects[:self.per_page]
+
+        return DatastorePage(has_next, fetched_objects, number, self)
 
     def _get_count(self):
         """
@@ -68,11 +69,14 @@ class DatastorePaginator(object):
     page_range = property(_get_page_range)
 
 
+Paginator = DatastorePaginator
+
+
 class DatastorePage(collections.Sequence):
 
-    def __init__(self, fetched_objects, object_list, number, paginator):
-        self.fetched_objects = fetched_objects
+    def __init__(self, has_next, object_list, number, paginator):
         self.object_list = object_list
+        self._has_next = has_next
         self.number = number
         self.paginator = paginator
 
@@ -87,14 +91,11 @@ class DatastorePage(collections.Sequence):
     def __getitem__(self, index):
         if not isinstance(index, (slice,) + six.integer_types):
             raise TypeError
-        # The object_list is converted to a list so that if it was a QuerySet
-        # it won't be a database hit per __getitem__.
-        if not isinstance(self.object_list, list):
-            self.object_list = list(self.object_list)
+
         return self.object_list[index]
 
     def has_next(self):
-        return len(self.fetched_objects) > len(self.object_list)
+        return self._has_next
 
     def has_previous(self):
         return self.number > 1
@@ -124,3 +125,6 @@ class DatastorePage(collections.Sequence):
         relative to total objects found (hits).
         """
         return (self.paginator.per_page * (self.number - 1)) + len(self.object_list)
+
+
+Page = DatastorePage
