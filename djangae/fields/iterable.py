@@ -13,7 +13,7 @@ from django.utils.text import capfirst
 
 # DJANGAE
 from djangae.core.validators import MinItemsValidator, MaxItemsValidator
-from djangae.forms.fields import ListFormField
+from djangae.forms.fields import ListFormField, SetMultipleChoiceField
 
 # types that don't need to be quoted when serializing an iterable field
 _SERIALIZABLE_TYPES = six.integer_types + (float, Decimal,)
@@ -101,6 +101,9 @@ class IterableTransformFactory(object):
 
 
 class IterableField(models.Field):
+
+    choices_form_field_class = forms.MultipleChoiceField
+
     @property
     def _iterable_type(self): raise NotImplementedError()
 
@@ -314,7 +317,7 @@ class IterableField(models.Field):
                 defaults['initial'] = self.get_default()
 
         if self.choices:
-            form_field_class = forms.MultipleChoiceField
+            form_field_class = self.choices_form_field_class
             defaults['choices'] = self.get_choices(include_blank=False) #no empty value on a multi-select
         else:
             form_field_class = ListFormField
@@ -363,6 +366,10 @@ class ListField(IterableField):
 
 
 class SetField(IterableField):
+
+    # specifies a different default widget than the vanilla MultipleChoiceField
+    choices_form_field_class = SetMultipleChoiceField
+
     @property
     def _iterable_type(self):
         return set

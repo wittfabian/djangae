@@ -5,7 +5,10 @@ import base64
 from django import forms
 from django.contrib import admin
 from django.db import models
+from django.forms.fields import MultipleChoiceField
+from django.forms.widgets import SelectMultiple
 from django.utils import six
+from django.utils.encoding import force_text
 from django.utils.safestring import mark_safe
 from django.core.urlresolvers import reverse
 from django.contrib.admin.templatetags.admin_static import static
@@ -57,6 +60,25 @@ class ListFormField(forms.Field):
         delimiter = self.delimiter  # faster
         for value in values:
             assert delimiter not in value
+
+
+class SetSelectMultipleWidget(SelectMultiple):
+
+    def format_value(self, value):
+        """Return selected values as a list."""
+        # the default implementation in `SelectMultiple` does not pass `set` to
+        # the `isinstance` check, which generates a list containing one string
+        # for the initial value, rather than a list of multiple strings
+        if not isinstance(value, (tuple, list, set)):
+            value = [value]
+        return [force_text(v) if v is not None else '' for v in value]
+
+
+
+class SetMultipleChoiceField(MultipleChoiceField):
+    """A form field to handle the initial values for a set field with multiple choices."""
+
+    widget = SetSelectMultipleWidget
 
 
 class JSONWidget(forms.Textarea):
