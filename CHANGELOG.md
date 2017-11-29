@@ -25,6 +25,7 @@
  - Create .editorconfig to ensure basic editor settings are consistent between users
  - Fix import error in SDK 1.9.60 
  - Add .flake8 file to move towards enforcement code standard
+ - Correctly select initial values for SetField form widget
 
 ## v0.9.10
 
