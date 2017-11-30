@@ -19,6 +19,7 @@ from djangae.db import transaction
 from djangae.fields import (
     ComputedBooleanField,
     ComputedCharField,
+    ComputedCollationField,
     ComputedIntegerField,
     ComputedPositiveIntegerField,
     ComputedTextField,
@@ -1431,3 +1432,21 @@ class PickleTests(TestCase):
                 pickle.dumps(field)
             except (pickle.PicklingError, TypeError) as e:
                 self.fail("Could not pickle %r: %s" % (field, e))
+
+
+class ModelWithComputedCollationField(models.Model):
+    """Test model for `ComputedCollationField`."""
+
+    name = models.CharField(max_length=100)
+    name_order = ComputedCollationField('name')
+
+    class Meta:  # noqa
+        app_label = "djangae"
+
+
+class ComputedCollationFieldTests(TestCase):
+    """Tests for `ComputedCollationField`."""
+
+    def test_model(self):
+        """Tests for a model using a `ComputedCollationField`."""
+        ModelWithComputedCollationField.objects.create(name='demo1')
