@@ -12,6 +12,13 @@ class CCollationModel(models.Model):
 
 class ComputedCollationFieldTests(TestCase):
 
+    def test_unicode(self):
+        instance = CCollationModel(field1=u"A unicode string")
+        try:
+            instance.save()
+        except TypeError:
+            self.fail("Error saving unicode value")
+
     def test_basic_usage(self):
         instance1 = CCollationModel.objects.create(field1="Đavid")
         instance2 = CCollationModel.objects.create(field1="Łukasz")
@@ -24,4 +31,4 @@ class ComputedCollationFieldTests(TestCase):
         self.assertEqual(results[1], instance1)
         self.assertEqual(results[2], instance2)
         self.assertEqual(results[3], instance4)
-    
+

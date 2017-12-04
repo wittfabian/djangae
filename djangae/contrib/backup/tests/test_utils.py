@@ -1,7 +1,9 @@
 from django.conf import settings
+from djangae.contrib import sleuth
 from djangae.test import TestCase
+from google.appengine.api import app_identity
 
-from ..utils import get_backup_setting
+from ..utils import get_backup_setting, get_gcs_bucket
 
 
 class GetDatastoreSettingTest(TestCase):
@@ -28,3 +30,31 @@ class GetDatastoreSettingTest(TestCase):
     def test_required_when_settings_does_not_exist(self):
         with self.assertRaises(Exception):
             get_backup_setting('FOO')
+
+
+class GetGcsBucketTest(TestCase):
+    def test_custom_bucket_setting(self):
+        with self.settings(DJANGAE_BACKUP_GCS_BUCKET='foo-bar-baz/qux'):
+            result = get_gcs_bucket()
+
+            self.assertEqual(result, 'foo-bar-baz/qux')
+
+    def test_no_bucket_setting(self):
+        with self.assertRaises(AttributeError):
+            settings.DJANGAE_BACKUP_GCS_BUCKET
+
+        result = get_gcs_bucket()
+
+        self.assertEqual(result, 'app_default_bucket/djangae-backups')
+
+    def test_no_bucket_setting_and_no_default_bucket(self):
+        with self.assertRaises(AttributeError):
+            settings.DJANGAE_BACKUP_GCS_BUCKET
+
+        with sleuth.fake('google.appengine.api.app_identity.get_default_gcs_bucket_name', None):
+            bucket = app_identity.get_default_gcs_bucket_name()
+
+            self.assertIsNone(bucket)
+
+            with self.assertRaisesRegexp(Exception, 'DJANGAE_BACKUP_GCS_BUCKET'):
+                get_gcs_bucket()

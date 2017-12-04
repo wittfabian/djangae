@@ -20,6 +20,7 @@ from djangae.db import transaction
 from djangae.fields import (
     ComputedBooleanField,
     ComputedCharField,
+    ComputedCollationField,
     ComputedIntegerField,
     ComputedPositiveIntegerField,
     ComputedTextField,
@@ -1444,7 +1445,6 @@ class PickleTests(TestCase):
                 self.fail("Could not pickle %r: %s" % (field, e))
 
 
-
 class FileFieldTests(TestCase):
 
     def test_url_field_is_populated(self):
@@ -1476,3 +1476,21 @@ class FileFieldTests(TestCase):
             obj.image_field = ContentFile('new image content', name='my_file')
             obj.save()
             self.assertEqual(get_serving_url_watcher.call_count, 4)
+
+
+class ModelWithComputedCollationField(models.Model):
+    """Test model for `ComputedCollationField`."""
+
+    name = models.CharField(max_length=100)
+    name_order = ComputedCollationField('name')
+
+    class Meta:  # noqa
+        app_label = "djangae"
+
+
+class ComputedCollationFieldTests(TestCase):
+    """Tests for `ComputedCollationField`."""
+
+    def test_model(self):
+        """Tests for a model using a `ComputedCollationField`."""
+        ModelWithComputedCollationField.objects.create(name='demo1')

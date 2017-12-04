@@ -2,6 +2,7 @@
 
 ### New features & improvements:
 
+- Backups made with `djangae.contrib.backup` are created in a new, time-stamped directory to make managing backups easier. Only `DJANGAE_BACKUP_ENABLED` is required, all other backup settings are optional and the default is to create backups in the default cloud storage bucket. See the backup docs for details.
 - Add support for querying JSONFields in a similar way to the PostgreSQL JSONField
 - Allow special indexers to index `None` as well as remove unused index properties from the entity
 - Added IDs to system check errors, allowing them to be silenced
@@ -25,6 +26,8 @@
  - Create .editorconfig to ensure basic editor settings are consistent between users
  - Fix import error in SDK 1.9.60
  - Add .flake8 file to move towards enforcement code standard
+ - Add missing `djangae/fields/allkeys-5.2.0.zip` file to `MANIFEST.in`
+ - It was possible a `TypeError` would throw when calculating the ComputedCollationField value if the source value was unicode
 
 ## v0.9.10
 
