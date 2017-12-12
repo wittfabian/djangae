@@ -12,6 +12,7 @@
 - Improve the approx SQL representation of Datastore commands (update, delete etc.)
 - Default value for failure_behaviour in `process_task_queues` is now `RAISE_ERROR`. Tasks will no longer fail silently when processed using this method in unit tests.
 - Add djangae.compat to handle SDK structural changes
+- Add a ComputedNullBooleanField
 
 ### Bug fixes:
 
