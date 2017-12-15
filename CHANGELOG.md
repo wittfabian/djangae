@@ -13,6 +13,7 @@
 - Default value for failure_behaviour in `process_task_queues` is now `RAISE_ERROR`. Tasks will no longer fail silently when processed using this method in unit tests.
 - Add djangae.compat to handle SDK structural changes
 - Add a ComputedNullBooleanField
+- Updated the `sleuth` library in djangae.contrib
 
 ### Bug fixes:
 
@@ -29,6 +30,7 @@
  - Add missing `djangae/fields/allkeys-5.2.0.zip` file to `MANIFEST.in`
  - It was possible a `TypeError` would throw when calculating the ComputedCollationField value if the source value was unicode
  - Make `value_from_datadict` in `forms.fields.ListWidget` return None when the value provided is None as the existing comment describes. This prevents an exception when `save()` is called on a `ListWidget` whose value is `None`.
+ - Fixed test to remove dependency on mock
 
 ## v0.9.10
 
