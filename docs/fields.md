@@ -238,6 +238,7 @@ Computed fields are:
 * `ComputedIntegerField`
 * `ComputedPositiveIntegerField`
 * `ComputedBooleanField`
+* `ComputedNullBooleanField`
 
 
 ## FileField & ImageField
