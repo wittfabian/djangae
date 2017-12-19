@@ -12,13 +12,14 @@ pages:
 - Environment: environment.md
 - Storage backends: storage.md
 - Contrib apps:
-  - Pagination: pagination.md
+  - Datastore eventual consistency: consistency.md
   - Gauth authentication: gauth.md
   - Map Reduce: mappers.md
-  - Unique constraint tool: uniquetool.md
+  - Pagination: pagination.md
+  - Scheduled backups: backup.md
   - Security: security.md
-  - Datastore eventual consistency: consistency.md
   - Thread locking: locking.md
+  - Unique constraint tool: uniquetool.md
 - Contributing & Testing: contributing.md
 - Release notes:
   - Overview: release_notes/index.md

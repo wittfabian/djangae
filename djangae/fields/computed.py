@@ -52,3 +52,7 @@ class ComputedPositiveIntegerField(ComputedFieldMixin, models.PositiveIntegerFie
 
 class ComputedBooleanField(ComputedFieldMixin, models.BooleanField):
     pass
+
+
+class ComputedNullBooleanField(ComputedFieldMixin, models.NullBooleanField):
+    pass

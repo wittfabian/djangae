@@ -107,6 +107,12 @@ class ListFieldFormsTest(TestCase):
         obj = form.save()
         self.assertEqual(obj.list_field, [])
 
+    def test_none_value_in_dict(self):
+        """ Check that value_from_datadict returns None if value provided is None """
+        data = dict(list_field=None)
+        form = ListFieldForm(data)
+        self.assertTrue(form.is_valid())
+
 
 class OrderedModelMultipleChoiceField(TestCase):
 
