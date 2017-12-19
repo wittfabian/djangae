@@ -31,6 +31,7 @@
  - It was possible a `TypeError` would throw when calculating the ComputedCollationField value if the source value was unicode
  - Make `value_from_datadict` in `forms.fields.ListWidget` return None when the value provided is None as the existing comment describes. This prevents an exception when `save()` is called on a `ListWidget` whose value is `None`.
  - Fixed test to remove dependency on mock
+ - Use '' as default namespace for memcache keys, instead of None.
 
 ## v0.9.10
 
