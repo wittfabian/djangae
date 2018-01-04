@@ -4,8 +4,6 @@
 
 [![build-status-image]][travis] [![codecov.io](https://img.shields.io/codecov/c/github/potatolondon/djangae/master.svg)](https://codecov.io/github/potatolondon/djangae?branch=master)
 
-[![Issue Stats](https://issuestats.com/github/potatolondon/djangae/badge/pr)](https://issuestats.com/github/potatolondon/djangae) [![Issue Stats](https://issuestats.com/github/potatolondon/djangae/badge/issue)](https://issuestats.com/github/potatolondon/djangae)
-
 The best way to run Django on Google App Engine.
 
 Djangae (djan-gee) is a Django app that allows you to run Django applications on Google App Engine, including (if you

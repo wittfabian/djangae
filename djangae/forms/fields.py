@@ -37,6 +37,10 @@ class ListWidget(forms.TextInput):
             of this widget. Returns None if it's not provided.
         """
         value = data.get(name, '')
+
+        if value is None:
+            return None
+
         if isinstance(value, six.string_types):
             value = value.split(',')
         return [v.strip() for v in value if v.strip()]
