@@ -35,6 +35,7 @@
  - Make `value_from_datadict` in `forms.fields.ListWidget` return None when the value provided is None as the existing comment describes. This prevents an exception when `save()` is called on a `ListWidget` whose value is `None`.
  - Fixed test to remove dependency on mock
  - Use '' as default namespace for memcache keys, instead of None.
+ - Set a default app_id (`managepy`) so you can use use gcloud compatible app.yaml files (which cannot contain an app_id).  Override with --app_id
 
 ## v0.9.10
 
