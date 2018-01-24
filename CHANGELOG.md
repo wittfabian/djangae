@@ -15,6 +15,7 @@
 - Added custom `FileField` and `ImageField` which accept an optional `url_field` argument to allow you to specify the name of another field on the model on which the URL to the file or image is cached.
 - Add a ComputedNullBooleanField
 - Updated the `sleuth` library in djangae.contrib
+- Updated the csrf session check to respect Django's `CSRF_USE_SESSIONS` flag
 
 ### Bug fixes:
 
@@ -36,6 +37,7 @@
  - Fixed test to remove dependency on mock
  - Use '' as default namespace for memcache keys, instead of None.
  - Set a default app_id (`managepy`) so you can use use gcloud compatible app.yaml files (which cannot contain an app_id).  Override with --app_id
+ - Restricted access to the `clearsessions` view to tasks and admins only
 
 ## v0.9.10
 
