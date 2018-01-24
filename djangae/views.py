@@ -84,6 +84,7 @@ def internalupload(request):
         return HttpResponseServerError()
 
 
+@environment.task_or_admin_only
 def clearsessions(request):
     if not environment.is_in_cron():
         return HttpResponse(status=403)
