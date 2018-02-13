@@ -105,7 +105,7 @@ def retry(func, *args, **kwargs):
     retries = kwargs.pop('_retries', 3)
     i = 0
     try:
-        timeout_ms = 100
+        timeout_ms = kwargs.pop('_initial_wait', 375)  # Try 375, 750, 1500
         while True:
             try:
                 i += 1
