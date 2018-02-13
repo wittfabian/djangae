@@ -194,3 +194,11 @@ class UnrecognisedQueryTypeErrorTest(TestCase):
 
         with self.assertRaises(NotImplementedError):
             generate_sql_representation(Command())
+
+
+class GenerateValuesExpressionTest(TestCase):
+    """Tests for `djangae.db.backends.appengine.formatting._generate_values_expression`."""
+
+    def test_unicode_error(self):
+        """Test that _generate_values_expression does not raise a unicode error."""
+        pass
