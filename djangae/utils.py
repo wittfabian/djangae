@@ -112,7 +112,7 @@ def retry(func, *args, **kwargs):
                 return func(*args, **kwargs)
             except (datastore_errors.Error, apiproxy_errors.Error, TransactionFailedError) as exc:
                 logger.info("Retrying function: %s(%s, %s) - %s", str(func), str(args), str(kwargs), str(exc))
-                time.sleep(timeout_ms / 1000000.0)
+                time.sleep(timeout_ms * 0.001)
                 timeout_ms *= 2
                 if i > retries:
                     raise exc
