@@ -16,6 +16,8 @@
 - Add a ComputedNullBooleanField
 - Updated the `sleuth` library in djangae.contrib
 - Updated the csrf session check to respect Django's `CSRF_USE_SESSIONS` flag
+- `djangae.utils.retry` now waits for 375ms by default before retrying to avoid excerbating contention (previous value of 100ms was far too low).
+- `djangae.utils.retry` now accepts overriding the initial retry time with the `_initial_wait` kwarg.
 
 ### Bug fixes:
 
@@ -38,6 +40,7 @@
  - Use '' as default namespace for memcache keys, instead of None.
  - Set a default app_id (`managepy`) so you can use use gcloud compatible app.yaml files (which cannot contain an app_id).  Override with --app_id
  - Restricted access to the `clearsessions` view to tasks and admins only
+ - Fixed the `sleep()` time in `djangae.utils.retry` which was sleeping in `ns` rather than `ms`
  - Fix unicode error when creating a SQL representation
 
 ## v0.9.10
