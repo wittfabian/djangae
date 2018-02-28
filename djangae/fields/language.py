@@ -75,7 +75,7 @@ class ComputedCollationField(ComputedFieldMixin, CharField):
             ComputedCollationField.collator = Collator(COLLATION_ZIP_FILE, COLLATION_FILE)
 
         def computer(instance):
-            source_value = getattr(instance, source_field_name, u"")
+            source_value = getattr(instance, source_field_name) or u""
             if not isinstance(source_value, unicode):
                 source_value = unicode(source_value, "utf-8")
             return self.collator.sort_key(source_value)

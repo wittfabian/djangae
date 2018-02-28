@@ -21,6 +21,7 @@
 
 ### Bug fixes:
 
+ - Fixed ComputedCollationField logic to work with nullable fields
  - Fixed performance issues and bugs in the Djangae core paginator
  - Fix several issues with the test sandbox
  - Initialize the app_identity stub in the test sandbox
