@@ -44,6 +44,8 @@
  - Fixed the `sleep()` time in `djangae.utils.retry` which was sleeping in `ns` rather than `ms`
  - Fix unicode error when creating a SQL representation
  - Fix cross-database relationship support for `RelatedSetField` and `RelatedListField`.
+ - Locked down the backup creation view in `djangae.contrib.backups`
+ - Fixed the backup creation URL to have a trailing slash (optional, to prevent breaking apps)
 
 ## v0.9.10
 
