@@ -3,7 +3,7 @@ import urllib
 
 from django.apps import apps
 from django.http import HttpResponse
-from djangae.environment import application_id
+from djangae.environment import task_or_admin_only
 from google.appengine.api import taskqueue
 
 from .utils import get_backup_setting, get_backup_path
@@ -15,6 +15,7 @@ GAE_BUILTIN_MODULE = "ah-builtin-python-bundle"
 BACKUP_HANDLER = "/_ah/datastore_admin/backup.create"
 
 
+@task_or_admin_only
 def create_datastore_backup(request):
     """Creates a datastore backup based on the DJANGAE_BACKUP_X settings."""
     enabled = get_backup_setting("ENABLED")
