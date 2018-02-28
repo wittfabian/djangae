@@ -217,6 +217,21 @@ class ModelWithCharOrNoneField(models.Model):
     char_or_none_field = CharOrNoneField(max_length=100)
 
 
+class ModelDatabaseA(models.Model):
+    set_of_bs = RelatedSetField('ModelDatabaseB', related_name='+')
+    list_of_bs = RelatedListField('ModelDatabaseB', related_name='+')
+
+    class Meta:
+        app_label = 'djangae'
+
+
+class ModelDatabaseB(models.Model):
+    test_database = 'ns1'
+
+    class Meta:
+        app_label = 'djangae'
+
+
 class ShardedCounterTest(TestCase):
     def test_basic_usage(self):
         instance = ModelWithCounter.objects.create()
@@ -622,6 +637,7 @@ class IterableFieldTests(TestCase):
 
 class RelatedIterableFieldTests(TestCase):
     """ Combined tests for common RelatedListField and RelatedSetField tests. """
+    multi_db = True
 
     def test_cannot_have_min_length_and_blank(self):
         """ Having min_length=X, blank=True doesn't make any sense, especially when you consider
@@ -752,6 +768,34 @@ class RelatedIterableFieldTests(TestCase):
 
         self.assertEqual(instance.related_set_ids, [x.pk for x in others])
         self.assertEqual(instance.related_list_ids, [x.pk for x in others])
+
+    def test_related_set_field_cross_database(self):
+        a = ModelDatabaseA.objects.create()
+        b = ModelDatabaseB.objects.create()
+
+        self.assertItemsEqual(a.set_of_bs.all(), [])
+
+        a.set_of_bs.add(b)
+        a.save()
+        self.assertItemsEqual(a.set_of_bs.all(), [b])
+
+        a.set_of_bs.remove(b)
+        a.save()
+        self.assertItemsEqual(a.set_of_bs.all(), [])
+
+    def test_related_list_field_cross_database(self):
+        a = ModelDatabaseA.objects.create()
+        b = ModelDatabaseB.objects.create()
+
+        self.assertItemsEqual(a.list_of_bs.all(), [])
+
+        a.list_of_bs.add(b)
+        a.save()
+        self.assertItemsEqual(a.list_of_bs.all(), [b])
+
+        a.list_of_bs.remove(b)
+        a.save()
+        self.assertItemsEqual(a.list_of_bs.all(), [])
 
 
 class RelatedListFieldModelTests(TestCase):

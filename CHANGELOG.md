@@ -43,6 +43,7 @@
  - Restricted access to the `clearsessions` view to tasks and admins only
  - Fixed the `sleep()` time in `djangae.utils.retry` which was sleeping in `ns` rather than `ms`
  - Fix unicode error when creating a SQL representation
+ - Fix cross-database relationship support for `RelatedSetField` and `RelatedListField`.
 
 ## v0.9.10
 

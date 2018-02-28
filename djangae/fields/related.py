@@ -260,7 +260,7 @@ class RelatedIteratorManagerBase(object):
         )
 
     def get_queryset(self):
-        db = self._db or router.db_for_read(self.instance.__class__, instance=self.instance)
+        db = self._db or router.db_for_read(self.model, instance=self.instance)
 
         if (hasattr(self.instance, "_prefetched_objects_cache") and
             self.field.name in self.instance._prefetched_objects_cache):
