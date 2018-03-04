@@ -46,6 +46,7 @@
  - Fix cross-database relationship support for `RelatedSetField` and `RelatedListField`.
  - Locked down the backup creation view in `djangae.contrib.backups`
  - Fixed the backup creation URL to have a trailing slash (optional, to prevent breaking apps)
+ - Replace deprecated resources(`models.get_models`, `models.get_apps` and `Options.module_name`) in `djangae.forms.fields.py`
 
 ## v0.9.10
 
