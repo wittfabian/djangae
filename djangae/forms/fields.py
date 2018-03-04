@@ -5,6 +5,7 @@ import base64
 from django import forms
 from django.contrib import admin
 from django.db import models
+from django.apps import apps
 from django.utils import six
 from django.utils.safestring import mark_safe
 from django.core.urlresolvers import reverse
@@ -208,7 +209,7 @@ class GenericFKInput(forms.TextInput):
 @memoized
 def model_from_db_table(db_table):
     for app in models.get_apps():
-        for model in models.get_models(app):
+        for model in apps.get_models(app):
             if model._meta.db_table == db_table:
                 return model
     raise ValueError("Couldn't find model class for %s" % db_table)
@@ -221,7 +222,7 @@ def get_all_model_choices():
     if _CHOICES is None:
         _CHOICES = [
             ('', 'None')] + [(model_path(m), m.__name__)
-            for m in models.get_models()
+            for m in apps.get_models()
         ]
     return _CHOICES
 
