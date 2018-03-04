@@ -208,10 +208,9 @@ class GenericFKInput(forms.TextInput):
 
 @memoized
 def model_from_db_table(db_table):
-    for app in models.get_apps():
-        for model in apps.get_models(app):
-            if model._meta.db_table == db_table:
-                return model
+    for model in apps.get_models():
+        if model._meta.db_table == db_table:
+            return model
     raise ValueError("Couldn't find model class for %s" % db_table)
 
 _CHOICES = None
