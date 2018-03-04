@@ -1273,6 +1273,24 @@ class TestGenericRelationField(TestCase):
         GenericRelationModel.objects.create(unique_relation_to_anything=None)
         GenericRelationModel.objects.create() # It should work even if we don't explicitly set it to None
 
+    def test_saving_forms(self):
+        class TestForm(forms.ModelForm):
+            class Meta:
+                model = GenericRelationModel
+                fields = ("relation_to_anything",)
+
+        related = ISOther.objects.create()
+        post_data = {
+            "relation_to_anything_0": related.__class__._meta.db_table,
+            "relation_to_anything_1": related.pk
+        }
+
+        form = TestForm(post_data)
+        self.assertTrue(form.is_valid())
+        instance = form.save()
+        self.assertEqual(related, instance.relation_to_anything)
+
+
 
 class JSONFieldModelTests(TestCase):
 
