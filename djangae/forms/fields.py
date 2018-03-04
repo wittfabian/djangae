@@ -185,7 +185,7 @@ class GenericFKInput(forms.TextInput):
     def render(self, name, value, attrs):
         urls = {}
         for m in admin.site._registry:
-            urls[model_path(m)] = reverse('admin:%s_%s_changelist' % (m._meta.app_label, m._meta.module_name))
+            urls[model_path(m)] = reverse('admin:%s_%s_changelist' % (m._meta.app_label, m._meta.model_name))
         urls = json.dumps(urls)
         safe_name = name.replace('-', '_')
         extra = []
