@@ -6,6 +6,7 @@ Instructions:
 
 1. Add the mapreduce library to your project, e.g. `$ pip install GoogleAppEngineMapReduce` or from [https://github.com/GoogleCloudPlatform/appengine-mapreduce](https://github.com/GoogleCloudPlatform/appengine-mapreduce).
 1. Ensure that you have included `djangae.urls` in your URL config.
+1. Add `'djangae.contrib.processing.mapreduce'` to `INSTALLED_APPS` in your Django settings.
 1. Subclass `djangae.contrib.mappers.pipes.MapReduceTask`, and define your `map` method.
 1. Your class can also override attributes such as `shard_count`, `job_name`, and `queue_name` (see the code for all options).
 1. The model to map over can either be defined as a attribute on the class or can be passed in when you instantiate it.
