@@ -18,6 +18,7 @@
 - Updated the csrf session check to respect Django's `CSRF_USE_SESSIONS` flag
 - `djangae.utils.retry` now waits for 375ms by default before retrying to avoid excerbating contention (previous value of 100ms was far too low).
 - `djangae.utils.retry` now accepts overriding the initial retry time with the `_initial_wait` kwarg.
+- Add `djangae.deferred.defer` to fix issues with `google.appengine.ext.deferred.defer`
 
 ### Bug fixes:
 
