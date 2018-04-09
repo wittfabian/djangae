@@ -1,13 +1,19 @@
 # encoding: utf-8
 
 from django.db import models
-from djangae.test import TestCase
+from google.appengine.api import datastore_errors
+
+from djangae.contrib import sleuth
 from djangae.fields import CharField, ComputedCollationField
+from djangae.test import TestCase
 
 
 class CCollationModel(models.Model):
     field1 = CharField()
     field1_order = ComputedCollationField('field1')
+
+    field2 = models.TextField()
+    field2_order = ComputedCollationField('field2')
 
     def __unicode__(self):
         return self.field1
@@ -39,3 +45,13 @@ class ComputedCollationFieldTests(TestCase):
         self.assertEqual(results[4], instance2)
         self.assertEqual(results[5], instance6)
 
+    def test_really_long_string(self):
+        long_string = "".join(["A"] * 1501)
+        instance1 = CCollationModel.objects.create(field2=long_string)
+
+        with sleuth.watch("djangae.fields.language.logger.warn") as warn:
+            try:
+                instance1.save()
+                self.assertTrue(warn.called)
+            except datastore_errors.BadRequestError:
+                self.fail("Threw bad request when saving collation key")
