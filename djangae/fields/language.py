@@ -91,7 +91,9 @@ class ComputedCollationField(ComputedFieldMixin, CharField):
             sort_key = u"".join([unichr(x) for x in sort_key])
             truncated_key = truncate(sort_key)
             if truncated_key != sort_key:
-                logger.warn("Truncated sort key for '%s'", source_field_name)
+                logger.warn(
+                    "Truncated sort key for '%s.%s'", instance._meta.db_table, source_field_name
+                )
             return truncated_key
 
         super(ComputedCollationField, self).__init__(computer)
