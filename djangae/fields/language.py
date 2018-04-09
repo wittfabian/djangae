@@ -78,7 +78,9 @@ class ComputedCollationField(ComputedFieldMixin, CharField):
             source_value = getattr(instance, source_field_name) or u""
             if not isinstance(source_value, unicode):
                 source_value = unicode(source_value, "utf-8")
-            return self.collator.sort_key(source_value)
+            sort_key = self.collator.sort_key(source_value)
+            sort_key = u"".join([unichr(x) for x in sort_key])
+            return sort_key
 
         super(ComputedCollationField, self).__init__(computer)
 
@@ -86,4 +88,3 @@ class ComputedCollationField(ComputedFieldMixin, CharField):
         name, path, args, kwargs = super(ComputedCollationField, self).deconstruct()
         del kwargs["max_length"]
         return name, path, args, kwargs
-
