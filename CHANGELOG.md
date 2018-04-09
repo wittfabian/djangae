@@ -47,6 +47,7 @@
  - Fix cross-database relationship support for `RelatedSetField` and `RelatedListField`.
  - Locked down the backup creation view in `djangae.contrib.backups`
  - Fixed the backup creation URL to have a trailing slash (optional, to prevent breaking apps)
+ - Correctly generate a sort key with ComputedCollationField (will need a resave of existing entities)
 
 ## v0.9.10
 
