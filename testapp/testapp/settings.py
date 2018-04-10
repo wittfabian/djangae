@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'django.contrib.humanize',
     'djangae.contrib.backup',
+    'djangae.contrib.expando',
     'djangae.contrib.locking',
     'djangae.contrib.processing.mapreduce',
     'djangae.contrib.pagination',
