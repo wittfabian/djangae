@@ -1,3 +1,6 @@
+import copy
+from collections import OrderedDict
+
 from django.db import models
 from django.utils import six
 
@@ -10,18 +13,47 @@ class ExpandoModel(models.Model):
     PROTECT_AGAINST_OVERWRITE = True
 
     def __init__(self, *args, **kwargs):
-        self._expando_registry = {}
+        self._expando_registry = OrderedDict()
+
+        # Wrap _meta to include stuff from the expando registry
+        original_meta = copy.copy(self._meta)
+
+        def meta_factory():
+            class NewMeta(original_meta.__class__):
+                _instance = self
+
+                @property
+                def expando_fields(self):
+                    return self._instance._expando_registry.keys()
+
+                @property
+                def fields(self):
+                    # Make sure that instance expando fields are returned by _meta.fields
+                    fields = super(NewMeta, self).fields
+                    fields = list(fields)
+                    fields.extend(list(self._instance._expando_registry.values()))
+                    return tuple(fields)
+
+                def get_field(self, name):
+                    if name in self._instance._expando_registry:
+                        return self._instance._expando_registry[name]
+                    return super(NewMeta, self).get_field(name)
+
+            return NewMeta
+
+        original_meta.__class__ = meta_factory()
+        setattr(self, "_meta", original_meta)
 
         # Remove expando values from the kwargs, otherwise
         # Django complains about them not being valid fields
-        kwargs, expandos = {}, {}
+        new_kwargs, expandos = {}, {}
         for k, v in kwargs.items():
             if isinstance(v, E):
                 expandos[k] = v
             else:
-                kwargs[k] = v
+                new_kwargs[k] = v
 
-        super(ExpandoModel, self).__init__(*args, **kwargs)
+        super(ExpandoModel, self).__init__(*args, **new_kwargs)
 
         # Set the expando values
         for k, v in expandos.items():
@@ -31,7 +63,10 @@ class ExpandoModel(models.Model):
         abstract = True
 
     def _add_expando_field(self, attr, value):
-        self._expando_registry[attr] = value.field_class()
+        self._expando_registry[attr] = value.field_class(
+            name=attr
+        )
+        return self._expando_registry[attr]
 
     def _remove_expando_field(self, attr):
         self._expando_registry.pop(attr, None)
@@ -43,7 +78,9 @@ class ExpandoModel(models.Model):
 
     def __setattr__(self, attr, value):
         if isinstance(value, E):
-            self._add_expando_field(attr, value)
+            field = self._add_expando_field(attr, value)
+            super(ExpandoModel, self).__setattr__(field.get_attname(), value._value)
+            return
         elif attr in getattr(self, "_expando_registry", {}):
             # If you assign anything but an E object, the expando field will be replaced
             # with a normal attribute. By default we protect against this, but you can disable it

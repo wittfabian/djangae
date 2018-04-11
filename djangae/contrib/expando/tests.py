@@ -1,8 +1,8 @@
 
-from django.db import models
+from django.db import connection, models
 from google.appengine.api.datastore import Get, Key
 
-from djangae.contrib.expando import ExpandoModel, E
+from djangae.contrib.expando import E, ExpandoModel
 from djangae.test import TestCase
 
 
@@ -32,15 +32,22 @@ class ExpandoTests(TestCase):
 
         # Instance._meta also gains an expando_fields property so we can see what additional
         # fields the instance has beyond the class
-        self.assertEqual(instance1._meta.expando_fields, ["field1", "field2"])
-        self.assertEqual(instance2._meta.expando_fields, ["field1", "field2", "field3"])
+        self.assertItemsEqual(instance1._meta.expando_fields, ["field1", "field2"])
+        self.assertItemsEqual(instance2._meta.expando_fields, ["field1", "field2", "field3"])
 
         instance1.save()
         instance2.save()
 
+        ns = connection.settings_dict.get("NAMESPACE", "")
+
         # Saving the expando should set the right stuff in the datastore
-        entity1 = Get(Key.from_path(ExpandoModel._meta.db_table, instance1.pk))
-        entity2 = Get(Key.from_path(ExpandoModel._meta.db_table, instance2.pk))
+        entity1 = Get(
+            Key.from_path(ExpandoTestModel._meta.db_table, instance1.pk, namespace=ns)
+        )
+
+        entity2 = Get(
+            Key.from_path(ExpandoTestModel._meta.db_table, instance2.pk, namespace=ns)
+        )
 
         self.assertEqual(entity1["field1"], 1)
         self.assertEqual(entity1["field2"], "two")
