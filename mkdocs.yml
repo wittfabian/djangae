@@ -11,6 +11,7 @@ pages:
 - Local/remote management commands: sandbox.md
 - Environment: environment.md
 - Storage backends: storage.md
+- Background Processing: deferred.md
 - Contrib apps:
   - Datastore eventual consistency: consistency.md
   - Gauth authentication: gauth.md
