@@ -1,13 +1,16 @@
 from __future__ import absolute_import
 
 import collections
+import functools
+import logging
 import sys
 import time
-import logging
-import functools
 import warnings
 
-from socket import socket, SHUT_RDWR
+from google.appengine.api import datastore_errors
+from google.appengine.runtime import apiproxy_errors
+from google.appengine.runtime import DeadlineExceededError
+from socket import socket
 
 
 logger = logging.getLogger(__name__)
@@ -97,29 +100,51 @@ def retry_until_successful(func, *args, **kwargs):
 
 
 def retry(func, *args, **kwargs):
-    from google.appengine.api import datastore_errors
-    from google.appengine.runtime import apiproxy_errors
-    from google.appengine.runtime import DeadlineExceededError
-    from djangae.db.transaction import TransactionFailedError
-
+    """ Calls a function that may intermittently fail, catching the given error(s) and retrying up
+        to `_retries` times.
+    """
+    from djangae.db.transaction import TransactionFailedError  # Avoid circular import
+    # Slightly weird `.pop(x, None) or default` thing here due to not wanting to repeat the tuple of
+    # default things in `retry_on_error` and having to do inline imports
+    catch = kwargs.pop('_catch', None) or (
+        datastore_errors.Error, apiproxy_errors.Error, TransactionFailedError
+    )
     retries = kwargs.pop('_retries', 3)
+    timeout_ms = kwargs.pop('_initial_wait', 375)  # Try 375, 750, 1500
+    max_wait = kwargs.pop('_max_wait', 30000)
+
     i = 0
     try:
-        timeout_ms = kwargs.pop('_initial_wait', 375)  # Try 375, 750, 1500
         while True:
             try:
                 i += 1
                 return func(*args, **kwargs)
-            except (datastore_errors.Error, apiproxy_errors.Error, TransactionFailedError) as exc:
-                logger.info("Retrying function: %s(%s, %s) - %s", str(func), str(args), str(kwargs), str(exc))
-                time.sleep(timeout_ms * 0.001)
-                timeout_ms *= 2
+            except catch as exc:
                 if i > retries:
                     raise exc
+                logger.info("Retrying function: %s(%s, %s) - %s", func, args, kwargs, exc)
+                time.sleep(timeout_ms * 0.001)
+                timeout_ms *= 2
+                timeout_ms = min(timeout_ms, max_wait)
 
     except DeadlineExceededError:
-        logger.error("Timeout while running function: %s(%s, %s)", str(func), str(args), str(kwargs))
+        logger.error("Timeout while running function: %s(%s, %s)", func, args, kwargs)
         raise
+
+
+def retry_on_error(_catch=None, _retries=3, _initial_wait=375, _max_wait=30000):
+    """ Decorator for wrapping a function with `retry`. """
+
+    def decorator(func):
+        @functools.wraps(func)
+        def replacement(*args, **kwargs):
+            return retry(
+                func,
+                _catch=_catch, _retries=_retries, _initial_wait=_initial_wait, _max_wait=_max_wait,
+                *args, **kwargs
+            )
+        return replacement
+    return decorator
 
 
 def djangae_webapp(request_handler):
