@@ -15,10 +15,11 @@ from google.appengine.runtime import DeadlineExceededError
 # DJANGAE
 from djangae.db.backends.appengine.caching import remove_entities_from_cache_by_key
 from djangae.db.backends.appengine.commands import reserve_id
+from djangae.utils import retry
 from . import mapper_library
 
 from .constants import TASK_RECHECK_INTERVAL
-from .utils import do_with_retry, clone_entity
+from .utils import clone_entity
 
 
 TESTING = 'test' in sys.argv
@@ -51,7 +52,7 @@ class BaseEntityMapperOperation(Operation, DjangaeMigration):
             to do any altering of the model state.
         """
         pass
-    
+
     def _print(self, *objects):
         if not TESTING:
             print(*objects)
@@ -109,7 +110,7 @@ class BaseEntityMapperOperation(Operation, DjangaeMigration):
 
         remove_entities_from_cache_by_key([entity.key()], self.namespace)
         try:
-            do_with_retry(self._map_entity, entity)
+            retry(self._map_entity, entity)
         except DeadlineExceededError:
             # This is (probably) not an error with the individual entity, but more likey that the
             # task has tried to process too many entities. Either way, we always re-raise it so
