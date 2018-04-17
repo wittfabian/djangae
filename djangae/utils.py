@@ -96,12 +96,12 @@ def get_in_batches(queryset, batch_size=10):
 
 
 def retry_until_successful(func, *args, **kwargs):
-    return retry(func, *args, _retries=float('inf'), **kwargs)
+    return retry(func, *args, _attempts=float('inf'), **kwargs)
 
 
 def retry(func, *args, **kwargs):
-    """ Calls a function that may intermittently fail, catching the given error(s) and retrying up
-        to `_retries` times.
+    """ Calls a function that may intermittently fail, catching the given error(s) and (re)trying
+        for a maximum of `_attempts` times.
     """
     from djangae.db.transaction import TransactionFailedError  # Avoid circular import
     # Slightly weird `.pop(x, None) or default` thing here due to not wanting to repeat the tuple of
@@ -109,7 +109,7 @@ def retry(func, *args, **kwargs):
     catch = kwargs.pop('_catch', None) or (
         datastore_errors.Error, apiproxy_errors.Error, TransactionFailedError
     )
-    retries = kwargs.pop('_retries', 3)
+    attempts = kwargs.pop('_attempts', 3)
     timeout_ms = kwargs.pop('_initial_wait', 375)  # Try 375, 750, 1500
     max_wait = kwargs.pop('_max_wait', 30000)
 
@@ -120,7 +120,7 @@ def retry(func, *args, **kwargs):
                 i += 1
                 return func(*args, **kwargs)
             except catch as exc:
-                if i > retries:
+                if i >= attempts:
                     raise exc
                 logger.info("Retrying function: %s(%s, %s) - %s", func, args, kwargs, exc)
                 time.sleep(timeout_ms * 0.001)
@@ -132,7 +132,7 @@ def retry(func, *args, **kwargs):
         raise
 
 
-def retry_on_error(_catch=None, _retries=3, _initial_wait=375, _max_wait=30000):
+def retry_on_error(_catch=None, _attempts=3, _initial_wait=375, _max_wait=30000):
     """ Decorator for wrapping a function with `retry`. """
 
     def decorator(func):
@@ -140,7 +140,7 @@ def retry_on_error(_catch=None, _retries=3, _initial_wait=375, _max_wait=30000):
         def replacement(*args, **kwargs):
             return retry(
                 func,
-                _catch=_catch, _retries=_retries, _initial_wait=_initial_wait, _max_wait=_max_wait,
+                _catch=_catch, _attempts=_attempts, _initial_wait=_initial_wait, _max_wait=_max_wait,
                 *args, **kwargs
             )
         return replacement
