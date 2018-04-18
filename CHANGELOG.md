@@ -23,6 +23,7 @@
     - Now allows specifying a `_max_wait` time.
     - Now provides an accompanying `@retry_on_error` decorator for applying it to function definitions.
     - Is now documented.
+    - changed `_retries` argument to `_attempts` which is better API
 - Add `djangae.deferred.defer` to fix issues with `google.appengine.ext.deferred.defer`
 
 ### Bug fixes:
