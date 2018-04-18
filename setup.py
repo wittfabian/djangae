@@ -20,6 +20,7 @@ setup(
 
     # metadata for upload to PyPI
     author=AUTHOR,
+    author_email='mail@p.ota.to',
     description=DESCRIPTION,
     long_description=LONG_DESCRIPTION,
     keywords=["django", "Google App Engine", "GAE"],
