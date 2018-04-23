@@ -27,6 +27,10 @@ class ExpandoModel(models.Model):
                     return self._instance._expando_registry.keys()
 
                 @property
+                def concrete_fields(self):
+                    return tuple([x for x in self.fields if x.concrete])
+
+                @property
                 def fields(self):
                     # Make sure that instance expando fields are returned by _meta.fields
                     fields = super(NewMeta, self).fields
@@ -63,9 +67,9 @@ class ExpandoModel(models.Model):
         abstract = True
 
     def _add_expando_field(self, attr, value):
-        self._expando_registry[attr] = value.field_class(
-            name=attr
-        )
+        field = value.field_class(name=attr)
+        field.set_attributes_from_name(attr)
+        self._expando_registry[attr] = field
         return self._expando_registry[attr]
 
     def _remove_expando_field(self, attr):

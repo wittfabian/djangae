@@ -601,21 +601,22 @@ class BulkInsertError(IntegrityError, NotSupportedError):
 
 
 class InsertCommand(object):
-    def __init__(self, connection, model, objs, fields, raw):
-        self.has_pk = any(x.primary_key for x in fields)
+    def __init__(self, connection, model, objs, query_fields, raw):
+        self.has_pk = any(x.primary_key for x in query_fields)
         self.model = model
         self.objs = objs
         self.connection = connection
         self.namespace = connection.ops.connection.settings_dict.get("NAMESPACE")
         self.raw = raw
-        self.fields = fields
+        self.query_fields = query_fields
 
         self.entities = []
         self.included_keys = []
 
         for obj in self.objs:
             if self.has_pk:
-                # We must convert the PK value here, even though this normally happens in django_instance_to_entities otherwise
+                # We must convert the PK value here, even though this normally
+                # happens in django_instance_to_entities otherwise
                 # custom PK fields don't work properly
                 value = self.model._meta.pk.get_db_prep_save(
                     self.model._meta.pk.pre_save(obj, True),
@@ -635,17 +636,21 @@ class InsertCommand(object):
                 # We zip() self.entities and self.included_keys in execute(), so they should be the same length
                 self.included_keys.append(None)
 
+            all_fields = query_fields + [
+                x for x in obj._meta.concrete_fields if x not in query_fields
+            ]
+
             # We don't use the values returned, but this does make sure we're
             # doing the same validation as Django. See issue #493 for an
             # example of how not doing this can mess things up
-            for field in fields:
+            for field in all_fields:
                 field.get_db_prep_save(
                     getattr(obj, field.attname) if raw else field.pre_save(obj, True),
                     connection=connection,
                 )
 
             primary, descendents = django_instance_to_entities(
-                self.connection, self.fields, self.raw, obj
+                self.connection, all_fields, self.raw, obj
             )
 
             # Append the entity, and any descendents to the list to insert

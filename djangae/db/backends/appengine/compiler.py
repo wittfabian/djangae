@@ -64,7 +64,7 @@ class SQLInsertCompiler(SQLCompiler, compiler.SQLInsertCompiler):
         # Always pass down all the fields on an insert
         return [(InsertCommand(
             self.connection, self.query.model, self.query.objs,
-            list(self.query.fields) + list(get_concrete_fields(self.query.model, ignore_leaf=True)),
+            list(self.query.fields),
             self.query.raw), tuple())
         ]
 

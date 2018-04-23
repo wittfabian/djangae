@@ -139,7 +139,6 @@ def get_concrete_fields(model, ignore_leaf=False):
     fields = []
     for klass in concrete_classes:
         fields.extend(klass._meta.fields)
-
     return fields
 
 @memoized
