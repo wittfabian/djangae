@@ -43,13 +43,13 @@ class CloudStorageTests(TestCase):
 
         f = ContentFile('content', name='my_file')
         filename = storage.save(name, f)
-        self.assertIsInstance(filename, basestring)
+        self.assertIsInstance(filename, six.string_types)
         self.assertTrue(filename.endswith(name))
 
         self.assertTrue(storage.exists(filename))
         self.assertEqual(storage.size(filename), len('content'))
         url = storage.url(filename)
-        self.assertIsInstance(url, basestring)
+        self.assertIsInstance(url, six.string_types)
         self.assertNotEqual(url, '')
 
         abs_url = urlparse.urlunparse(
@@ -175,14 +175,14 @@ class BlobstoreStorageTests(TestCase):
         f = ContentFile('content', name='my_file')
         filename = storage.save('tmp', f)
 
-        self.assertIsInstance(filename, basestring)
+        self.assertIsInstance(filename, six.string_types)
         self.assertTrue(filename.endswith('tmp'))
 
         # Check .exists(), .size() and .url()
         self.assertTrue(storage.exists(filename))
         self.assertEqual(storage.size(filename), len('content'))
         url = storage.url(filename)
-        self.assertIsInstance(url, basestring)
+        self.assertIsInstance(url, six.string_types)
         self.assertNotEqual(url, '')
 
         # Check URL can be fetched

@@ -18,6 +18,7 @@ from django.core.files.uploadedfile import UploadedFile
 from django.core.files.uploadhandler import FileUploadHandler, \
     StopFutureHandlers
 from django.http import HttpResponse
+from django.utils import six
 from django.utils.encoding import smart_str, force_unicode
 from django.test.client import encode_multipart, MULTIPART_CONTENT, BOUNDARY
 from djangae.db import transaction
@@ -110,7 +111,7 @@ def serve_file(request, blob_key_or_info, as_download=False, content_type=None, 
     if isinstance(blob_key_or_info, BlobKey):
         info = BlobInfo.get(blob_key_or_info)
         blob_key = blob_key_or_info
-    elif isinstance(blob_key_or_info, basestring):
+    elif isinstance(blob_key_or_info, six.string_types):
         info = BlobInfo.get(BlobKey(blob_key_or_info))
         blob_key = BlobKey(blob_key_or_info)
     elif isinstance(blob_key_or_info, BlobInfo):

@@ -6,6 +6,7 @@ from django.apps import apps
 from django.db import models, connections
 from django.dispatch import receiver
 from django.db.models.signals import post_save
+from django.utils import six
 
 from google.appengine.api import datastore
 from google.appengine.ext import deferred
@@ -205,7 +206,7 @@ class CheckRepairMapper(MapReduceTask):
 
             elif m['instance'] != entity.key():
 
-                if isinstance(m['instance'], basestring):
+                if isinstance(m['instance'], six.string_types):
                     m['instance'] = datastore.Key(m['instance'])
 
                     if repair:

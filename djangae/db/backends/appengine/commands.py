@@ -12,6 +12,7 @@ from itertools import chain, groupby
 import django
 from django.db import DatabaseError
 from django.db import IntegrityError
+from django.utils import six
 
 from google.appengine.api import datastore, datastore_errors, memcache
 from google.appengine.datastore import datastore_stub_util
@@ -389,7 +390,7 @@ class SelectCommand(object):
                 if isinstance(value, decimal.Decimal):
                     field = get_field_from_column(self.query.model, filter_node.column)
                     value = self.connection.ops.adapt_decimalfield_value(value, field.max_digits, field.decimal_places)
-                elif isinstance(value, basestring):
+                elif isinstance(value, six.string_types):
                     value = coerce_unicode(value)
                 elif isinstance(value, datastore.Key):
                     # Make sure we apply the current namespace to any lookups
@@ -700,7 +701,7 @@ class InsertCommand(object):
                             raise IntegrityError("Tried to INSERT with existing key")
 
                         id_or_name = key.id_or_name()
-                        if isinstance(id_or_name, basestring) and id_or_name.startswith("__"):
+                        if isinstance(id_or_name, six.string_types) and id_or_name.startswith("__"):
                             raise NotSupportedError("Datastore ids cannot start with __. Id was %s" % id_or_name)
 
                         # Notify App Engine of any keys we're specifying intentionally

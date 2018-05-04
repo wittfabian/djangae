@@ -11,6 +11,8 @@ import logging
 
 from datetime import datetime
 from django.conf import settings
+from django.utils import six
+
 from google.appengine.api import datastore, datastore_errors
 from google.appengine.api.taskqueue.taskqueue import _DEFAULT_QUEUE
 from google.appengine.ext import deferred
@@ -66,7 +68,7 @@ def _next_key(key):
         we simply calculate the next alphabetical key
     """
     val = key.id_or_name()
-    if isinstance(val, basestring):
+    if isinstance(val, six.string_types):
         return datastore.Key.from_path(
             key.kind(),
             _next_string(val),
@@ -93,7 +95,7 @@ def _mid_key(key1, key2):
             "Sharding of entities with mixed integer and string types is not yet supported."
         )
 
-    if isinstance(key1_val, basestring):
+    if isinstance(key1_val, six.string_types):
         mid_id_or_name = _mid_string(key1_val, key2_val)
     else:
         mid_id_or_name = key1_val + ((key2_val - key1_val) // 2)
