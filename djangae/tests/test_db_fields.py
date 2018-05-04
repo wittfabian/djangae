@@ -12,6 +12,7 @@ from django.conf import settings
 from django.core.exceptions import ValidationError, ImproperlyConfigured
 from django.core.files.base import ContentFile
 from django.core.validators import EmailValidator
+from django.utils.encoding import python_2_unicode_compatible
 import django
 
 # DJANGAE
@@ -124,10 +125,11 @@ class ModelWithCounterWithManyShards(models.Model):
         app_label = "djangae"
 
 
+@python_2_unicode_compatible
 class ISOther(models.Model):
     name = models.CharField(max_length=500)
 
-    def __unicode__(self):
+    def __str__(self):
         return "%s:%s" % (self.pk, self.name)
 
     class Meta:

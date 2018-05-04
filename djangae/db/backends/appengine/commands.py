@@ -13,6 +13,7 @@ import django
 from django.db import DatabaseError
 from django.db import IntegrityError
 from django.utils import six
+from django.utils.encoding import python_2_unicode_compatible
 
 from google.appengine.api import datastore, datastore_errors, memcache
 from google.appengine.datastore import datastore_stub_util
@@ -283,6 +284,7 @@ class EntityTransforms:
         return result
 
 
+@python_2_unicode_compatible
 class SelectCommand(object):
     def __init__(self, connection, query, keys_only=False):
         self.connection = connection
@@ -540,11 +542,8 @@ class SelectCommand(object):
         self.results = iter(self.results)
         return self.results_returned
 
-    def __unicode__(self):
+    def __str__(self):
         return generate_sql_representation(self)
-
-    def __repr__(self):
-        return self.__unicode__().encode("utf-8")
 
     def __mod__(self, params):
         return repr(self)
@@ -601,6 +600,7 @@ class BulkInsertError(IntegrityError, NotSupportedError):
     pass
 
 
+@python_2_unicode_compatible
 class InsertCommand(object):
     def __init__(self, connection, model, objs, fields, raw):
         self.has_pk = any(x.primary_key for x in fields)
@@ -753,13 +753,11 @@ class InsertCommand(object):
         """
         return unicode(self).lower()
 
-    def __unicode__(self):
+    def __str__(self):
         return generate_sql_representation(self)
 
-    def __repr__(self):
-        return self.__unicode__().encode("utf-8")
 
-
+@python_2_unicode_compatible
 class DeleteCommand(object):
     def __init__(self, connection, query):
         self.model = query.model
@@ -775,7 +773,7 @@ class DeleteCommand(object):
             utils.get_top_concrete_parent(query.model)._meta.db_table
         )
 
-    def __unicode__(self):
+    def __str__(self):
         return generate_sql_representation(self)
 
     def execute(self):
@@ -887,6 +885,7 @@ class DeleteCommand(object):
         return unicode(self).lower()
 
 
+@python_2_unicode_compatible
 class UpdateCommand(object):
     def __init__(self, connection, query):
         self.model = query.model
@@ -896,7 +895,7 @@ class UpdateCommand(object):
         self.connection = connection
         self.namespace = connection.ops.connection.settings_dict.get("NAMESPACE")
 
-    def __unicode__(self):
+    def __str__(self):
         return generate_sql_representation(self)
 
     def lower(self):

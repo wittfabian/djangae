@@ -2,6 +2,7 @@ from django.db import models
 from djangae.contrib import sleuth
 from djangae.test import TestCase, inconsistent_db
 from djangae.utils import get_next_available_port, retry, retry_on_error
+from django.utils.encoding import python_2_unicode_compatible
 from djangae.db.consistency import ensure_instance_consistent, ensure_instances_consistent
 from djangae.db.backends.appengine.context import CacheDict
 
@@ -19,13 +20,14 @@ class AvailablePortTests(TestCase):
             self.assertEquals(8095, get_next_available_port(url, port))
 
 
+@python_2_unicode_compatible
 class EnsureCreatedModel(models.Model):
     field1 = models.IntegerField()
 
     class Meta:
         app_label = "djangae"
 
-    def __unicode__(self):
+    def __str__(self):
         return u"PK: {}, field1 {}".format(self.pk, self.field1)
 
 
