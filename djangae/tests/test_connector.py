@@ -4,7 +4,7 @@ import re
 import random
 import logging
 
-from cStringIO import StringIO
+from io import StringIO
 from string import letters
 from hashlib import md5
 from unittest import skipIf
