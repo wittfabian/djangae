@@ -9,6 +9,7 @@ from google.appengine.api.memcache import Client
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 from django.core.cache.backends.base import default_key_func
+from django.utils import six
 
 from djangae.db import utils
 from djangae.db.unique_utils import unique_identifiers_from_entity, _format_value_for_identifier
@@ -85,7 +86,7 @@ class KeyPrefixedClient(Client):
             key_mapping.keys(), key_prefix=key_prefix, namespace=namespace, for_cas=for_cas
         )
 
-        return { key_mapping[k]: v for k, v in ret.iteritems() }
+        return { key_mapping[k]: v for k, v in six.iteritems(ret) }
 
     def set_multi_async(self, mapping, time=0,  key_prefix='', min_compress_len=0, namespace=None, rpc=None):
         prefixed_mapping = {}
@@ -123,7 +124,7 @@ class KeyPrefixedClient(Client):
 def _apply_namespace(value_or_map, namespace):
     """ Add the given namespace to the given cache key(s). """
     if hasattr(value_or_map, "keys"):
-        return {"{}:{}".format(namespace, k): v for k, v in value_or_map.iteritems()}
+        return {"{}:{}".format(namespace, k): v for k, v in six.iteritems(value_or_map)}
     elif hasattr(value_or_map, "__iter__"):
         return ["{}:{}".format(namespace, x) for x in value_or_map]
     else:
@@ -136,7 +137,7 @@ def _strip_namespace(value_or_map):
         return value.split(":", 1)[-1]
 
     if hasattr(value_or_map, "keys"):
-        return {_strip(k): v for k, v in value_or_map.iteritems()}
+        return {_strip(k): v for k, v in six.iteritems(value_or_map.iteritems)}
     elif hasattr(value_or_map, "__iter__"):
         return [_strip(x) for x in value_or_map]
     else:
