@@ -1,14 +1,13 @@
 # coding: utf-8
 # STANDARD LIB
 from unittest import skipIf
-import httplib
 import os
-import urlparse
 
 # THIRD PARTY
 from django.core.files.base import File, ContentFile
 from django.db import models
 from django.test.utils import override_settings
+from django.utils import six
 from google.appengine.api import urlfetch
 from google.appengine.api.images import TransformationError, LargeImageError
 
@@ -52,11 +51,11 @@ class CloudStorageTests(TestCase):
         self.assertIsInstance(url, six.string_types)
         self.assertNotEqual(url, '')
 
-        abs_url = urlparse.urlunparse(
+        abs_url = six.moves.urllib.parse.urlunparse(
             ('http', os.environ['HTTP_HOST'], url, None, None, None)
         )
         response = urlfetch.fetch(abs_url)
-        self.assertEqual(response.status_code, httplib.OK)
+        self.assertEqual(response.status_code, six.moves.http_client.OK)
         self.assertEqual(response.content, 'content')
 
         f = storage.open(filename)
@@ -142,7 +141,7 @@ class CloudStorageTests(TestCase):
             text_file=ContentFile('content', name='my_file')
         )
         instance.save()
-        with sleuth.watch('urllib.quote') as urllib_quote_watcher:
+        with sleuth.watch('six.urllib.parse.quote') as urllib_quote_watcher:
             with sleuth.detonate('djangae.storage.get_serving_url', TransformationError):
                 instance.refresh_from_db()
                 instance.text_file.url
@@ -186,11 +185,11 @@ class BlobstoreStorageTests(TestCase):
         self.assertNotEqual(url, '')
 
         # Check URL can be fetched
-        abs_url = urlparse.urlunparse(
+        abs_url = six.moves.urllib.parse.urlunparse(
             ('http', os.environ['HTTP_HOST'], url, None, None, None)
         )
         response = urlfetch.fetch(abs_url)
-        self.assertEqual(response.status_code, httplib.OK)
+        self.assertEqual(response.status_code, six.moves.http_client.OK)
         self.assertEqual(response.content, 'content')
 
         # Open it, read it

@@ -1,5 +1,4 @@
 # coding: utf-8
-import urllib
 import mimetypes
 import re
 import threading
@@ -335,7 +334,7 @@ class CloudStorage(Storage, BlobstoreUploadMixin):
 
             # Also, Django requires that url() return something 'truthy' even if the file field hasn't been
             # saved yet so we do the same thing if the file is not found (just add the bucket to the filename)
-            quoted_filename = urllib.quote(self._add_bucket(filename))
+            quoted_filename = six.moves.urllib.parse.quote(self._add_bucket(filename))
             return '{0}{1}'.format(self.api_url, quoted_filename)
 
     def _get_blobkey(self, name):
@@ -356,7 +355,7 @@ class CloudStorage(Storage, BlobstoreUploadMixin):
         return name
 
     def _add_bucket(self, name):
-        safe_name = urllib.quote(name.encode('utf-8'))
+        safe_name = six.moves.urllib.parse.quote(name.encode('utf-8'))
         return '/{0}/{1}'.format(self.bucket, safe_name)
 
     def _content_type_for_name(self, name):
