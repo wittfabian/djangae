@@ -8,6 +8,8 @@ from django.conf import settings
 from django.db import connection, models
 from django.db.migrations.state import ProjectState
 from django.test import override_settings
+from django.utils.six.moves import six
+
 from google.appengine.api import datastore
 from google.appengine.runtime import DeadlineExceededError
 
@@ -225,7 +227,7 @@ class MigrationOperationTests(TestCase):
 
     def test_queue_option(self):
         """ The `queue` kwarg should determine the task queue that the operation runs on. """
-        for x in xrange(3):
+        for x in range(3):
             TestModel.objects.create()
 
         operation = operations.AddFieldData(
@@ -250,7 +252,7 @@ class MigrationOperationTests(TestCase):
         """ If no `queue` kwarg is passed then the DJANGAE_MIGRATION_DEFAULT_QUEUE setting should
             be used to determine the task queue.
         """
-        for x in xrange(2):
+        for x in range(2):
             TestModel.objects.create()
 
         operation = operations.AddFieldData(
@@ -310,7 +312,7 @@ class MigrationOperationTests(TestCase):
 
     def test_addfielddata(self):
         """ Test the AddFieldData operation. """
-        for x in xrange(2):
+        for x in range(2):
             TestModel.objects.create()
 
         # Just for sanity, check that none of the entities have the new field value yet
@@ -329,7 +331,7 @@ class MigrationOperationTests(TestCase):
 
     def test_removefielddata(self):
         """ Test the RemoveFieldData operation. """
-        for x in xrange(2):
+        for x in range(2):
             TestModel.objects.create(name="name_%s" % x)
 
         # Just for sanity, check that all of the entities have `name` value
@@ -348,7 +350,7 @@ class MigrationOperationTests(TestCase):
 
     def test_copyfielddata(self):
         """ Test the CopyFieldData operation. """
-        for x in xrange(2):
+        for x in range(2):
             TestModel.objects.create(name="name_%s" % x)
 
         # Just for sanity, check that none of the entities have the new "new_field" value
@@ -367,7 +369,7 @@ class MigrationOperationTests(TestCase):
 
     def test_deletemodeldata(self):
         """ Test the DeleteModelData operation. """
-        for x in xrange(2):
+        for x in range(2):
             TestModel.objects.create()
 
         # Just for sanity, check that the entities exist!
@@ -386,7 +388,7 @@ class MigrationOperationTests(TestCase):
         """ Test the CopyModelData operation with overwrite_existing=True. """
 
         # Create the TestModel instances, with OtherModel instances with matching PKs
-        for x in xrange(2):
+        for x in range(2):
             instance = TestModel.objects.create(name="name_which_will_be_copied")
             OtherModel.objects.create(name="original_name", id=instance.pk)
 
@@ -413,7 +415,7 @@ class MigrationOperationTests(TestCase):
 
         # Create the TestModel instances, with OtherModel instances with matching PKs only for
         # odd PKs
-        for x in xrange(1, 5):
+        for x in range(1, 5):
             TestModel.objects.create(id=x, name="name_which_will_be_copied")
             if x % 2:
                 OtherModel.objects.create(id=x, name="original_name")
@@ -445,7 +447,7 @@ class MigrationOperationTests(TestCase):
         """ Test the CopyModelDataToNamespace operation with overwrite_existing=True. """
         ns1 = settings.DATABASES["ns1"]["NAMESPACE"]
         # Create instances, with copies in the other namespace with matching IDs
-        for x in xrange(2):
+        for x in range(2):
             instance = TestModel.objects.create(name="name_which_will_be_copied")
             instance.save(using="ns1")
 
@@ -473,7 +475,7 @@ class MigrationOperationTests(TestCase):
         ns1 = settings.DATABASES["ns1"]["NAMESPACE"]
         # Create the TestModel instances, with OtherModel instances with matching PKs only for
         # odd PKs
-        for x in xrange(1, 5):
+        for x in range(1, 5):
             TestModel.objects.create(id=x, name="name_which_will_be_copied")
             if x % 2:
                 ns1_instance = TestModel(id=x, name="original_name")
@@ -510,7 +512,7 @@ class MigrationOperationTests(TestCase):
             a new app as well as in a new namespace.
         """
         ns1 = settings.DATABASES["ns1"]["NAMESPACE"]
-        for x in xrange(2):
+        for x in range(2):
             TestModel.objects.create(name="name_which_will_be_copied")
 
         # Just for sanity, check that the entities exist
@@ -534,7 +536,7 @@ class MigrationOperationTests(TestCase):
 
     def test_mapfunctiononentities(self):
         """ Test the MapFunctionOnEntities operation. """
-        for x in xrange(2):
+        for x in range(2):
             TestModel.objects.create()
         # Test that our entities have not had our function called on them
         entities = self.get_entities()
@@ -693,7 +695,7 @@ class ShardQueryTestCase(TestCase):
     def test_query_sharding(self):
         ns1 = settings.DATABASES["default"]["NAMESPACE"]
 
-        for x in xrange(1, 21):
+        for x in range(1, 21):
             TestModel.objects.create(pk=x)
 
         qry = datastore.Query(TestModel._meta.db_table, namespace=ns1)
@@ -732,7 +734,7 @@ class MapperLibraryTestCase(TestCase):
             processing.
         """
         objs = []
-        for x in xrange(2):
+        for x in range(2):
             objs.append(TestModel(name="Test-%s" % x))
         TestModel.objects.bulk_create(objs)
         start_mapping("my_lovely_mapper", self._get_testmodel_query(), tickle_entity)
@@ -745,7 +747,7 @@ class MapperLibraryTestCase(TestCase):
             mappers.
         """
         objs = []
-        for x in xrange(2):
+        for x in range(2):
             objs.append(TestModel(name="Test-%s" % x))
         TestModel.objects.bulk_create(objs)
 
@@ -769,7 +771,7 @@ class MapperLibraryTestCase(TestCase):
         # Create some objects in 2 different namespaces
         for db in dbs:
             objs = []
-            for x in xrange(2):
+            for x in range(2):
                 objs.append(TestModel(name="Test-%s" % x))
             TestModel.objects.using(db).bulk_create(objs)
 
@@ -790,7 +792,7 @@ class MapperLibraryTestCase(TestCase):
             should redefer and continue.
         """
         objs = []
-        for x in xrange(8):
+        for x in range(8):
             objs.append(TestModel(name="Test-%s" % x))
         TestModel.objects.bulk_create(objs)
 

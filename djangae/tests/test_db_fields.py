@@ -13,6 +13,7 @@ from django.core.exceptions import ValidationError, ImproperlyConfigured
 from django.core.files.base import ContentFile
 from django.core.validators import EmailValidator
 from django.utils.encoding import python_2_unicode_compatible
+from django.utils.six.moves import range
 import django
 
 # DJANGAE

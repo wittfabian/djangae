@@ -2,6 +2,7 @@
 from bs4 import BeautifulSoup
 from django import forms
 from django.db import models
+from django.utils.six.moves import range
 
 # DJANGAE
 from djangae.fields import ListField, RelatedListField
@@ -123,7 +124,7 @@ class OrderedModelMultipleChoiceField(TestCase):
         instance_one, instance_two, instance_three = [
             CharFieldModel.objects.create(
                 string_field=str(x)
-            ) for x in xrange(3)
+            ) for x in range(3)
         ]
         data = dict(related_list_field=[
             instance_two.pk, instance_three.pk, instance_one.pk]

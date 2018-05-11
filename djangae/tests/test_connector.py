@@ -21,6 +21,7 @@ from django.forms import ModelForm
 from django.test import RequestFactory
 from django.utils.safestring import SafeText
 from django.forms.models import modelformset_factory
+from django.utils.six.moves import range
 from google.appengine.api.datastore_errors import EntityNotFoundError, TransactionFailedError
 from google.appengine.datastore import datastore_rpc
 from google.appengine.api import datastore
@@ -325,7 +326,7 @@ class BackendTests(TestCase):
         for i in range(10):
             TestFruit.objects.create(name=str(i), color=str(i))
 
-        to_exclude = [ str(x) for x in range(5) + range(15,20) ]
+        to_exclude = [ str(x) for x in list(range(5)) + list(range(15,20)) ]
 
         to_return = TestFruit.objects.exclude(pk__in=set(to_exclude)).values_list("pk", flat=True)[:2]
         self.assertEqual(2, len(to_return))
