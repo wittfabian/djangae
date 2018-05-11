@@ -5,6 +5,7 @@ from functools import partial
 from itertools import chain, groupby
 
 from django.conf import settings
+from django.utils import six
 from djangae.db.backends.appengine import caching
 from djangae.db import utils
 
@@ -332,7 +333,7 @@ class QueryByKeys(object):
 
                 multi_query = []
                 orderings = self.queries[0]._Query__orderings
-                for key, queries in self.queries_by_key.iteritems():
+                for key, queries in six.iteritems(self.queries_by_key):
                     for query in queries:
                         if additional_cols:
                             # We need to include additional orderings in the projection so that we can
