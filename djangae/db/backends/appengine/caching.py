@@ -137,7 +137,7 @@ def _strip_namespace(value_or_map):
         return value.split(":", 1)[-1]
 
     if hasattr(value_or_map, "keys"):
-        return {_strip(k): v for k, v in six.iteritems(value_or_map.iteritems)}
+        return {_strip(k): v for k, v in six.iteritems(value_or_map)}
     elif hasattr(value_or_map, "__iter__"):
         return [_strip(x) for x in value_or_map]
     else:
