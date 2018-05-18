@@ -7,6 +7,8 @@ import sys
 import time
 import warnings
 
+from django.utils import six
+
 from google.appengine.api import datastore_errors
 from google.appengine.runtime import apiproxy_errors
 from google.appengine.runtime import DeadlineExceededError
@@ -168,7 +170,7 @@ def djangae_webapp(request_handler):
         view_func.dispatch()
 
         django_response = HttpResponse(response.body, status=int(str(response.status).split(" ")[0]))
-        for header, value in response.headers.iteritems():
+        for header, value in six.iteritems(response.headers):
             django_response[header] = value
 
         return django_response
