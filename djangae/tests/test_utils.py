@@ -231,8 +231,8 @@ class RetryTestCase(TestCase):
                 pass
 
             self.assertEqual(len(sleep_watch.calls), 2)  # It doesn't sleep after the final attempt
-            self.assertEqual(sleep_watch.calls[0].args[0], 5 / 1000.0)
-            self.assertEqual(sleep_watch.calls[1].args[0], 10 / 1000.0)
+            self.assertEqual(sleep_watch.calls[0].args[0], 0.005) # initial wait in milliseconds
+            self.assertEqual(sleep_watch.calls[1].args[0], 0.01) # initial wait doubled during backoff
 
     def test_max_wait_param(self):
         """ The _max_wait parameter should limit the backoff time for retries, otherwise they will
@@ -252,7 +252,7 @@ class RetryTestCase(TestCase):
             self.assertTrue(sleep_watch.called)
             self.assertEqual(len(sleep_watch.calls), 9)  # It doesn't sleep after the final attempt
             sleep_times = [call.args[0] for call in sleep_watch.calls]
-            self.assertEqual(max(sleep_times), 3 / 1000.0)
+            self.assertEqual(max(sleep_times), 0.003)
 
     def test_args_and_kwargs_passed(self):
         """ Args and kwargs passed to `retry` or to the function decorated with `@retry_on_error`
