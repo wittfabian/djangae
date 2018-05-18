@@ -1826,7 +1826,7 @@ class BlobstoreFileUploadHandlerTest(TestCase):
         self.extra_content_type = {'blob-key': 'PLOF0qOie14jzHWJXEa9HA==', 'access-type': 'X-AppEngine-BlobKey'}
 
     def _create_wsgi_input(self):
-        return StringIO('--===============7417945581544019063==\r\nContent-Type:'
+        return StringIO(u'--===============7417945581544019063==\r\nContent-Type:'
                         ' text/plain\r\nContent-Disposition: form-data;'
                         ' name="field-nationality"\r\n\r\nAS\r\n'
                         '--===============7417945581544019063==\r\nContent-Type:'

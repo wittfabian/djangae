@@ -141,7 +141,7 @@ class CloudStorageTests(TestCase):
             text_file=ContentFile('content', name='my_file')
         )
         instance.save()
-        with sleuth.watch('six.urllib.parse.quote') as urllib_quote_watcher:
+        with sleuth.watch('djangae.storage.six.moves.urllib.parse.quote') as urllib_quote_watcher:
             with sleuth.detonate('djangae.storage.get_serving_url', TransformationError):
                 instance.refresh_from_db()
                 instance.text_file.url

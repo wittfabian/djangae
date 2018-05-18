@@ -8,7 +8,6 @@ from django.conf import settings
 from django.db import connection, models
 from django.db.migrations.state import ProjectState
 from django.test import override_settings
-from django.utils.six.moves import six
 
 from google.appengine.api import datastore
 from google.appengine.runtime import DeadlineExceededError
