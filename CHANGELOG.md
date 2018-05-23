@@ -4,7 +4,9 @@
 -
 
 ### Bug fixes:
--
+
+- Fixed `ImportError` when running `./manage.py runserver` and the SDK is not already on the Python import path.
+
 
 ## v0.9.11
 
