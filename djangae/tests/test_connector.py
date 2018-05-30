@@ -21,6 +21,7 @@ from django.forms import ModelForm
 from django.test import RequestFactory
 from django.utils.safestring import SafeText
 from django.forms.models import modelformset_factory
+from django.utils import six
 from django.utils.six.moves import range
 from google.appengine.api.datastore_errors import EntityNotFoundError, TransactionFailedError
 from google.appengine.datastore import datastore_rpc
@@ -490,7 +491,7 @@ class BackendTests(TestCase):
 
     def test_gae_query_display(self):
         # Shouldn't raise any exceptions:
-        representation = str(TestUser.objects.filter(username='test').query)
+        representation = six.text_type(TestUser.objects.filter(username='test').query)
         self.assertTrue('test' in representation)
         self.assertTrue('username' in representation)
 

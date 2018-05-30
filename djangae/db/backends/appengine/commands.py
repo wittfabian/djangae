@@ -284,7 +284,6 @@ class EntityTransforms:
         return result
 
 
-@python_2_unicode_compatible
 class SelectCommand(object):
     def __init__(self, connection, query, keys_only=False):
         self.connection = connection
@@ -542,7 +541,7 @@ class SelectCommand(object):
         self.results = iter(self.results)
         return self.results_returned
 
-    def __str__(self):
+    def __repr__(self):
         return generate_sql_representation(self)
 
     def __mod__(self, params):
