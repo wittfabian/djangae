@@ -5,7 +5,6 @@ import logging
 
 # 3RD PARTY
 from django.conf import settings
-from django.utils import six
 from google.appengine.datastore.datastore_rpc import BaseConnection
 
 # CONSISTENCY
@@ -126,7 +125,7 @@ def object_matches_a_check(obj, checks):
                 return True
         else:
             try:
-                for field, value in six.iteritems(check):
+                for field, value in check.items():
                     if not getattr(obj, field) == value:
                         break
                 else:

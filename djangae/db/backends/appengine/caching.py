@@ -1,19 +1,18 @@
+import itertools
 import logging
 import threading
-import itertools
 
-from google.appengine.api import datastore
-from google.appengine.api import memcache
+from google.appengine.api import datastore, memcache
 from google.appengine.api.memcache import Client
 
-from django.conf import settings
-from django.core.exceptions import ImproperlyConfigured
-from django.core.cache.backends.base import default_key_func
-from django.utils import six
-
 from djangae.db import utils
-from djangae.db.unique_utils import unique_identifiers_from_entity, _format_value_for_identifier
-from djangae.db.backends.appengine.context import ContextCache, key_or_entity_compare
+from djangae.db.backends.appengine.context import (ContextCache,
+                                                   key_or_entity_compare)
+from djangae.db.unique_utils import (_format_value_for_identifier,
+                                     unique_identifiers_from_entity)
+from django.conf import settings
+from django.core.cache.backends.base import default_key_func
+from django.core.exceptions import ImproperlyConfigured
 
 _local = threading.local()
 
@@ -80,13 +79,13 @@ class KeyPrefixedClient(Client):
 
     def get_multi(self, keys, key_prefix='', namespace=None, for_cas=False):
         # Convert the given keys to our prefixed keys, then map the results back onto the original keys
-        key_mapping = { default_key_func(x, KEY_PREFIX, VERSION): x for x in keys }
+        key_mapping = {default_key_func(x, KEY_PREFIX, VERSION): x for x in keys}
 
         ret = super(KeyPrefixedClient, self).get_multi(
             key_mapping.keys(), key_prefix=key_prefix, namespace=namespace, for_cas=for_cas
         )
 
-        return { key_mapping[k]: v for k, v in six.iteritems(ret) }
+        return {key_mapping[k]: v for k, v in ret.items()}
 
     def set_multi_async(self, mapping, time=0,  key_prefix='', min_compress_len=0, namespace=None, rpc=None):
         prefixed_mapping = {}
@@ -124,7 +123,7 @@ class KeyPrefixedClient(Client):
 def _apply_namespace(value_or_map, namespace):
     """ Add the given namespace to the given cache key(s). """
     if hasattr(value_or_map, "keys"):
-        return {"{}:{}".format(namespace, k): v for k, v in six.iteritems(value_or_map)}
+        return {"{}:{}".format(namespace, k): v for k, v in value_or_map.items()}
     elif hasattr(value_or_map, "__iter__"):
         return ["{}:{}".format(namespace, x) for x in value_or_map]
     else:
@@ -137,7 +136,7 @@ def _strip_namespace(value_or_map):
         return value.split(":", 1)[-1]
 
     if hasattr(value_or_map, "keys"):
-        return {_strip(k): v for k, v in six.iteritems(value_or_map)}
+        return {_strip(k): v for k, v in value_or_map.items()}
     elif hasattr(value_or_map, "__iter__"):
         return [_strip(x) for x in value_or_map]
     else:

@@ -6,7 +6,7 @@ import datetime
 # 3RD PARTY
 from djangae.contrib.common import get_request
 from django.core.cache import cache
-from django.utils import timezone, six
+from django.utils import timezone
 
 
 def get_caches(names):
@@ -103,7 +103,7 @@ class SessionCache(object):
 def strip_old_objects(objects, max_age):
     to_keep = {}
     threshold = timezone.now() - datetime.timedelta(seconds=max_age)
-    for obj_pk, created_time in six.iteritems(objects):
+    for obj_pk, created_time in objects.items():
         if created_time >= threshold:
             # object is still new enough to keep in the cache
             to_keep[obj_pk] = created_time
