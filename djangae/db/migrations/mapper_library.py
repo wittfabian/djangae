@@ -114,21 +114,35 @@ def _get_range(key1, key2):
     val2 = key2.id_or_name()
     if type(val1) != type(val2):
         raise Exception("Cannot calculate range between keys of different types.")
-    if isinstance(val1, (int, long)):
-        return val2 - val1
+
     # Otherwise, the values are strings...
     # Put the strings in order, so the lowest one is lhs
     lhs = min(val1, val2)
     rhs = max(val1, val2)
+
+    if isinstance(lhs, (int, long)):
+        return rhs - lhs
+
     # Pad out the shorter string so that they're both the same length
     longest_length = max(len(lhs), len(rhs))
     lhs = lhs.ljust(longest_length, "\0")
-    # For each position in the strings, find the difference
-    diffs = []
-    for l, r in zip(lhs, rhs):
-        diffs.append(ord(r) - ord(l))
-    # We return this "difference" as a string
-    return u"".join([unichr(x) for x in diffs])
+
+    max_unicode = 0x10FFFF
+
+    # This is based on the positional numeral system solution described here:
+    # https://stackoverflow.com/a/41492405/48362
+    # But adapted to deal with unicode characters.
+    lhs_value = sum([
+        (max_unicode ** (longest_length - 1)) * ord(x)
+        for i, x in enumerate(lhs)
+    ])
+
+    rhs_value = sum([
+        (max_unicode ** (longest_length - 1)) * ord(x)
+        for i, x in enumerate(rhs)
+    ])
+
+    return rhs_value - lhs_value
 
 
 def _generate_shards(keys, shard_count):
