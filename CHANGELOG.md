@@ -4,7 +4,7 @@
 -
 
 ### Bug fixes:
--
+- Fix a ValueError when sharding string keys in the migrations mapper library
 
 ## v0.9.11
 
