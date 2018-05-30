@@ -1,12 +1,6 @@
 # coding: utf-8
 import mimetypes
-import re
 import threading
-
-try:
-    from cStringIO import StringIO
-except ImportError:
-    from io import StringIO
 
 from django.conf import settings
 from django.core.exceptions import SuspiciousFileOperation
@@ -56,6 +50,7 @@ KEY_CACHE = {}
 KEY_CACHE_LIST = []
 MAX_KEY_CACHE_SIZE = 500
 
+
 def _add_to_cache(blob_key_or_info, blob_key, file_info):
     """
         This helps remove overhead when serving cloud storage files
@@ -87,6 +82,7 @@ def _get_from_cache(blob_key_or_info):
     with CACHE_LOCK:
         return KEY_CACHE.get(blob_key_or_info)
 
+
 def _get_or_create_cached_blob_key_and_info(blob_key_or_info):
     cached_value = _get_from_cache(blob_key_or_info)
     if cached_value:
@@ -97,6 +93,7 @@ def _get_or_create_cached_blob_key_and_info(blob_key_or_info):
         blob_key = create_gs_key('/gs{0}'.format(blob_key_or_info))
         _add_to_cache(blob_key_or_info, blob_key, info)
     return (blob_key, info)
+
 
 def serve_file(request, blob_key_or_info, as_download=False, content_type=None, filename=None, offset=None, size=None):
     """
@@ -156,6 +153,7 @@ def serve_file(request, blob_key_or_info, as_download=False, content_type=None, 
 
 DEFAULT_GCS_BUCKET = None
 
+
 def get_bucket_name():
     """
         Returns the bucket name for Google Cloud Storage, either from your
@@ -189,7 +187,8 @@ class BlobstoreUploadMixin():
 
         url = self._create_upload_url()
 
-        response = urlfetch.fetch(url=url,
+        response = urlfetch.fetch(
+            url=url,
             payload=encode_multipart(BOUNDARY, {'file': content}),
             method=urlfetch.POST,
             deadline=60,
@@ -397,12 +396,13 @@ class CloudStorage(Storage, BlobstoreUploadMixin):
             gs_bucket_name=self.bucket_name
         )
 
+
 class UniversalNewLineBlobReader(BlobReader):
     def readline(self, size=-1):
         limit_size = size > -1
 
         buf = []  # A buffer to store our line
-        #Read characters until we find a \r or \n, or hit the maximum size
+        # Read characters until we find a \r or \n, or hit the maximum size
         c = self.read(size=1)
         while c != '\n' and c != '\r' and (not limit_size or len(buf) < size):
             if not c:
@@ -415,11 +415,11 @@ class UniversalNewLineBlobReader(BlobReader):
         if c == '\r':
             n = self.read(size=1)
 
-            #If the \r wasn't followed by a \n, then it was a mac line ending
-            #so we seek backwards 1
+            # If the \r wasn't followed by a \n, then it was a mac line ending
+            # so we seek backwards 1
             if n and n != '\n':
-                #We only check n != '\n' if we weren't EOF (e.g. n evaluates to False) otherwise
-                #we'd read nothing, and then seek back 1 which would then be re-read next loop etc.
+                # We only check n != '\n' if we weren't EOF (e.g. n evaluates to False) otherwise
+                # we'd read nothing, and then seek back 1 which would then be re-read next loop etc.
                 self.seek(-1, 1)  # The second 1 means to seek relative to the current position
 
         # Only add a trailing \n (if it doesn't break the size constraint)
