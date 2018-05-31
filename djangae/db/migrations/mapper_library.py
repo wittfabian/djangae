@@ -132,15 +132,9 @@ def _get_range(key1, key2):
     # This is based on the positional numeral system solution described here:
     # https://stackoverflow.com/a/41492405/48362
     # But adapted to deal with unicode characters.
-    lhs_value = sum([
-        (max_unicode ** (longest_length - 1)) * ord(x)
-        for i, x in enumerate(lhs)
-    ])
 
-    rhs_value = sum([
-        (max_unicode ** (longest_length - 1)) * ord(x)
-        for i, x in enumerate(rhs)
-    ])
+    lhs_value = sum((max_unicode ** n) * ord(c) for n, c in enumerate(reversed(lhs)))
+    rhs_value = sum((max_unicode ** n) * ord(c) for n, c in enumerate(reversed(rhs)))
 
     return rhs_value - lhs_value
 
