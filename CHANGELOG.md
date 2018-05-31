@@ -1,7 +1,7 @@
 ## v0.9.12 (in development)
 
 ### New features & improvements:
--
+- Take some steps to make the code Python 3 compatible
 
 ### Bug fixes:
 - Fix a ValueError when sharding string keys in the migrations mapper library
