@@ -12,6 +12,8 @@ from itertools import chain, groupby
 import django
 from django.db import DatabaseError
 from django.db import IntegrityError
+from django.utils import six
+from django.utils.encoding import python_2_unicode_compatible
 
 from google.appengine.api import datastore, datastore_errors, memcache
 from google.appengine.datastore import datastore_stub_util
@@ -389,7 +391,7 @@ class SelectCommand(object):
                 if isinstance(value, decimal.Decimal):
                     field = get_field_from_column(self.query.model, filter_node.column)
                     value = self.connection.ops.adapt_decimalfield_value(value, field.max_digits, field.decimal_places)
-                elif isinstance(value, basestring):
+                elif isinstance(value, six.string_types):
                     value = coerce_unicode(value)
                 elif isinstance(value, datastore.Key):
                     # Make sure we apply the current namespace to any lookups
@@ -539,11 +541,8 @@ class SelectCommand(object):
         self.results = iter(self.results)
         return self.results_returned
 
-    def __unicode__(self):
-        return generate_sql_representation(self)
-
     def __repr__(self):
-        return self.__unicode__().encode("utf-8")
+        return generate_sql_representation(self)
 
     def __mod__(self, params):
         return repr(self)
@@ -600,6 +599,7 @@ class BulkInsertError(IntegrityError, NotSupportedError):
     pass
 
 
+@python_2_unicode_compatible
 class InsertCommand(object):
     def __init__(self, connection, model, objs, fields, raw):
         self.has_pk = any(x.primary_key for x in fields)
@@ -700,7 +700,7 @@ class InsertCommand(object):
                             raise IntegrityError("Tried to INSERT with existing key")
 
                         id_or_name = key.id_or_name()
-                        if isinstance(id_or_name, basestring) and id_or_name.startswith("__"):
+                        if isinstance(id_or_name, six.string_types) and id_or_name.startswith("__"):
                             raise NotSupportedError("Datastore ids cannot start with __. Id was %s" % id_or_name)
 
                         # Notify App Engine of any keys we're specifying intentionally
@@ -752,13 +752,11 @@ class InsertCommand(object):
         """
         return unicode(self).lower()
 
-    def __unicode__(self):
+    def __str__(self):
         return generate_sql_representation(self)
 
-    def __repr__(self):
-        return self.__unicode__().encode("utf-8")
 
-
+@python_2_unicode_compatible
 class DeleteCommand(object):
     def __init__(self, connection, query):
         self.model = query.model
@@ -774,7 +772,7 @@ class DeleteCommand(object):
             utils.get_top_concrete_parent(query.model)._meta.db_table
         )
 
-    def __unicode__(self):
+    def __str__(self):
         return generate_sql_representation(self)
 
     def execute(self):
@@ -886,6 +884,7 @@ class DeleteCommand(object):
         return unicode(self).lower()
 
 
+@python_2_unicode_compatible
 class UpdateCommand(object):
     def __init__(self, connection, query):
         self.model = query.model
@@ -895,7 +894,7 @@ class UpdateCommand(object):
         self.connection = connection
         self.namespace = connection.ops.connection.settings_dict.get("NAMESPACE")
 
-    def __unicode__(self):
+    def __str__(self):
         return generate_sql_representation(self)
 
     def lower(self):

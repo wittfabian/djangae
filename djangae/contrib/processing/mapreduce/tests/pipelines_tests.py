@@ -3,6 +3,8 @@ from __future__ import absolute_import
 import logging
 
 from django.db import models
+from django.utils.six.moves import range
+
 from djangae.test import TestCase
 from djangae.test import process_task_queues
 
@@ -62,7 +64,7 @@ class FanOutFanInPipeline(pipeline_base.PipelineBase):
 
     def run(self, count):
         results = []
-        for i in xrange(0, count):
+        for i in range(0, count):
             result = yield SquarePipeline(i)
             results.append(result)
 

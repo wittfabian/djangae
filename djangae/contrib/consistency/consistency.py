@@ -125,7 +125,7 @@ def object_matches_a_check(obj, checks):
                 return True
         else:
             try:
-                for field, value in check.iteritems():
+                for field, value in check.items():
                     if not getattr(obj, field) == value:
                         break
                 else:

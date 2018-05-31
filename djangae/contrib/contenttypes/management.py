@@ -2,7 +2,6 @@ import django
 from django.db import DEFAULT_DB_ALIAS, router
 from django.apps import apps
 from django.utils.encoding import smart_text
-from django.utils import six
 from django.utils.six.moves import input
 
 
@@ -40,7 +39,7 @@ def update_contenttypes(sender, verbosity=2, db=DEFAULT_DB_ALIAS, **kwargs):
     created_or_existing_pks = []
     created_or_existing_by_unique = {}
 
-    for (model_name, model) in six.iteritems(app_models):
+    for (model_name, model) in app_models.items():
         # Go through get_or_create any models that we want to keep
         defaults = {}
         if django.VERSION < (1, 9):

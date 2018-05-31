@@ -4,7 +4,7 @@ import re
 import random
 import logging
 
-from cStringIO import StringIO
+from io import StringIO
 from string import letters
 from hashlib import md5
 from unittest import skipIf
@@ -21,6 +21,8 @@ from django.forms import ModelForm
 from django.test import RequestFactory
 from django.utils.safestring import SafeText
 from django.forms.models import modelformset_factory
+from django.utils import six
+from django.utils.six.moves import range
 from google.appengine.api.datastore_errors import EntityNotFoundError, TransactionFailedError
 from google.appengine.datastore import datastore_rpc
 from google.appengine.api import datastore
@@ -325,7 +327,7 @@ class BackendTests(TestCase):
         for i in range(10):
             TestFruit.objects.create(name=str(i), color=str(i))
 
-        to_exclude = [ str(x) for x in range(5) + range(15,20) ]
+        to_exclude = [ str(x) for x in list(range(5)) + list(range(15,20)) ]
 
         to_return = TestFruit.objects.exclude(pk__in=set(to_exclude)).values_list("pk", flat=True)[:2]
         self.assertEqual(2, len(to_return))
@@ -489,7 +491,7 @@ class BackendTests(TestCase):
 
     def test_gae_query_display(self):
         # Shouldn't raise any exceptions:
-        representation = str(TestUser.objects.filter(username='test').query)
+        representation = six.text_type(TestUser.objects.filter(username='test').query)
         self.assertTrue('test' in representation)
         self.assertTrue('username' in representation)
 
@@ -1825,7 +1827,7 @@ class BlobstoreFileUploadHandlerTest(TestCase):
         self.extra_content_type = {'blob-key': 'PLOF0qOie14jzHWJXEa9HA==', 'access-type': 'X-AppEngine-BlobKey'}
 
     def _create_wsgi_input(self):
-        return StringIO('--===============7417945581544019063==\r\nContent-Type:'
+        return StringIO(u'--===============7417945581544019063==\r\nContent-Type:'
                         ' text/plain\r\nContent-Disposition: form-data;'
                         ' name="field-nationality"\r\n\r\nAS\r\n'
                         '--===============7417945581544019063==\r\nContent-Type:'

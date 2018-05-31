@@ -11,6 +11,9 @@ import logging
 
 from datetime import datetime
 from django.conf import settings
+from django.utils import six
+from django.utils.six.moves import range
+
 from google.appengine.api import datastore, datastore_errors
 from google.appengine.api.taskqueue.taskqueue import _DEFAULT_QUEUE
 from google.appengine.ext import deferred
@@ -66,7 +69,7 @@ def _next_key(key):
         we simply calculate the next alphabetical key
     """
     val = key.id_or_name()
-    if isinstance(val, basestring):
+    if isinstance(val, six.string_types):
         return datastore.Key.from_path(
             key.kind(),
             _next_string(val),
@@ -93,7 +96,7 @@ def _mid_key(key1, key2):
             "Sharding of entities with mixed integer and string types is not yet supported."
         )
 
-    if isinstance(key1_val, basestring):
+    if isinstance(key1_val, six.string_types):
         mid_id_or_name = _mid_string(key1_val, key2_val)
     else:
         mid_id_or_name = key1_val + ((key2_val - key1_val) // 2)
@@ -162,7 +165,7 @@ def _generate_shards(keys, shard_count):
         keys = [keys[int(round(index_stride * i))] for i in range(1, shard_count)]
 
     shards = []
-    for i in xrange(len(keys) - 1):
+    for i in range(len(keys) - 1):
         shards.append([keys[i], keys[i + 1]])
 
     return shards
@@ -404,7 +407,7 @@ class ShardedTaskMarker(datastore.Entity):
                 processing_shards = marker[ShardedTaskMarker.RUNNING_KEY]
                 queued_count = len(queued_shards)
 
-                for j in xrange(min(BATCH_SIZE, queued_count)):
+                for j in range(min(BATCH_SIZE, queued_count)):
                     pickled_shard = queued_shards.pop()
                     processing_shards.append(pickled_shard)
                     shard = cPickle.loads(str(pickled_shard))
@@ -433,7 +436,7 @@ class ShardedTaskMarker(datastore.Entity):
         # Reload the marker (non-transactionally) and defer the shards in batches
         # transactionally. If this task fails somewhere, it will resume where it left off
         marker = datastore.Get(self.key())
-        for i in xrange(0, len(marker[ShardedTaskMarker.QUEUED_KEY]), BATCH_SIZE):
+        for i in range(0, len(marker[ShardedTaskMarker.QUEUED_KEY]), BATCH_SIZE):
             datastore.RunInTransaction(txn)
 
 

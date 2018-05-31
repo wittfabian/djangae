@@ -1,6 +1,8 @@
 # encoding: utf-8
 
 from django.db import models
+from django.utils.encoding import python_2_unicode_compatible
+
 from google.appengine.api import datastore_errors
 
 from djangae.contrib import sleuth
@@ -8,6 +10,7 @@ from djangae.fields import CharField, ComputedCollationField
 from djangae.test import TestCase
 
 
+@python_2_unicode_compatible
 class CCollationModel(models.Model):
     field1 = CharField()
     field1_order = ComputedCollationField('field1')
@@ -15,7 +18,7 @@ class CCollationModel(models.Model):
     field2 = models.TextField()
     field2_order = ComputedCollationField('field2')
 
-    def __unicode__(self):
+    def __str__(self):
         return self.field1
 
 

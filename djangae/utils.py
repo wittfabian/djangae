@@ -6,12 +6,11 @@ import logging
 import sys
 import time
 import warnings
-
-from google.appengine.api import datastore_errors
-from google.appengine.runtime import apiproxy_errors
-from google.appengine.runtime import DeadlineExceededError
 from socket import socket
 
+from google.appengine.api import datastore_errors
+
+from google.appengine.runtime import DeadlineExceededError, apiproxy_errors
 
 logger = logging.getLogger(__name__)
 
@@ -168,7 +167,7 @@ def djangae_webapp(request_handler):
         view_func.dispatch()
 
         django_response = HttpResponse(response.body, status=int(str(response.status).split(" ")[0]))
-        for header, value in response.headers.iteritems():
+        for header, value in response.headers.items():
             django_response[header] = value
 
         return django_response
@@ -204,9 +203,9 @@ class memoized(object):
     def __call__(self, *args):
         args = self.args or args
         if not isinstance(args, collections.Hashable):
-         # uncacheable. a list, for instance.
-         # better to not cache than blow up.
-         return self.func(*args)
+            # uncacheable. a list, for instance.
+            # better to not cache than blow up.
+            return self.func(*args)
 
         if args in self.cache:
             return self.cache[args]
