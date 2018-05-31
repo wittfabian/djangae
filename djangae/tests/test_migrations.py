@@ -561,11 +561,11 @@ class ShardQueryTestCase(TestCase):
         self.assertEqual(1, len(shards))
 
         shards = shard_query(qry, 20)
-        self.assertEqual(20, len(shards))
+        self.assertEqual(12, len(shards))
 
         shards = shard_query(qry, 50)
         # We can't create 50 shards if there are only 20 objects
-        self.assertEqual(20, len(shards))
+        self.assertEqual(12, len(shards))
 
 
 class MapperLibraryTestCase(TestCase):
