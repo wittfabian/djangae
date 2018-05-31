@@ -220,7 +220,7 @@ class JSONKeyLookupIndexer(Indexer):
         return "exact"
 
     def prep_value_for_database(self, value, index, **kwargs):
-        if isinstance(value, basestring):
+        if isinstance(value, six.string_types):
             value = json.loads(value)
 
         index_part = index.split("__", 1)[1]

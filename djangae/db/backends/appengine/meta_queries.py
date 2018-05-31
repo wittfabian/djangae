@@ -2,7 +2,7 @@ import copy
 import threading
 
 from functools import partial
-from itertools import chain, groupby
+from itertools import groupby
 
 from django.conf import settings
 from djangae.db.backends.appengine import caching
@@ -109,7 +109,7 @@ class AsyncMultiQuery(object):
             # Spawn a new thread
             threads.append(self._spawn_thread(i, query, result_queues, limit=limit))
 
-        [x.join() for x in threads] # Wait until all the threads are done
+        [x.join() for x in threads]  # Wait until all the threads are done
 
         return result_queues
 
@@ -148,7 +148,6 @@ class AsyncMultiQuery(object):
                 return result
 
         return cmp(lhs.key(), rhs.key())
-
 
     def Count(self, **kwargs):
         def query_decorator(query):
@@ -199,7 +198,7 @@ class AsyncMultiQuery(object):
             'yielded': 0
         }
 
-        seen_keys = set() #For de-duping results
+        seen_keys = set()  #For de-duping results
         while any(next_entries):
             def get_next():
                 idx, lowest = None, None
@@ -260,10 +259,12 @@ def _convert_entity_based_on_query_options(entity, opts):
 
     return entity
 
+
 # The max number of entities in a resultset that will be cached
 # if a query returns more than this number then only the first ones
 # will be cached
 DEFAULT_MAX_ENTITY_COUNT = 8
+
 
 class QueryByKeys(object):
     """ Does the most efficient fetching possible for when we have the keys of the entities we want. """
@@ -285,9 +286,11 @@ class QueryByKeys(object):
         # groupby requires that the iterable is sorted by the given key before grouping
         self.queries = sorted(queries, key=_get_key)
         self.query_count = len(self.queries)
-        self.queries_by_key = { a: list(b) for a, b in groupby(self.queries, _get_key) }
+        self.queries_by_key = {a: list(b) for a, b in groupby(self.queries, _get_key)}
 
-        self.max_allowable_queries = getattr(settings, "DJANGAE_MAX_QUERY_BRANCHES", DEFAULT_MAX_ALLOWABLE_QUERIES)
+        self.max_allowable_queries = getattr(
+            settings, "DJANGAE_MAX_QUERY_BRANCHES", DEFAULT_MAX_ALLOWABLE_QUERIES
+        )
         self.can_multi_query = self.query_count < self.max_allowable_queries
 
         self.ordering = ordering
@@ -306,7 +309,9 @@ class QueryByKeys(object):
 
         is_projection = False
 
-        max_cache_count = getattr(settings, "DJANGAE_CACHE_MAX_ENTITY_COUNT", DEFAULT_MAX_ENTITY_COUNT)
+        max_cache_count = getattr(
+            settings, "DJANGAE_CACHE_MAX_ENTITY_COUNT", DEFAULT_MAX_ENTITY_COUNT
+        )
 
         cache_results = True
         results = None
@@ -317,22 +322,22 @@ class QueryByKeys(object):
             result = caching.get_from_cache_by_key(key)
             if result is not None:
                 results = [result]
-                cache_results = False # Don't update cache, we just got it from there
+                cache_results = False  # Don't update cache, we just got it from there
 
         if results is None:
             if opts.projection and self.can_multi_query:
                 is_projection = True
-                cache_results = False # Don't cache projection results!
+                cache_results = False  # Don't cache projection results!
 
                 # If we can multi-query in a single query, we do so using a number of
                 # ancestor queries (to stay consistent) otherwise, we just do a
                 # datastore Get, but this will return extra data over the RPC
                 to_fetch = (offset or 0) + limit if limit else None
-                additional_cols = set([ x[0] for x in self.ordering if x[0] not in opts.projection])
+                additional_cols = set([x[0] for x in self.ordering if x[0] not in opts.projection])
 
                 multi_query = []
                 orderings = self.queries[0]._Query__orderings
-                for key, queries in self.queries_by_key.iteritems():
+                for key, queries in self.queries_by_key.items():
                     for query in queries:
                         if additional_cols:
                             # We need to include additional orderings in the projection so that we can
@@ -344,7 +349,7 @@ class QueryByKeys(object):
                                 namespace=self.namespace,
                             )
 
-                        query.Ancestor(key) # Make this an ancestor query
+                        query.Ancestor(key)  # Make this an ancestor query
                         multi_query.append(query)
 
                 if len(multi_query) == 1:
@@ -357,7 +362,10 @@ class QueryByKeys(object):
         def iter_results(results):
             returned = 0
             # This is safe, because Django is fetching all results any way :(
-            sorted_results = sorted(results, cmp=partial(utils.django_ordering_comparison, self.ordering))
+            sorted_results = sorted(
+                results, 
+                cmp=partial(utils.django_ordering_comparison, self.ordering)
+            )
             sorted_results = [result for result in sorted_results if result is not None]
             if cache_results and sorted_results:
                 caching.add_entities_to_cache(
@@ -372,7 +380,8 @@ class QueryByKeys(object):
                     entity_matches_query = True
                 else:
                     entity_matches_query = any(
-                        utils.entity_matches_query(result, qry) for qry in self.queries_by_key[result.key()]
+                        utils.entity_matches_query(result, qry)
+                        for qry in self.queries_by_key[result.key()]
                     )
 
                 if not entity_matches_query:
@@ -436,12 +445,17 @@ class UniqueQuery(object):
 
         if ret is None:
             # We do a fast keys_only query to get the result
-            keys_query = Query(self._gae_query._Query__kind, keys_only=True, namespace=self._namespace)
+            keys_query = Query(
+                self._gae_query._Query__kind, keys_only=True, namespace=self._namespace
+            )
             keys_query.update(self._gae_query)
             keys = keys_query.Run(limit=limit, offset=offset)
 
             # Do a consistent get so we don't cache stale data, and recheck the result matches the query
-            ret = [x for x in datastore.Get(keys) if x and utils.entity_matches_query(x, self._gae_query)]
+            ret = [
+                x for x in datastore.Get(keys) 
+                if x and utils.entity_matches_query(x, self._gae_query)
+            ]
             if len(ret) == 1:
                 caching.add_entities_to_cache(
                     self._model,

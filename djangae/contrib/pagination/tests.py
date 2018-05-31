@@ -1,5 +1,7 @@
 from django.core import paginator as django_paginator
 from django.db import models
+from django.utils.encoding import python_2_unicode_compatible
+
 from djangae.test import TestCase
 from djangae.contrib import sleuth
 from djangae.contrib.pagination import (
@@ -23,13 +25,14 @@ from .paginator import (
     ("-created",),
     "pk",  # it's possible to order by the model pk
 ])
+@python_2_unicode_compatible
 class TestUser(models.Model):
     first_name = models.CharField(max_length=200)
     last_name = models.CharField(max_length=200)
     created = models.DateTimeField(auto_now_add=True)
 
-    def __unicode__(self):
-        return u" ".join([self.first_name, self.last_name])
+    def __str__(self):
+        return " ".join([self.first_name, self.last_name])
 
     class Meta:
         db_table = "pagination"

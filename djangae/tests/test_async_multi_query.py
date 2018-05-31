@@ -1,6 +1,7 @@
 from django.test import override_settings
 from django.db import NotSupportedError
 from django.db import models
+from django.utils.six.moves import range
 from djangae.test import TestCase
 
 
@@ -48,5 +49,5 @@ class AsyncMultiQueryTest(TestCase):
 
         self.assertRaises(
             NotSupportedError,
-            list, MultiQueryModel.objects.filter(field1__in=range(11))
+            list, MultiQueryModel.objects.filter(field1__in=list(range(11)))
         )

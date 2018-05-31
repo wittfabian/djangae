@@ -6,6 +6,7 @@ import logging
 
 #LIBRARIES
 from django.conf import settings
+from django.utils import six
 from django.utils import timezone
 
 from django.db.backends.base.operations import BaseDatabaseOperations
@@ -246,7 +247,7 @@ class DatabaseOperations(BaseDatabaseOperations):
         return [FlushCommand(table, self.connection) for table in tables + additional_djangaeidx_tables]
 
     def prep_lookup_key(self, model, value, field):
-        if isinstance(value, basestring):
+        if isinstance(value, six.string_types):
             value = value[:500]
             left = value[500:]
             if left:

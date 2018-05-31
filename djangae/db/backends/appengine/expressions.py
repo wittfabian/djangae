@@ -1,5 +1,6 @@
 from django.db import NotSupportedError
 from django.db.models.expressions import F, Col
+from django.utils import six
 from djangae.db.utils import get_prepared_db_value
 from django.db.models.aggregates import Aggregate
 
@@ -16,7 +17,7 @@ def evaluate_expression(expression, instance, connection):
         the get/put transaction in _update_entity so these will happen atomically
     """
 
-    if isinstance(expression, (basestring, int, float)):
+    if isinstance(expression, (six.string_types, int, float)):
         return expression
 
     if isinstance(expression, Aggregate):

@@ -1,5 +1,6 @@
 from mapreduce import input_readers
 from django.apps import apps
+from django.utils.six.moves import range
 import logging
 import cPickle
 
@@ -87,7 +88,7 @@ class DjangoInputReader(input_readers.InputReader):
         keyranges = []
         if len(keys) > 1:
             keyranges.append(DjangoInputReader(params['model'], pk__lte=keys[0], query=query, shard_id=0, db=db))
-            for x in xrange((len(keys) - 1)):
+            for x in range((len(keys) - 1)):
                 keyranges.append(DjangoInputReader(params['model'], pk__gt=keys[x], pk__lte=keys[x+1], query=query, shard_id=x+1, db=db))
             keyranges.append(DjangoInputReader(params['model'], pk__gt=keys[x+1], query=query, shard_id=x+2, db=db))
         elif len(keys) == 1:

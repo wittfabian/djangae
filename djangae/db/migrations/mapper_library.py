@@ -11,6 +11,9 @@ import logging
 
 from datetime import datetime
 from django.conf import settings
+from django.utils import six
+from django.utils.six.moves import range
+
 from google.appengine.api import datastore, datastore_errors
 from google.appengine.api.taskqueue.taskqueue import _DEFAULT_QUEUE
 from google.appengine.ext import deferred
@@ -66,7 +69,7 @@ def _next_key(key):
         we simply calculate the next alphabetical key
     """
     val = key.id_or_name()
-    if isinstance(val, basestring):
+    if isinstance(val, six.string_types):
         return datastore.Key.from_path(
             key.kind(),
             _next_string(val),
@@ -93,7 +96,7 @@ def _mid_key(key1, key2):
             "Sharding of entities with mixed integer and string types is not yet supported."
         )
 
-    if isinstance(key1_val, basestring):
+    if isinstance(key1_val, six.string_types):
         mid_id_or_name = _mid_string(key1_val, key2_val)
     else:
         mid_id_or_name = key1_val + ((key2_val - key1_val) // 2)
@@ -114,21 +117,29 @@ def _get_range(key1, key2):
     val2 = key2.id_or_name()
     if type(val1) != type(val2):
         raise Exception("Cannot calculate range between keys of different types.")
-    if isinstance(val1, (int, long)):
-        return val2 - val1
+
     # Otherwise, the values are strings...
     # Put the strings in order, so the lowest one is lhs
     lhs = min(val1, val2)
     rhs = max(val1, val2)
+
+    if isinstance(lhs, (int, long)):
+        return rhs - lhs
+
     # Pad out the shorter string so that they're both the same length
     longest_length = max(len(lhs), len(rhs))
     lhs = lhs.ljust(longest_length, "\0")
-    # For each position in the strings, find the difference
-    diffs = []
-    for l, r in zip(lhs, rhs):
-        diffs.append(ord(r) - ord(l))
-    # We return this "difference" as a string
-    return u"".join([unichr(x) for x in diffs])
+
+    max_unicode = 0x10FFFF
+
+    # This is based on the positional numeral system solution described here:
+    # https://stackoverflow.com/a/41492405/48362
+    # But adapted to deal with unicode characters.
+
+    lhs_value = sum((max_unicode ** n) * ord(c) for n, c in enumerate(reversed(lhs)))
+    rhs_value = sum((max_unicode ** n) * ord(c) for n, c in enumerate(reversed(rhs)))
+
+    return rhs_value - lhs_value
 
 
 def _generate_shards(keys, shard_count):
@@ -154,7 +165,7 @@ def _generate_shards(keys, shard_count):
         keys = [keys[int(round(index_stride * i))] for i in range(1, shard_count)]
 
     shards = []
-    for i in xrange(len(keys) - 1):
+    for i in range(len(keys) - 1):
         shards.append([keys[i], keys[i + 1]])
 
     return shards
@@ -396,7 +407,7 @@ class ShardedTaskMarker(datastore.Entity):
                 processing_shards = marker[ShardedTaskMarker.RUNNING_KEY]
                 queued_count = len(queued_shards)
 
-                for j in xrange(min(BATCH_SIZE, queued_count)):
+                for j in range(min(BATCH_SIZE, queued_count)):
                     pickled_shard = queued_shards.pop()
                     processing_shards.append(pickled_shard)
                     shard = cPickle.loads(str(pickled_shard))
@@ -425,7 +436,7 @@ class ShardedTaskMarker(datastore.Entity):
         # Reload the marker (non-transactionally) and defer the shards in batches
         # transactionally. If this task fails somewhere, it will resume where it left off
         marker = datastore.Get(self.key())
-        for i in xrange(0, len(marker[ShardedTaskMarker.QUEUED_KEY]), BATCH_SIZE):
+        for i in range(0, len(marker[ShardedTaskMarker.QUEUED_KEY]), BATCH_SIZE):
             datastore.RunInTransaction(txn)
 
 

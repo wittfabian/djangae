@@ -8,6 +8,7 @@ from django.conf import settings
 from django.db import connection, models
 from django.db.migrations.state import ProjectState
 from django.test import override_settings
+
 from google.appengine.api import datastore
 from google.appengine.runtime import DeadlineExceededError
 
@@ -225,7 +226,7 @@ class MigrationOperationTests(TestCase):
 
     def test_queue_option(self):
         """ The `queue` kwarg should determine the task queue that the operation runs on. """
-        for x in xrange(3):
+        for x in range(3):
             TestModel.objects.create()
 
         operation = operations.AddFieldData(
@@ -250,7 +251,7 @@ class MigrationOperationTests(TestCase):
         """ If no `queue` kwarg is passed then the DJANGAE_MIGRATION_DEFAULT_QUEUE setting should
             be used to determine the task queue.
         """
-        for x in xrange(2):
+        for x in range(2):
             TestModel.objects.create()
 
         operation = operations.AddFieldData(
@@ -310,7 +311,7 @@ class MigrationOperationTests(TestCase):
 
     def test_addfielddata(self):
         """ Test the AddFieldData operation. """
-        for x in xrange(2):
+        for x in range(2):
             TestModel.objects.create()
 
         # Just for sanity, check that none of the entities have the new field value yet
@@ -329,7 +330,7 @@ class MigrationOperationTests(TestCase):
 
     def test_removefielddata(self):
         """ Test the RemoveFieldData operation. """
-        for x in xrange(2):
+        for x in range(2):
             TestModel.objects.create(name="name_%s" % x)
 
         # Just for sanity, check that all of the entities have `name` value
@@ -348,7 +349,7 @@ class MigrationOperationTests(TestCase):
 
     def test_copyfielddata(self):
         """ Test the CopyFieldData operation. """
-        for x in xrange(2):
+        for x in range(2):
             TestModel.objects.create(name="name_%s" % x)
 
         # Just for sanity, check that none of the entities have the new "new_field" value
@@ -367,7 +368,7 @@ class MigrationOperationTests(TestCase):
 
     def test_deletemodeldata(self):
         """ Test the DeleteModelData operation. """
-        for x in xrange(2):
+        for x in range(2):
             TestModel.objects.create()
 
         # Just for sanity, check that the entities exist!
@@ -386,7 +387,7 @@ class MigrationOperationTests(TestCase):
         """ Test the CopyModelData operation with overwrite_existing=True. """
 
         # Create the TestModel instances, with OtherModel instances with matching PKs
-        for x in xrange(2):
+        for x in range(2):
             instance = TestModel.objects.create(name="name_which_will_be_copied")
             OtherModel.objects.create(name="original_name", id=instance.pk)
 
@@ -413,7 +414,7 @@ class MigrationOperationTests(TestCase):
 
         # Create the TestModel instances, with OtherModel instances with matching PKs only for
         # odd PKs
-        for x in xrange(1, 5):
+        for x in range(1, 5):
             TestModel.objects.create(id=x, name="name_which_will_be_copied")
             if x % 2:
                 OtherModel.objects.create(id=x, name="original_name")
@@ -445,7 +446,7 @@ class MigrationOperationTests(TestCase):
         """ Test the CopyModelDataToNamespace operation with overwrite_existing=True. """
         ns1 = settings.DATABASES["ns1"]["NAMESPACE"]
         # Create instances, with copies in the other namespace with matching IDs
-        for x in xrange(2):
+        for x in range(2):
             instance = TestModel.objects.create(name="name_which_will_be_copied")
             instance.save(using="ns1")
 
@@ -473,7 +474,7 @@ class MigrationOperationTests(TestCase):
         ns1 = settings.DATABASES["ns1"]["NAMESPACE"]
         # Create the TestModel instances, with OtherModel instances with matching PKs only for
         # odd PKs
-        for x in xrange(1, 5):
+        for x in range(1, 5):
             TestModel.objects.create(id=x, name="name_which_will_be_copied")
             if x % 2:
                 ns1_instance = TestModel(id=x, name="original_name")
@@ -510,7 +511,7 @@ class MigrationOperationTests(TestCase):
             a new app as well as in a new namespace.
         """
         ns1 = settings.DATABASES["ns1"]["NAMESPACE"]
-        for x in xrange(2):
+        for x in range(2):
             TestModel.objects.create(name="name_which_will_be_copied")
 
         # Just for sanity, check that the entities exist
@@ -534,7 +535,7 @@ class MigrationOperationTests(TestCase):
 
     def test_mapfunctiononentities(self):
         """ Test the MapFunctionOnEntities operation. """
-        for x in xrange(2):
+        for x in range(2):
             TestModel.objects.create()
         # Test that our entities have not had our function called on them
         entities = self.get_entities()
@@ -553,7 +554,7 @@ class MidStringTestCase(TestCase):
     """ Tests for the _mid_string function in the mapper_library. """
 
     def test_handles_args_in_either_order(self):
-        """ It shouldn't matter whether we pass the "higher" string as the first or second param. """
+        """It shouldn't matter whether we pass the "higher" string as the first or second param."""
         low = "aaaaa"
         high = "zzzzz"
         mid1 = _mid_string(low, high)
@@ -676,7 +677,7 @@ class GetKeyRangeTestCase(TestCase):
         key1 = datastore.Key.from_path("my_kind", "a")
         key2 = datastore.Key.from_path("my_kind", "b")
         # The difference between "a" and "b" is 1 character
-        self.assertEqual(_get_range(key1, key2), unichr(1))
+        self.assertEqual(_get_range(key1, key2), 1)
 
     def test_mixed_keys_cause_exception(self):
         """ Trying to get a range between 2 keys when one is an integer and the other is a string
@@ -686,6 +687,12 @@ class GetKeyRangeTestCase(TestCase):
         key2 = datastore.Key.from_path("my_kind", 12345)
         self.assertRaises(Exception, _get_range, key1, key2)
 
+    def test_long_string_keys_with(self):
+        key1 = datastore.Key.from_path('my_kind', '60a1fef9136a4584a1cbf8a3193394b6')
+        key2 = datastore.Key.from_path('my_kind', '5e840832631344adb297493a5aade1bc')
+        value = _get_range(key1, key2)
+        self.assertTrue(value > 0)
+
 
 class ShardQueryTestCase(TestCase):
     """ Tests for the `shard_query` function. """
@@ -693,7 +700,7 @@ class ShardQueryTestCase(TestCase):
     def test_query_sharding(self):
         ns1 = settings.DATABASES["default"]["NAMESPACE"]
 
-        for x in xrange(1, 21):
+        for x in range(1, 21):
             TestModel.objects.create(pk=x)
 
         qry = datastore.Query(TestModel._meta.db_table, namespace=ns1)
@@ -732,7 +739,7 @@ class MapperLibraryTestCase(TestCase):
             processing.
         """
         objs = []
-        for x in xrange(2):
+        for x in range(2):
             objs.append(TestModel(name="Test-%s" % x))
         TestModel.objects.bulk_create(objs)
         start_mapping("my_lovely_mapper", self._get_testmodel_query(), tickle_entity)
@@ -745,7 +752,7 @@ class MapperLibraryTestCase(TestCase):
             mappers.
         """
         objs = []
-        for x in xrange(2):
+        for x in range(2):
             objs.append(TestModel(name="Test-%s" % x))
         TestModel.objects.bulk_create(objs)
 
@@ -769,7 +776,7 @@ class MapperLibraryTestCase(TestCase):
         # Create some objects in 2 different namespaces
         for db in dbs:
             objs = []
-            for x in xrange(2):
+            for x in range(2):
                 objs.append(TestModel(name="Test-%s" % x))
             TestModel.objects.using(db).bulk_create(objs)
 
@@ -790,7 +797,7 @@ class MapperLibraryTestCase(TestCase):
             should redefer and continue.
         """
         objs = []
-        for x in xrange(8):
+        for x in range(8):
             objs.append(TestModel(name="Test-%s" % x))
         TestModel.objects.bulk_create(objs)
 
