@@ -554,7 +554,7 @@ class MidStringTestCase(TestCase):
     """ Tests for the _mid_string function in the mapper_library. """
 
     def test_handles_args_in_either_order(self):
-        """ It shouldn't matter whether we pass the "higher" string as the first or second param. """
+        """It shouldn't matter whether we pass the "higher" string as the first or second param."""
         low = "aaaaa"
         high = "zzzzz"
         mid1 = _mid_string(low, high)
@@ -677,7 +677,7 @@ class GetKeyRangeTestCase(TestCase):
         key1 = datastore.Key.from_path("my_kind", "a")
         key2 = datastore.Key.from_path("my_kind", "b")
         # The difference between "a" and "b" is 1 character
-        self.assertEqual(_get_range(key1, key2), unichr(1))
+        self.assertEqual(_get_range(key1, key2), 1)
 
     def test_mixed_keys_cause_exception(self):
         """ Trying to get a range between 2 keys when one is an integer and the other is a string
@@ -686,6 +686,12 @@ class GetKeyRangeTestCase(TestCase):
         key1 = datastore.Key.from_path("my_kind", "a")
         key2 = datastore.Key.from_path("my_kind", 12345)
         self.assertRaises(Exception, _get_range, key1, key2)
+
+    def test_long_string_keys_with(self):
+        key1 = datastore.Key.from_path('my_kind', '60a1fef9136a4584a1cbf8a3193394b6')
+        key2 = datastore.Key.from_path('my_kind', '5e840832631344adb297493a5aade1bc')
+        value = _get_range(key1, key2)
+        self.assertTrue(value > 0)
 
 
 class ShardQueryTestCase(TestCase):
