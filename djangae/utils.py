@@ -8,10 +8,8 @@ import time
 import warnings
 from socket import socket
 
-from google.appengine.api import datastore_errors
-
-from google.appengine.runtime import DeadlineExceededError, apiproxy_errors
-
+# No SDK imports allowed in module namespace because `./manage.py runserver`
+# imports this before the SDK is added to sys.path. See bugs #899, #1055.
 logger = logging.getLogger(__name__)
 
 
@@ -102,6 +100,10 @@ def retry(func, *args, **kwargs):
     """ Calls a function that may intermittently fail, catching the given error(s) and (re)trying
         for a maximum of `_attempts` times.
     """
+    # Imported here to fix ImportError (see bugs #899, #1055).
+    from google.appengine.api import datastore_errors
+    from google.appengine.runtime import apiproxy_errors
+    from google.appengine.runtime import DeadlineExceededError
     from djangae.db.transaction import TransactionFailedError  # Avoid circular import
     # Slightly weird `.pop(x, None) or default` thing here due to not wanting to repeat the tuple of
     # default things in `retry_on_error` and having to do inline imports

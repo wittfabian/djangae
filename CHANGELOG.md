@@ -1,9 +1,12 @@
 ## v0.9.12 (in development)
 
 ### New features & improvements:
+
 - Take some steps to make the code Python 3 compatible
 
 ### Bug fixes:
+
+- Fixed `ImportError` when running `./manage.py runserver` and the SDK is not already on the Python import path.
 - Fix a ValueError when sharding string keys in the migrations mapper library
 
 ## v0.9.11
