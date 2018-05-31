@@ -25,6 +25,7 @@
 - Simplified the atomic() and non_atomic() decorator/context managers to hopefully eliminate edge-case/threading bugs that have been seen.
 - Fix a bug where the context cache would be incorrectly set after leaving a non_atomic block
 - Fixed serialization/deserialization of JSONFields
+- Fixed migrations failing to map all entities of a kind.
 
 ## v0.9.11
 

@@ -1,6 +1,6 @@
 # encoding: utf-8
 # STANDARD LIB
-from unittest import skipIf
+import unittest
 
 # THIRD PARTY
 from django.apps.registry import apps  # Apps
@@ -16,10 +16,7 @@ from google.appengine.runtime import DeadlineExceededError
 from djangae.contrib import sleuth
 from djangae.db.migrations import operations
 from djangae.db.migrations.mapper_library import (
-    _get_range,
-    _mid_key,
-    _mid_string,
-    _next_string,
+    generate_shards,
     shard_query,
     ShardedTaskMarker,
     start_mapping,
@@ -441,7 +438,7 @@ class MigrationOperationTests(TestCase):
             else:
                 self.assertEqual(entity["name"], "name_which_will_be_copied")
 
-    @skipIf("ns1" not in settings.DATABASES, "This test is designed for the Djangae testapp settings")
+    @unittest.skipIf("ns1" not in settings.DATABASES, "This test is designed for the Djangae testapp settings")
     def test_copymodeldatatonamespace_overwrite(self):
         """ Test the CopyModelDataToNamespace operation with overwrite_existing=True. """
         ns1 = settings.DATABASES["ns1"]["NAMESPACE"]
@@ -468,7 +465,7 @@ class MigrationOperationTests(TestCase):
             entity["name"] == "name_which_will_be_copied" for entity in ns1_entities
         ))
 
-    @skipIf("ns1" not in settings.DATABASES, "This test is designed for the Djangae testapp settings")
+    @unittest.skipIf("ns1" not in settings.DATABASES, "This test is designed for the Djangae testapp settings")
     def test_copymodeldatatonamespace_no_overwrite(self):
         """ Test the CopyModelDataToNamespace operation with overwrite_existing=False. """
         ns1 = settings.DATABASES["ns1"]["NAMESPACE"]
@@ -502,7 +499,7 @@ class MigrationOperationTests(TestCase):
             else:
                 self.assertEqual(entity["name"], "name_which_will_be_copied")
 
-    @skipIf(
+    @unittest.skipIf(
         "ns1" not in settings.DATABASES or "testapp" not in settings.INSTALLED_APPS,
         "This test is designed for the Djangae testapp settings"
     )
@@ -548,150 +545,6 @@ class MigrationOperationTests(TestCase):
         entities = self.get_entities()
         self.assertEqual(len(entities), 2)
         self.assertTrue(all(entity.get("is_tickled") for entity in entities))
-
-
-class MidStringTestCase(TestCase):
-    """ Tests for the _mid_string function in the mapper_library. """
-
-    def test_handles_args_in_either_order(self):
-        """It shouldn't matter whether we pass the "higher" string as the first or second param."""
-        low = "aaaaa"
-        high = "zzzzz"
-        mid1 = _mid_string(low, high)
-        mid2 = _mid_string(low, high)
-        self.assertEqual(mid1, mid2)
-        self.assertTrue(low < mid1 < high)
-
-    def test_basic_behaviour(self):
-        """ Test finding the midpoint between two string in an obvious case. """
-        start = "a"
-        end = "c"
-        self.assertEqual(_mid_string(start, end), "b")
-
-    def test_slightly_less_basic_behaviour(self):
-        start = "aaaaaaaaaaaa"
-        end = "z"
-        mid_low_apprx = "l"
-        mid_high_apprx = "n"
-        result = _mid_string(start, end)
-        self.assertTrue(mid_low_apprx < result < mid_high_apprx)
-
-    def test_handles_strings_of_different_lengths(self):
-        """ Strings of different lengths should return another of a length mid way between """
-        start = "aaa"
-        end = "zzzzzzzzzzzzz"
-        mid = _mid_string(start, end)
-
-        self.assertTrue(start < mid < end)
-
-    def test_handles_unicode(self):
-        """ It should be able to do comparisions on non-ascii strings. """
-        start = u"aaa£¢$›😇"
-        end = u"zzz🤡"
-        mid = _mid_string(start, end)
-        self.assertTrue(start < mid < end)
-
-    def test_does_not_return_string_starting_with_double_underscore(self):
-        """ A string that starts with a double underscore is not a valid Datastore key and so
-            should not be returned.
-        """
-        # The true mid point between this start and end combination is a double underscore
-        start = "^^"
-        end = "``"
-        result = _mid_string(start, end)
-        self.assertNotEqual(result, "__")
-
-
-class MidKeyTestCase(TestCase):
-    """ Tests for the `_mid_key` function. """
-
-    def test_mixed_integers_and_strings_not_allowed(self):
-        """ Finding the mid point between keys of different types is not currently supported and
-            should therefore raise an error.
-        """
-        key1 = datastore.Key.from_path("my_kind", 1)
-        key2 = datastore.Key.from_path("my_kind", "1")
-        self.assertRaises(NotImplementedError, _mid_key, key1, key2)
-
-    def test_mid_integer_key(self):
-        """ Given 2 keys with integer `id_or_name` values, the returned key should have an
-            `id_or_name` which is an integer somewhere between the two.
-        """
-        key1 = datastore.Key.from_path("my_kind", 1)
-        key2 = datastore.Key.from_path("my_kind", 100)
-        result = _mid_key(key1, key2)
-        self.assertEqual(result.kind(), key1.kind())
-        self.assertEqual(result.namespace(), key1.namespace())
-        self.assertTrue(1 < result.id_or_name() < 100)
-
-    def test_mid_string_key(self):
-        """ Given 2 keys with string `id_or_name` values, the returned key should have an
-            `id_or_name` which is a string somewhere between the two.
-        """
-        key1 = datastore.Key.from_path("my_kind", "1")
-        key2 = datastore.Key.from_path("my_kind", "100")
-        result = _mid_key(key1, key2)
-        self.assertEqual(result.kind(), key1.kind())
-        self.assertEqual(result.namespace(), key1.namespace())
-        self.assertTrue("1" < result.id_or_name() < "100")
-
-
-class NextStringTestCase(TestCase):
-    """ Tests for the _next_string function in the mapper_library. """
-
-    def test_basic_behaviour(self):
-        try:
-            unichr(65536)
-            # Python wide-unicode build (Linux) UTF-32
-            highest_unicode_char = unichr(0x10ffff)
-        except ValueError:
-            # Python narrow build (OSX)
-            # Python 2 using 16 bit unicode, so the highest possible character is (2**16) - 1
-            highest_unicode_char = unichr(2 ** 16 - 1)
-
-        checks = (
-            # Pairs of (input, expected_output)
-            ("a", "b"),
-            ("aaaa", "aaab"),
-            # unichr((2 ** 32) - 1) is the last possible unicode character
-            (highest_unicode_char, highest_unicode_char + unichr(1)),
-            (u"aaa" + highest_unicode_char, u"aaa" + highest_unicode_char + unichr(1)),
-        )
-        for input_text, expected_output in checks:
-            self.assertEqual(_next_string(input_text), expected_output)
-
-
-class GetKeyRangeTestCase(TestCase):
-    """ Tests for the `_get_range` function. """
-
-    def test_integer_range(self):
-        """ Given 2 integer-based keys, it should return the range that the IDs span. """
-        key1 = datastore.Key.from_path("my_kind", 4012809128)
-        key2 = datastore.Key.from_path("my_kind", 9524773032)
-        self.assertEqual(_get_range(key1, key2), 9524773032 - 4012809128)
-
-    def test_string_range(self):
-        """ Given 2 string-based keys, it should return a representation of the range that the two
-            keys span.
-        """
-        key1 = datastore.Key.from_path("my_kind", "a")
-        key2 = datastore.Key.from_path("my_kind", "b")
-        # The difference between "a" and "b" is 1 character
-        self.assertEqual(_get_range(key1, key2), 1)
-
-    def test_mixed_keys_cause_exception(self):
-        """ Trying to get a range between 2 keys when one is an integer and the other is a string
-            should cause an explosion.
-        """
-        key1 = datastore.Key.from_path("my_kind", "a")
-        key2 = datastore.Key.from_path("my_kind", 12345)
-        self.assertRaises(Exception, _get_range, key1, key2)
-
-    def test_long_string_keys_with(self):
-        key1 = datastore.Key.from_path('my_kind', '60a1fef9136a4584a1cbf8a3193394b6')
-        key2 = datastore.Key.from_path('my_kind', '5e840832631344adb297493a5aade1bc')
-        value = _get_range(key1, key2)
-        self.assertTrue(value > 0)
 
 
 class ShardQueryTestCase(TestCase):
@@ -817,3 +670,41 @@ class MapperLibraryTestCase(TestCase):
         # self.assertTrue(tickle_entity_volitle.call_count > TestModel.objects.count())
         # And check that every entity has been tickled
         self.assertTrue(all(e['is_tickled'] for e in self._get_testmodel_query().Run()))
+
+
+class GenerateShardsTestCase(unittest.TestCase):
+    def test_key_pairs_returned_in_order(self):
+        keys = [5, 3, 1, 2, 4]
+        result = generate_shards(keys, 2)
+
+        self.assertEqual(result, [(1, 4), (4, None)])
+
+    def test_key_pairs_for_1_shard(self):
+        keys = [1, 2, 3, 4, 5]
+        result = generate_shards(keys, 1)
+
+        self.assertEqual(result, [(1, None)])
+
+    def test_key_pairs_for_shards_equal_to_keys(self):
+        keys = [1, 2, 3, 4, 5]
+        result = generate_shards(keys, 5)
+
+        self.assertEqual(result, [(1, 2), (2, 3), (3, 4), (4, 5), (5, None)])
+
+    def test_key_pairs_for_shards_evenly_dividing_num_keys(self):
+        keys = [1, 2, 3, 4]
+        result = generate_shards(keys, 2)
+
+        self.assertEqual(result, [(1, 3), (3, None)])
+
+    def test_key_pairs_for_shards_not_evenly_dividing_num_keys(self):
+        keys = [1, 2, 3, 4, 5]
+        result = generate_shards(keys, 2)
+
+        self.assertEqual(result, [(1, 4), (4, None)])
+
+    def test_key_pairs_for_more_shards_than_keys(self):
+        keys = [1, 2, 3, 4, 5]
+        result = generate_shards(keys, 999)
+
+        self.assertEqual(result, [(1, 2), (2, 3), (3, 4), (4, 5), (5, None)])
