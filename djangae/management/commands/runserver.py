@@ -1,23 +1,18 @@
+import logging
 import os
 import re
-import logging
-
 from datetime import datetime
 
+from djangae import VERSION as DJANGAE_VERSION
+from djangae import debugger, sandbox
 from django.conf import settings
 from django.core.management.commands import runserver
-
-from djangae import (
-    sandbox,
-    VERSION as DJANGAE_VERSION
-)
 
 from google.appengine.tools.devappserver2 import shutdown
 from google.appengine.tools.sdk_update_checker import (
     GetVersionObject,
     _VersionList
 )
-
 
 DJANGAE_RUNSERVER_IGNORED_FILES_REGEXES = getattr(settings, "DJANGAE_RUNSERVER_IGNORED_FILES_REGEXES", [])
 DJANGAE_RUNSERVER_IGNORED_DIR_REGEXES = getattr(settings, "DJANGAE_RUNSERVER_IGNORED_DIR_REGEXES", [])
@@ -93,6 +88,9 @@ class Command(runserver.Command):
         parser.description = 'Starts Appengine SDK\'s dev_appserver.py for development and also serves static files.'
         parser.usage = '%(prog)s [options]'
 
+        # Enable vscode remote debugging?
+        parser.add_argument("--debug", help="Enable ptvsd remote debugging", action='store_true', default=False)
+
         # Extra parameters that we're going to pass to GAE's `dev_appserver.py`.
         group = parser.add_argument_group('dev_appserver.py options')
         for option in self.sandbox_options:
@@ -120,6 +118,11 @@ class Command(runserver.Command):
         # passed down to the dev_appserver
         self.use_reloader = options.get("use_reloader")
         self.use_threading = options.get("use_threading")
+
+        # If we're remote debugging, we don't want threads
+        if options.get("debug"):
+            self.use_threading = False
+            self.gae_options["env_variables"] = {debugger._ENABLE_ENV_VAR: "1"}
 
         # We force the option to false here because we use the dev_appserver reload
         # capabilities, not Django's reloading
@@ -203,6 +206,9 @@ class Command(runserver.Command):
         sandbox._OPTIONS.automatic_restart = self.use_reloader
         sandbox._OPTIONS.threadsafe_override = self.use_threading
 
+        if not self.use_threading:
+            sandbox._OPTIONS.max_module_instances = 1
+
         if sandbox._OPTIONS.host == "127.0.0.1" and os.environ["HTTP_HOST"].startswith("localhost"):
             hostname = "localhost"
             sandbox._OPTIONS.host = "localhost"
@@ -267,7 +273,6 @@ class Command(runserver.Command):
                     logging.warning("Attempted to set _dispatcher twice")
                     return
 
-
                 # When the dispatcher is created this property is set so we use it
                 # to construct *our* dispatcher
                 configuration = dispatcher._configuration
@@ -282,7 +287,11 @@ class Command(runserver.Command):
                 )
 
                 # the dispatcher may have passed environment variables, it should be propagated
-                env_vars = self._dispatcher._configuration.modules[0]._app_info_external.env_variables or EnvironmentVariables()
+                env_vars = (
+                    self._dispatcher._configuration.modules[0]._app_info_external.env_variables or
+                    EnvironmentVariables()
+                )
+
                 for module in configuration.modules:
                     module_name = module._module_name
                     if module_name == 'default' or module_name is None:
@@ -397,3 +406,4 @@ class Command(runserver.Command):
             sys.stdout.write(shutdown_message)
 
         return
+
