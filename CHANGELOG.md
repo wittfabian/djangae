@@ -9,6 +9,7 @@
 - Fixed `ImportError` when running `./manage.py runserver` and the SDK is not already on the Python import path.
 - Fix a ValueError when sharding string keys in the migrations mapper library.
 - Fixed Djangae's project description on pypi.org.
+- Fixed installing dependencies when running tests with pip version 10.
 
 ## v0.9.11
 
