@@ -805,6 +805,11 @@ class BackendTests(TestCase):
         t1 = TestUser.objects.create()
         self.assertFalse(TestUser.objects.none().filter(pk=t1.pk))
 
+    def test_values_list_returns_unicode_strings(self):
+        TestUser.objects.create(username=u"Łukasz")
+        self.assertEqual(unicode, type(TestUser.objects.get().username))
+        self.assertEqual(unicode, type(TestUser.objects.values_list("username", flat=True)[0]))
+
 
 class ModelFormsetTest(TestCase):
     def test_reproduce_index_error(self):

@@ -274,6 +274,27 @@ class EntityTransforms:
         return result
 
     @staticmethod
+    def fix_projected_values_type(query, result):
+        """
+            String values returned from projection queries return as 'str' not 'unicode'
+            See https://github.com/potatolondon/djangae/issues/1026
+        """
+        if result is None:
+            return None
+
+        fields = [
+            x for x in query.model._meta.fields
+            if x.get_internal_type() in ("CharField",)
+        ]
+
+        for field in fields:
+            col = field.column
+            if col in result and isinstance(result[col], str):
+                result[col] = unicode(result[col], "utf-8")
+
+        return result
+
+    @staticmethod
     def ignore_excluded_pks(excluded_pks, result):
         if result is None:
             return result
@@ -522,7 +543,10 @@ class SelectCommand(object):
 
             entity = EntityTransforms.ignore_excluded_pks(excluded_pks, entity)
             entity = EntityTransforms.convert_datetime_fields(self.query, entity)
-            entity = EntityTransforms.rename_pk_field(self.query.model, self.query.concrete_model, entity)
+            entity = EntityTransforms.fix_projected_values_type(self.query, entity)
+            entity = EntityTransforms.rename_pk_field(
+                self.query.model, self.query.concrete_model, entity
+            )
             entity = EntityTransforms.process_extra_selects(self.query, entity)
 
             if self.query.distinct and self.query.extra_selects:
