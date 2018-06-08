@@ -23,6 +23,7 @@ setup(
     author_email='mail@p.ota.to',
     description=DESCRIPTION,
     long_description=LONG_DESCRIPTION,
+    long_description_content_type='text/markdown',
     keywords=["django", "Google App Engine", "GAE"],
     url=URL,
     classifiers=[
