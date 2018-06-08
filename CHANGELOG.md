@@ -10,6 +10,7 @@
 - Fix a ValueError when sharding string keys in the migrations mapper library.
 - Fixed Djangae's project description on pypi.org.
 - Fixed installing dependencies when running tests with pip version 10.
+- Worked around a bug where App Engine would return projected values as `str` instead of `unicode`
 
 ## v0.9.11
 
