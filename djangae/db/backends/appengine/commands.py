@@ -1,41 +1,31 @@
-#STANDARD LIB
-from datetime import datetime
-import logging
+# STANDARD LIB
 import copy
 import decimal
-import json
-
-from functools import partial
-from itertools import chain, groupby
-
-#LIBRARIES
-import django
-from django.db import DatabaseError
-from django.db import IntegrityError
-from django.utils import six
-from django.utils.encoding import python_2_unicode_compatible
+import logging
+from datetime import datetime
 
 from google.appengine.api import datastore, datastore_errors, memcache
-from google.appengine.datastore import datastore_stub_util
-from google.appengine.api.datastore import Query, Key, Entity
-from google.appengine.ext import db
+from google.appengine.api.datastore import Entity, Query
 
-#DJANGAE
-from djangae.db.backends.appengine.dbapi import NotSupportedError
-from djangae.db.utils import (
-    get_datastore_key,
-    django_instance_to_entities,
-    MockInstance,
-    has_concrete_parents,
-    get_field_from_column,
-    ensure_datetime,
-)
-
-from djangae.db.backends.appengine import POLYMODEL_CLASS_ATTRIBUTE
+# LIBRARIES
+import django
 from djangae.db import constraints, utils
-from djangae.db.backends.appengine import caching
+from djangae.db.backends.appengine import POLYMODEL_CLASS_ATTRIBUTE, caching
+# DJANGAE
+from djangae.db.backends.appengine.dbapi import NotSupportedError
+from djangae.db.backends.appengine.dnf import normalize_query
+from djangae.db.backends.appengine.formatting import \
+    generate_sql_representation
+from djangae.db.backends.appengine.query import transform_query
 from djangae.db.unique_utils import query_is_unique
-from djangae.db.backends.appengine.formatting import generate_sql_representation
+from djangae.db.utils import (MockInstance, django_instance_to_entities,
+                              ensure_datetime, get_datastore_key,
+                              get_field_from_column, has_concrete_parents)
+from django.db import DatabaseError, IntegrityError
+from django.utils import six
+from django.utils.encoding import python_2_unicode_compatible
+from google.appengine.datastore import datastore_stub_util
+from google.appengine.ext import db
 
 from . import meta_queries
 
@@ -65,11 +55,11 @@ EXTRA_SELECT_FUNCTIONS = {
 }
 
 REVERSE_OP_MAP = {
-    '=':'exact',
-    '>':'gt',
-    '>=':'gte',
-    '<':'lt',
-    '<=':'lte',
+    '=': 'exact',
+    '>': 'gt',
+    '>=': 'gte',
+    '<': 'lt',
+    '<=': 'lte',
 }
 
 INEQUALITY_OPERATORS = frozenset(['>', '<', '<=', '>='])
@@ -79,10 +69,11 @@ def _cols_from_where_node(where_node):
     cols = where_node.get_cols() if hasattr(where_node, 'get_cols') else where_node.get_group_by_cols()
     return cols
 
+
 def _get_tables_from_where(where_node):
     cols = _cols_from_where_node(where_node)
     if django.VERSION[1] < 8:
-        return list(set([x[0] for x in cols if x[0] ]))
+        return list(set([x[0] for x in cols if x[0]]))
     else:
         return list(set([x.alias for x in cols]))
 
@@ -127,12 +118,9 @@ def log_once(logging_call, text, args):
     logging_call(text % args)
     log_once.logged.add(identifier)
 
+
 log_once.logged = set()
 
-
-
-from djangae.db.backends.appengine.query import transform_query
-from djangae.db.backends.appengine.dnf import normalize_query
 
 def convert_django_ordering_to_gae(ordering):
     result = []
@@ -143,6 +131,7 @@ def convert_django_ordering_to_gae(ordering):
         else:
             result.append((column, datastore.Query.ASCENDING))
     return result
+
 
 def limit_results_generator(results, limit):
     for result in results:
@@ -177,6 +166,7 @@ def can_perform_datastore_get(normalized_query):
                 return False
 
     return True
+
 
 class EntityTransforms:
     @staticmethod
@@ -248,7 +238,7 @@ class EntityTransforms:
             return arg
 
         for col, select in extra_selects:
-            result[col] = select[0](*[ process_arg(x) for x in select[1] ])
+            result[col] = select[0](*[process_arg(x) for x in select[1]])
 
         return result
 
@@ -264,7 +254,7 @@ class EntityTransforms:
 
         for field in fields:
             column = field.column
-            if isinstance(result, dict): # sometimes it's a key!
+            if isinstance(result, dict):  # sometimes it's a key!
                 value = result.get(column)
             else:
                 value = None
@@ -331,15 +321,17 @@ class SelectCommand(object):
             self.keys_only = False
 
     def __eq__(self, other):
-        return (isinstance(other, self.__class__)
-            and self.query.serialize() == other.query.serialize())
+        return (isinstance(other, self.__class__) and
+                self.query.serialize() == other.query.serialize())
 
     def __ne__(self, other):
         return not self.__eq__(other)
 
     def _sanity_check(self):
         if self.query.distinct and not self.query.columns:
-            raise NotSupportedError("Tried to perform distinct query when projection wasn't possible")
+            raise NotSupportedError(
+                "Tried to perform distinct query when projection wasn't possible"
+            )
 
     def _exclude_pk(self, columns):
         if columns is None:
@@ -411,7 +403,9 @@ class SelectCommand(object):
                 # conversion here, when really it should be handled elsewhere
                 if isinstance(value, decimal.Decimal):
                     field = get_field_from_column(self.query.model, filter_node.column)
-                    value = self.connection.ops.adapt_decimalfield_value(value, field.max_digits, field.decimal_places)
+                    value = self.connection.ops.adapt_decimalfield_value(
+                        value, field.max_digits, field.decimal_places
+                    )
                 elif isinstance(value, six.string_types):
                     value = coerce_unicode(value)
                 elif isinstance(value, datastore.Key):
@@ -428,7 +422,7 @@ class SelectCommand(object):
                 # If there is already a value for this lookup, we need to make the
                 # value a list and append the new entry
                 if lookup in query and not isinstance(query[lookup], (list, tuple)) and query[lookup] != value:
-                    query[lookup] = [query[lookup] ] + [value]
+                    query[lookup] = [query[lookup]] + [value]
                 else:
                     # If the value is a list, we can't just assign it to the query
                     # which will treat each element as its own value. So in this
@@ -459,7 +453,9 @@ class SelectCommand(object):
             identifier = query_is_unique(self.query.model, queries[0])
             if identifier:
                 # Yay for optimizations!
-                return meta_queries.UniqueQuery(identifier, queries[0], self.query.model, self.namespace)
+                return meta_queries.UniqueQuery(
+                    identifier, queries[0], self.query.model, self.namespace
+                )
 
             return queries[0]
         else:
@@ -501,10 +497,12 @@ class SelectCommand(object):
                     # If this is a QueryByKeys, just do the datastore Get and count the results
                     resultset = (x.key() for x in query.Run(limit=limit, offset=offset) if x)
                 else:
-                    count_query = Query(query._Query__kind, keys_only=True, namespace=self.namespace)
+                    count_query = Query(
+                        query._Query__kind, keys_only=True, namespace=self.namespace
+                    )
                     count_query.update(query)
                     resultset = count_query.Run(limit=limit, offset=offset)
-                self.results = [ len([ y for y in resultset if y not in excluded_pks]) ]
+                self.results = [len([y for y in resultset if y not in excluded_pks])]
                 self.results_returned = 1
             else:
                 self.results = [query.Count(limit=limit, offset=offset)]
@@ -529,7 +527,7 @@ class SelectCommand(object):
             if not columns:
                 return result
 
-            key = tuple([ result[x] for x in self._exclude_pk(columns) if x in result ])
+            key = tuple([result[x] for x in self._exclude_pk(columns) if x in result])
             if key in seen:
                 return None
             seen.add(key)
@@ -599,7 +597,9 @@ class FlushCommand(object):
         # Delete the markers we need to
         from djangae.db.constraints import UniqueMarker
         query = datastore.Query(UniqueMarker.kind(), keys_only=True, namespace=self.namespace)
-        query["__key__ >="] = datastore.Key.from_path(UniqueMarker.kind(), self.table, namespace=self.namespace)
+        query["__key__ >="] = datastore.Key.from_path(
+            UniqueMarker.kind(), self.table, namespace=self.namespace
+        )
         query["__key__ <"] = datastore.Key.from_path(
             UniqueMarker.kind(), u"{}{}".format(self.table, u'\ufffd'), namespace=self.namespace
         )
@@ -639,7 +639,8 @@ class InsertCommand(object):
 
         for obj in self.objs:
             if self.has_pk:
-                # We must convert the PK value here, even though this normally happens in django_instance_to_entities otherwise
+                # We must convert the PK value here, even though this normally happens in 
+                # django_instance_to_entities otherwise
                 # custom PK fields don't work properly
                 value = self.model._meta.pk.get_db_prep_save(
                     self.model._meta.pk.pre_save(obj, True),
@@ -697,11 +698,10 @@ class InsertCommand(object):
                 results.append(new_key)
             return results
 
-
         if not constraints.has_active_unique_constraints(self.model) and not check_existence:
             # Fast path, no constraint checks and no keys mean we can just do a normal datastore.Put
             # which isn't limited to 25
-            results = perform_insert(self.entities) # This modifies self.entities and sets their keys
+            results = perform_insert(self.entities)  # This modifies self.entities and sets their keys
             caching.add_entities_to_cache(
                 self.model,
                 [x[0] for x in self.entities],
@@ -716,6 +716,7 @@ class InsertCommand(object):
         def insert_chunk(keys, entities):
             # Note that this is limited to a maximum of 25 entities.
             markers = []
+
             @db.transactional(xg=entity_group_count > 1)
             def txn():
                 for key in keys:
@@ -824,9 +825,10 @@ class DeleteCommand(object):
 
             Things to improve:
 
-             - Delete the constraints in a background thread. We don't need to wait for them, and really,
-             we don't want the non-deletion of them to affect the deletion of the entity. Lingering markers
-             are handled automatically they just case a small performance hit on write.
+             - Delete the constraints in a background thread. We don't need to wait for them, and
+             really, we don't want the non-deletion of them to affect the deletion of the entity.
+             Lingering markers are handled automatically they just case a small performance hit on 
+             write.
              - Check the entity matches the query still (there's a fixme there)
         """
         from djangae.db.backends.appengine.indexing import indexers_for_model
@@ -858,7 +860,7 @@ class DeleteCommand(object):
         def delete_batch(key_slice):
             entities = datastore.Get(key_slice)
 
-            #FIXME: We need to make sure the entity still matches the query!
+            # FIXME: We need to make sure the entity still matches the query!
 #            entities = (x for x in entities if utils.entity_matches_query(x, self.select.gae_query))
 
             to_delete = []
@@ -899,7 +901,6 @@ class DeleteCommand(object):
             keys = keys[datastore_stub_util._MAX_EG_PER_TXN:]
 
         return deleted
-
 
     def lower(self):
         """
