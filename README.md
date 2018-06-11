@@ -7,11 +7,11 @@ The best way to run Django on Google App Engine.
 Djangae (djan-gee) is a Django app that allows you to run Django applications on Google App Engine, including (if you
 want to) using Django's models with the App Engine Datastore as the underlying database.
 
-- Documentation: https://djangae.readthedocs.io/
-- Google Group: https://groups.google.com/forum/#!forum/djangae-users
-- Website: https://djangae.org
-- GitHub: https://github.com/potatolondon/djangae
-- Gitter: https://gitter.im/potatolondon/djangae
+- :closed_book: Documentation: https://djangae.readthedocs.io/
+- :busts_in_silhouette: Google Group: https://groups.google.com/forum/#!forum/djangae-users
+- :earth_africa: Website: https://djangae.org
+- :octocat: GitHub: https://github.com/potatolondon/djangae
+- :speech_balloon: Gitter: https://gitter.im/potatolondon/djangae
 
 **Note: Djangae is under heavy development, stability is not guaranteed. See [1.0 release changes issue](https://github.com/potatolondon/djangae/issues/593) to follow progress on Djangae 1.0 release.**
 
