@@ -1,8 +1,6 @@
 # Djangae
 
-[![Join the chat at https://gitter.im/potatolondon/djangae](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/potatolondon/djangae?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
-
-[![build-status-image]][travis] [![codecov.io](https://img.shields.io/codecov/c/github/potatolondon/djangae/master.svg)](https://codecov.io/github/potatolondon/djangae?branch=master)
+[![Join the chat at https://gitter.im/potatolondon/djangae](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/potatolondon/djangae?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge) [![build-status-image]][travis] [![codecov.io](https://img.shields.io/codecov/c/github/potatolondon/djangae/master.svg)](https://codecov.io/github/potatolondon/djangae?branch=master)
 
 The best way to run Django on Google App Engine.
 
@@ -11,9 +9,9 @@ want to) using Django's models with the App Engine Datastore as the underlying d
 
 - Documentation: https://djangae.readthedocs.io/
 - Google Group: https://groups.google.com/forum/#!forum/djangae-users
-- Website: https://potatolondon.github.io/djangae/
+- Website: https://djangae.org
 - GitHub: https://github.com/potatolondon/djangae
-- Slack: https://djangae.slack.com
+- Gitter: https://gitter.im/potatolondon/djangae
 
 **Note: Djangae is under heavy development, stability is not guaranteed. See [1.0 release changes issue](https://github.com/potatolondon/djangae/issues/593) to follow progress on Djangae 1.0 release.**
 
