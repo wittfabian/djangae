@@ -1570,3 +1570,44 @@ class ComputedCollationFieldTests(TestCase):
     def test_model(self):
         """Tests for a model using a `ComputedCollationField`."""
         ModelWithComputedCollationField.objects.create(name='demo1')
+
+class BinaryFieldModel(models.Model):
+    binary = models.BinaryField(null=True)
+
+    class Meta:
+        app_label = "djangae"
+
+class BinaryFieldModelTests(TestCase):
+    binary_value = b'\xff'
+
+    def test_insert(self):
+
+        obj = BinaryFieldModel.objects.create(binary = self.binary_value)
+        obj.save()
+
+        readout = BinaryFieldModel.objects.get(pk = obj.pk)
+
+        assert(readout.binary == self.binary_value)
+
+    def test_none(self):
+
+        obj = BinaryFieldModel.objects.create()
+        obj.save()
+
+        readout = BinaryFieldModel.objects.get(pk = obj.pk)
+
+        assert(readout.binary is None)
+
+    def test_update(self):
+
+        obj = BinaryFieldModel.objects.create()
+        obj.save()
+
+        toupdate = BinaryFieldModel.objects.get(pk = obj.pk)
+        toupdate.binary = self.binary_value
+        toupdate.save()
+
+        readout = BinaryFieldModel.objects.get(pk = obj.pk)
+
+        assert(readout.binary == self.binary_value)
+

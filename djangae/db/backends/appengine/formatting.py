@@ -38,10 +38,12 @@ def _generate_values_expression(instances, columns):
             value = getattr(instance, column, None)
             needs_quoting = isinstance(value, six.string_types)
 
-            if needs_quoting:
-                row.append('"{}"'.format(value))
-            else:
-                row.append(six.text_type(value))
+            try:
+                text_value = '"{}"'.format(value) if needs_quoting else six.text_type(value)
+            except UnicodeDecodeError:
+                text_value = '"<binary>"'
+
+            row.append(text_value)
 
         values.append("(" + ", ".join(row) + ")")
     return ", ".join(values)

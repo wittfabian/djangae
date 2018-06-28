@@ -10,6 +10,7 @@
 - Fix a ValueError when sharding string keys in the migrations mapper library.
 - Fixed Djangae's project description on pypi.org.
 - Fixed installing dependencies when running tests with pip version 10.
+- Replace binary values in sql value generation with `<binary>` identifier.
 
 ## v0.9.11
 

@@ -17,6 +17,7 @@ class FormattingTestModel(models.Model):
     field1 = models.IntegerField()
     field2 = models.CharField(max_length=10)
     field3 = models.TextField()
+    field4 = models.BinaryField()
 
 
 class SelectFormattingTest(TestCase):
@@ -102,7 +103,7 @@ SELECT (*) FROM {} ORDER BY field1, field2 DESC
 
 class InsertFormattingTest(TestCase):
     def test_single_insert(self):
-        instance = FormattingTestModel(field1=1, field2="Two", field3="Three")
+        instance = FormattingTestModel(field1=1, field2="Two", field3="Three", field4=b'\xff')
 
         command = InsertCommand(
             connections["default"],
@@ -110,14 +111,14 @@ class InsertFormattingTest(TestCase):
             [instance],
             [
                 FormattingTestModel._meta.get_field(x)
-                for x in ("field1", "field2", "field3")
+                for x in ("field1", "field2", "field3", "field4")
             ], True
         )
 
         sql = generate_sql_representation(command)
 
         expected = """
-INSERT INTO {} (field1, field2, field3) VALUES (1, "Two", "Three")
+INSERT INTO {} (field1, field2, field3, field4) VALUES (1, "Two", "Three", "<binary>")
 """.format(FormattingTestModel._meta.db_table).strip()
 
         self.assertEqual(expected, sql)
