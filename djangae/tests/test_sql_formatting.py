@@ -100,6 +100,19 @@ SELECT (*) FROM {} ORDER BY field1, field2 DESC
 
         self.assertEqual(expected, sql)
 
+    def test_unicode_error(self):
+        command = SelectCommand(
+            connections['default'],
+            FormattingTestModel.objects.filter(field2=u"Jacqu\xe9s").query
+        )
+        sql = generate_sql_representation(command)
+
+        expected = u"""
+SELECT (*) FROM {} WHERE (field2='Jacqu\xe9s')
+""".format(FormattingTestModel._meta.db_table).strip()
+
+        self.assertEqual(expected, sql)
+
 
 class InsertFormattingTest(TestCase):
     def test_single_insert(self):
@@ -118,7 +131,7 @@ class InsertFormattingTest(TestCase):
         sql = generate_sql_representation(command)
 
         expected = """
-INSERT INTO {} (field1, field2, field3, field4) VALUES (1, "Two", "Three", "<binary>")
+INSERT INTO {} (field1, field2, field3, field4) VALUES (1, 'Two', 'Three', '<binary>')
 """.format(FormattingTestModel._meta.db_table).strip()
 
         self.assertEqual(expected, sql)
@@ -210,4 +223,4 @@ class GenerateValuesExpressionTest(TestCase):
 
         m = Mock()
         output = _generate_values_expression([m], ['value1'])
-        self.assertEqual(output, '("' + m.value1 + '")')
+        self.assertEqual(output, '(\'' + m.value1 + '\')')

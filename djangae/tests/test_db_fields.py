@@ -12,6 +12,7 @@ from django.conf import settings
 from django.core.exceptions import ValidationError, ImproperlyConfigured
 from django.core.files.base import ContentFile
 from django.core.validators import EmailValidator
+from django.test import override_settings
 from django.utils.encoding import python_2_unicode_compatible
 from django.utils.six.moves import range
 import django
@@ -1359,6 +1360,11 @@ class JSONFieldModelTests(TestCase):
         thing = JSONFieldWithDefaultModel()
         self.assertEqual(thing.json_field, {})
 
+class CharFieldModel(models.Model):
+    char_field = CharField(max_length=500)
+
+    class Meta:
+        app_label = "djangae"
 
 class CharFieldModelTests(TestCase):
 
@@ -1611,3 +1617,34 @@ class BinaryFieldModelTests(TestCase):
 
         assert(readout.binary == self.binary_value)
 
+
+class CharFieldModelTest(TestCase):
+
+    def test_query(self):
+        instance = CharFieldModel(char_field="foo")
+        instance.save()
+
+        readout = CharFieldModel.objects.get(char_field="foo")
+        self.assertEqual(readout, instance)
+
+    def test_query_unicode(self):
+        name = u'Jacqu\xe9s'
+
+        instance = CharFieldModel(char_field=name)
+        instance.save()
+
+        readout = CharFieldModel.objects.get(char_field=name)
+        self.assertEqual(readout, instance)
+
+    @override_settings(DEBUG=True)
+    def test_query_unicode_debug(self):
+        """ Test that unicode query can be performed in DEBUG mode,
+            which will use CursorDebugWrapper and call last_executed_query.
+        """
+        name = u'Jacqu\xe9s'
+
+        instance = CharFieldModel(char_field=name)
+        instance.save()
+
+        readout = CharFieldModel.objects.get(char_field=name)
+        self.assertEqual(readout, instance)
