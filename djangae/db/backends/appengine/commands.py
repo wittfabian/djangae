@@ -23,7 +23,9 @@ from djangae.db.utils import (MockInstance, django_instance_to_entities,
                               get_field_from_column, has_concrete_parents)
 from django.db import DatabaseError, IntegrityError
 from django.utils import six
-from django.utils.encoding import python_2_unicode_compatible
+from django.utils.encoding import python_2_unicode_compatible, force_str
+
+from google.appengine.api import datastore, datastore_errors, memcache
 from google.appengine.datastore import datastore_stub_util
 from google.appengine.ext import db
 
@@ -564,7 +566,7 @@ class SelectCommand(object):
         return self.results_returned
 
     def __repr__(self):
-        return generate_sql_representation(self)
+        return force_str(generate_sql_representation(self))
 
     def __mod__(self, params):
         return repr(self)

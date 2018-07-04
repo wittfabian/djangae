@@ -18,6 +18,7 @@ from django.db.backends.base.features import BaseDatabaseFeatures
 from django.db.backends.base.validation import BaseDatabaseValidation
 from django.db.backends.base.creation import BaseDatabaseCreation
 from django.db.backends.base.schema import BaseDatabaseSchemaEditor
+from django.utils.encoding import smart_text
 
 from google.appengine.api.datastore_types import Blob, Text
 from google.appengine.api import datastore, datastore_errors
@@ -351,7 +352,7 @@ class DatabaseOperations(BaseDatabaseOperations):
             in your SQL. Technically this is a bug in Django for assuming that sql is ASCII but
             it's only our backend that will ever trigger the problem
         """
-        return u"QUERY = {}".format(sql)
+        return u"QUERY = {}".format(smart_text(sql))
 
     def fetch_returned_insert_id(self, cursor):
         return cursor.lastrowid

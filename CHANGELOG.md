@@ -11,6 +11,9 @@
 - Fixed Djangae's project description on pypi.org.
 - Fixed installing dependencies when running tests with pip version 10.
 - Worked around a bug where App Engine would return projected values as `str` instead of `unicode`
+- Replace binary values in sql value generation with `<binary>` identifier.
+- Fix a couple sql unicode bugs.
+- Use single quotes for sql string literals, and do not quote integers.
 
 ## v0.9.11
 
