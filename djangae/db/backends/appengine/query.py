@@ -665,9 +665,10 @@ class Query(object):
 
                 if node.children:
                     for lookup in node.children:
-                        query[''.join([lookup.column, lookup.operator])] = six.text_type("NULL" if lookup.value is None else lookup.value)
+
+                        query[''.join([lookup.column, lookup.operator])] = _serialize_sql_value(lookup.value)
                 else:
-                    query[''.join([node.column, node.operator])] = six.text_type("NULL" if node.value is None else node.value)
+                    query[''.join([node.column, node.operator])] = _serialize_sql_value(node.value)
 
                 where.append(query)
 
@@ -683,6 +684,11 @@ INVALID_ORDERING_FIELD_MESSAGE = (
     "field and instead order on that."
 )
 
+def _serialize_sql_value(value):
+    if isinstance(value, six.integer_types):
+        return value
+    else:
+        return six.text_type("NULL" if value is None else value)
 
 def _get_parser(query, connection=None):
     version = django.VERSION[:2]

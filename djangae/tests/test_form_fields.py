@@ -7,7 +7,7 @@ from django.utils.six.moves import range
 # DJANGAE
 from djangae.fields import ListField, RelatedListField
 from djangae.test import TestCase
-from djangae.tests.test_db_fields import JSONFieldModel, NullableJSONFieldModel
+from djangae.tests.test_db_fields import CharFieldModel, JSONFieldModel, NullableJSONFieldModel
 
 
 class JSONModelForm(forms.ModelForm):
@@ -30,12 +30,6 @@ class ListFieldForm(forms.ModelForm):
     class Meta:
         model = BlankableListFieldModel
         fields = ['list_field']
-
-
-class CharFieldModel(models.Model):
-    """Simple model we can reference as the related model in RelatedListField."""
-    string_field = models.CharField(max_length=2)
-
 
 class RelatedListFieldModel(models.Model):
     related_list_field = RelatedListField(CharFieldModel)
@@ -123,7 +117,7 @@ class OrderedModelMultipleChoiceField(TestCase):
         """
         instance_one, instance_two, instance_three = [
             CharFieldModel.objects.create(
-                string_field=str(x)
+                char_field=str(x)
             ) for x in range(3)
         ]
         data = dict(related_list_field=[
