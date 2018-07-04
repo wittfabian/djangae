@@ -1,3 +1,5 @@
+# encoding: utf-8
+
 import datetime
 import decimal
 import re
@@ -514,7 +516,6 @@ class BackendTests(TestCase):
 
         self.assertEqual(instance, ModelWithNullableCharField.objects.filter(some_id=999).exclude(field1="test")[0])
 
-
     def test_null_date_field(self):
         null_date = NullDate()
         null_date.save()
@@ -576,7 +577,7 @@ class BackendTests(TestCase):
     def test_datetime_fields(self):
         date = datetime.datetime.today()
         dt = datetime.datetime.now()
-        time = datetime.time(0,0,0)
+        time = datetime.time(0, 0, 0)
 
         # check if creating objects work
         obj = NullDate.objects.create(date=date, datetime=dt, time=time)
@@ -589,7 +590,7 @@ class BackendTests(TestCase):
         # check if updating objects work
         obj.date = date + datetime.timedelta(days=1)
         obj.datetime = dt + datetime.timedelta(days=1)
-        obj.time = datetime.time(23,0,0)
+        obj.time = datetime.time(23, 0, 0)
         obj.save()
         self.assertItemsEqual([obj], NullDate.objects.filter(datetime=obj.datetime))
         self.assertItemsEqual([obj], NullDate.objects.filter(date=obj.date))
@@ -598,7 +599,7 @@ class BackendTests(TestCase):
     def test_related_datetime_nullable(self):
         date = datetime.datetime.today()
         dt = datetime.datetime.now()
-        time = datetime.time(0,0,0)
+        time = datetime.time(0, 0, 0)
 
         date_set = NullDateSet.objects.create()
         empty_obj = NullDate.objects.create(date=None, datetime=None, time=None)
@@ -804,6 +805,11 @@ class BackendTests(TestCase):
     def test_chaining_none_filter(self):
         t1 = TestUser.objects.create()
         self.assertFalse(TestUser.objects.none().filter(pk=t1.pk))
+
+    def test_values_list_returns_unicode_strings(self):
+        TestUser.objects.create(username=u"Łukasz")
+        self.assertEqual(unicode, type(TestUser.objects.get().username))
+        self.assertEqual(unicode, type(TestUser.objects.values_list("username", flat=True)[0]))
 
 
 class ModelFormsetTest(TestCase):
@@ -1281,7 +1287,7 @@ class ConstraintTests(TestCase):
         instance2.save()
 
         instance2.unique_set_field = set()
-        instance2.save() # You can have two fields with empty sets
+        instance2.save()  # You can have two fields with empty sets
 
     def test_unique_constraints_on_model_with_long_str_pk(self):
         """ Check that an object with a string-based PK of 500 characters (the max that GAE allows)
