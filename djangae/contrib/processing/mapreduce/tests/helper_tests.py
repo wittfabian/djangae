@@ -69,7 +69,6 @@ def reduce_count(key, values):
 def delete(*args, **kwargs):
     TestModel.objects.all().delete()
 
-
 class MapReduceEntityTests(TestCase):
 
     def setUp(self):
@@ -200,6 +199,17 @@ class MapQuerysetTests(TestCase):
         self.assertEqual(3, counter.count)
         self.assertFalse(TestModel.objects.count())
 
+    def test_no_start_pipeline(self):
+        counter = Counter.objects.create()
+
+        pipeline = map_queryset(
+            TestModel.objects.all(),
+            count,
+            counter_id=counter.pk,
+            start_pipeline=False
+        )
+
+        self.assertIsNone(pipeline._pipeline_key)
 
 @skipIf(not has_cloudstorage, "Cloud Storage not available")
 class MapFilesTests(TestCase):
