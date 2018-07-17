@@ -193,12 +193,9 @@ class AsyncMultiQuery(object):
             except StopIteration:
                 next_entries[i] = None
 
-        counters = {
-            'returned': 0,
-            'yielded': 0
-        }
+        returned_count = 0
 
-        seen_keys = set()  #For de-duping results
+        seen_keys = set()  # For de-duping results
         while any(next_entries):
             def get_next():
                 idx, lowest = None, None
@@ -233,18 +230,17 @@ class AsyncMultiQuery(object):
 
             # Make sure we haven't seen this result before before yielding
             if next_key not in seen_keys:
-                counters['returned'] += 1
+                returned_count += 1
+                seen_keys.add(next_key)
 
-                if offset and counters['returned'] <= offset:
+                if offset and returned_count <= offset:
                     # We haven't hit the offset yet, so just
                     # keep fetching entities
                     continue
 
-                seen_keys.add(next_key)
-                counters['yielded'] += 1
                 yield next_entity
 
-                if limit and counters['yielded'] == limit:
+                if limit and returned_count == limit:
                     raise StopIteration()
 
 
@@ -363,7 +359,7 @@ class QueryByKeys(object):
             returned = 0
             # This is safe, because Django is fetching all results any way :(
             sorted_results = sorted(
-                results, 
+                results,
                 cmp=partial(utils.django_ordering_comparison, self.ordering)
             )
             sorted_results = [result for result in sorted_results if result is not None]
@@ -453,7 +449,7 @@ class UniqueQuery(object):
 
             # Do a consistent get so we don't cache stale data, and recheck the result matches the query
             ret = [
-                x for x in datastore.Get(keys) 
+                x for x in datastore.Get(keys)
                 if x and utils.entity_matches_query(x, self._gae_query)
             ]
             if len(ret) == 1:
