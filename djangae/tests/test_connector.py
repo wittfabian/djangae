@@ -2228,3 +2228,18 @@ class CascadeDeletionTests(TestCase):
 
         self.assertEqual(Enclosure.objects.count(), 0)
         self.assertEqual(Animal.objects.count(), 0)
+
+
+class AsyncMultiQueryTests(TestCase):
+
+    def test_offset_is_correctly_applied(self):
+        TestUser.objects.create(username="Adam", field2="Adam")
+        u2 = TestUser.objects.create(username="Bob")
+        TestUser.objects.create(username="Chloe")
+
+        qs = TestUser.objects.filter(
+            Q(field2="Adam") | Q(username__in=["Adam", "Bob"])
+        ).order_by("username")[1:]
+
+        self.assertEqual(len(qs), 1)
+        self.assertItemsEqual([u2], qs)

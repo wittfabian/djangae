@@ -14,6 +14,7 @@
 - Replace binary values in sql value generation with `<binary>` identifier.
 - Fix a couple sql unicode bugs.
 - Use single quotes for sql string literals, and do not quote integers.
+- Fixed a bug in the AsyncMultiQuery that would prevent returning all results.
 
 ## v0.9.11
 
