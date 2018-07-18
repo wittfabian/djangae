@@ -2243,3 +2243,15 @@ class AsyncMultiQueryTests(TestCase):
 
         self.assertEqual(len(qs), 1)
         self.assertItemsEqual([u2], qs)
+
+    def test_limit_is_correctly_applied(self):
+        TestUser.objects.create(username="Adam", field2="Adam")
+        u2 = TestUser.objects.create(username="Bob")
+        TestUser.objects.create(username="Chloe")
+
+        qs = TestUser.objects.filter(
+            Q(field2="Adam") | Q(username__in=["Adam", "Bob", "Chloe"])
+        ).order_by("username")[1:2]
+
+        self.assertEqual(len(qs), 1)
+        self.assertItemsEqual([u2], qs)

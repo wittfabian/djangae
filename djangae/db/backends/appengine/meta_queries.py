@@ -194,6 +194,7 @@ class AsyncMultiQuery(object):
                 next_entries[i] = None
 
         returned_count = 0
+        yielded_count = 0
 
         seen_keys = set()  # For de-duping results
         while any(next_entries):
@@ -238,9 +239,10 @@ class AsyncMultiQuery(object):
                     # keep fetching entities
                     continue
 
+                yielded_count += 1
                 yield next_entity
 
-                if limit and returned_count == limit:
+                if limit and yielded_count == limit:
                     raise StopIteration()
 
 
