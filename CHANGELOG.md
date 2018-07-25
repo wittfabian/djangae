@@ -2,7 +2,8 @@
 
 ### New features & improvements:
 
-- Take some steps to make the code Python 3 compatible
+- Take some steps to make the code Python 3 compatible.
+- Additional option to not start mapper pipeline; and provide outputs to finalize function.
 
 ### Bug fixes:
 
