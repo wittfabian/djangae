@@ -97,6 +97,11 @@ def get_datastore_kind(model):
 def get_prepared_db_value(connection, instance, field, raw=False):
     value = getattr(instance, field.attname) if raw else field.pre_save(instance, instance._state.adding)
 
+    # If value is None, but there is a default, and the field is not nullable then we should populate it
+    # Otherwise thing get hairy when you add new fields to models
+    if value is None and field.has_default() and not field.null:
+        value = field.get_default()
+
     if isinstance(value, BaseExpression):
         from djangae.db.backends.appengine.expressions import evaluate_expression
 
@@ -189,11 +194,6 @@ def django_instance_to_entities(connection, fields, raw, instance, check_null=Tr
 
     def value_from_instance(_instance, _field):
         value = get_prepared_db_value(connection, _instance, _field, raw)
-
-        # If value is None, but there is a default, and the field is not nullable then we should populate it
-        # Otherwise thing get hairy when you add new fields to models
-        if value is None and _field.has_default() and not _field.null:
-            value = connection.ops.value_for_db(_field.get_default(), _field)
 
         if check_null and (not _field.null and not _field.primary_key) and value is None:
             raise IntegrityError("You can't set %s (a non-nullable "
