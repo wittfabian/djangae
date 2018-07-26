@@ -16,6 +16,7 @@
 - Fix a couple sql unicode bugs.
 - Use single quotes for sql string literals, and do not quote integers.
 - Fixed a bug in the AsyncMultiQuery that would prevent returning all results in the case when an `OR` query was used with an offset and some entities matched more than one branch of the `OR` query.
+- Fix occasions where the default value of a field would not be correctly set on save()
 
 ## v0.9.11
 

@@ -1,11 +1,13 @@
 # -*- encoding: utf-8 -*
 from collections import OrderedDict
+from datetime import timedelta
 import datetime
 import pickle
 
 # LIBRARIES
 from django import forms
 from django.core import serializers
+from django.db import connection
 from django.db import models
 from django.db.utils import IntegrityError
 from django.conf import settings
@@ -20,6 +22,7 @@ import django
 # DJANGAE
 from djangae.contrib import sleuth
 from djangae.db import transaction
+from djangae.db.caching import disable_cache
 from djangae.fields import (
     ComputedBooleanField,
     ComputedCharField,
@@ -1648,3 +1651,69 @@ class CharFieldModelTest(TestCase):
 
         readout = CharFieldModel.objects.get(char_field=name)
         self.assertEqual(readout, instance)
+
+class DurationFieldModelWithDefault(models.Model):
+    duration = models.DurationField(default=timedelta(1,0))
+
+    class Meta:
+        app_label = "djangae"
+
+class DurationFieldModelTests(TestCase):
+
+    def test_creates_with_default(self):
+        instance = DurationFieldModelWithDefault()
+
+        self.assertEqual(instance.duration, timedelta(1,0))
+
+        instance.save()
+
+        readout = DurationFieldModelWithDefault.objects.get(pk=instance.pk)
+        self.assertEqual(readout.duration, timedelta(1,0))
+
+    def test_none_saves_as_default(self):
+        instance = DurationFieldModelWithDefault()
+        # this could happen if we were reading an existing instance out of the database that didn't have this field
+        instance.duration = None
+        instance.save()
+
+        readout = DurationFieldModelWithDefault.objects.get(pk=instance.pk)
+        self.assertEqual(readout.duration, timedelta(1,0))
+
+class ModelWithNonNullableFieldAndDefaultValue(models.Model):
+    some_field = models.IntegerField(null=False, default=1086)
+
+# ModelWithNonNullableFieldAndDefaultValueTests verifies that we maintain same
+# behavior as Django with respect to a model field that is non-nullable with default value.
+class ModelWithNonNullableFieldAndDefaultValueTests(TestCase):
+
+    def _create_instance_with_null_field_value(self):
+
+        instance = ModelWithNonNullableFieldAndDefaultValue.objects.create(some_field=1)
+
+        entity = datastore.Get(datastore.Key.from_path(ModelWithNonNullableFieldAndDefaultValue._meta.db_table,
+                               instance.pk, namespace=connection.settings_dict["NAMESPACE"]))
+        del entity["some_field"]
+        datastore.Put(entity)
+
+        instance.refresh_from_db()
+
+        return instance
+
+    @disable_cache()
+    def test_none_in_db_reads_as_none_in_model(self):
+
+        instance = self._create_instance_with_null_field_value()
+
+        self.assertIsNone(instance.some_field)
+
+    @disable_cache()
+    def test_none_in_model_saved_as_default(self):
+
+        instance = self._create_instance_with_null_field_value()
+
+        instance.save()
+        instance.refresh_from_db()
+
+        self.assertEqual(instance.some_field, 1086)
+
+
