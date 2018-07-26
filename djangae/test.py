@@ -38,7 +38,7 @@ def inconsistent_db(probability=0, connection='default'):
         stub.SetConsistencyPolicy(original_policy)
 
 
-def _get_queued_tasks(stub, queue_name=None, flush=True):
+def _get_queued_tasks(stub, queue_name=None, flush=True, process_pull_tasks=True):
     tasks = []
     queues = stub.GetQueues()
 
@@ -46,6 +46,9 @@ def _get_queued_tasks(stub, queue_name=None, flush=True):
         queues = filter(lambda q: queue_name == q['name'], queues)
 
     for queue in queues:
+        if not process_pull_tasks and queue.get('mode') == 'pull':
+            continue
+
         for task in stub.GetTasks(queue['name']):
             tasks.append(task)
 
@@ -110,7 +113,7 @@ def process_task_queues(queue_name=None, failure_behaviour=TaskFailedBehaviour.R
 
     stub = apiproxy_stub_map.apiproxy.GetStub("taskqueue")
 
-    tasks = _get_queued_tasks(stub, queue_name)
+    tasks = _get_queued_tasks(stub, queue_name, process_pull_tasks=False)
 
     client = Client() # Instantiate a test client for processing the tasks
 
@@ -181,7 +184,7 @@ def process_task_queues(queue_name=None, failure_behaviour=TaskFailedBehaviour.R
 
         if not tasks:
             #The map reduce may have added more tasks, so refresh the list
-            tasks = _get_queued_tasks(stub, queue_name)
+            tasks = _get_queued_tasks(stub, queue_name, process_pull_tasks=False)
 
 
 def get_task_count(queue_name=None):
