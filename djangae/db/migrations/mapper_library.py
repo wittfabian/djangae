@@ -8,14 +8,15 @@
 import copy
 import cPickle
 import logging
-
 from datetime import datetime
+
+from google.appengine.api import datastore_errors
+from google.appengine.api.taskqueue.taskqueue import _DEFAULT_QUEUE
+
+from djangae.db.backends.appengine import rpc
 from django.conf import settings
 from django.utils import six
 from django.utils.six.moves import range
-
-from google.appengine.api import datastore, datastore_errors
-from google.appengine.api.taskqueue.taskqueue import _DEFAULT_QUEUE
 from google.appengine.ext import deferred
 from google.appengine.runtime import DeadlineExceededError
 
@@ -70,13 +71,13 @@ def _next_key(key):
     """
     val = key.id_or_name()
     if isinstance(val, six.string_types):
-        return datastore.Key.from_path(
+        return rpc.Key.from_path(
             key.kind(),
             _next_string(val),
             namespace=key.namespace()
         )
     else:
-        return datastore.Key.from_path(
+        return rpc.Key.from_path(
             key.kind(),
             val + 1,
             namespace=key.namespace()
@@ -101,7 +102,7 @@ def _mid_key(key1, key2):
     else:
         mid_id_or_name = key1_val + ((key2_val - key1_val) // 2)
 
-    return datastore.Key.from_path(
+    return rpc.Key.from_path(
         key1.kind(),
         mid_id_or_name,
         namespace=key1.namespace()
@@ -193,7 +194,7 @@ def _find_largest_shard(shards):
 
 
 def shard_query(query, shard_count):
-    """ Given a datastore.Query object and a number of shards, return a list of shards where each
+    """ Given a rpc.Query object and a number of shards, return a list of shards where each
         shard is a pair of (low_key, high_key).
         May return fewer than `shard_count` shards in cases where there aren't many entities.
     """
@@ -273,9 +274,9 @@ def shard_query(query, shard_count):
     return shards
 
 
-class ShardedTaskMarker(datastore.Entity):
+class ShardedTaskMarker(rpc.Entity):
     """ Manages the running of an operation over the entities of a query using multiple processing
-        tasks.  Stores details of the current state on itself as an Entity in the Datastore.
+        tasks.  Stores details of the current state on itself as an Entity in the rpc.
     """
     KIND = "_djangae_migration_task"
 
@@ -299,7 +300,7 @@ class ShardedTaskMarker(datastore.Entity):
 
     @classmethod
     def get_key(cls, identifier, namespace):
-        return datastore.Key.from_path(
+        return rpc.Key.from_path(
             cls.KIND,
             identifier,
             namespace=namespace
@@ -320,13 +321,13 @@ class ShardedTaskMarker(datastore.Entity):
             if self["is_finished"]:
                 self["time_finished"] = datetime.utcnow()
 
-        datastore.Put(self)
+        rpc.Put(self)
 
     def run_shard(
         self, original_query, shard, operation, operation_method=None, offset=0,
         entities_per_task=None, queue=_DEFAULT_QUEUE
     ):
-        """ Given a datastore.Query which does not have any high/low bounds on it, apply the bounds
+        """ Given a rpc.Query which does not have any high/low bounds on it, apply the bounds
             of the given shard (which is a pair of keys), and run either the given `operation`
             (if it's a function) or the given method of the given operation (if it's an object) on
             each entity that the query returns, starting at entity `offset`, and redeferring every
@@ -341,7 +342,7 @@ class ShardedTaskMarker(datastore.Entity):
         else:
             function = operation
 
-        marker = datastore.Get(self.key())
+        marker = rpc.Get(self.key())
         if cPickle.dumps(shard) not in marker[ShardedTaskMarker.RUNNING_KEY]:
             return
 
@@ -384,13 +385,13 @@ class ShardedTaskMarker(datastore.Entity):
         # Once we've run the operation on all the entities, mark the shard as done
         def txn():
             pickled_shard = cPickle.dumps(shard)
-            marker = datastore.Get(self.key())
+            marker = rpc.Get(self.key())
             marker.__class__ = ShardedTaskMarker
             marker[ShardedTaskMarker.RUNNING_KEY].remove(pickled_shard)
             marker[ShardedTaskMarker.FINISHED_KEY].append(pickled_shard)
             marker.put()
 
-        datastore.RunInTransaction(txn)
+        rpc.RunInTransaction(txn)
 
     def begin_processing(self, operation, operation_method, entities_per_task, queue):
         BATCH_SIZE = 3
@@ -400,7 +401,7 @@ class ShardedTaskMarker(datastore.Entity):
 
         def txn():
             try:
-                marker = datastore.Get(self.key())
+                marker = rpc.Get(self.key())
                 marker.__class__ = ShardedTaskMarker
 
                 queued_shards = marker[ShardedTaskMarker.QUEUED_KEY]
@@ -435,9 +436,9 @@ class ShardedTaskMarker(datastore.Entity):
 
         # Reload the marker (non-transactionally) and defer the shards in batches
         # transactionally. If this task fails somewhere, it will resume where it left off
-        marker = datastore.Get(self.key())
+        marker = rpc.Get(self.key())
         for i in range(0, len(marker[ShardedTaskMarker.QUEUED_KEY]), BATCH_SIZE):
-            datastore.RunInTransaction(txn)
+            rpc.RunInTransaction(txn)
 
 
 def start_mapping(
@@ -456,7 +457,7 @@ def start_mapping(
     def txn(shards):
         marker_key = ShardedTaskMarker.get_key(identifier, query._Query__namespace)
         try:
-            datastore.Get(marker_key)
+            rpc.Get(marker_key)
 
             # If the marker already exists, don't do anything - just return
             return
@@ -481,7 +482,7 @@ def start_mapping(
 
         return marker_key
 
-    return datastore.RunInTransaction(txn, shards_to_run)
+    return rpc.RunInTransaction(txn, shards_to_run)
 
 
 def mapper_exists(identifier, namespace):
@@ -489,7 +490,7 @@ def mapper_exists(identifier, namespace):
         Returns True if the mapper exists, False otherwise
     """
     try:
-        datastore.Get(ShardedTaskMarker.get_key(identifier, namespace))
+        rpc.Get(ShardedTaskMarker.get_key(identifier, namespace))
         return True
     except datastore_errors.EntityNotFoundError:
         return False
@@ -507,7 +508,7 @@ def is_mapper_running(identifier, namespace):
         Returns True if the mapper exists, but it's not finished
     """
     try:
-        marker = datastore.Get(ShardedTaskMarker.get_key(identifier, namespace))
+        marker = rpc.Get(ShardedTaskMarker.get_key(identifier, namespace))
         return not marker["is_finished"]
     except datastore_errors.EntityNotFoundError:
         return False
