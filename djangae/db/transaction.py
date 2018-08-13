@@ -2,6 +2,8 @@ import copy
 import functools
 import threading
 
+from django.db import router, connections
+from djangae.db.backends.appengine import rpc
 from google.appengine.api.datastore import (CreateTransactionOptions,
                                             IsInTransaction, _GetConnection,
                                             _PopConnection, _PushConnection)
@@ -17,10 +19,28 @@ def in_atomic_block():
     return IsInTransaction()
 
 
+def _datastore_get_handler(signal, sender, keys, **kwargs):
+    txn = current_transaction()
+    if txn:
+        txn._seen_keys.update(set(keys))
+
+
+rpc.datastore_get.connect(_datastore_get_handler, dispatch_uid='_datastore_get_handler')
+
+
 class Transaction(object):
     def __init__(self, connection):
         self._connection = connection
         self._previous_connection = None
+        self._seen_keys = set()
+
+    def enter(self):
+        self._seen_keys = set()
+        self._enter()
+
+    def exit(self):
+        self._exit()
+        self._seen_keys = set()
 
     def _enter(self):
         raise NotImplementedError()
@@ -28,8 +48,21 @@ class Transaction(object):
     def _exit(self):
         raise NotImplementedError()
 
-    def has_already_been_read(self, instance):
-        pass
+    def has_already_been_read(self, instance, connection=None):
+        if instance.pk is None:
+            return False
+
+        if not connection:
+            connection = router.db_for_read(instance.__class__, instance=instance)
+            connection = connections[connection]
+
+        key = rpc.Key.from_path(
+            instance._meta.db_table,
+            instance.pk,
+            namespace=connection.settings_dict.get('NAMESPACE', '')
+        )
+
+        return key in self._seen_keys
 
     def refresh_if_unread(self, instance):
         """
@@ -66,14 +99,10 @@ class Transaction(object):
             instance.refresh_from_db()
 
     def _commit(self):
-        context = caching.get_context()
-
         if self._connection:
             return self._connection.commit()
 
     def _rollback(self):
-        context = caching.get_context()
-
         if self._connection:
             self._connection.rollback()
 
@@ -148,10 +177,22 @@ def current_transaction():
 
     _init_storage()
 
-    try:
-        return _STORAGE.transaction_stack[-1]
-    except IndexError:
-        return None
+    active_transaction = None
+
+    # Return the last Transaction object with a connection
+    for txn in reversed(_STORAGE.transaction_stack):
+        if isinstance(txn, IndependentTransaction):
+            active_transaction = txn
+            break
+        elif isinstance(txn, NormalTransaction):
+            active_transaction = txn
+            # Keep searching... there may be an independent or further transaction
+        elif isinstance(txn, NoTransaction):
+            # Bail immediately for non_atomic blocks. There is no transaction there.
+            active_transaction = None
+            break
+
+    return active_transaction
 
 
 def _init_storage():
@@ -281,12 +322,15 @@ class AtomicDecorator(ContextDecorator):
             new_transaction = NormalTransaction(options)
 
         _STORAGE.transaction_stack.append(new_transaction)
-        _STORAGE.transaction_stack[-1]._enter()
+        _STORAGE.transaction_stack[-1].enter()
 
         if isinstance(new_transaction, (IndependentTransaction, NormalTransaction)):
             caching.get_context().stack.push()
 
-        return new_transaction
+        # We may have created a new transaction, we may not. current_transaction() returns
+        # the actual active transaction (highest NormalTransaction or lowest IndependentTransaction)
+        # or None if we're in a non_atomic, or there are no transactions
+        return current_transaction()
 
     @classmethod
     def _do_exit(cls, state, decorator_args, exception):
@@ -310,7 +354,7 @@ class AtomicDecorator(ContextDecorator):
                 else:
                     context.stack.pop(apply_staged=True, clear_staged=True)
 
-            transaction._exit()
+            transaction.exit()
             transaction._connection = None
 
 
