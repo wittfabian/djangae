@@ -248,9 +248,83 @@ The following functions are available to manage transactions:
  - `djangae.db.transaction.atomic` - Decorator and Context Manager. Starts a new transaction, accepted `xg`, `indepedendent` and `mandatory` args
  - `djangae.db.transaction.non_atomic` - Decorator and Context Manager. Breaks out of any current transactions so you can run queries outside the transaction
  - `djangae.db.transaction.in_atomic_block` - Returns True if inside a transaction, False otherwise
+ - `djangae.db.transaction.current_transaction` - Returns an object representing the currently active transaction
 
-  **Do not use `google.appengine.ext.db.run_in_transaction` and friends, it will break.**
+**Do not use `google.appengine.ext.db.run_in_transaction` and friends, it will break.**
 
+### Writing safe Transactional code
+
+Transactions on App Engine are a little strange and it's easy to get caught out by unexpected behaviour when using them. Take the following code for example:
+
+```python
+    MyModel.objects.create(pk=1, value=0)
+
+    with atomic():
+        instance = MyModel.objects.get(pk=1)
+        instance.value = 1
+        instance.save()
+
+        instance.refresh_from_db()
+        assert(instance.value == 1)
+```
+
+By default, this code would raise an AssertionError and the value of `instance.value` would be zero. This is because until the moment that the transaction commits, all datastore reads will read the value from *outside* the transaction, not the value you saved from within the atomic block.
+
+To make things behave in a more preditable way Djangae provides two features to you:
+
+ - The "Context Cache"
+ - The `Transaction` object
+
+The context cache is enabled by default, and is a thread-level in-memory cache of entities that have been saved within the transaction. When the context cache
+is enabled the above code would not raise an AssertionError. `instance.value` would equal `1`, because `refresh_from_db()` would hit the local cache and not
+actually read from the Datastore.
+
+There are times when it's necessary to read from the Datastore directly, and you can use `djangae.db.caching.disable_cache()` for that.
+
+The other feature that Djangae provides are `Transaction` objects, and in particular, `Transaction.has_already_been_read(instance)` and
+`Transaction.refresh_if_unread(instance)`:
+
+```python
+
+instance = MyModel.objects.create(pk=1, value=0)
+with atomic() as txn:
+    assert(not txn.has_already_been_read(instance))
+
+    txn.refresh_if_unread(instance)
+
+    assert(txn.has_already_been_read(instance))
+
+    instance.value = 1
+    instance.save()
+```
+
+Transactions in the Datastore generally need to be made up of a Get, and Put. If you don't do both within the atomic block, then you could overwrite
+data by accident. It's important to understand that nested transactions don't exist, if you nest `atomic()` decorators (without the `independent` flag) your inner `atomic()` call will be a no-op.
+
+And for that reason, if you blindly call refresh_from_db() from an `atomic()` function, and that function is called from another `atomic()` function then
+you can overwrite local changes:
+
+```python
+
+@atomic()
+def method1(self):
+    self.refresh_from_db()
+    self.value += 1
+    self.save()
+
+@atomic()
+def method2(self):
+    self.refresh_from_db()
+    self.value += 1
+    self.method1()
+    self.save()
+
+instance.method1()
+instance.refresh_from_db()
+instance.value -> 1  # Oops!
+```
+
+You can write safer code by using `refresh_if_unread(instance)` which will only update the instance if you haven't already done it in the current transaction.
 
 
 ## Multiple Namespaces
