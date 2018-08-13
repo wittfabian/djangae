@@ -523,6 +523,7 @@ class MemcacheCachingTests(TestCase):
 
         self.assertFalse(_remove_entities_from_memcache_by_key.called)
 
+
 class ContextCachingTests(TestCase):
     """
         We can be a bit more liberal with hitting the context cache as it's
@@ -567,7 +568,6 @@ class ContextCachingTests(TestCase):
             with sleuth.watch("djangae.db.backends.appengine.rpc.Get") as datastore_get:
                 self.assertEqual(0, datastore_get.call_count) # Should hit the cache
 
-
     @disable_cache(memcache=True, context=False)
     def test_caching_bug(self):
         entity_data = {
@@ -587,7 +587,6 @@ class ContextCachingTests(TestCase):
         self.assertItemsEqual(CachingTestModel.objects.filter(pk=instance.pk).values_list("field1"), [("Apple",)])
         # Now fetch from the cache again, checking that the previously wiped fields are still in tact
         self.assertItemsEqual(CachingTestModel.objects.filter(pk=instance.pk).values(), [expected])
-
 
     @disable_cache(memcache=True, context=False)
     def test_transactions_get_their_own_context(self):
@@ -668,7 +667,7 @@ class ContextCachingTests(TestCase):
                     inner = CachingTestModel.objects.get(pk=original.pk)
                     inner.field1 = "Banana"
                     inner.save()
-                    raise ValueError() # Will rollback the transaction
+                    raise ValueError()  # Will rollback the transaction
             except ValueError:
                 pass
 
@@ -676,7 +675,7 @@ class ContextCachingTests(TestCase):
             self.assertEqual("Apple", outer.field1)
 
         original = CachingTestModel.objects.get(pk=original.pk)
-        self.assertEqual("Apple", original.field1) # Shouldn't have changed
+        self.assertEqual("Apple", original.field1)  # Shouldn't have changed
 
     def test_save_caches(self):
         """ Test that after saving something, it exists in the context cache and therefore when we
@@ -832,3 +831,60 @@ class ContextCachingTests(TestCase):
             request_finished.send(HttpRequest(), keep_disabled_flags=True)
             CachingTestModel.objects.get(field1="test")
             self.assertEqual(query.call_count, 2)
+
+    def test_transactional_caching_behaviour(self):
+        """
+            The context cache exists so that transactional code becomes more sensible.
+
+            Look at the following code:
+
+            MyModel.objects.create(pk=1, value=0)
+
+            with atomic():
+                instance = MyModel.objects.get(pk=1)
+                instance.value = 1
+                instance.save()
+
+                instance.refresh_from_db()
+                assert(instance.value == 1)
+
+            Without the context cache, this will raise AssertionError as 'value' will be zero.
+            datastore.Get returns the state of the object at the start of the transaction.
+
+            With the context cache, this will behave as intended as refresh_from_db() will hit the
+            cache and return the thing you just saved.
+        """
+
+        instance = CachingTestModel.objects.create()
+
+        @transaction.atomic()
+        def b():
+            obj = CachingTestModel.objects.get(pk=instance.pk)
+            obj.comb1 += 1
+            obj.save()
+
+        @transaction.atomic()
+        def a():
+            obj = CachingTestModel.objects.get(pk=instance.pk)
+            obj.comb1 += 1
+            obj.save()
+            b()
+
+        # Make sure the context cache is enabled
+        with disable_cache(memcache=True, context=False):
+            a()
+
+            instance.refresh_from_db()
+            self.assertEqual(instance.comb1, 2)
+
+        instance.comb1 = 0
+        instance.save()
+
+        # Now disable all caching
+        with disable_cache(memcache=True, context=True):
+            a()
+
+            instance.refresh_from_db()
+
+            # Should be one as the call to b() would trash the value set by a()
+            self.assertEqual(instance.comb1, 1)
