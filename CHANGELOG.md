@@ -4,6 +4,9 @@
 
 - Take some steps to make the code Python 3 compatible.
 - Additional option to not start mapper pipeline; and provide outputs to finalize function.
+- `atomic()` (when used as a context manager) now returns an object representing the current transaction
+- Added `djangae.db.transaction.current_transaction()` to return the same thing from inside an `atomic()` decorator
+- Added `Transaction.has_already_been_read(instance)` and `Transaction.refresh_if_unread(instance)` which allows writing safe transactional code.
 
 ### Bug fixes:
 
@@ -18,6 +21,7 @@
 - Fixed a bug in the AsyncMultiQuery that would prevent returning all results in the case when an `OR` query was used with an offset and some entities matched more than one branch of the `OR` query.
 - Add an option to ignore pull tasks in testing
 - Fix occasions where the default value of a field would not be correctly set on save()
+- Simplified the atomic() and non_atomic() decorator/context managers to hopefully eliminate edge-case/threading bugs that have been seen.
 
 ## v0.9.11
 
