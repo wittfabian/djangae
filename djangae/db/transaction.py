@@ -2,23 +2,161 @@ import copy
 import functools
 import threading
 
-from google.appengine.api.datastore import (
-    CreateTransactionOptions,
-    _GetConnection,
-    _PushConnection,
-    _PopConnection,
-    _SetConnection,
-    IsInTransaction
-)
-from google.appengine.datastore.datastore_rpc import TransactionOptions
+from google.appengine.api.datastore import (CreateTransactionOptions,
+                                            IsInTransaction, _GetConnection,
+                                            _PopConnection, _PushConnection)
 
 from djangae.db.backends.appengine import caching
+from google.appengine.datastore.datastore_rpc import (TransactionalConnection,
+                                                      TransactionOptions)
 
 
 def in_atomic_block():
     # At the moment just a wrapper around App Engine so that
     # users don't have to use two different APIs
     return IsInTransaction()
+
+
+class Transaction(object):
+    def __init__(self, connection):
+        self._connection = connection
+        self._previous_connection = None
+
+    def _enter(self):
+        raise NotImplementedError()
+
+    def _exit(self):
+        raise NotImplementedError()
+
+    def has_already_been_read(self, instance):
+        pass
+
+    def refresh_if_unread(self, instance):
+        """
+            Calls instance.refresh_from_db() if the instance hasn't already
+            been read this transaction. This helps prevent oddities if you
+            call nested transactional functions. e.g.
+
+            @atomic()
+            def my_method(self):
+                self.refresh_from_db()   # << Refresh state from the start of the transaction
+                self.update()
+                self.save()
+
+            with atomic():
+                instance = MyModel.objects.get(pk=1)
+                instance.other_update()
+                instance.my_method()  # << Oops! Undid work!
+                instance.save()
+
+            Instead, this will fix it
+
+            def my_method(self):
+                with atomic() as txn:
+                    txn.refresh_if_unread(self)
+                    self.update()
+                    self.save()
+        """
+
+        if self.has_already_been_read(instance):
+            # If the instance has already been read this transaction,
+            # then don't refresh it again.
+            return
+        else:
+            instance.refresh_from_db()
+
+    def _commit(self):
+        context = caching.get_context()
+
+        if self._connection:
+            return self._connection.commit()
+
+    def _rollback(self):
+        context = caching.get_context()
+
+        if self._connection:
+            self._connection.rollback()
+
+
+class IndependentTransaction(Transaction):
+    def __init__(self, options):
+        self._options = options
+        super(IndependentTransaction, self).__init__(None)
+
+    def _enter(self):
+        if IsInTransaction():
+            self._previous_connection = _GetConnection()
+            assert(isinstance(self._previous_connection, TransactionalConnection))
+
+            _PopConnection()
+
+        self._connection = _GetConnection().new_transaction(self._options)
+        _PushConnection(self._connection)
+
+    def _exit(self):
+        _PopConnection()
+        if self._previous_connection:
+            _PushConnection(self._previous_connection)
+
+
+class NestedTransaction(Transaction):
+    def _enter(self):
+        pass
+
+    def _exit(self):
+        pass
+
+
+class NormalTransaction(Transaction):
+    def __init__(self, options):
+        self._options = options
+        connection = _GetConnection().new_transaction(options)
+        super(NormalTransaction, self).__init__(connection)
+
+    def _enter(self):
+        _PushConnection(self._connection)
+
+    def _exit(self):
+        _PopConnection()
+
+
+class NoTransaction(Transaction):
+    def _enter(self):
+        if IsInTransaction():
+            self._previous_connection = _GetConnection()
+            _PopConnection()
+
+    def _exit(self):
+        if self._previous_connection:
+            _PushConnection(self._previous_connection)
+
+
+_STORAGE = threading.local()
+
+
+def current_transaction():
+    """
+        Returns the current 'Transaction' object (which may be a NoTransaction). This is useful
+        when atomic() is used as a decorator rather than a context manager. e.g.
+
+        @atomic()
+        def my_function(apple):
+            apple = current_transaction().refresh_if_unread(apple)
+            apple.thing = 1
+            apple.save()
+    """
+
+    _init_storage()
+
+    try:
+        return _STORAGE.transaction_stack[-1]
+    except IndexError:
+        return None
+
+
+def _init_storage():
+    if not hasattr(_STORAGE, "transaction_stack"):
+        _STORAGE.transaction_stack = []
 
 
 # Because decorators are only instantiated once per function, we need to make sure any state
@@ -51,7 +189,7 @@ class ContextDecorator(object):
             )
 
         self.func = func
-        self.decorator_args = { x: kwargs.get(x) for x in self.__class__.VALID_ARGUMENTS }
+        self.decorator_args = {x: kwargs.get(x) for x in self.__class__.VALID_ARGUMENTS}
         # Add thread local state for variables that change per-call rather than
         # per insantiation of the decorator
         self.state = threading.local()
@@ -75,7 +213,7 @@ class ContextDecorator(object):
             self.__class__._do_enter(self._push_state(), decorator_args)
             try:
                 return self.func(*_args, **_kwargs)
-            except:
+            except Exception:
                 exception = True
                 raise
             finally:
@@ -103,7 +241,7 @@ class ContextDecorator(object):
         return self.state.stack.pop()
 
     def __enter__(self):
-        self.__class__._do_enter(self._push_state(), self.decorator_args.copy())
+        return self.__class__._do_enter(self._push_state(), self.decorator_args.copy())
 
     def __exit__(self, exc_type, exc_value, traceback):
         self.__class__._do_exit(self._pop_state(), self.decorator_args.copy(), exc_type)
@@ -118,73 +256,62 @@ class AtomicDecorator(ContextDecorator):
 
     @classmethod
     def _do_enter(cls, state, decorator_args):
+        _init_storage()
+
         mandatory = decorator_args.get("mandatory", False)
         independent = decorator_args.get("independent", False)
         xg = decorator_args.get("xg", False)
-
-        # Reset the state
-        state.conn_stack = []
-        state.transaction_started = False
-        state.original_stack = None
-
-        if independent:
-            # Unwind the connection stack and store it on the state so that
-            # we can replace it on exit
-            while in_atomic_block():
-                state.conn_stack.append(_PopConnection())
-            state.original_stack = copy.deepcopy(caching.get_context().stack)
-
-        elif in_atomic_block():
-            # App Engine doesn't support nested transactions, so if there is a nested
-            # atomic() call we just don't do anything. This is how RunInTransaction does it
-            return
-        elif mandatory:
-            raise TransactionFailedError("You've specified that an outer transaction is mandatory, but one doesn't exist")
 
         options = CreateTransactionOptions(
             xg=xg,
             propagation=TransactionOptions.INDEPENDENT if independent else None
         )
 
-        conn = _GetConnection()
-        new_conn = conn.new_transaction(options)
-        _PushConnection(new_conn)
+        new_transaction = None
 
-        assert(_GetConnection())
+        if independent:
+            new_transaction = IndependentTransaction(options)
+        elif in_atomic_block():
+            new_transaction = NestedTransaction(None)
+        elif mandatory:
+            raise TransactionFailedError(
+                "You've specified that an outer transaction is mandatory, but one doesn't exist"
+            )
+        else:
+            new_transaction = NormalTransaction(options)
 
-        # Clear the context cache at the start of a transaction
-        caching.get_context().stack.push()
-        state.transaction_started = True
+        _STORAGE.transaction_stack.append(new_transaction)
+        _STORAGE.transaction_stack[-1]._enter()
+
+        if isinstance(new_transaction, (IndependentTransaction, NormalTransaction)):
+            caching.get_context().stack.push()
+
+        return new_transaction
 
     @classmethod
     def _do_exit(cls, state, decorator_args, exception):
-        independent = decorator_args.get("independent", False)
+        _init_storage()
         context = caching.get_context()
+
+        transaction = _STORAGE.transaction_stack.pop()
+
         try:
-            if state.transaction_started:
+            if transaction._connection:
                 if exception:
-                    _GetConnection().rollback()
+                    transaction._connection.rollback()
                 else:
-                    if not _GetConnection().commit():
+                    if not transaction._connection.commit():
                         raise TransactionFailedError()
         finally:
-            if state.transaction_started:
-                _PopConnection()
-
-                 # Clear the context cache at the end of a transaction
+            if isinstance(transaction, (IndependentTransaction, NormalTransaction)):
+                # Clear the context cache at the end of a transaction
                 if exception:
                     context.stack.pop(discard=True)
                 else:
                     context.stack.pop(apply_staged=True, clear_staged=True)
 
-            # If we were in an independent transaction, put everything back
-            # the way it was!
-            if independent:
-                while state.conn_stack:
-                    _PushConnection(state.conn_stack.pop())
-
-                # Restore the in-context cache as it was
-                context.stack = state.original_stack
+            transaction._exit()
+            transaction._connection = None
 
 
 atomic = AtomicDecorator
@@ -194,20 +321,16 @@ commit_on_success = AtomicDecorator  # Alias to the old Django name for this kin
 class NonAtomicDecorator(ContextDecorator):
     @classmethod
     def _do_enter(cls, state, decorator_args):
-        state.conn_stack = []
+        _init_storage()
+
         context = caching.get_context()
 
-        # We aren't in a transaction, do nothing!
-        if not in_atomic_block():
-            return
+        new_transaction = NoTransaction(None)
+        _STORAGE.transaction_stack.append(new_transaction)
+        _STORAGE.transaction_stack[-1]._enter()
 
         # Store the current in-context stack
         state.original_stack = copy.deepcopy(context.stack)
-
-        # Similar to independent transactions, unwind the connection statck
-        # until we aren't in a transaction
-        while in_atomic_block():
-            state.conn_stack.append(_PopConnection())
 
         # Unwind the in-context stack
         while len(context.stack.stack) > 1:
@@ -215,14 +338,10 @@ class NonAtomicDecorator(ContextDecorator):
 
     @classmethod
     def _do_exit(cls, state, decorator_args, exception):
-        if not state.conn_stack:
-            return
-
-        # Restore the connection stack
-        while state.conn_stack:
-            _PushConnection(state.conn_stack.pop())
-
-        caching.get_context().stack = state.original_stack
+        context = caching.get_context()
+        transaction = _STORAGE.transaction_stack.pop()
+        transaction._exit()
+        context.stack = state.original_stack
 
 
 non_atomic = NonAtomicDecorator

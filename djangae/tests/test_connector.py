@@ -879,7 +879,7 @@ class ConstraintTests(TestCase):
             return False
 
         initial_constraints = list(UniqueMarker.all())
-        with sleuth.switch('google.appengine.api.datastore_rpc.TransactionalConnection.commit', fake_commit) as commit:
+        with sleuth.switch('google.appengine.datastore.datastore_rpc.TransactionalConnection.commit', fake_commit) as commit:
             self.assertRaises(TransactionFailedError, ModelWithUniques.objects.create, name="One")
             self.assertTrue(commit.called)
 
@@ -889,7 +889,7 @@ class ConstraintTests(TestCase):
         instance = ModelWithUniques.objects.create(name="One")
         initial_constraints = list(UniqueMarker.all())
 
-        with sleuth.switch('google.appengine.api.datastore_rpc.TransactionalConnection.commit', fake_commit) as commit:
+        with sleuth.switch('google.appengine.datastore.datastore_rpc.TransactionalConnection.commit', fake_commit) as commit:
             instance.name = "Two"
             self.assertRaises(TransactionFailedError, instance.save)
             self.assertTrue(commit.called)
@@ -916,7 +916,7 @@ class ConstraintTests(TestCase):
             return False
 
         initial_constraints = list(UniqueMarker.all())
-        with sleuth.switch('google.appengine.rpc.datastore_rpc.TransactionalConnection.commit', fake_commit) as commit:
+        with sleuth.switch('google.appengine.datastore.datastore_rpc.TransactionalConnection.commit', fake_commit) as commit:
             self.assertRaises(TransactionFailedError, ModelWithUniques.objects.create, name="One")
             self.assertTrue(commit.called)
 
@@ -927,7 +927,7 @@ class ConstraintTests(TestCase):
         instance = ModelWithUniques.objects.create(name="One")
         initial_constraints = list(UniqueMarker.all())
 
-        with sleuth.switch('google.appengine.rpc.datastore_rpc.TransactionalConnection.commit', fake_commit) as commit:
+        with sleuth.switch('google.appengine.datastore.datastore_rpc.TransactionalConnection.commit', fake_commit) as commit:
             instance.name = "Two"
             self.assertRaises(TransactionFailedError, instance.save)
             self.assertTrue(commit.called)
@@ -937,12 +937,10 @@ class ConstraintTests(TestCase):
         self.assertRaises(ModelWithUniques.DoesNotExist, ModelWithUniques.objects.get, name="Two")
         self.assertEqual(instance, ModelWithUniques.objects.get(name="One"))
 
-
     def test_update_updates_markers(self):
         initial_count = rpc.Query(UniqueMarker.kind(), namespace=DEFAULT_NAMESPACE).Count()
 
         instance = ModelWithUniques.objects.create(name="One")
-
 
         self.assertEqual(
             1,
@@ -1058,7 +1056,7 @@ class ConstraintTests(TestCase):
             instance.delete()
             self.assertEqual(0, ModelWithUniques.objects.filter(name="One").count())
             self.assertFalse(ModelWithUniques.objects.filter(name="One").exists())
-            self.assertFalse(list(ModelWithUniques.objects.all())) # Triple-check
+            self.assertFalse(list(ModelWithUniques.objects.all()))  # Triple-check
 
     def test_conflicting_update_throws_integrity_error(self):
         ModelWithUniques.objects.create(name="One")
