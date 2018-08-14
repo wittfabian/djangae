@@ -41,8 +41,8 @@ class ContainsIndexerTests(TestCase):
             not when the queryset is created.
         """
         ContainsModel.objects.create(field1="Adam")
-        with sleuth.watch("google.appengine.api.datastore.Query.Run") as datastore_query:
-            with sleuth.watch("google.appengine.api.datastore.Get") as datastore_get:
+        with sleuth.watch("djangae.db.backends.appengine.rpc.Query.Run") as datastore_query:
+            with sleuth.watch("djangae.db.backends.appengine.rpc.Get") as datastore_get:
                 queryset = ContainsModel.objects.filter(field1__contains="Ad")
                 self.assertFalse(datastore_query.called)
                 self.assertFalse(datastore_get.called)

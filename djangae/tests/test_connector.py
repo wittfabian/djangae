@@ -27,7 +27,6 @@ from django.utils import six
 from django.utils.six.moves import range
 from google.appengine.api.datastore_errors import EntityNotFoundError, TransactionFailedError
 from google.appengine.datastore import datastore_rpc
-from google.appengine.api import datastore
 from google.appengine.ext import deferred
 from google.appengine.api import taskqueue
 from django.test.utils import override_settings
@@ -45,12 +44,12 @@ from djangae.db.constraints import UniqueMarker, UniquenessMixin
 from djangae.db.unique_utils import _unique_combinations, unique_identifiers_from_entity
 from djangae.db.backends.appengine.indexing import add_special_index, IExactIndexer, get_indexer
 from djangae.db.backends.appengine import indexing
+from djangae.db.backends.appengine import rpc
 from djangae.db.utils import entity_matches_query, decimal_to_string, normalise_field_value
 from djangae.db.caching import disable_cache
 from djangae.fields import SetField, ListField, RelatedSetField
 from djangae.storage import BlobstoreFileUploadHandler
 from djangae.core import paginator
-
 
 DEFAULT_NAMESPACE = default_connection.ops.connection.settings_dict.get("NAMESPACE")
 
@@ -297,11 +296,11 @@ class BackendTests(TestCase):
         self.assertEqual(0, len(results))
 
     def test_entity_matches_query(self):
-        entity = datastore.Entity("test_model")
+        entity = rpc.Entity("test_model")
         entity["name"] = "Charlie"
         entity["age"] = 22
 
-        query = datastore.Query("test_model")
+        query = rpc.Query("test_model")
         query["name ="] = "Charlie"
         self.assertTrue(entity_matches_query(entity, query))
 
@@ -350,9 +349,9 @@ class BackendTests(TestCase):
         fruit = TestFruit.objects.create(name="Apple", color="Red")
         self.assertEqual("Unknown", fruit.origin)
 
-        instance = datastore.Get(datastore.Key.from_path(TestFruit._meta.db_table, fruit.pk, namespace=DEFAULT_NAMESPACE))
+        instance = rpc.Get(rpc.Key.from_path(TestFruit._meta.db_table, fruit.pk, namespace=DEFAULT_NAMESPACE))
         del instance["origin"]
-        datastore.Put(instance)
+        rpc.Put(instance)
 
         fruit = TestFruit.objects.get()
         self.assertIsNone(fruit.origin)
@@ -367,17 +366,17 @@ class BackendTests(TestCase):
         fruits = [ TestFruit.objects.create(name=str(x), color=random.choice(colors)) for x in range(32) ]
 
         # Check that projections work with key lookups
-        with sleuth.watch('google.appengine.api.datastore.Query.__init__') as query_init:
-            with sleuth.watch('google.appengine.api.datastore.Query.Ancestor') as query_anc:
+        with sleuth.watch('djangae.db.backends.appengine.rpc.Query.__init__') as query_init:
+            with sleuth.watch('djangae.db.backends.appengine.rpc.Query.Ancestor') as query_anc:
                 TestFruit.objects.only("color").get(pk="0").color
                 self.assertEqual(query_init.calls[0].kwargs["projection"], ["color"])
 
                 # Make sure the query is an ancestor of the key
-                self.assertEqual(query_anc.calls[0].args[1], datastore.Key.from_path(TestFruit._meta.db_table, "0", namespace=DEFAULT_NAMESPACE))
+                self.assertEqual(query_anc.calls[0].args[1], rpc.Key.from_path(TestFruit._meta.db_table, "0", namespace=DEFAULT_NAMESPACE))
 
         # Now check projections work with fewer than 100 things
         with sleuth.watch('djangae.db.backends.appengine.meta_queries.AsyncMultiQuery.__init__') as query_init:
-            with sleuth.watch('google.appengine.api.datastore.Query.Ancestor') as query_anc:
+            with sleuth.watch('djangae.db.backends.appengine.rpc.Query.Ancestor') as query_anc:
                 keys = [str(x) for x in range(32)]
                 results = list(TestFruit.objects.only("color").filter(pk__in=keys).order_by("name"))
 
@@ -465,11 +464,11 @@ class BackendTests(TestCase):
     def test_gae_conversion(self):
         # A PK IN query should result in a single get by key
 
-        with sleuth.switch("djangae.db.backends.appengine.commands.datastore.Get", lambda *args, **kwargs: []) as get_mock:
+        with sleuth.switch("djangae.db.backends.appengine.commands.rpc.Get", lambda *args, **kwargs: []) as get_mock:
             list(TestUser.objects.filter(pk__in=[1, 2, 3]))  # Force the query to run
             self.assertEqual(1, get_mock.call_count)
 
-        with sleuth.switch("djangae.db.backends.appengine.commands.datastore.Query.Run", lambda *args, **kwargs: []) as query_mock:
+        with sleuth.switch("djangae.db.backends.appengine.commands.rpc.Query.Run", lambda *args, **kwargs: []) as query_mock:
             list(TestUser.objects.filter(username="test"))
             self.assertEqual(1, query_mock.call_count)
 
@@ -477,7 +476,7 @@ class BackendTests(TestCase):
             list(TestUser.objects.filter(username__in=["test", "cheese"]))
             self.assertEqual(1, query_mock.call_count)
 
-        with sleuth.switch("djangae.db.backends.appengine.commands.datastore.Get", lambda *args, **kwargs: []) as get_mock:
+        with sleuth.switch("djangae.db.backends.appengine.commands.rpc.Get", lambda *args, **kwargs: []) as get_mock:
             list(TestUser.objects.filter(pk=1))
             self.assertEqual(1, get_mock.call_count)
 
@@ -485,7 +484,7 @@ class BackendTests(TestCase):
             list(TestUser.objects.exclude(username__startswith="test"))
             self.assertEqual(1, query_mock.call_count)
 
-        with sleuth.switch("djangae.db.backends.appengine.commands.datastore.Get", lambda *args, **kwargs: []) as get_mock:
+        with sleuth.switch("djangae.db.backends.appengine.commands.rpc.Get", lambda *args, **kwargs: []) as get_mock:
             list(TestUser.objects.filter(pk__in=[1, 2, 3, 4, 5, 6, 7, 8]).
                 filter(username__in=["test", "test2", "test3"]).filter(email__in=["test@example.com", "test2@example.com"]))
 
@@ -673,14 +672,14 @@ class BackendTests(TestCase):
         # Color fields is missing (not even None)
         # we need more than 1 so we explore all sorting branches
         values = {'name': 'c'}
-        entity = datastore.Entity(TestFruit._meta.db_table, namespace=DEFAULT_NAMESPACE, **values)
+        entity = rpc.Entity(TestFruit._meta.db_table, namespace=DEFAULT_NAMESPACE, **values)
         entity.update(values)
-        datastore.Put(entity)
+        rpc.Put(entity)
 
         values = {'name': 'd'}
-        entity = datastore.Entity(TestFruit._meta.db_table, namespace=DEFAULT_NAMESPACE, **values)
+        entity = rpc.Entity(TestFruit._meta.db_table, namespace=DEFAULT_NAMESPACE, **values)
         entity.update(values)
-        datastore.Put(entity)
+        rpc.Put(entity)
 
         # Ok, we can get all 4 instances
         self.assertEqual(TestFruit.objects.count(), 4)
@@ -756,8 +755,8 @@ class BackendTests(TestCase):
         self.assertEqual(durations_as_3.duration_field, td3)
         self.assertEqual(durations_as_3.duration_field_nullable, td3)
         # And just for good measure, check the raw value in the datastore
-        key = datastore.Key.from_path(DurationModel._meta.db_table, durations_as_3.pk, namespace=DEFAULT_NAMESPACE)
-        entity = datastore.Get(key)
+        key = rpc.Key.from_path(DurationModel._meta.db_table, durations_as_3.pk, namespace=DEFAULT_NAMESPACE)
+        entity = rpc.Get(key)
         self.assertTrue(isinstance(entity['duration_field'], (int, long)))
 
     def test_datetime_and_time_fields_precision_for_projection_queries(self):
@@ -781,22 +780,22 @@ class BackendTests(TestCase):
         self.assertEqual(t1, TestUser.objects.filter(condition).first())
 
     def test_only_defer_does_project(self):
-        with sleuth.watch("google.appengine.api.datastore.Query.__init__") as watcher:
+        with sleuth.watch("djangae.db.backends.appengine.rpc.Query.__init__") as watcher:
             list(TestUser.objects.only("pk").all())
             self.assertTrue(watcher.calls[0].kwargs["keys_only"])
             self.assertFalse(watcher.calls[0].kwargs["projection"])
 
-        with sleuth.watch("google.appengine.api.datastore.Query.__init__") as watcher:
+        with sleuth.watch("djangae.db.backends.appengine.rpc.Query.__init__") as watcher:
             list(TestUser.objects.values("pk"))
             self.assertTrue(watcher.calls[0].kwargs["keys_only"])
             self.assertFalse(watcher.calls[0].kwargs["projection"])
 
-        with sleuth.watch("google.appengine.api.datastore.Query.__init__") as watcher:
+        with sleuth.watch("djangae.db.backends.appengine.rpc.Query.__init__") as watcher:
             list(TestUser.objects.only("username").all())
             self.assertFalse(watcher.calls[0].kwargs["keys_only"])
             self.assertItemsEqual(watcher.calls[0].kwargs["projection"], ["username"])
 
-        with sleuth.watch("google.appengine.api.datastore.Query.__init__") as watcher:
+        with sleuth.watch("djangae.db.backends.appengine.rpc.Query.__init__") as watcher:
             list(TestUser.objects.defer("username").all())
             self.assertFalse(watcher.calls[0].kwargs["keys_only"])
             self.assertTrue(watcher.calls[0].kwargs["projection"])
@@ -938,26 +937,24 @@ class ConstraintTests(TestCase):
         self.assertRaises(ModelWithUniques.DoesNotExist, ModelWithUniques.objects.get, name="Two")
         self.assertEqual(instance, ModelWithUniques.objects.get(name="One"))
 
-
     def test_update_updates_markers(self):
-        initial_count = datastore.Query(UniqueMarker.kind(), namespace=DEFAULT_NAMESPACE).Count()
+        initial_count = rpc.Query(UniqueMarker.kind(), namespace=DEFAULT_NAMESPACE).Count()
 
         instance = ModelWithUniques.objects.create(name="One")
 
-
         self.assertEqual(
             1,
-            datastore.Query(UniqueMarker.kind(), namespace=DEFAULT_NAMESPACE).Count() - initial_count
+            rpc.Query(UniqueMarker.kind(), namespace=DEFAULT_NAMESPACE).Count() - initial_count
         )
 
-        qry = datastore.Query(UniqueMarker.kind(), namespace=DEFAULT_NAMESPACE)
-        qry.Order(("created", datastore.Query.DESCENDING))
+        qry = rpc.Query(UniqueMarker.kind(), namespace=DEFAULT_NAMESPACE)
+        qry.Order(("created", rpc.Query.DESCENDING))
 
         marker = [x for x in qry.Run()][0]
         # Make sure we assigned the instance
         self.assertEqual(
             marker["instance"],
-            datastore.Key.from_path(instance._meta.db_table, instance.pk, namespace=DEFAULT_NAMESPACE)
+            rpc.Key.from_path(instance._meta.db_table, instance.pk, namespace=DEFAULT_NAMESPACE)
         )
 
         expected_marker = "{}|name:{}".format(ModelWithUniques._meta.db_table, md5("One").hexdigest())
@@ -968,13 +965,13 @@ class ConstraintTests(TestCase):
 
         self.assertEqual(
             1,
-            datastore.Query(UniqueMarker.kind(), namespace=DEFAULT_NAMESPACE).Count() - initial_count
+            rpc.Query(UniqueMarker.kind(), namespace=DEFAULT_NAMESPACE).Count() - initial_count
         )
         marker = [x for x in qry.Run()][0]
         # Make sure we assigned the instance
         self.assertEqual(
             marker["instance"],
-            datastore.Key.from_path(instance._meta.db_table, instance.pk, namespace=DEFAULT_NAMESPACE)
+            rpc.Key.from_path(instance._meta.db_table, instance.pk, namespace=DEFAULT_NAMESPACE)
         )
 
         expected_marker = "{}|name:{}".format(ModelWithUniques._meta.db_table, md5("Two").hexdigest())
@@ -1059,7 +1056,7 @@ class ConstraintTests(TestCase):
             instance.delete()
             self.assertEqual(0, ModelWithUniques.objects.filter(name="One").count())
             self.assertFalse(ModelWithUniques.objects.filter(name="One").exists())
-            self.assertFalse(list(ModelWithUniques.objects.all())) # Triple-check
+            self.assertFalse(list(ModelWithUniques.objects.all()))  # Triple-check
 
     def test_conflicting_update_throws_integrity_error(self):
         ModelWithUniques.objects.create(name="One")
@@ -1073,8 +1070,8 @@ class ConstraintTests(TestCase):
         stale_instance = ModelWithUniques.objects.create(name="One")
 
         # Delete the entity without updating the markers
-        key = datastore.Key.from_path(ModelWithUniques._meta.db_table, stale_instance.pk, namespace=DEFAULT_NAMESPACE)
-        datastore.Delete(key)
+        key = rpc.Key.from_path(ModelWithUniques._meta.db_table, stale_instance.pk, namespace=DEFAULT_NAMESPACE)
+        rpc.Delete(key)
 
         ModelWithUniques.objects.create(name="One") # Should be fine
         with self.assertRaises(IntegrityError):
@@ -1089,7 +1086,7 @@ class ConstraintTests(TestCase):
 
         class Entity(dict):
             def __init__(self, model, id):
-                self._key = datastore.Key.from_path(model, id, namespace=DEFAULT_NAMESPACE)
+                self._key = rpc.Key.from_path(model, id, namespace=DEFAULT_NAMESPACE)
 
             def key(self):
                 return self._key
@@ -1108,24 +1105,24 @@ class ConstraintTests(TestCase):
         ], ids_one)
 
     def test_error_on_update_doesnt_change_markers(self):
-        initial_count = datastore.Query(UniqueMarker.kind(), namespace=DEFAULT_NAMESPACE).Count()
+        initial_count = rpc.Query(UniqueMarker.kind(), namespace=DEFAULT_NAMESPACE).Count()
 
         instance = ModelWithUniques.objects.create(name="One")
 
         self.assertEqual(
             1,
-            datastore.Query(UniqueMarker.kind(), namespace=DEFAULT_NAMESPACE).Count() - initial_count
+            rpc.Query(UniqueMarker.kind(), namespace=DEFAULT_NAMESPACE).Count() - initial_count
         )
 
-        qry = datastore.Query(UniqueMarker.kind(), namespace=DEFAULT_NAMESPACE)
-        qry.Order(("created", datastore.Query.DESCENDING))
+        qry = rpc.Query(UniqueMarker.kind(), namespace=DEFAULT_NAMESPACE)
+        qry.Order(("created", rpc.Query.DESCENDING))
 
         marker = [x for x in qry.Run()][0]
 
         # Make sure we assigned the instance
         self.assertEqual(
             marker["instance"],
-            datastore.Key.from_path(instance._meta.db_table, instance.pk, namespace=DEFAULT_NAMESPACE)
+            rpc.Key.from_path(instance._meta.db_table, instance.pk, namespace=DEFAULT_NAMESPACE)
         )
 
         expected_marker = "{}|name:{}".format(ModelWithUniques._meta.db_table, md5("One").hexdigest())
@@ -1137,67 +1134,67 @@ class ConstraintTests(TestCase):
             kind = args[0][0].kind() if isinstance(args[0], list) else args[0].kind()
             if kind != UniqueMarker.kind():
                 raise AssertionError()
-            return datastore.Put(*args, **kwargs)
+            return rpc.Put(*args, **kwargs)
 
-        with sleuth.switch("djangae.db.backends.appengine.commands.datastore.Put", wrapped_put):
+        with sleuth.switch("djangae.db.backends.appengine.commands.rpc.Put", wrapped_put):
             with self.assertRaises(Exception):
                 instance.save()
 
         self.assertEqual(
             1,
-            datastore.Query(UniqueMarker.kind(), namespace=DEFAULT_NAMESPACE).Count() - initial_count
+            rpc.Query(UniqueMarker.kind(), namespace=DEFAULT_NAMESPACE).Count() - initial_count
         )
         marker = [x for x in qry.Run()][0]
         # Make sure we assigned the instance
         self.assertEqual(
             marker["instance"],
-            datastore.Key.from_path(instance._meta.db_table, instance.pk, namespace=DEFAULT_NAMESPACE)
+            rpc.Key.from_path(instance._meta.db_table, instance.pk, namespace=DEFAULT_NAMESPACE)
         )
 
         expected_marker = "{}|name:{}".format(ModelWithUniques._meta.db_table, md5("One").hexdigest())
         self.assertEqual(expected_marker, marker.key().id_or_name())
 
     def test_error_on_insert_doesnt_create_markers(self):
-        initial_count = datastore.Query(UniqueMarker.kind(), namespace=DEFAULT_NAMESPACE).Count()
+        initial_count = rpc.Query(UniqueMarker.kind(), namespace=DEFAULT_NAMESPACE).Count()
 
         def wrapped_put(*args, **kwargs):
             kind = args[0][0].kind() if isinstance(args[0], list) else args[0].kind()
             if kind != UniqueMarker.kind():
                 raise AssertionError()
-            return datastore.Put(*args, **kwargs)
+            return rpc.Put(*args, **kwargs)
 
-        with sleuth.switch("djangae.db.backends.appengine.commands.datastore.Put", wrapped_put):
+        with sleuth.switch("djangae.db.backends.appengine.commands.rpc.Put", wrapped_put):
             with self.assertRaises(Exception):
                 ModelWithUniques.objects.create(name="One")
 
         self.assertEqual(
             0,
-            datastore.Query(UniqueMarker.kind(), namespace=DEFAULT_NAMESPACE).Count() - initial_count
+            rpc.Query(UniqueMarker.kind(), namespace=DEFAULT_NAMESPACE).Count() - initial_count
         )
 
     def test_delete_clears_markers(self):
-        initial_count = datastore.Query(UniqueMarker.kind(), namespace=DEFAULT_NAMESPACE).Count()
+        initial_count = rpc.Query(UniqueMarker.kind(), namespace=DEFAULT_NAMESPACE).Count()
 
         instance = ModelWithUniques.objects.create(name="One")
         self.assertEqual(
             1,
-            datastore.Query(UniqueMarker.kind(), namespace=DEFAULT_NAMESPACE).Count() - initial_count
+            rpc.Query(UniqueMarker.kind(), namespace=DEFAULT_NAMESPACE).Count() - initial_count
         )
         instance.delete()
         self.assertEqual(
             0,
-            datastore.Query(UniqueMarker.kind(), namespace=DEFAULT_NAMESPACE).Count() - initial_count
+            rpc.Query(UniqueMarker.kind(), namespace=DEFAULT_NAMESPACE).Count() - initial_count
         )
 
     @override_settings(DJANGAE_DISABLE_CONSTRAINT_CHECKS=True)
     def test_constraints_disabled_doesnt_create_or_check_markers(self):
-        initial_count = datastore.Query(UniqueMarker.kind(), namespace=DEFAULT_NAMESPACE).Count()
+        initial_count = rpc.Query(UniqueMarker.kind(), namespace=DEFAULT_NAMESPACE).Count()
 
         instance1 = ModelWithUniques.objects.create(name="One")
 
         self.assertEqual(
             initial_count,
-            datastore.Query(UniqueMarker.kind(), namespace=DEFAULT_NAMESPACE).Count()
+            rpc.Query(UniqueMarker.kind(), namespace=DEFAULT_NAMESPACE).Count()
         )
 
         instance2 = ModelWithUniques.objects.create(name="One")
@@ -1208,12 +1205,12 @@ class ConstraintTests(TestCase):
     @override_settings(DJANGAE_DISABLE_CONSTRAINT_CHECKS=True)
     def test_constraints_can_be_enabled_per_model(self):
 
-        initial_count = datastore.Query(UniqueMarker.kind(), namespace=DEFAULT_NAMESPACE).Count()
+        initial_count = rpc.Query(UniqueMarker.kind(), namespace=DEFAULT_NAMESPACE).Count()
         ModelWithUniquesAndOverride.objects.create(name="One")
 
         self.assertEqual(
             1,
-            datastore.Query(UniqueMarker.kind(), namespace=DEFAULT_NAMESPACE).Count() - initial_count
+            rpc.Query(UniqueMarker.kind(), namespace=DEFAULT_NAMESPACE).Count() - initial_count
         )
 
     def test_list_field_unique_constaints(self):
@@ -2080,7 +2077,7 @@ class SlicingTests(TestCase):
         for i in range(15):
             SliceModel.objects.create(field1=str(i))
 
-        with sleuth.watch('google.appengine.api.datastore.Query.Run') as Run:
+        with sleuth.watch('djangae.db.backends.appengine.rpc.Query.Run') as Run:
             qs = SliceModel.objects.order_by("field1")[:5]
 
             self.assertEqual(5, len(list(qs)))
@@ -2129,8 +2126,8 @@ class NamespaceTests(TestCase):
         """
 
         TestFruit.objects.using("nonamespace").create(name="Apple", color="Red")
-        key = datastore.Key.from_path(TestFruit._meta.db_table, "Apple")
-        self.assertTrue(datastore.Get([key])[0])
+        key = rpc.Key.from_path(TestFruit._meta.db_table, "Apple")
+        self.assertTrue(rpc.Get([key])[0])
 
     @skipIf("nonamespace" not in settings.DATABASES, "This test is designed for the Djangae testapp settings")
     def test_move_objects_between_namespaces(self):

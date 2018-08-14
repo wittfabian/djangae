@@ -2,10 +2,11 @@ import itertools
 import logging
 import threading
 
-from google.appengine.api import datastore, memcache
+from google.appengine.api import memcache
 from google.appengine.api.memcache import Client
 
 from djangae.db import utils
+from djangae.db.backends.appengine import rpc
 from djangae.db.backends.appengine.context import (ContextCache,
                                                    key_or_entity_compare)
 from djangae.db.unique_utils import (_format_value_for_identifier,
@@ -179,7 +180,7 @@ def _get_cache_key_and_model_from_datastore_key(key):
 
 def _remove_entities_from_memcache_by_key(keys, namespace):
     """
-        Given an iterable of datastore.Key objects, remove the corresponding entities from memcache.
+        Given an iterable of rpc.Key objects, remove the corresponding entities from memcache.
         Note, if the key of the entity got evicted from the cache, it's possible that stale cache
         entries would be left behind. Remember if you need pure atomicity then use disable_cache() or a
         transaction.
@@ -227,10 +228,10 @@ def add_entities_to_cache(model, entities, situation, namespace, skip_memcache=F
     # Don't cache on Get if we are inside a transaction, even in the context
     # This is because transactions don't see the current state of the datastore
     # We can still cache in the context on Put() but not in memcache
-    if situation == CachingSituation.DATASTORE_GET and datastore.IsInTransaction():
+    if situation == CachingSituation.DATASTORE_GET and rpc.IsInTransaction():
         return
 
-    if situation in (CachingSituation.DATASTORE_PUT, CachingSituation.DATASTORE_GET_PUT) and datastore.IsInTransaction():
+    if situation in (CachingSituation.DATASTORE_PUT, CachingSituation.DATASTORE_GET_PUT) and rpc.IsInTransaction():
         # We have to wipe the entity from memcache
         _remove_entities_from_memcache_by_key([entity.key() for entity in entities if entity.key()], namespace)
 
@@ -245,7 +246,7 @@ def add_entities_to_cache(model, entities, situation, namespace, skip_memcache=F
     # the exception is GET_PUT - which we do in our own transaction so we have to ignore that!
     if (
         (
-            not datastore.IsInTransaction()
+            not rpc.IsInTransaction()
             and situation in (CachingSituation.DATASTORE_GET, CachingSituation.DATASTORE_PUT)
         )
         or situation == CachingSituation.DATASTORE_GET_PUT
@@ -263,7 +264,7 @@ def add_entities_to_cache(model, entities, situation, namespace, skip_memcache=F
 
 def remove_entities_from_cache_by_key(keys, namespace, memcache_only=False):
     """
-        Given an iterable of datastore.Keys objects, remove the corresponding entities from caches,
+        Given an iterable of rpc.Keys objects, remove the corresponding entities from caches,
         both context and memcache, or just memcache if specified.
     """
     if not CACHE_ENABLED:
@@ -282,7 +283,7 @@ def remove_entities_from_cache_by_key(keys, namespace, memcache_only=False):
 
 def get_from_cache_by_key(key):
     """
-        Given a datastore.Key (which should already have the namespace applied to it), return an
+        Given a rpc.Key (which should already have the namespace applied to it), return an
         entity from the context cache, falling back to memcache when possible.
     """
     if not CACHE_ENABLED:
@@ -294,7 +295,7 @@ def get_from_cache_by_key(key):
     if context.context_enabled:
         # It's safe to hit the context cache, because a new one was pushed on the stack at the start of the transaction
         ret = context.stack.top.get_entity_by_key(key)
-        if ret is None and not datastore.IsInTransaction():
+        if ret is None and not rpc.IsInTransaction():
             if context.memcache_enabled:
                 ret = _get_entity_from_memcache_by_key(key)
                 if ret:
@@ -306,7 +307,7 @@ def get_from_cache_by_key(key):
                         namespace,
                         skip_memcache=True # Don't put in memcache, we just got it from there!
                     )
-    elif context.memcache_enabled and not datastore.IsInTransaction():
+    elif context.memcache_enabled and not rpc.IsInTransaction():
         ret = _get_entity_from_memcache_by_key(key)
 
     return ret
@@ -326,7 +327,7 @@ def get_from_cache(unique_identifier, namespace):
     if context.context_enabled:
         # It's safe to hit the context cache, because a new one was pushed on the stack at the start of the transaction
         ret = context.stack.top.get_entity(cache_key)
-        if ret is None and not datastore.IsInTransaction():
+        if ret is None and not rpc.IsInTransaction():
             if context.memcache_enabled:
                 ret = _get_entity_from_memcache(cache_key)
                 if ret:
@@ -339,7 +340,7 @@ def get_from_cache(unique_identifier, namespace):
                         skip_memcache=True # Don't put in memcache, we just got it from there!
                     )
 
-    elif context.memcache_enabled and not datastore.IsInTransaction():
+    elif context.memcache_enabled and not rpc.IsInTransaction():
         ret = _get_entity_from_memcache(cache_key)
 
     return ret

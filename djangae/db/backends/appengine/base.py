@@ -1,47 +1,34 @@
 #STANDARD LIB
 import datetime
 import decimal
-import warnings
 import logging
+import warnings
 
-#LIBRARIES
-from django.conf import settings
-from django.utils import six
-from django.utils import timezone
-
-from django.db.backends.base.operations import BaseDatabaseOperations
-from django.db.backends.base.client import BaseDatabaseClient
-from django.db.backends.base.introspection import BaseDatabaseIntrospection
-from django.db.backends.base.introspection import TableInfo
-from django.db.backends.base.base import BaseDatabaseWrapper
-from django.db.backends.base.features import BaseDatabaseFeatures
-from django.db.backends.base.validation import BaseDatabaseValidation
-from django.db.backends.base.creation import BaseDatabaseCreation
-from django.db.backends.base.schema import BaseDatabaseSchemaEditor
-from django.utils.encoding import smart_text
-
+from google.appengine.api import datastore_errors
 from google.appengine.api.datastore_types import Blob, Text
-from google.appengine.api import datastore, datastore_errors
-
-#DJANGAE
-from djangae.db.utils import (
-    decimal_to_string,
-    make_timezone_naive,
-    get_datastore_key,
-)
-
-from djangae.db.backends.appengine.indexing import load_special_indexes
-from .commands import (
-    SelectCommand,
-    InsertCommand,
-    FlushCommand,
-    UpdateCommand,
-    DeleteCommand,
-    coerce_unicode
-)
 
 from djangae.db.backends.appengine import dbapi as Database
+from djangae.db.backends.appengine import rpc
+from djangae.db.backends.appengine.indexing import load_special_indexes
+#DJANGAE
+from djangae.db.utils import (decimal_to_string, get_datastore_key,
+                              make_timezone_naive)
+#LIBRARIES
+from django.conf import settings
+from django.db.backends.base.base import BaseDatabaseWrapper
+from django.db.backends.base.client import BaseDatabaseClient
+from django.db.backends.base.creation import BaseDatabaseCreation
+from django.db.backends.base.features import BaseDatabaseFeatures
+from django.db.backends.base.introspection import (BaseDatabaseIntrospection,
+                                                   TableInfo)
+from django.db.backends.base.operations import BaseDatabaseOperations
+from django.db.backends.base.schema import BaseDatabaseSchemaEditor
+from django.db.backends.base.validation import BaseDatabaseValidation
+from django.utils import six, timezone
+from django.utils.encoding import smart_text
 
+from .commands import (DeleteCommand, FlushCommand, InsertCommand,
+                       SelectCommand, UpdateCommand, coerce_unicode)
 
 logger = logging.getLogger(__name__)
 
@@ -144,6 +131,7 @@ class Cursor(object):
     def close(self):
         pass
 
+
 MAXINT = 9223372036854775808
 
 
@@ -164,7 +152,7 @@ class DatabaseOperations(BaseDatabaseOperations):
         # Bulk insertions really need to be limited to 25 elsewhere (so that they can be done)
         # transactionally, so setting to 30 doesn't matter but for cascade deletions
         # (which explode to thing_id__in=[]) we need to limit to MAX_ALLOWABLE_QUERIES
-        return datastore.MAX_ALLOWABLE_QUERIES
+        return rpc.MAX_ALLOWABLE_QUERIES
 
     def quote_name(self, name):
         return name
@@ -485,10 +473,10 @@ class DatabaseCreation(BaseDatabaseCreation):
 
 
 class DatabaseIntrospection(BaseDatabaseIntrospection):
-    @datastore.NonTransactional
+    @rpc.NonTransactional
     def get_table_list(self, cursor):
         namespace = self.connection.settings_dict.get("NAMESPACE")
-        kinds = [kind.key().id_or_name() for kind in datastore.Query('__kind__', namespace=namespace).Run()]
+        kinds = [kind.key().id_or_name() for kind in rpc.Query('__kind__', namespace=namespace).Run()]
         return [TableInfo(x, "t") for x in kinds]
 
 

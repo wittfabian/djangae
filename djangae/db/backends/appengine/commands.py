@@ -10,7 +10,11 @@ from google.appengine.api.datastore import Entity, Query
 # LIBRARIES
 import django
 from djangae.db import constraints, utils
-from djangae.db.backends.appengine import POLYMODEL_CLASS_ATTRIBUTE, caching
+from djangae.db.backends.appengine import (
+    POLYMODEL_CLASS_ATTRIBUTE,
+    caching,
+    rpc
+)
 # DJANGAE
 from djangae.db.backends.appengine.dbapi import NotSupportedError
 from djangae.db.backends.appengine.dnf import normalize_query
@@ -23,9 +27,7 @@ from djangae.db.utils import (MockInstance, django_instance_to_entities,
                               get_field_from_column, has_concrete_parents)
 from django.db import DatabaseError, IntegrityError
 from django.utils import six
-from django.utils.encoding import python_2_unicode_compatible, force_str
-
-from google.appengine.api import datastore, datastore_errors, memcache
+from django.utils.encoding import force_str, python_2_unicode_compatible
 from google.appengine.datastore import datastore_stub_util
 from google.appengine.ext import db
 
@@ -129,9 +131,9 @@ def convert_django_ordering_to_gae(ordering):
 
     for column in ordering:
         if column.startswith("-"):
-            result.append((column.lstrip("-"), datastore.Query.DESCENDING))
+            result.append((column.lstrip("-"), rpc.Query.DESCENDING))
         else:
-            result.append((column, datastore.Query.ASCENDING))
+            result.append((column, rpc.Query.ASCENDING))
     return result
 
 
@@ -410,12 +412,12 @@ class SelectCommand(object):
                     )
                 elif isinstance(value, six.string_types):
                     value = coerce_unicode(value)
-                elif isinstance(value, datastore.Key):
+                elif isinstance(value, rpc.Key):
                     # Make sure we apply the current namespace to any lookups
                     # by key. Fixme: if we ever add key properties this will break if
                     # someone is trying to filter on a key which has a different namespace
                     # to the active one.
-                    value = datastore.Key.from_path(
+                    value = rpc.Key.from_path(
                         value.kind(),
                         value.id_or_name(),
                         namespace=self.namespace
@@ -470,7 +472,7 @@ class SelectCommand(object):
         # while we're processing the results later
         # Apply the namespace before excluding
         excluded_pks = [
-            datastore.Key.from_path(x.kind(), x.id_or_name(), namespace=self.namespace)
+            rpc.Key.from_path(x.kind(), x.id_or_name(), namespace=self.namespace)
             for x in self.query.excluded_pks
         ]
 
@@ -592,21 +594,21 @@ class FlushCommand(object):
 
     def execute(self):
         table = self.table
-        query = datastore.Query(table, keys_only=True, namespace=self.namespace)
+        query = rpc.Query(table, keys_only=True, namespace=self.namespace)
         while query.Count():
-            datastore.Delete(query.Run())
+            rpc.Delete(query.Run())
 
         # Delete the markers we need to
         from djangae.db.constraints import UniqueMarker
-        query = datastore.Query(UniqueMarker.kind(), keys_only=True, namespace=self.namespace)
-        query["__key__ >="] = datastore.Key.from_path(
+        query = rpc.Query(UniqueMarker.kind(), keys_only=True, namespace=self.namespace)
+        query["__key__ >="] = rpc.Key.from_path(
             UniqueMarker.kind(), self.table, namespace=self.namespace
         )
-        query["__key__ <"] = datastore.Key.from_path(
+        query["__key__ <"] = rpc.Key.from_path(
             UniqueMarker.kind(), u"{}{}".format(self.table, u'\ufffd'), namespace=self.namespace
         )
         while query.Count():
-            datastore.Delete(query.Run())
+            rpc.Delete(query.Run())
 
         # TODO: ideally we would only clear the cached objects for the table that was flushed, but
         # we have no way of doing that
@@ -617,7 +619,7 @@ class FlushCommand(object):
 @db.non_transactional
 def reserve_id(kind, id_or_name, namespace):
     from google.appengine.api.datastore import _GetConnection
-    key = datastore.Key.from_path(kind, id_or_name, namespace=namespace)
+    key = rpc.Key.from_path(kind, id_or_name, namespace=namespace)
     _GetConnection()._reserve_keys([key])
 
 
@@ -641,7 +643,7 @@ class InsertCommand(object):
 
         for obj in self.objs:
             if self.has_pk:
-                # We must convert the PK value here, even though this normally happens in 
+                # We must convert the PK value here, even though this normally happens in
                 # django_instance_to_entities otherwise
                 # custom PK fields don't work properly
                 value = self.model._meta.pk.get_db_prep_save(
@@ -684,7 +686,7 @@ class InsertCommand(object):
         def perform_insert(entities):
             results = []
             for primary, descendents in entities:
-                new_key = datastore.Put(primary)
+                new_key = rpc.Put(primary)
                 if descendents:
                     for i, descendent in enumerate(descendents):
                         descendents[i] = Entity(
@@ -696,12 +698,12 @@ class InsertCommand(object):
                         )
                         descendents[i].update(descendent)
 
-                    datastore.Put(descendents)
+                    rpc.Put(descendents)
                 results.append(new_key)
             return results
 
         if not constraints.has_active_unique_constraints(self.model) and not check_existence:
-            # Fast path, no constraint checks and no keys mean we can just do a normal datastore.Put
+            # Fast path, no constraint checks and no keys mean we can just do a normal rpc.Put
             # which isn't limited to 25
             results = perform_insert(self.entities)  # This modifies self.entities and sets their keys
             caching.add_entities_to_cache(
@@ -752,7 +754,7 @@ class InsertCommand(object):
                 return txn()
             except:
                 # There are 3 possible reasons why we've ended up here:
-                # 1. The datastore.Put() failed, but note that because it's a transaction, the
+                # 1. The rpc.Put() failed, but note that because it's a transaction, the
                 #    exception isn't raised until the END of the transaction block.
                 # 2. Some of the markers were acquired, but then we hit a unique constraint
                 #    conflict and so the outer transaction was rolled back.
@@ -829,7 +831,7 @@ class DeleteCommand(object):
 
              - Delete the constraints in a background thread. We don't need to wait for them, and
              really, we don't want the non-deletion of them to affect the deletion of the entity.
-             Lingering markers are handled automatically they just case a small performance hit on 
+             Lingering markers are handled automatically they just case a small performance hit on
              write.
              - Check the entity matches the query still (there's a fixme there)
         """
@@ -860,7 +862,7 @@ class DeleteCommand(object):
 
         @db.transactional(xg=True)
         def delete_batch(key_slice):
-            entities = datastore.Get(key_slice)
+            entities = rpc.Get(key_slice)
 
             # FIXME: We need to make sure the entity still matches the query!
 #            entities = (x for x in entities if utils.entity_matches_query(x, self.select.gae_query))
@@ -883,8 +885,8 @@ class DeleteCommand(object):
                     to_update.append(entity)
                 updated_keys.append(entity.key())
 
-            datastore.DeleteAsync(to_delete)
-            datastore.PutAsync(to_update)
+            rpc.DeleteAsync(to_delete)
+            rpc.PutAsync(to_update)
 
             # Clean up any special index things that need to be cleaned
             for indexer in indexers_for_model(self.model):
@@ -944,7 +946,7 @@ class UpdateCommand(object):
             caching.remove_entities_from_cache_by_key([key], self.namespace)
 
             try:
-                result = datastore.Get(key)
+                result = rpc.Get(key)
             except datastore_errors.EntityNotFoundError:
                 # Return false to indicate update failure
                 return False
@@ -1003,7 +1005,7 @@ class UpdateCommand(object):
                     Inserts result, and any descendents with their ancestor
                     value set
                 """
-                inserted_key = datastore.Put(result)
+                inserted_key = rpc.Put(result)
                 if descendents:
                     for i, descendent in enumerate(descendents):
                         descendents[i] = Entity(
@@ -1014,7 +1016,7 @@ class UpdateCommand(object):
                             name=descendent.key().name() or None
                         )
                         descendents[i].update(descendent)
-                    datastore.Put(descendents)
+                    rpc.Put(descendents)
 
             if not constraints.has_active_unique_constraints(self.model):
                 # The fast path, no constraint checking
@@ -1036,7 +1038,7 @@ class UpdateCommand(object):
 
                 constraints.update_identifiers(markers_to_acquire, markers_to_release, result.key())
 
-                # If the datastore.Put() fails then the exception will only be raised when the
+                # If the rpc.Put() fails then the exception will only be raised when the
                 # transaction applies, which means that we will still get to here and will still have
                 # applied the marker changes (because they're in a nested, independent transaction).
                 # Hence we set this flag to tell us that we got this far and that we should roll them back.
