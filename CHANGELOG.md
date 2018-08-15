@@ -22,6 +22,7 @@
 - Add an option to ignore pull tasks in testing
 - Fix occasions where the default value of a field would not be correctly set on save()
 - Simplified the atomic() and non_atomic() decorator/context managers to hopefully eliminate edge-case/threading bugs that have been seen.
+- Fix a bug where the context cache would be incorrectly set after leaving a non_atomic block
 
 ## v0.9.11
 
