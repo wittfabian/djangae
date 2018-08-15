@@ -279,3 +279,17 @@ class TransactionStateTests(TestCase):
             txn.refresh_if_unread(apple)
 
             self.assertEqual(apple.color, "Pink")
+
+    def test_non_atomic_only(self):
+        from .test_connector import TestFruit
+
+        apple = TestFruit.objects.create(name="Apple", color="Red")
+        apple.save()
+
+        apple2 = TestFruit.objects.get(pk=apple.pk)
+
+        with transaction.non_atomic():
+            apple.delete()
+
+        # Apple should no longer be in the cache!
+        self.assertRaises(TestFruit.DoesNotExist, apple2.refresh_from_db)

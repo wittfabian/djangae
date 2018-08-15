@@ -373,10 +373,10 @@ class NonAtomicDecorator(ContextDecorator):
         _STORAGE.transaction_stack.append(new_transaction)
         _STORAGE.transaction_stack[-1]._enter()
 
-        # Store the current in-context stack
-        state.original_stack = copy.deepcopy(context.stack)
+        # Store the current state of the stack (aside from the first entry)
+        state.original_stack = copy.deepcopy(context.stack.stack[1:])
 
-        # Unwind the in-context stack
+        # Unwind the in-context stack leaving just the first entry
         while len(context.stack.stack) > 1:
             context.stack.pop(discard=True)
 
@@ -385,7 +385,9 @@ class NonAtomicDecorator(ContextDecorator):
         context = caching.get_context()
         transaction = _STORAGE.transaction_stack.pop()
         transaction._exit()
-        context.stack = state.original_stack
+
+        # Restore the context stack as it was
+        context.stack.stack = context.stack.stack + state.original_stack
 
 
 non_atomic = NonAtomicDecorator
