@@ -2,12 +2,12 @@
     Test that you can query on json field properties
 """
 
-from django.db import models
-from django.db import connection
+from google.appengine.api.datastore import Get, Key
+
 from djangae.fields import JSONField
 from djangae.test import TestCase
-
-from google.appengine.api.datastore import Get, Key
+from django.core import serializers
+from django.db import connection, models
 
 
 class Dog(models.Model):
@@ -82,4 +82,12 @@ class JSONFieldTests(TestCase):
 
         # There should be no index fields now
         index_fields = [x for x in entity if x.startswith("_idx")]
-        self.assertFalse(index_fields) 
+        self.assertFalse(index_fields)
+
+    def test_serialization_and_deserialization(self):
+        dog = Dog.objects.create(name="Bingo", data={"One": "one"})
+
+        dogs = serializers.deserialize('json', serializers.serialize('json', [dog]))
+        dog = next(dogs).object
+
+        self.assertEqual(dog.data["One"], "one")
