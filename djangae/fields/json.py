@@ -140,6 +140,14 @@ class JSONField(models.TextField):
     def from_db_value(self, value, expression, connection, context):
         return self.parse_json(value)
 
+    def value_to_string(self, obj):
+        value = self.value_from_object(obj)
+
+        if isinstance(value, basestring):
+            return value
+
+        return dumps(value)
+
     def get_db_prep_save(self, value, connection, **kwargs):
         """Convert our JSON object to a string before we save"""
         if value is None and self.null:
