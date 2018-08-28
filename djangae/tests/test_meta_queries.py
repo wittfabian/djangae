@@ -1,3 +1,5 @@
+import threading
+
 from django.db import connection
 from django.db import models
 from djangae.test import TestCase
@@ -58,3 +60,18 @@ class ExcludeFilterTestCase(TestCase):
 
         queryset = MetaQueryTestModel.objects.exclude(field1="Lucy")
         self.assertEqual(len(queryset), 0)
+
+    def test_datastore_api_thread_safe(self):
+
+        def func(filters):
+            query = datastore.Query("my_kind", filters=filters)
+            query_run_args = {'limit': None}
+            [x for x in query.Run(**query_run_args)]
+
+        thread1 = threading.Thread(target=func, args=({'field1 >': u'Lucy'},))
+        thread2 = threading.Thread(target=func, args=({'field1 >': u'Lucy'},))
+        thread1.start()
+        thread2.start()
+        thread1.join()
+        thread2.join()
+
