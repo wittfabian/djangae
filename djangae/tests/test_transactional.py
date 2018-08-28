@@ -244,23 +244,23 @@ class TransactionStateTests(TestCase):
         pear = TestFruit.objects.create(name="Pear", color="Green")
 
         with transaction.atomic(xg=True) as txn:
-            self.assertFalse(txn.has_already_been_read(apple))
-            self.assertFalse(txn.has_already_been_read(pear))
+            self.assertFalse(txn.has_been_read(apple))
+            self.assertFalse(txn.has_been_read(pear))
 
             apple.refresh_from_db()
 
-            self.assertTrue(txn.has_already_been_read(apple))
-            self.assertFalse(txn.has_already_been_read(pear))
+            self.assertTrue(txn.has_been_read(apple))
+            self.assertFalse(txn.has_been_read(pear))
 
             with transaction.atomic(xg=True) as txn:
-                self.assertTrue(txn.has_already_been_read(apple))
-                self.assertFalse(txn.has_already_been_read(pear))
+                self.assertTrue(txn.has_been_read(apple))
+                self.assertFalse(txn.has_been_read(pear))
                 pear.refresh_from_db()
-                self.assertTrue(txn.has_already_been_read(pear))
+                self.assertTrue(txn.has_been_read(pear))
 
                 with transaction.atomic(independent=True) as txn2:
-                    self.assertFalse(txn2.has_already_been_read(apple))
-                    self.assertFalse(txn2.has_already_been_read(pear))
+                    self.assertFalse(txn2.has_been_read(apple))
+                    self.assertFalse(txn2.has_been_read(pear))
 
     def test_refresh_if_unread(self):
         from .test_connector import TestFruit

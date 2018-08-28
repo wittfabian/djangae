@@ -48,7 +48,7 @@ class Transaction(object):
     def _exit(self):
         raise NotImplementedError()
 
-    def has_already_been_read(self, instance, connection=None):
+    def has_been_read(self, instance, connection=None):
         if instance.pk is None:
             return False
 
