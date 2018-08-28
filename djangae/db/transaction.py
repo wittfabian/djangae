@@ -170,7 +170,7 @@ def current_transaction():
 
         @atomic()
         def my_function(apple):
-            apple = current_transaction().refresh_if_unread(apple)
+            current_transaction().refresh_if_unread(apple)
             apple.thing = 1
             apple.save()
     """
