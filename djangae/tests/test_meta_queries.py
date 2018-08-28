@@ -1,7 +1,12 @@
+from django.db import connection
 from django.db import models
 from djangae.test import TestCase
+from google.appengine.api import datastore
 
 from djangae.contrib import sleuth
+
+
+DEFAULT_NAMESPACE = connection.ops.connection.settings_dict.get("NAMESPACE")
 
 
 class MetaQueryTestModel(models.Model):
@@ -38,3 +43,18 @@ class PrimaryKeyFilterTests(TestCase):
 
             self.assertEqual(2, run_calls.calls[0].kwargs['limit'])
             self.assertEqual(2, run_calls.calls[1].kwargs['limit'])
+
+
+class ExcludeFilterTestCase(TestCase):
+
+    def test_exclude_with_empty_db(self):
+        queryset = MetaQueryTestModel.objects.exclude(field1="Lucy")
+        self.assertEqual(len(queryset), 0)
+
+    def test_exclude_without_empty_db(self):
+        # Create anything in the DB to avoid it being empty
+        entity = datastore.Entity(kind="whatever", namespace=DEFAULT_NAMESPACE)
+        datastore.Put(entity)
+
+        queryset = MetaQueryTestModel.objects.exclude(field1="Lucy")
+        self.assertEqual(len(queryset), 0)
