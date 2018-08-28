@@ -3,6 +3,7 @@ import threading
 
 # DJANGAE
 from djangae.db import transaction
+from djangae.db.caching import DisableCache
 from djangae.contrib import sleuth
 from djangae.test import TestCase
 
@@ -279,6 +280,27 @@ class TransactionStateTests(TestCase):
             txn.refresh_if_unread(apple)
 
             self.assertEqual(apple.color, "Pink")
+
+    def test_refresh_if_unread_for_created_objects(self):
+        """ refresh_if_unread should account for objects which have been *created* within the
+            transaction, as well as ones that have been read.
+        """
+        from .test_connector import TestFruit
+
+        # With caching
+        with transaction.atomic() as txn:
+            apple = TestFruit.objects.create(name="Apple", color="Red")
+            apple.color = "Pink"  # Deliberately don't save
+            txn.refresh_if_unread(apple)
+            self.assertEqual(apple.color, "Red")
+
+        # Without caching
+        with DisableCache():
+            with transaction.atomic() as txn:
+                apple = TestFruit.objects.create(name="Radish", color="Red")
+                apple.color = "Pink"  # Deliberately don't save
+                txn.refresh_if_unread(apple)
+                self.assertEqual(apple.color, "Red")
 
     def test_non_atomic_only(self):
         from .test_connector import TestFruit
