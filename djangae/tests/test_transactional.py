@@ -302,6 +302,29 @@ class TransactionStateTests(TestCase):
                 txn.refresh_if_unread(apple)
                 self.assertEqual(apple.color, "Pink")
 
+    def test_refresh_if_unread_for_resaved_objects(self):
+        """ refresh_if_unread should not refresh objects which have been re-saved within the
+            transaction.
+        """
+        from .test_connector import TestFruit
+
+        # With caching
+        apple = TestFruit.objects.create(name="Apple", color="Red")
+        with transaction.atomic() as txn:
+            apple.save()
+            apple.color = "Pink"  # Deliberately don't save
+            txn.refresh_if_unread(apple)
+            self.assertEqual(apple.color, "Pink")
+
+        # Without caching
+        radish = TestFruit.objects.create(name="Radish", color="Red")
+        with DisableCache():
+            with transaction.atomic() as txn:
+                radish.save()
+                radish.color = "Pink"  # Deliberately don't save
+                txn.refresh_if_unread(radish)
+                self.assertEqual(radish.color, "Pink")
+
     def test_non_atomic_only(self):
         from .test_connector import TestFruit
 
