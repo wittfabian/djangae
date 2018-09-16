@@ -1,7 +1,7 @@
 import logging
 import os
+import pkgutil
 import re
-import subprocess
 from django import VERSION
 from django.conf import settings
 from django.core.checks import register, Tags, Error, Warning
@@ -14,7 +14,7 @@ if not hasattr(Tags, "caches"):
     Tags.urls = "urls"
 
 
-MAX_GCLOUD_SDK_VERSION = (170, 0, 0)
+MAX_APP_ENGINE_SDK_VERSION = (1, 9, 57)
 
 CSP_SOURCE_NAMES = [
     'CSP_DEFAULT_SRC',
@@ -29,28 +29,34 @@ CSP_SOURCE_NAMES = [
 ]
 
 
+def _load_file_contents(filename):
+    with open(filename) as fin:
+        return fin.read().decode('utf-8')
+
+
 @register
-def check_gcloud_sdk_version(app_configs=None, **kwargs):
+def check_app_engine_sdk_version(app_configs=None, **kwargs):
     errors = []
-    try:
-        output = subprocess.check_output('gcloud version', shell=True).decode('utf-8')
-        match = re.search('Google Cloud SDK ([^\n]+)\n', output)
-        if not match:
-            logging.warning('unable to parse gcloud output, skipping compatibility check')
-        sdk_version = tuple(int(s) for s in match.group(1).split('.'))
-        if sdk_version > MAX_GCLOUD_SDK_VERSION:
-            errors.append(Error(
-                "MAX_GCLOUD_SDK_VERSION",
-                hint="You are using a version of the Google Cloud SDK that is not yet supported",
-                id='djangae.E005',
-            ))
-    except subprocess.CalledProcessError:
-        logging.warning('call to `gcloud` failed')
+    package = pkgutil.get_loader('dev_appserver')
+    version_path = os.path.abspath(os.path.join(package.filename, '..', 'VERSION'))
+    if not os.path.exists(version_path):
         errors.append(Error(
-            "GCLOUD_SDK_REQUIRED",
-            hint="The gcloud command cannot be found in the current environment",
+            "APP_ENGINE_SDK_REQUIRED",
+            hint="The App Engine SDK version file cannot be found in the current environment",
             id='djangae.E004',
         ))
+    else:
+        output = _load_file_contents(version_path)
+        match = re.search('release: "([^"]+)"', output)
+        if not match:
+            logging.warning('unable to parse version information, skipping compatibility check')
+        sdk_version = tuple(int(s) for s in match.group(1).split('.'))
+        if sdk_version > MAX_APP_ENGINE_SDK_VERSION:
+                errors.append(Error(
+                    "MAX_APP_ENGINE_SDK_VERSION",
+                    hint="You are using a version of the App Engine SDK that is not yet supported",
+                    id='djangae.E005',
+                ))
     return errors
 
 
