@@ -1,4 +1,7 @@
+import logging
 import os
+import re
+import subprocess
 from django import VERSION
 from django.conf import settings
 from django.core.checks import register, Tags, Error, Warning
@@ -11,6 +14,8 @@ if not hasattr(Tags, "caches"):
     Tags.urls = "urls"
 
 
+MAX_GCLOUD_SDK_VERSION = (170, 0, 0)
+
 CSP_SOURCE_NAMES = [
     'CSP_DEFAULT_SRC',
     'CSP_SCRIPT_SRC',
@@ -22,6 +27,31 @@ CSP_SOURCE_NAMES = [
     'CSP_STYLE_SRC',
     'CSP_CONNECT_SRC',
 ]
+
+
+@register
+def check_gcloud_sdk_version(app_configs=None, **kwargs):
+    errors = []
+    try:
+        output = subprocess.check_output('gcloud version', shell=True).decode('utf-8')
+        match = re.search('Google Cloud SDK ([^\n]+)\n', output)
+        if not match:
+            logging.warning('unable to parse gcloud output, skipping compatibility check')
+        sdk_version = tuple(int(s) for s in match.group(1).split('.'))
+        if sdk_version > MAX_GCLOUD_SDK_VERSION:
+            errors.append(Error(
+                "MAX_GCLOUD_SDK_VERSION",
+                hint="You are using a version of the Google Cloud SDK that is not yet supported",
+                id='djangae.E005',
+            ))
+    except subprocess.CalledProcessError:
+        logging.warning('call to `gcloud` failed')
+        errors.append(Error(
+            "GCLOUD_SDK_REQUIRED",
+            hint="The gcloud command cannot be found in the current environment",
+            id='djangae.E004',
+        ))
+    return errors
 
 
 @register(Tags.security)

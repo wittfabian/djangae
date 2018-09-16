@@ -1,4 +1,5 @@
 import os
+import subprocess
 import tempfile
 
 import yaml
@@ -98,3 +99,29 @@ class ChecksTestCase(TestCase):
         with override_settings(TEMPLATES=template_setting):
             errors = checks.check_cached_template_loader_used()
             self.assertEqual(len(errors), 0)
+
+    def test_gcloud_sdk_version_check_supported(self):
+        with sleuth.switch(
+            'subprocess.check_output',
+            lambda cmd, **kwargs: 'Google Cloud SDK 1.0.0\n',
+        ):
+            errors = checks.check_gcloud_sdk_version()
+            self.assertEqual(len(errors), 0)
+
+    def test_gcloud_sdk_version_check_no_gcloud_command(self):
+        class SubProcessException(subprocess.CalledProcessError):
+            def __init__(self, cmd):
+                super(SubProcessException, self).__init__(self, 1, cmd)
+        with sleuth.detonate('subprocess.check_output', SubProcessException):
+            errors = checks.check_gcloud_sdk_version()
+            self.assertEqual(len(errors), 1)
+            self.assertEqual(errors[0].id, 'djangae.E004')
+
+    def test_gcloud_sdk_version_check_unsupported(self):
+        with sleuth.switch(
+            'subprocess.check_output',
+            lambda cmd, **kwargs: 'Google Cloud SDK 999.0.0\n',
+        ):
+            errors = checks.check_gcloud_sdk_version()
+            self.assertEqual(len(errors), 1)
+            self.assertEqual(errors[0].id, 'djangae.E005')
