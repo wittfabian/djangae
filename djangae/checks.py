@@ -1,12 +1,12 @@
-import logging
 import os
-import pkgutil
-import re
 from django import VERSION
 from django.conf import settings
 from django.core.checks import register, Tags, Error, Warning
 
 from djangae.environment import get_application_root
+
+from google.appengine.tools.sdk_update_checker import GetVersionObject, _VersionList
+
 
 # django 1.8 didn't declare a "caches" tag
 if not hasattr(Tags, "caches"):
@@ -29,34 +29,16 @@ CSP_SOURCE_NAMES = [
 ]
 
 
-def _load_file_contents(filename):
-    with open(filename) as fin:
-        return fin.read().decode('utf-8')
-
-
 @register
 def check_app_engine_sdk_version(app_configs=None, **kwargs):
     errors = []
-    package = pkgutil.get_loader('dev_appserver')
-    version_path = os.path.abspath(os.path.join(package.filename, '..', 'VERSION'))
-    if not os.path.exists(version_path):
-        errors.append(Error(
-            "APP_ENGINE_SDK_REQUIRED",
-            hint="The App Engine SDK version file cannot be found in the current environment",
-            id='djangae.E004',
-        ))
-    else:
-        output = _load_file_contents(version_path)
-        match = re.search('release: "([^"]+)"', output)
-        if not match:
-            logging.warning('unable to parse version information, skipping compatibility check')
-        sdk_version = tuple(int(s) for s in match.group(1).split('.'))
-        if sdk_version > MAX_APP_ENGINE_SDK_VERSION:
-                errors.append(Error(
-                    "MAX_APP_ENGINE_SDK_VERSION",
-                    hint="You are using a version of the App Engine SDK that is not yet supported",
-                    id='djangae.E005',
-                ))
+    sdk_version = tuple(_VersionList(GetVersionObject()['release']))
+    if sdk_version > MAX_APP_ENGINE_SDK_VERSION:
+            errors.append(Error(
+                "MAX_APP_ENGINE_SDK_VERSION",
+                hint="You are using a version of the App Engine SDK that is not yet supported",
+                id='djangae.E004',
+            ))
     return errors
 
 

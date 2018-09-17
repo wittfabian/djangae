@@ -100,18 +100,12 @@ class ChecksTestCase(TestCase):
             self.assertEqual(len(errors), 0)
 
     def test_app_engine_sdk_version_check_supported(self):
-        with sleuth.switch('djangae.checks._load_file_contents', lambda x: 'release: "1.0.0"\n'):
+        with sleuth.switch('djangae.checks._VersionList', lambda x: [1, 0, 0]):
             errors = checks.check_app_engine_sdk_version()
             self.assertEqual(len(errors), 0)
 
-    def test_app_engine_sdk_version_check_no_version_file(self):
-        with sleuth.switch('os.path.exists', lambda x: False):
+    def test_app_engine_sdk_version_check_unsupported(self):
+        with sleuth.switch('djangae.checks._VersionList', lambda x: [100, 0, 0]):
             errors = checks.check_app_engine_sdk_version()
             self.assertEqual(len(errors), 1)
             self.assertEqual(errors[0].id, 'djangae.E004')
-
-    def test_app_engine_sdk_version_check_unsupported(self):
-        with sleuth.switch('djangae.checks._load_file_contents', lambda x: 'release: "100.0.0"\n'):
-            errors = checks.check_app_engine_sdk_version()
-            self.assertEqual(len(errors), 1)
-            self.assertEqual(errors[0].id, 'djangae.E005')
