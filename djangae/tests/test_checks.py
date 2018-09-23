@@ -108,4 +108,4 @@ class ChecksTestCase(TestCase):
         with sleuth.switch('djangae.checks._VersionList', lambda x: [100, 0, 0]):
             errors = checks.check_app_engine_sdk_version()
             self.assertEqual(len(errors), 1)
-            self.assertEqual(errors[0].id, 'djangae.E004')
+            self.assertEqual(errors[0].id, 'djangae.W002')
