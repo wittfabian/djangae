@@ -1,18 +1,19 @@
+import itertools
 import logging
 import threading
-import itertools
 
-from google.appengine.api import datastore
 from google.appengine.api import memcache
 from google.appengine.api.memcache import Client
 
-from django.conf import settings
-from django.core.exceptions import ImproperlyConfigured
-from django.core.cache.backends.base import default_key_func
-
 from djangae.db import utils
-from djangae.db.unique_utils import unique_identifiers_from_entity, _format_value_for_identifier
-from djangae.db.backends.appengine.context import ContextCache
+from djangae.db.backends.appengine import rpc
+from djangae.db.backends.appengine.context import (ContextCache,
+                                                   key_or_entity_compare)
+from djangae.db.unique_utils import (_format_value_for_identifier,
+                                     unique_identifiers_from_entity)
+from django.conf import settings
+from django.core.cache.backends.base import default_key_func
+from django.core.exceptions import ImproperlyConfigured
 
 _local = threading.local()
 
@@ -79,13 +80,13 @@ class KeyPrefixedClient(Client):
 
     def get_multi(self, keys, key_prefix='', namespace=None, for_cas=False):
         # Convert the given keys to our prefixed keys, then map the results back onto the original keys
-        key_mapping = { default_key_func(x, KEY_PREFIX, VERSION): x for x in keys }
+        key_mapping = {default_key_func(x, KEY_PREFIX, VERSION): x for x in keys}
 
         ret = super(KeyPrefixedClient, self).get_multi(
             key_mapping.keys(), key_prefix=key_prefix, namespace=namespace, for_cas=for_cas
         )
 
-        return { key_mapping[k]: v for k, v in ret.iteritems() }
+        return {key_mapping[k]: v for k, v in ret.items()}
 
     def set_multi_async(self, mapping, time=0,  key_prefix='', min_compress_len=0, namespace=None, rpc=None):
         prefixed_mapping = {}
@@ -123,7 +124,7 @@ class KeyPrefixedClient(Client):
 def _apply_namespace(value_or_map, namespace):
     """ Add the given namespace to the given cache key(s). """
     if hasattr(value_or_map, "keys"):
-        return {"{}:{}".format(namespace, k): v for k, v in value_or_map.iteritems()}
+        return {"{}:{}".format(namespace, k): v for k, v in value_or_map.items()}
     elif hasattr(value_or_map, "__iter__"):
         return ["{}:{}".format(namespace, x) for x in value_or_map]
     else:
@@ -136,7 +137,7 @@ def _strip_namespace(value_or_map):
         return value.split(":", 1)[-1]
 
     if hasattr(value_or_map, "keys"):
-        return {_strip(k): v for k, v in value_or_map.iteritems()}
+        return {_strip(k): v for k, v in value_or_map.items()}
     elif hasattr(value_or_map, "__iter__"):
         return [_strip(x) for x in value_or_map]
     else:
@@ -179,7 +180,7 @@ def _get_cache_key_and_model_from_datastore_key(key):
 
 def _remove_entities_from_memcache_by_key(keys, namespace):
     """
-        Given an iterable of datastore.Key objects, remove the corresponding entities from memcache.
+        Given an iterable of rpc.Key objects, remove the corresponding entities from memcache.
         Note, if the key of the entity got evicted from the cache, it's possible that stale cache
         entries would be left behind. Remember if you need pure atomicity then use disable_cache() or a
         transaction.
@@ -210,7 +211,7 @@ def _get_entity_from_memcache(cache_key):
 def _get_entity_from_memcache_by_key(key):
     # We build the cache key for the ID of the instance
     cache_key, _ = _get_cache_key_and_model_from_datastore_key(key)
-    namespace = key.namespace() or None
+    namespace = key.namespace() or ''
     return _get_entity_from_memcache(_apply_namespace(cache_key, namespace))
 
 
@@ -218,13 +219,19 @@ def add_entities_to_cache(model, entities, situation, namespace, skip_memcache=F
     if not CACHE_ENABLED:
         return None
 
+    context = get_context()
+
+    if not (context.context_enabled or context.memcache_enabled):
+        # Don't cache anything if caching is disabled
+        return
+
     # Don't cache on Get if we are inside a transaction, even in the context
     # This is because transactions don't see the current state of the datastore
     # We can still cache in the context on Put() but not in memcache
-    if situation == CachingSituation.DATASTORE_GET and datastore.IsInTransaction():
+    if situation == CachingSituation.DATASTORE_GET and rpc.IsInTransaction():
         return
 
-    if situation in (CachingSituation.DATASTORE_PUT, CachingSituation.DATASTORE_GET_PUT) and datastore.IsInTransaction():
+    if situation in (CachingSituation.DATASTORE_PUT, CachingSituation.DATASTORE_GET_PUT) and rpc.IsInTransaction():
         # We have to wipe the entity from memcache
         _remove_entities_from_memcache_by_key([entity.key() for entity in entities if entity.key()], namespace)
 
@@ -239,7 +246,7 @@ def add_entities_to_cache(model, entities, situation, namespace, skip_memcache=F
     # the exception is GET_PUT - which we do in our own transaction so we have to ignore that!
     if (
         (
-            not datastore.IsInTransaction()
+            not rpc.IsInTransaction()
             and situation in (CachingSituation.DATASTORE_GET, CachingSituation.DATASTORE_PUT)
         )
         or situation == CachingSituation.DATASTORE_GET_PUT
@@ -257,7 +264,7 @@ def add_entities_to_cache(model, entities, situation, namespace, skip_memcache=F
 
 def remove_entities_from_cache_by_key(keys, namespace, memcache_only=False):
     """
-        Given an iterable of datastore.Keys objects, remove the corresponding entities from caches,
+        Given an iterable of rpc.Keys objects, remove the corresponding entities from caches,
         both context and memcache, or just memcache if specified.
     """
     if not CACHE_ENABLED:
@@ -266,7 +273,7 @@ def remove_entities_from_cache_by_key(keys, namespace, memcache_only=False):
     context = get_context()
     if not memcache_only:
         for key in keys:
-            identifiers = context.stack.top.reverse_cache.get(key, [])
+            identifiers = context.stack.top.cache.get_reversed(key, compare_func=key_or_entity_compare)
             for identifier in identifiers:
                 if identifier in context.stack.top.cache:
                     del context.stack.top.cache[identifier]
@@ -276,19 +283,19 @@ def remove_entities_from_cache_by_key(keys, namespace, memcache_only=False):
 
 def get_from_cache_by_key(key):
     """
-        Given a datastore.Key (which should already have the namespace applied to it), return an
+        Given a rpc.Key (which should already have the namespace applied to it), return an
         entity from the context cache, falling back to memcache when possible.
     """
     if not CACHE_ENABLED:
         return None
 
     context = get_context()
-    namespace = key.namespace() or None
+    namespace = key.namespace() or ''
     ret = None
     if context.context_enabled:
         # It's safe to hit the context cache, because a new one was pushed on the stack at the start of the transaction
         ret = context.stack.top.get_entity_by_key(key)
-        if ret is None and not datastore.IsInTransaction():
+        if ret is None and not rpc.IsInTransaction():
             if context.memcache_enabled:
                 ret = _get_entity_from_memcache_by_key(key)
                 if ret:
@@ -300,7 +307,7 @@ def get_from_cache_by_key(key):
                         namespace,
                         skip_memcache=True # Don't put in memcache, we just got it from there!
                     )
-    elif context.memcache_enabled and not datastore.IsInTransaction():
+    elif context.memcache_enabled and not rpc.IsInTransaction():
         ret = _get_entity_from_memcache_by_key(key)
 
     return ret
@@ -320,7 +327,7 @@ def get_from_cache(unique_identifier, namespace):
     if context.context_enabled:
         # It's safe to hit the context cache, because a new one was pushed on the stack at the start of the transaction
         ret = context.stack.top.get_entity(cache_key)
-        if ret is None and not datastore.IsInTransaction():
+        if ret is None and not rpc.IsInTransaction():
             if context.memcache_enabled:
                 ret = _get_entity_from_memcache(cache_key)
                 if ret:
@@ -333,7 +340,7 @@ def get_from_cache(unique_identifier, namespace):
                         skip_memcache=True # Don't put in memcache, we just got it from there!
                     )
 
-    elif context.memcache_enabled and not datastore.IsInTransaction():
+    elif context.memcache_enabled and not rpc.IsInTransaction():
         ret = _get_entity_from_memcache(cache_key)
 
     return ret

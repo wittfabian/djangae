@@ -1,20 +1,17 @@
-from google.appengine.api import datastore
 from google.appengine.api import datastore_errors
-from google.appengine.ext.db import non_transactional
-
-from django.db import connection as default_connection, models
-from django.http import HttpRequest
-from django.core.signals import request_finished, request_started
-from django.core.cache import cache
 
 from djangae.contrib import sleuth
-from djangae.test import TestCase
-from djangae.db import unique_utils
-from djangae.db import transaction
+from djangae.db import transaction, unique_utils
+from djangae.db.backends.appengine import caching, rpc
 from djangae.db.backends.appengine.context import ContextStack
-from djangae.db.backends.appengine import caching
 from djangae.db.caching import disable_cache
-
+from djangae.test import TestCase
+from django.core.cache import cache
+from django.core.signals import request_finished, request_started
+from django.db import connection as default_connection
+from django.db import models
+from django.http import HttpRequest
+from google.appengine.ext.db import non_transactional
 
 DEFAULT_NAMESPACE = default_connection.ops.connection.settings_dict.get("NAMESPACE")
 
@@ -28,7 +25,7 @@ class FakeEntity(dict):
         self.update(data)
 
     def key(self):
-        return datastore.Key.from_path("auth_user", self.id)
+        return rpc.Key.from_path("auth_user", self.id)
 
 
 class ContextStackTests(TestCase):
@@ -152,7 +149,7 @@ class MemcacheCachingTests(TestCase):
 
         # Make sure that altering inside the transaction evicted the item from the cache
         # and that a get then hits the datastore (which then in turn caches)
-        with sleuth.watch("google.appengine.api.datastore.Get") as datastore_get:
+        with sleuth.watch("djangae.db.backends.appengine.rpc.Get") as datastore_get:
             for identifier in identifiers:
                 self.assertIsNone(cache.get(identifier))
 
@@ -331,7 +328,7 @@ class MemcacheCachingTests(TestCase):
         original = CachingTestModel.objects.create(**entity_data)
         original.refresh_from_db()
 
-        with sleuth.watch("google.appengine.api.datastore.Query.Run") as datastore_query:
+        with sleuth.watch("djangae.db.backends.appengine.rpc.Query.Run") as datastore_query:
             instance = CachingTestModel.objects.filter(field1="Apple").all()[0]
             self.assertEqual(original, instance)
 
@@ -360,7 +357,7 @@ class MemcacheCachingTests(TestCase):
 
         original = CachingTestModel.objects.create(**entity_data)
 
-        with sleuth.watch("google.appengine.api.datastore.Query.Run") as datastore_query:
+        with sleuth.watch("djangae.db.backends.appengine.rpc.Query.Run") as datastore_query:
             instance = CachingTestModel.objects.filter(comb1=1).all()[0]
             self.assertEqual(original, instance)
 
@@ -377,7 +374,7 @@ class MemcacheCachingTests(TestCase):
         original = CachingTestModel.objects.create(**entity_data)
         original.refresh_from_db() # Add to memcache (consistent Get)
 
-        with sleuth.watch("google.appengine.api.datastore.Get") as datastore_get:
+        with sleuth.watch("djangae.db.backends.appengine.rpc.Get") as datastore_get:
             instance = CachingTestModel.objects.get(pk=original.pk)
             self.assertEqual(original, instance)
 
@@ -393,7 +390,7 @@ class MemcacheCachingTests(TestCase):
 
         original = CachingTestModel.objects.create(**entity_data)
 
-        with sleuth.watch("google.appengine.api.datastore.Get") as datastore_get:
+        with sleuth.watch("djangae.db.backends.appengine.rpc.Get") as datastore_get:
             with transaction.atomic():
                 instance = CachingTestModel.objects.get(pk=original.pk)
             self.assertEqual(original, instance)
@@ -411,7 +408,7 @@ class MemcacheCachingTests(TestCase):
         original = CachingTestModel.objects.create(**entity_data)
         original.refresh_from_db()
 
-        with sleuth.watch("google.appengine.api.datastore.Get") as datastore_get:
+        with sleuth.watch("djangae.db.backends.appengine.rpc.Get") as datastore_get:
             instance = CachingTestModel.objects.get(field1="Apple")
             self.assertEqual(original, instance)
 
@@ -427,7 +424,7 @@ class MemcacheCachingTests(TestCase):
 
         CachingTestModel.objects.create(**entity_data)
 
-        with sleuth.watch("google.appengine.api.datastore.Query.Run") as datastore_query:
+        with sleuth.watch("djangae.db.backends.appengine.rpc.Query.Run") as datastore_query:
             with transaction.atomic():
                 try:
                     CachingTestModel.objects.get(field1="Apple")
@@ -526,6 +523,7 @@ class MemcacheCachingTests(TestCase):
 
         self.assertFalse(_remove_entities_from_memcache_by_key.called)
 
+
 class ContextCachingTests(TestCase):
     """
         We can be a bit more liberal with hitting the context cache as it's
@@ -562,14 +560,13 @@ class ContextCachingTests(TestCase):
         instance = CachingTestModel.objects.create(**entity_data)
 
         with transaction.atomic():
-            with sleuth.watch("google.appengine.api.datastore.Get") as datastore_get:
+            with sleuth.watch("djangae.db.backends.appengine.rpc.Get") as datastore_get:
                 instance = CachingTestModel.objects.get(pk=instance.pk)
                 self.assertEqual(1, datastore_get.call_count) # Shouldn't hit the cache!
                 instance.save()
 
-            with sleuth.watch("google.appengine.api.datastore.Get") as datastore_get:
+            with sleuth.watch("djangae.db.backends.appengine.rpc.Get") as datastore_get:
                 self.assertEqual(0, datastore_get.call_count) # Should hit the cache
-
 
     @disable_cache(memcache=True, context=False)
     def test_caching_bug(self):
@@ -590,7 +587,6 @@ class ContextCachingTests(TestCase):
         self.assertItemsEqual(CachingTestModel.objects.filter(pk=instance.pk).values_list("field1"), [("Apple",)])
         # Now fetch from the cache again, checking that the previously wiped fields are still in tact
         self.assertItemsEqual(CachingTestModel.objects.filter(pk=instance.pk).values(), [expected])
-
 
     @disable_cache(memcache=True, context=False)
     def test_transactions_get_their_own_context(self):
@@ -671,7 +667,7 @@ class ContextCachingTests(TestCase):
                     inner = CachingTestModel.objects.get(pk=original.pk)
                     inner.field1 = "Banana"
                     inner.save()
-                    raise ValueError() # Will rollback the transaction
+                    raise ValueError()  # Will rollback the transaction
             except ValueError:
                 pass
 
@@ -679,11 +675,11 @@ class ContextCachingTests(TestCase):
             self.assertEqual("Apple", outer.field1)
 
         original = CachingTestModel.objects.get(pk=original.pk)
-        self.assertEqual("Apple", original.field1) # Shouldn't have changed
+        self.assertEqual("Apple", original.field1)  # Shouldn't have changed
 
     def test_save_caches(self):
         """ Test that after saving something, it exists in the context cache and therefore when we
-            fetch it we don't hit memcache or the Datastore.
+            fetch it we don't hit memcache or the rpc.
         """
         entity_data = {
             "field1": "Apple",
@@ -693,7 +689,7 @@ class ContextCachingTests(TestCase):
 
         original = CachingTestModel.objects.create(**entity_data)
 
-        with sleuth.watch("google.appengine.api.datastore.Get") as datastore_get:
+        with sleuth.watch("djangae.db.backends.appengine.rpc.Get") as datastore_get:
             with sleuth.watch("google.appengine.api.memcache.get") as memcache_get:
                 with sleuth.watch("google.appengine.api.memcache.get_multi") as memcache_get_multi:
                     original = CachingTestModel.objects.get(pk=original.pk)
@@ -720,7 +716,7 @@ class ContextCachingTests(TestCase):
 
         CachingTestModel.objects.get(pk=original.pk) # Should update the cache
 
-        with sleuth.watch("google.appengine.api.datastore.Get") as datastore_get:
+        with sleuth.watch("djangae.db.backends.appengine.rpc.Get") as datastore_get:
             CachingTestModel.objects.get(pk=original.pk)
 
         self.assertFalse(datastore_get.called)
@@ -728,11 +724,11 @@ class ContextCachingTests(TestCase):
         caching.get_context().reset(keep_disabled_flags=True)
 
         with transaction.atomic():
-            with sleuth.watch("google.appengine.api.datastore.Get") as datastore_get:
+            with sleuth.watch("djangae.db.backends.appengine.rpc.Get") as datastore_get:
                 CachingTestModel.objects.get(pk=original.pk) # Should *not* update the cache
                 self.assertTrue(datastore_get.called)
 
-        with sleuth.watch("google.appengine.api.datastore.Get") as datastore_get:
+        with sleuth.watch("djangae.db.backends.appengine.rpc.Get") as datastore_get:
             CachingTestModel.objects.get(pk=original.pk)
 
         self.assertTrue(datastore_get.called)
@@ -751,7 +747,7 @@ class ContextCachingTests(TestCase):
 
         CachingTestModel.objects.all() # Inconsistent
 
-        with sleuth.watch("google.appengine.api.datastore.Get") as datastore_get:
+        with sleuth.watch("djangae.db.backends.appengine.rpc.Get") as datastore_get:
             CachingTestModel.objects.get(pk=original.pk)
 
         self.assertTrue(datastore_get.called)
@@ -766,7 +762,7 @@ class ContextCachingTests(TestCase):
 
         CachingTestModel.objects.create(**entity_data)
 
-        with sleuth.watch("google.appengine.api.datastore.Get") as datastore_get:
+        with sleuth.watch("djangae.db.backends.appengine.rpc.Get") as datastore_get:
             list(CachingTestModel.objects.filter(field1="Apple"))
 
         self.assertFalse(datastore_get.called)
@@ -781,7 +777,7 @@ class ContextCachingTests(TestCase):
 
         original = CachingTestModel.objects.create(**entity_data)
 
-        with sleuth.watch("google.appengine.api.datastore.Query.Run") as datastore_query:
+        with sleuth.watch("djangae.db.backends.appengine.rpc.Query.Run") as datastore_query:
             # Expect no matches
             num_instances = CachingTestModel.objects.filter(field1="Apple", comb1=0).count()
             self.assertEqual(num_instances, 0)
@@ -796,7 +792,7 @@ class ContextCachingTests(TestCase):
 
         original = CachingTestModel.objects.create(**entity_data)
 
-        with sleuth.watch("google.appengine.api.datastore.Get") as datastore_get:
+        with sleuth.watch("djangae.db.backends.appengine.rpc.Get") as datastore_get:
             CachingTestModel.objects.get(pk=original.pk)
 
         self.assertFalse(datastore_get.called)
@@ -811,7 +807,7 @@ class ContextCachingTests(TestCase):
 
         CachingTestModel.objects.create(**entity_data)
 
-        with sleuth.watch("google.appengine.api.datastore.Get") as datastore_get:
+        with sleuth.watch("djangae.db.backends.appengine.rpc.Get") as datastore_get:
             CachingTestModel.objects.get(field1="Apple")
 
         self.assertFalse(datastore_get.called)
@@ -820,7 +816,7 @@ class ContextCachingTests(TestCase):
     def test_context_cache_cleared_after_request(self):
         """ The context cache should be cleared between requests. """
         CachingTestModel.objects.create(field1="test")
-        with sleuth.watch("google.appengine.api.datastore.Query.Run") as query:
+        with sleuth.watch("djangae.db.backends.appengine.rpc.Query.Run") as query:
             CachingTestModel.objects.get(field1="test")
             self.assertEqual(query.call_count, 0)
             # Now start a new request, which should clear the cache
@@ -835,3 +831,60 @@ class ContextCachingTests(TestCase):
             request_finished.send(HttpRequest(), keep_disabled_flags=True)
             CachingTestModel.objects.get(field1="test")
             self.assertEqual(query.call_count, 2)
+
+    def test_transactional_caching_behaviour(self):
+        """
+            The context cache exists so that transactional code becomes more sensible.
+
+            Look at the following code:
+
+            MyModel.objects.create(pk=1, value=0)
+
+            with atomic():
+                instance = MyModel.objects.get(pk=1)
+                instance.value = 1
+                instance.save()
+
+                instance.refresh_from_db()
+                assert(instance.value == 1)
+
+            Without the context cache, this will raise AssertionError as 'value' will be zero.
+            datastore.Get returns the state of the object at the start of the transaction.
+
+            With the context cache, this will behave as intended as refresh_from_db() will hit the
+            cache and return the thing you just saved.
+        """
+
+        instance = CachingTestModel.objects.create()
+
+        @transaction.atomic()
+        def b():
+            obj = CachingTestModel.objects.get(pk=instance.pk)
+            obj.comb1 += 1
+            obj.save()
+
+        @transaction.atomic()
+        def a():
+            obj = CachingTestModel.objects.get(pk=instance.pk)
+            obj.comb1 += 1
+            obj.save()
+            b()
+
+        # Make sure the context cache is enabled
+        with disable_cache(memcache=True, context=False):
+            a()
+
+            instance.refresh_from_db()
+            self.assertEqual(instance.comb1, 2)
+
+        instance.comb1 = 0
+        instance.save()
+
+        # Now disable all caching
+        with disable_cache(memcache=True, context=True):
+            a()
+
+            instance.refresh_from_db()
+
+            # Should be one as the call to b() would trash the value set by a()
+            self.assertEqual(instance.comb1, 1)

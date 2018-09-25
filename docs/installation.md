@@ -8,7 +8,7 @@ Alternatively, you can also follow this guide:
 1. Install Djangae into your project, make sure it's importable (you'll likely need to manipulate the path in manage.py and wsgi.py).
 1. Add `'djangae'` to `INSTALLED_APPS`.  This must come before any `django` apps.
 1. We also recommend that you:
-    - Add `'djangae.contrib.contenttypes'` to `INSTALLED_APPS`.  This must come after `'django.contrib.contenttypes'`.
+    - Add `'djangae.contrib.contenttypes'` to `INSTALLED_APPS`.  This must come after `'django.contrib.contenttypes'`. (Please note that this is only really required if you are using the Datastore.)
     - Add `'djangae.contrib.security'` to `INSTALLED_APPS'`.
     - Add `'djangae.contrib.security.middleware.AppEngineSecurityMiddleware'` to `MIDDLEWARE_CLASSES`.
 1. At the top of your `settings.py`, insert the following line to setup some default settings: 
@@ -34,9 +34,13 @@ Make your `manage.py` look something like this:
 if __name__ == "__main__":
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "myapp.settings")
 
-    from djangae.core.management import execute_from_command_line
+    from djangae.core.management import execute_from_command_line, test_execute_from_command_line
 
-    execute_from_command_line(sys.argv)
+    if "test" in sys.argv:
+        # This prevents the local sandbox initializing when running tests
+        test_execute_from_command_line(sys.argv)
+    else:
+        execute_from_command_line(sys.argv)
 ```
 
 Use the Djangae WSGI handler in your wsgi.py, something like

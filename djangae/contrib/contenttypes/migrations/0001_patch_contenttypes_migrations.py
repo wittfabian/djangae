@@ -35,7 +35,15 @@ def get_installed_app_labels_with_migrations():
 
         migrations_module = MigrationLoader.migrations_module(app.label)
         try:
-            module = import_module(migrations_module)
+            # Django 1.11 changed the return value of the migrations_module call to a 2-element
+            # tuple.  The actual module is the first entry
+            if isinstance(migrations_module, tuple):
+                migrations_module = migrations_module[0]
+
+            if migrations_module:
+                module = import_module(migrations_module)
+            else:
+                continue
         except ImportError:
             continue
 

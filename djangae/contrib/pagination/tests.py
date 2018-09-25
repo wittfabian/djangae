@@ -1,5 +1,7 @@
 from django.core import paginator as django_paginator
 from django.db import models
+from django.utils.encoding import python_2_unicode_compatible
+
 from djangae.test import TestCase
 from djangae.contrib import sleuth
 from djangae.contrib.pagination import (
@@ -23,17 +25,32 @@ from .paginator import (
     ("-created",),
     "pk",  # it's possible to order by the model pk
 ])
+@python_2_unicode_compatible
 class TestUser(models.Model):
     first_name = models.CharField(max_length=200)
     last_name = models.CharField(max_length=200)
     created = models.DateTimeField(auto_now_add=True)
 
-    def __unicode__(self):
-        return u" ".join([self.first_name, self.last_name])
+    def __str__(self):
+        return " ".join([self.first_name, self.last_name])
 
     class Meta:
         db_table = "pagination"
         ordering = ("first_name", "last_name")
+
+@paginated_model(orderings=[
+    "name",
+    "pk",  # it's possible to order by the model pk
+])
+class SimpleModelWithoutOrdering(models.Model):
+    name = models.CharField(max_length=200)
+
+    class Meta:
+        db_table = "pagination"
+
+class SimpleModelWithOrdering(SimpleModelWithoutOrdering):
+    class Meta:
+        ordering = ["name"]
 
 
 class PaginatedModelTests(TestCase):
@@ -127,7 +144,7 @@ class DatastorePaginatorTests(TestCase):
         query_id = queryset_identifier(paginator.object_list)
 
         actual_markers = []
-        for i in xrange(1, 5):
+        for i in range(1, 5):
             actual_markers.append(_get_marker(query_id, i)[0])
 
         self.assertEqual(expected_markers, actual_markers)
@@ -143,10 +160,25 @@ class DatastorePaginatorTests(TestCase):
         query_id = queryset_identifier(paginator.object_list)
 
         actual_markers = []
-        for i in xrange(1, 3):
+        for i in range(1, 3):
             actual_markers.append(_get_marker(query_id, i)[0])
 
         self.assertEqual(expected_markers, actual_markers)
+
+    def test_ordering_required_exception_is_thrown_when_no_order_specified(self):
+        # The exception should not be thrown when an order is specified
+        query_set = SimpleModelWithoutOrdering.objects.order_by("name")
+        paginator = Paginator(query_set, 25, readahead=10)
+
+        # The exception should not be thrown when the model has a default order
+        query_set = SimpleModelWithOrdering.objects.all()
+        paginator = Paginator(query_set, 25, readahead=10)
+
+        # The exception should be thrown when no order is specified on the model or in the query set
+        query_set = SimpleModelWithoutOrdering.objects.all()
+        with self.assertRaises(PaginationOrderingRequired):
+            paginator = Paginator(query_set, 25, readahead=10)
+
 
     def test_pages_correct(self):
         paginator = Paginator(TestUser.objects.all().order_by("first_name"), 1)  # 1 item per page

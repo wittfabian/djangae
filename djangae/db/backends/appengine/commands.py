@@ -1,39 +1,37 @@
-#STANDARD LIB
-from datetime import datetime
-import logging
+# STANDARD LIB
 import copy
 import decimal
-import json
-
-from functools import partial
-from itertools import chain, groupby
-
-#LIBRARIES
-import django
-from django.db import DatabaseError
-from django.db import IntegrityError
+import logging
+from datetime import datetime
 
 from google.appengine.api import datastore, datastore_errors, memcache
+from google.appengine.api.datastore import Entity, Query
+
+# LIBRARIES
+import django
+from djangae.db import constraints, utils
+from djangae.db.backends.appengine import (
+    POLYMODEL_CLASS_ATTRIBUTE,
+    caching,
+    rpc
+)
+# DJANGAE
+from djangae.db.backends.appengine.dbapi import NotSupportedError
+from djangae.db.backends.appengine.dnf import normalize_query
+from djangae.db.backends.appengine.formatting import \
+    generate_sql_representation
+from djangae.db.backends.appengine.query import transform_query
+from djangae.db.unique_utils import query_is_unique
+from djangae.db.utils import (MockInstance, django_instance_to_entities,
+                              ensure_datetime, get_datastore_key,
+                              get_field_from_column, has_concrete_parents)
+from django.db import DatabaseError, IntegrityError
+from django.utils import six
+from django.utils.encoding import force_str, python_2_unicode_compatible
 from google.appengine.datastore import datastore_stub_util
-from google.appengine.api.datastore import Query
 from google.appengine.ext import db
 
-#DJANGAE
-from djangae.db.backends.appengine.dbapi import NotSupportedError
-from djangae.db.utils import (
-    get_datastore_key,
-    django_instance_to_entity,
-    MockInstance,
-    has_concrete_parents,
-    get_field_from_column,
-    ensure_datetime,
-)
-
-from djangae.db.backends.appengine import POLYMODEL_CLASS_ATTRIBUTE
-from djangae.db import constraints, utils
-from djangae.db.backends.appengine import caching
-from djangae.db.unique_utils import query_is_unique
-
+from . import meta_queries
 
 logger = logging.getLogger(__name__)
 
@@ -61,11 +59,11 @@ EXTRA_SELECT_FUNCTIONS = {
 }
 
 REVERSE_OP_MAP = {
-    '=':'exact',
-    '>':'gt',
-    '>=':'gte',
-    '<':'lt',
-    '<=':'lte',
+    '=': 'exact',
+    '>': 'gt',
+    '>=': 'gte',
+    '<': 'lt',
+    '<=': 'lte',
 }
 
 INEQUALITY_OPERATORS = frozenset(['>', '<', '<=', '>='])
@@ -75,10 +73,11 @@ def _cols_from_where_node(where_node):
     cols = where_node.get_cols() if hasattr(where_node, 'get_cols') else where_node.get_group_by_cols()
     return cols
 
+
 def _get_tables_from_where(where_node):
     cols = _cols_from_where_node(where_node)
     if django.VERSION[1] < 8:
-        return list(set([x[0] for x in cols if x[0] ]))
+        return list(set([x[0] for x in cols if x[0]]))
     else:
         return list(set([x.alias for x in cols]))
 
@@ -123,231 +122,20 @@ def log_once(logging_call, text, args):
     logging_call(text % args)
     log_once.logged.add(identifier)
 
+
 log_once.logged = set()
 
-
-def _convert_entity_based_on_query_options(entity, opts):
-    if opts.keys_only:
-        return entity.key()
-
-    if opts.projection:
-        for k in entity.keys()[:]:
-            if k not in list(opts.projection) + [POLYMODEL_CLASS_ATTRIBUTE]:
-                del entity[k]
-
-    return entity
-
-
-class QueryByKeys(object):
-    """ Does the most efficient fetching possible for when we have the keys of the entities we want. """
-
-    def __init__(self, model, queries, ordering, namespace):
-        # `queries` should be filtered by __key__ with keys that have the namespace applied to them.
-        # `namespace` is passed for explicit niceness (mostly so that we don't have to assume that
-        # all the keys belong to the same namespace, even though they will).
-        def _get_key(query):
-            result = query["__key__ ="]
-            return result
-
-        self.model = model
-        self.namespace = namespace
-
-        # groupby requires that the iterable is sorted by the given key before grouping
-        self.queries = sorted(queries, key=_get_key)
-        self.queries_by_key = { a: list(b) for a, b in groupby(self.queries, _get_key) }
-
-        self.ordering = ordering
-        self._Query__kind = queries[0]._Query__kind
-
-    def Run(self, limit=None, offset=None):
-        """
-            Here are the options:
-
-            1. Single key, hit memcache
-            2. Multikey projection, async MultiQueries with ancestors chained
-            3. Full select, datastore get
-        """
-
-        opts = self.queries[0]._Query__query_options
-        key_count = len(self.queries_by_key)
-
-        is_projection = False
-
-        results = None
-        if key_count == 1:
-            # FIXME: Potentially could use get_multi in memcache and the make a query
-            # for whatever remains
-            key = self.queries_by_key.keys()[0]
-            result = caching.get_from_cache_by_key(key)
-            if result is not None:
-                results = [result]
-                cache = False # Don't update cache, we just got it from there
-
-        if results is None:
-            if opts.projection:
-                is_projection = True # Don't cache projection results!
-
-                # Assumes projection ancestor queries are faster than a datastore Get
-                # due to lower traffic over the RPC. This should be faster for queries with
-                # < 30 keys (which is the most common case), and faster if the entities are
-                # larger and there are many results, but there is probably a slower middle ground
-                # because the larger number of RPC calls. Still, if performance is an issue the
-                # user can just do a normal get() rather than values/values_list/only/defer
-
-                to_fetch = (offset or 0) + limit if limit else None
-                additional_cols = set([ x[0] for x in self.ordering if x[0] not in opts.projection])
-
-                multi_query = []
-                final_queries = []
-                orderings = self.queries[0]._Query__orderings
-                for key, queries in self.queries_by_key.iteritems():
-                    for query in queries:
-                        if additional_cols:
-                            # We need to include additional orderings in the projection so that we can
-                            # sort them in memory. Annoyingly that means reinstantiating the queries
-                            query = Query(
-                                kind=query._Query__kind,
-                                filters=query,
-                                projection=list(opts.projection).extend(list(additional_cols)),
-                                namespace=self.namespace,
-                            )
-
-                        query.Ancestor(key) # Make this an ancestor query
-                        multi_query.append(query)
-                        if len(multi_query) == 30:
-                            final_queries.append(datastore.MultiQuery(multi_query, orderings).Run(limit=to_fetch))
-                            multi_query = []
-                else:
-                    if len(multi_query) == 1:
-                        final_queries.append(multi_query[0].Run(limit=to_fetch))
-                    elif multi_query:
-                        final_queries.append(datastore.MultiQuery(multi_query, orderings).Run(limit=to_fetch))
-
-                results = chain(*final_queries)
-            else:
-                results = datastore.Get(self.queries_by_key.keys())
-
-        def iter_results(results):
-            returned = 0
-            # This is safe, because Django is fetching all results any way :(
-            sorted_results = sorted(results, cmp=partial(utils.django_ordering_comparison, self.ordering))
-            sorted_results = [result for result in sorted_results if result is not None]
-            if not is_projection and sorted_results:
-                caching.add_entities_to_cache(
-                    self.model,
-                    sorted_results,
-                    caching.CachingSituation.DATASTORE_GET,
-                    self.namespace,
-                )
-
-            for result in sorted_results:
-                if is_projection:
-                    entity_matches_query = True
-                else:
-                    entity_matches_query = any(
-                        utils.entity_matches_query(result, qry) for qry in self.queries_by_key[result.key()]
-                    )
-
-                if not entity_matches_query:
-                    continue
-
-                if offset and returned < offset:
-                    # Skip entities based on offset
-                    returned += 1
-                    continue
-                else:
-
-                    yield _convert_entity_based_on_query_options(result, opts)
-
-                    returned += 1
-
-                    # If there is a limit, we might be done!
-                    if limit is not None and returned == (offset or 0) + limit:
-                        break
-
-        return iter_results(results)
-
-    def Count(self, limit, offset):
-        return len([x for x in self.Run(limit, offset)])
-
-
-class NoOpQuery(object):
-    def Run(self, limit, offset):
-        return []
-
-    def Count(self, limit, offset):
-        return 0
-
-
-class UniqueQuery(object):
-    """
-        This mimics a normal query but hits the cache if possible. It must
-        be passed the set of unique fields that form a unique constraint
-    """
-    def __init__(self, unique_identifier, gae_query, model, namespace):
-        self._identifier = unique_identifier
-        self._gae_query = gae_query
-        self._model = model
-        self._namespace = namespace
-
-        self._Query__kind = gae_query._Query__kind
-
-    def get(self, x):
-        return self._gae_query.get(x)
-
-    def keys(self):
-        return self._gae_query.keys()
-
-    def Run(self, limit, offset):
-        opts = self._gae_query._Query__query_options
-        if opts.keys_only or opts.projection:
-            return self._gae_query.Run(limit=limit, offset=offset)
-
-        ret = caching.get_from_cache(self._identifier, self._namespace)
-        if ret is not None and not utils.entity_matches_query(ret, self._gae_query):
-            ret = None
-
-        if ret is None:
-            # We do a fast keys_only query to get the result
-            keys_query = Query(self._gae_query._Query__kind, keys_only=True, namespace=self._namespace)
-            keys_query.update(self._gae_query)
-            keys = keys_query.Run(limit=limit, offset=offset)
-
-            # Do a consistent get so we don't cache stale data, and recheck the result matches the query
-            ret = [x for x in datastore.Get(keys) if x and utils.entity_matches_query(x, self._gae_query)]
-            if len(ret) == 1:
-                caching.add_entities_to_cache(
-                    self._model,
-                    [ret[0]],
-                    caching.CachingSituation.DATASTORE_GET,
-                    self._namespace,
-                )
-            return iter(ret)
-
-        return iter([ret])
-
-    def Count(self, limit, offset):
-        return sum(1 for x in self.Run(limit, offset))
-
-
-from djangae.db.backends.appengine.query import transform_query
-from djangae.db.backends.appengine.dnf import normalize_query
 
 def convert_django_ordering_to_gae(ordering):
     result = []
 
     for column in ordering:
         if column.startswith("-"):
-            result.append((column.lstrip("-"), datastore.Query.DESCENDING))
+            result.append((column.lstrip("-"), rpc.Query.DESCENDING))
         else:
-            result.append((column, datastore.Query.ASCENDING))
+            result.append((column, rpc.Query.ASCENDING))
     return result
 
-def wrap_result_with_functor(results, func):
-    for result in results:
-        result = func(result)
-        if result is not None:
-            yield result
 
 def limit_results_generator(results, limit):
     for result in results:
@@ -384,6 +172,133 @@ def can_perform_datastore_get(normalized_query):
     return True
 
 
+class EntityTransforms:
+    @staticmethod
+    def convert_key_to_entity(result):
+        class FakeEntity(dict):
+            def __init__(self, key):
+                self._key = key
+
+            def key(self):
+                return self._key
+
+        return FakeEntity(result)
+
+    @staticmethod
+    def rename_pk_field(model, concrete_model, result):
+        if result is None:
+            return result
+
+        value = result.key().id_or_name()
+        result[model._meta.pk.column] = value
+        result[concrete_model._meta.pk.column] = value
+        return result
+
+    @staticmethod
+    def process_extra_selects(query, result):
+        """
+            We handle extra selects by generating the new columns from
+            each result. We can handle simple boolean logic and operators.
+        """
+        if result is None:
+            return result
+
+        extra_selects = query.extra_selects
+        model_fields = query.model._meta.fields
+
+        DATE_FORMATS = ("%Y-%m-%d", "%Y-%m-%d %H:%M:%S")
+
+        def process_arg(arg):
+            if arg.startswith("'") and arg.endswith("'"):
+                # String literal
+                arg = arg.strip("'")
+                # Check to see if this is a date
+                for date in DATE_FORMATS:
+                    try:
+                        value = datetime.strptime(arg, date)
+                        return value
+                    except ValueError:
+                        continue
+                return arg
+            elif arg in [x.column for x in model_fields]:
+                # Column value
+                return result.get(arg)
+
+            # Handle NULL
+            if arg.lower() == 'null':
+                return None
+            elif arg.lower() == 'true':
+                return True
+            elif arg.lower() == 'false':
+                return False
+
+            # See if it's an integer
+            try:
+                arg = int(arg)
+            except (TypeError, ValueError):
+                pass
+
+            # Just a plain old literal
+            return arg
+
+        for col, select in extra_selects:
+            result[col] = select[0](*[process_arg(x) for x in select[1]])
+
+        return result
+
+    @staticmethod
+    def convert_datetime_fields(query, result):
+        if result is None:
+            return result
+
+        fields = [
+            x for x in query.model._meta.fields
+            if x.get_internal_type() in ("DateTimeField", "DateField", "TimeField")
+        ]
+
+        for field in fields:
+            column = field.column
+            if isinstance(result, dict):  # sometimes it's a key!
+                value = result.get(column)
+            else:
+                value = None
+
+            if value is not None:
+                result[column] = ensure_datetime(value)
+        return result
+
+    @staticmethod
+    def fix_projected_values_type(query, result):
+        """
+            String values returned from projection queries return as 'str' not 'unicode'
+            See https://github.com/potatolondon/djangae/issues/1026
+        """
+        if result is None:
+            return None
+
+        fields = [
+            x for x in query.model._meta.fields
+            if x.get_internal_type() in ("CharField",)
+        ]
+
+        for field in fields:
+            col = field.column
+            if col in result and isinstance(result[col], str):
+                result[col] = unicode(result[col], "utf-8")
+
+        return result
+
+    @staticmethod
+    def ignore_excluded_pks(excluded_pks, result):
+        if result is None:
+            return result
+
+        if result.key() in excluded_pks:
+            return None
+
+        return result
+
+
 class SelectCommand(object):
     def __init__(self, connection, query, keys_only=False):
         self.connection = connection
@@ -394,22 +309,33 @@ class SelectCommand(object):
         self.query = normalize_query(self.query)
 
         self.original_query = query
-        self.keys_only = (keys_only or [x.field for x in query.select] == [query.model._meta.pk])
+
+        # We enable keys only queries if they have been forced, or, if
+        # someone did only("pk") or someone did values_list("pk") this is a little
+        # inconsistent with other fields which aren't projected if just values(_list) is used
+        self.keys_only = keys_only or (
+            query.deferred_loading[1] is False and
+            len(query.deferred_loading[0]) == 1 and query.model._meta.pk.column in query.deferred_loading[0]
+        ) or (
+            len(query.select) == 1 and query.select[0].field == query.model._meta.pk
+        )
 
         # MultiQuery doesn't support keys_only
         if self.query.where and len(self.query.where.children) > 1:
             self.keys_only = False
 
     def __eq__(self, other):
-        return (isinstance(other, self.__class__)
-            and self.query.serialize() == other.query.serialize())
+        return (isinstance(other, self.__class__) and
+                self.query.serialize() == other.query.serialize())
 
     def __ne__(self, other):
         return not self.__eq__(other)
 
     def _sanity_check(self):
         if self.query.distinct and not self.query.columns:
-            raise NotSupportedError("Tried to perform distinct query when projection wasn't possible")
+            raise NotSupportedError(
+                "Tried to perform distinct query when projection wasn't possible"
+            )
 
     def _exclude_pk(self, columns):
         if columns is None:
@@ -427,7 +353,6 @@ class SelectCommand(object):
         self._sanity_check()
 
         queries = []
-
         projection = self._exclude_pk(self.query.columns) or None
 
         query_kwargs = {
@@ -475,21 +400,24 @@ class SelectCommand(object):
                 lookup = "{} {}".format(filter_node.column, filter_node.operator)
 
                 value = filter_node.value
+
                 # This is a special case. Annoyingly Django's decimal field doesn't
                 # ever call ops.get_prep_save or lookup or whatever when you are filtering
                 # on a query. It *does* do it on a save, so we basically need to do a
                 # conversion here, when really it should be handled elsewhere
                 if isinstance(value, decimal.Decimal):
                     field = get_field_from_column(self.query.model, filter_node.column)
-                    value = self.connection.ops.adapt_decimalfield_value(value, field.max_digits, field.decimal_places)
-                elif isinstance(value, basestring):
+                    value = self.connection.ops.adapt_decimalfield_value(
+                        value, field.max_digits, field.decimal_places
+                    )
+                elif isinstance(value, six.string_types):
                     value = coerce_unicode(value)
-                elif isinstance(value, datastore.Key):
+                elif isinstance(value, rpc.Key):
                     # Make sure we apply the current namespace to any lookups
                     # by key. Fixme: if we ever add key properties this will break if
                     # someone is trying to filter on a key which has a different namespace
                     # to the active one.
-                    value = datastore.Key.from_path(
+                    value = rpc.Key.from_path(
                         value.kind(),
                         value.id_or_name(),
                         namespace=self.namespace
@@ -498,7 +426,7 @@ class SelectCommand(object):
                 # If there is already a value for this lookup, we need to make the
                 # value a list and append the new entry
                 if lookup in query and not isinstance(query[lookup], (list, tuple)) and query[lookup] != value:
-                    query[lookup] = [query[lookup] ] + [value]
+                    query[lookup] = [query[lookup]] + [value]
                 else:
                     # If the value is a list, we can't just assign it to the query
                     # which will treat each element as its own value. So in this
@@ -523,17 +451,19 @@ class SelectCommand(object):
 
         if can_perform_datastore_get(self.query):
             # Yay for optimizations!
-            return QueryByKeys(self.query.model, queries, ordering, self.namespace)
+            return meta_queries.QueryByKeys(self.query.model, queries, ordering, self.namespace)
 
         if len(queries) == 1:
             identifier = query_is_unique(self.query.model, queries[0])
             if identifier:
                 # Yay for optimizations!
-                return UniqueQuery(identifier, queries[0], self.query.model, self.namespace)
+                return meta_queries.UniqueQuery(
+                    identifier, queries[0], self.query.model, self.namespace
+                )
 
             return queries[0]
         else:
-            return datastore.MultiQuery(queries, ordering)
+            return meta_queries.AsyncMultiQuery(queries, ordering)
 
     def _fetch_results(self, query):
         # If we're manually excluding PKs, and we've specified a limit to the results
@@ -542,7 +472,7 @@ class SelectCommand(object):
         # while we're processing the results later
         # Apply the namespace before excluding
         excluded_pks = [
-            datastore.Key.from_path(x.kind(), x.id_or_name(), namespace=self.namespace)
+            rpc.Key.from_path(x.kind(), x.id_or_name(), namespace=self.namespace)
             for x in self.query.excluded_pks
         ]
 
@@ -567,191 +497,81 @@ class SelectCommand(object):
                 # didn't seem to indicate much of a performance difference, even when doing the pk__in
                 # with GetAsync while the count was running. That might not be true of prod though so
                 # if anyone comes up with a faster idea let me know!
-                if isinstance(query, QueryByKeys):
+                if isinstance(query, meta_queries.QueryByKeys):
                     # If this is a QueryByKeys, just do the datastore Get and count the results
                     resultset = (x.key() for x in query.Run(limit=limit, offset=offset) if x)
                 else:
-                    count_query = Query(query._Query__kind, keys_only=True, namespace=self.namespace)
+                    count_query = Query(
+                        query._Query__kind, keys_only=True, namespace=self.namespace
+                    )
                     count_query.update(query)
                     resultset = count_query.Run(limit=limit, offset=offset)
-                self.results = (x for x in [ len([ y for y in resultset if y not in excluded_pks]) ])
+                self.results = [len([y for y in resultset if y not in excluded_pks])]
+                self.results_returned = 1
             else:
-                self.results = (x for x in [query.Count(limit=limit, offset=offset)])
+                self.results = [query.Count(limit=limit, offset=offset)]
+                self.results_returned = 1
             return
         elif self.query.kind == "AVERAGE":
             raise ValueError("AVERAGE not yet supported")
-        else:
-            self.results = query.Run(limit=limit, offset=offset)
 
         # Ensure that the results returned is reset
         self.results_returned = 0
+        self.results = []
 
-        def increment_returned_results(result):
-            self.results_returned += 1
-            return result
+        seen = set()
 
-        def convert_key_to_entity(result):
-            class FakeEntity(dict):
-                def __init__(self, key):
-                    self._key = key
-
-                def key(self):
-                    return self._key
-
-            return FakeEntity(result)
-
-        def rename_pk_field(result):
-            if result is None:
+        def dedupe(result):
+            # FIXME: This logic can't be right. I think we need to store the distinct fields
+            # somewhere on the query
+            if getattr(self.original_query, "annotation_select", None):
+                columns = self.original_query.annotation_select.keys()
+            else:
+                columns = self.query.columns or []
+            if not columns:
                 return result
 
-            value = result.key().id_or_name()
-            result[self.query.model._meta.pk.column] = value
-            result[self.query.concrete_model._meta.pk.column] = value
-            return result
-
-        def process_extra_selects(result):
-            """
-                We handle extra selects by generating the new columns from
-                each result. We can handle simple boolean logic and operators.
-            """
-            extra_selects = self.query.extra_selects
-            model_fields = self.query.model._meta.fields
-
-            DATE_FORMATS = ("%Y-%m-%d", "%Y-%m-%d %H:%M:%S")
-
-            def process_arg(arg):
-                if arg.startswith("'") and arg.endswith("'"):
-                    # String literal
-                    arg = arg.strip("'")
-                    # Check to see if this is a date
-                    for date in DATE_FORMATS:
-                        try:
-                            value = datetime.strptime(arg, date)
-                            return value
-                        except ValueError:
-                            continue
-                    return arg
-                elif arg in [x.column for x in model_fields]:
-                    # Column value
-                    return result.get(arg)
-
-                # Handle NULL
-                if arg.lower() == 'null':
-                    return None
-                elif arg.lower() == 'true':
-                    return True
-                elif arg.lower() == 'false':
-                    return False
-
-                # See if it's an integer
-                try:
-                    arg = int(arg)
-                except (TypeError, ValueError):
-                    pass
-
-                # Just a plain old literal
-                return arg
-
-            for col, select in extra_selects:
-                result[col] = select[0](*[ process_arg(x) for x in select[1] ])
-
-            return result
-
-        def convert_datetime_fields(result):
-            fields = [
-                x for x in self.query.model._meta.fields
-                if x.get_internal_type() in ("DateTimeField", "DateField", "TimeField")
-            ]
-
-            for field in fields:
-                column = field.column
-                if isinstance(result, dict): # sometimes it's a key!
-                    value = result.get(column)
-                else:
-                    value = None
-
-                if value is not None:
-                    result[column] = ensure_datetime(value)
-            return result
-
-        def ignore_excluded_pks(result):
-            if result.key() in excluded_pks:
+            key = tuple([result[x] for x in self._exclude_pk(columns) if x in result])
+            if key in seen:
                 return None
+            seen.add(key)
             return result
 
-        self.results = wrap_result_with_functor(self.results, increment_returned_results)
+        for entity in query.Run(limit=limit, offset=offset):
+            # If this is a keys only query, we need to generate a fake entity
+            # for each key in the result set
+            if self.keys_only:
+                entity = EntityTransforms.convert_key_to_entity(entity)
 
-        # If this is a keys only query, we need to generate a fake entity
-        # for each key in the result set
-        if self.keys_only:
-            self.results = wrap_result_with_functor(self.results, convert_key_to_entity)
+            entity = EntityTransforms.ignore_excluded_pks(excluded_pks, entity)
+            entity = EntityTransforms.convert_datetime_fields(self.query, entity)
+            entity = EntityTransforms.fix_projected_values_type(self.query, entity)
+            entity = EntityTransforms.rename_pk_field(
+                self.query.model, self.query.concrete_model, entity
+            )
+            entity = EntityTransforms.process_extra_selects(self.query, entity)
 
-        self.results = wrap_result_with_functor(self.results, ignore_excluded_pks)
-        self.results = wrap_result_with_functor(self.results, convert_datetime_fields)
-        self.results = wrap_result_with_functor(self.results, rename_pk_field)
-        self.results = wrap_result_with_functor(self.results, process_extra_selects)
+            if self.query.distinct and self.query.extra_selects:
+                entity = dedupe(entity)
 
-        if self.query.distinct and self.query.extra_selects:
-            # If we had extra selects, and we're distinct, we must deduplicate results
-            def deduper_factory():
-                seen = set()
+            if entity:
+                self.results.append(entity)
+                self.results_returned += 1
 
-                def dedupe(result):
-                    # FIXME: This logic can't be right. I think we need to store the distinct fields
-                    # somewhere on the query
-                    if getattr(self.original_query, "annotation_select", None):
-                        columns = self.original_query.annotation_select.keys()
-                    else:
-                        columns = self.query.columns or []
-                    if not columns:
-                        return result
-
-                    key = tuple([ result[x] for x in self._exclude_pk(columns) if x in result ])
-                    if key in seen:
-                        return None
-                    seen.add(key)
-                    return result
-
-                return dedupe
-
-            self.results = wrap_result_with_functor(self.results, deduper_factory())
-
-        if limit:
-            self.results = limit_results_generator(self.results, limit - excluded_pk_count)
-
+            if limit and self.results_returned >= (limit - excluded_pk_count):
+                break
 
     def execute(self):
         self.gae_query = self._build_query()
         self._fetch_results(self.gae_query)
-
-    def __unicode__(self):
-        # TODO: should we print out the namespace in here too?
-        try:
-            qry = json.loads(self.query.serialize())
-
-            result = u" ".join([
-                qry["kind"],
-                u", ".join(qry["columns"] if qry["projection_possible"] and qry["columns"] else ["*"]),
-                u"FROM",
-                qry["concrete_table"]
-            ])
-
-            if qry["where"]:
-                result += u" " + u" ".join([
-                    u"WHERE",
-                    u" OR ".join([
-                        u" AND ".join( [u"{} {}".format(k, v) for k, v in x.iteritems()])
-                        for x in qry["where"]
-                    ])
-                ])
-            return result
-        except:
-            # We never want this to cause things to die
-            logger.exception("Unable to translate query to string")
-            return "QUERY TRANSLATION ERROR"
+        self.results = iter(self.results)
+        return self.results_returned
 
     def __repr__(self):
-        return self.__unicode__().encode("utf-8")
+        return force_str(generate_sql_representation(self))
+
+    def __mod__(self, params):
+        return repr(self)
 
     def lower(self):
         """
@@ -774,19 +594,21 @@ class FlushCommand(object):
 
     def execute(self):
         table = self.table
-        query = datastore.Query(table, keys_only=True, namespace=self.namespace)
+        query = rpc.Query(table, keys_only=True, namespace=self.namespace)
         while query.Count():
-            datastore.Delete(query.Run())
+            rpc.Delete(query.Run())
 
         # Delete the markers we need to
         from djangae.db.constraints import UniqueMarker
-        query = datastore.Query(UniqueMarker.kind(), keys_only=True, namespace=self.namespace)
-        query["__key__ >="] = datastore.Key.from_path(UniqueMarker.kind(), self.table, namespace=self.namespace)
-        query["__key__ <"] = datastore.Key.from_path(
+        query = rpc.Query(UniqueMarker.kind(), keys_only=True, namespace=self.namespace)
+        query["__key__ >="] = rpc.Key.from_path(
+            UniqueMarker.kind(), self.table, namespace=self.namespace
+        )
+        query["__key__ <"] = rpc.Key.from_path(
             UniqueMarker.kind(), u"{}{}".format(self.table, u'\ufffd'), namespace=self.namespace
         )
         while query.Count():
-            datastore.Delete(query.Run())
+            rpc.Delete(query.Run())
 
         # TODO: ideally we would only clear the cached objects for the table that was flushed, but
         # we have no way of doing that
@@ -797,14 +619,15 @@ class FlushCommand(object):
 @db.non_transactional
 def reserve_id(kind, id_or_name, namespace):
     from google.appengine.api.datastore import _GetConnection
-    key = datastore.Key.from_path(kind, id_or_name, namespace=namespace)
-    _GetConnection()._async_reserve_keys(None, [key])
+    key = rpc.Key.from_path(kind, id_or_name, namespace=namespace)
+    _GetConnection()._reserve_keys([key])
 
 
 class BulkInsertError(IntegrityError, NotSupportedError):
     pass
 
 
+@python_2_unicode_compatible
 class InsertCommand(object):
     def __init__(self, connection, model, objs, fields, raw):
         self.has_pk = any(x.primary_key for x in fields)
@@ -820,7 +643,8 @@ class InsertCommand(object):
 
         for obj in self.objs:
             if self.has_pk:
-                # We must convert the PK value here, even though this normally happens in django_instance_to_entity otherwise
+                # We must convert the PK value here, even though this normally happens in
+                # django_instance_to_entities otherwise
                 # custom PK fields don't work properly
                 value = self.model._meta.pk.get_db_prep_save(
                     self.model._meta.pk.pre_save(obj, True),
@@ -849,30 +673,55 @@ class InsertCommand(object):
                     connection=connection,
                 )
 
-            self.entities.append(
-                django_instance_to_entity(self.connection, self.model, self.fields, self.raw, obj)
+            primary, descendents = django_instance_to_entities(
+                self.connection, self.fields, self.raw, obj
             )
+
+            # Append the entity, and any descendents to the list to insert
+            self.entities.append((primary, descendents))
 
     def execute(self):
         check_existence = self.has_pk and not has_concrete_parents(self.model)
 
+        def perform_insert(entities):
+            results = []
+            for primary, descendents in entities:
+                new_key = rpc.Put(primary)
+                if descendents:
+                    for i, descendent in enumerate(descendents):
+                        descendents[i] = Entity(
+                            descendent.kind(),
+                            parent=new_key,
+                            namespace=new_key.namespace(),
+                            id=descendent.key().id() or None,
+                            name=descendent.key().name() or None
+                        )
+                        descendents[i].update(descendent)
+
+                    rpc.Put(descendents)
+                results.append(new_key)
+            return results
+
         if not constraints.has_active_unique_constraints(self.model) and not check_existence:
-            # Fast path, no constraint checks and no keys mean we can just do a normal datastore.Put
+            # Fast path, no constraint checks and no keys mean we can just do a normal rpc.Put
             # which isn't limited to 25
-            results = datastore.Put(self.entities) # This modifies self.entities and sets their keys
+            results = perform_insert(self.entities)  # This modifies self.entities and sets their keys
             caching.add_entities_to_cache(
                 self.model,
-                self.entities,
+                [x[0] for x in self.entities],
                 caching.CachingSituation.DATASTORE_GET_PUT,
                 self.namespace,
                 skip_memcache=True
             )
             return results
 
+        entity_group_count = len(self.entities)
+
         def insert_chunk(keys, entities):
             # Note that this is limited to a maximum of 25 entities.
             markers = []
-            @db.transactional(xg=len(entities) > 1)
+
+            @db.transactional(xg=entity_group_count > 1)
             def txn():
                 for key in keys:
                     if check_existence and key is not None:
@@ -880,19 +729,20 @@ class InsertCommand(object):
                             raise IntegrityError("Tried to INSERT with existing key")
 
                         id_or_name = key.id_or_name()
-                        if isinstance(id_or_name, basestring) and id_or_name.startswith("__"):
+                        if isinstance(id_or_name, six.string_types) and id_or_name.startswith("__"):
                             raise NotSupportedError("Datastore ids cannot start with __. Id was %s" % id_or_name)
 
                         # Notify App Engine of any keys we're specifying intentionally
                         reserve_id(key.kind(), key.id_or_name(), self.namespace)
 
-                results = datastore.Put(entities)
-                for entity in entities:
+                results = perform_insert(entities)
+
+                for entity, _ in entities:
                     markers.extend(constraints.acquire(self.model, entity))
 
                 caching.add_entities_to_cache(
                     self.model,
-                    entities,
+                    [x[0] for x in entities],
                     caching.CachingSituation.DATASTORE_GET_PUT,
                     self.namespace,
                     skip_memcache=True
@@ -904,7 +754,7 @@ class InsertCommand(object):
                 return txn()
             except:
                 # There are 3 possible reasons why we've ended up here:
-                # 1. The datastore.Put() failed, but note that because it's a transaction, the
+                # 1. The rpc.Put() failed, but note that because it's a transaction, the
                 #    exception isn't raised until the END of the transaction block.
                 # 2. Some of the markers were acquired, but then we hit a unique constraint
                 #    conflict and so the outer transaction was rolled back.
@@ -918,7 +768,7 @@ class InsertCommand(object):
         # We can't really support this and maintain expected behaviour. If we chunked the insert and one of the
         # chunks fails it will mean some of the data would be saved and rather than trying to communicate that back
         # to the user it's better that they chunk the data themselves as they can deal with the failure better
-        if len(self.entities) > datastore_stub_util._MAX_EG_PER_TXN:
+        if entity_group_count > datastore_stub_util._MAX_EG_PER_TXN:
             raise BulkInsertError("Bulk inserts with unique constraints, or pre-defined keys are limited to {} instances on the datastore".format(
                 datastore_stub_util._MAX_EG_PER_TXN
             ))
@@ -931,35 +781,28 @@ class InsertCommand(object):
         """
         return unicode(self).lower()
 
-    def __unicode__(self):
-        try:
-            keys = self.entities[0].keys()
-            result = u" ".join([
-                u"INSERT INTO",
-                self.entities[0].kind(),
-                u"(" + u", ".join(keys) + u")",
-                u"VALUES"
-            ])
-
-            for entity in self.entities:
-                result += u"(" + u", ".join([unicode(entity[x]) for x in keys]) + u")"
-
-            return result
-        except:
-            # We never want this to cause things to die
-            logger.info("InsertCommand is unable to translate query to string")
-            return u"QUERY TRANSLATION ERROR"
-
-    def __repr__(self):
-        return self.__unicode__().encode("utf-8")
+    def __str__(self):
+        return generate_sql_representation(self)
 
 
+@python_2_unicode_compatible
 class DeleteCommand(object):
     def __init__(self, connection, query):
         self.model = query.model
         self.select = SelectCommand(connection, query, keys_only=True)
+        self.query = self.select.query
         self.namespace = connection.ops.connection.settings_dict.get("NAMESPACE")
-        self.table_to_delete = query.tables[0]
+
+        # It seems query.tables is populated in most cases, but I have seen cases (albeit in testing)
+        # where this isn't the case (particularly when not filtering on anything). In that case
+        # fallback to the model table (perhaps we should do
+        self.table_to_delete = (
+            query.tables[0] if query.tables else
+            utils.get_top_concrete_parent(query.model)._meta.db_table
+        )
+
+    def __str__(self):
+        return generate_sql_representation(self)
 
     def execute(self):
         """
@@ -986,11 +829,13 @@ class DeleteCommand(object):
 
             Things to improve:
 
-             - Delete the constraints in a background thread. We don't need to wait for them, and really,
-             we don't want the non-deletion of them to affect the deletion of the entity. Lingering markers
-             are handled automatically they just case a small performance hit on write.
+             - Delete the constraints in a background thread. We don't need to wait for them, and
+             really, we don't want the non-deletion of them to affect the deletion of the entity.
+             Lingering markers are handled automatically they just case a small performance hit on
+             write.
              - Check the entity matches the query still (there's a fixme there)
         """
+        from djangae.db.backends.appengine.indexing import indexers_for_model
 
         self.select.execute()
 
@@ -1017,9 +862,9 @@ class DeleteCommand(object):
 
         @db.transactional(xg=True)
         def delete_batch(key_slice):
-            entities = datastore.Get(key_slice)
+            entities = rpc.Get(key_slice)
 
-            #FIXME: We need to make sure the entity still matches the query!
+            # FIXME: We need to make sure the entity still matches the query!
 #            entities = (x for x in entities if utils.entity_matches_query(x, self.select.gae_query))
 
             to_delete = []
@@ -1033,14 +878,20 @@ class DeleteCommand(object):
 
                 wipe_polymodel_from_entity(entity, self.table_to_delete)
                 if not entity.get('class'):
-                    to_delete.append(entity)
-                    constraints.release(self.model, entity)
+                    to_delete.append(entity.key())
+                    if constraints_enabled:
+                        constraints.release(self.model, entity)
                 else:
                     to_update.append(entity)
                 updated_keys.append(entity.key())
 
-            datastore.DeleteAsync([x.key() for x in to_delete])
-            datastore.PutAsync(to_update)
+            rpc.DeleteAsync(to_delete)
+            rpc.PutAsync(to_update)
+
+            # Clean up any special index things that need to be cleaned
+            for indexer in indexers_for_model(self.model):
+                for key in to_delete:
+                    indexer.cleanup(key)
 
             caching.remove_entities_from_cache_by_key(
                 updated_keys, self.namespace
@@ -1055,7 +906,6 @@ class DeleteCommand(object):
 
         return deleted
 
-
     def lower(self):
         """
             This exists solely for django-debug-toolbar compatibility.
@@ -1063,13 +913,18 @@ class DeleteCommand(object):
         return unicode(self).lower()
 
 
+@python_2_unicode_compatible
 class UpdateCommand(object):
     def __init__(self, connection, query):
         self.model = query.model
         self.select = SelectCommand(connection, query, keys_only=True)
+        self.query = self.select.query
         self.values = query.values
         self.connection = connection
         self.namespace = connection.ops.connection.settings_dict.get("NAMESPACE")
+
+    def __str__(self):
+        return generate_sql_representation(self)
 
     def lower(self):
         """
@@ -1091,13 +946,13 @@ class UpdateCommand(object):
             caching.remove_entities_from_cache_by_key([key], self.namespace)
 
             try:
-                result = datastore.Get(key)
+                result = rpc.Get(key)
             except datastore_errors.EntityNotFoundError:
                 # Return false to indicate update failure
                 return False
 
             if (
-                isinstance(self.select.gae_query, (Query, UniqueQuery)) # ignore QueryByKeys and NoOpQuery
+                isinstance(self.select.gae_query, (Query, meta_queries.UniqueQuery)) # ignore QueryByKeys and NoOpQuery
                 and not utils.entity_matches_query(result, self.select.gae_query)
             ):
                 # Due to eventual consistency they query may have returned an entity which no longer
@@ -1106,13 +961,13 @@ class UpdateCommand(object):
 
             original = copy.deepcopy(result)
 
-            instance_kwargs = {field.attname:value for field, param, value in self.values}
+            instance_kwargs = {field.attname: value for field, param, value in self.values}
 
             # Note: If you replace MockInstance with self.model, you'll find that some delete
             # tests fail in the test app. This is because any unspecified fields would then call
             # get_default (even though we aren't going to use them) which may run a query which
             # fails inside this transaction. Given as we are just using MockInstance so that we can
-            # call django_instance_to_entity it on it with the subset of fields we pass in,
+            # call django_instance_to_entities it on it with the subset of fields we pass in,
             # what we have is fine.
             meta = self.model._meta
             instance = MockInstance(
@@ -1121,30 +976,52 @@ class UpdateCommand(object):
                 **instance_kwargs
             )
 
-            # We need to add to the class attribute, rather than replace it!
-            original_class = result.get(POLYMODEL_CLASS_ATTRIBUTE, [])
-
-            # Update the entity we read above with the new values
-            result.update(django_instance_to_entity(
-                self.connection, self.model,
-                [ x[0] for x in self.values],  # Pass in the fields that were updated
-                True, instance)
+            # Convert the instance to an entity
+            primary, descendents = django_instance_to_entities(
+                self.connection,
+                [x[0] for x in self.values],  # Pass in the fields that were updated
+                True, instance,
+                model=self.model
             )
 
-            # Make sure we keep all classes in the inheritence tree!
-            if original_class:
-                if result[POLYMODEL_CLASS_ATTRIBUTE] is not None:
-                    result[POLYMODEL_CLASS_ATTRIBUTE].extend(original_class)
-                    # Make sure we don't add duplicates
-                else:
-                    result[POLYMODEL_CLASS_ATTRIBUTE] = original_class
+            # Update the entity we read above with the new values
+            result.update(primary)
 
-            if POLYMODEL_CLASS_ATTRIBUTE in result:
-                result[POLYMODEL_CLASS_ATTRIBUTE] = list(set(result[POLYMODEL_CLASS_ATTRIBUTE]))
+            # Remove fields which have been marked to be unindexed
+            for col in getattr(primary, "_properties_to_remove", []):
+                if col in result:
+                    del result[col]
+
+            # Make sure that any polymodel classes which were in the original entity are kept,
+            # as django_instance_to_entities may have wiped them as well as added them.
+            polymodel_classes = list(set(
+                original.get(POLYMODEL_CLASS_ATTRIBUTE, []) + result.get(POLYMODEL_CLASS_ATTRIBUTE, [])
+            ))
+            if polymodel_classes:
+                result[POLYMODEL_CLASS_ATTRIBUTE] = polymodel_classes
+
+            def perform_insert():
+                """
+                    Inserts result, and any descendents with their ancestor
+                    value set
+                """
+                inserted_key = rpc.Put(result)
+                if descendents:
+                    for i, descendent in enumerate(descendents):
+                        descendents[i] = Entity(
+                            descendent.kind(),
+                            parent=inserted_key,
+                            namespace=inserted_key.namespace(),
+                            id=descendent.key().id() or None,
+                            name=descendent.key().name() or None
+                        )
+                        descendents[i].update(descendent)
+                    rpc.Put(descendents)
 
             if not constraints.has_active_unique_constraints(self.model):
                 # The fast path, no constraint checking
-                datastore.Put(result)
+                perform_insert()
+
                 caching.add_entities_to_cache(
                     self.model,
                     [result],
@@ -1156,11 +1033,12 @@ class UpdateCommand(object):
                 markers_to_acquire[:], markers_to_release[:] = constraints.get_markers_for_update(
                     self.model, original, result
                 )
-                datastore.Put(result)
+
+                perform_insert()
 
                 constraints.update_identifiers(markers_to_acquire, markers_to_release, result.key())
 
-                # If the datastore.Put() fails then the exception will only be raised when the
+                # If the rpc.Put() fails then the exception will only be raised when the
                 # transaction applies, which means that we will still get to here and will still have
                 # applied the marker changes (because they're in a nested, independent transaction).
                 # Hence we set this flag to tell us that we got this far and that we should roll them back.

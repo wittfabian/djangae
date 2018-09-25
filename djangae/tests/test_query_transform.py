@@ -231,19 +231,19 @@ class QueryNormalizationTests(TestCase):
 
 
         query = Query(TestUser, "SELECT")
-        query.where = WhereNode()
-        query.where.children.append(WhereNode())
+        query.where = WhereNode('default')
+        query.where.children.append(WhereNode('default'))
         query.where.children[-1].column = "A"
         query.where.children[-1].operator = "="
-        query.where.children.append(WhereNode())
+        query.where.children.append(WhereNode('default'))
         query.where.children[-1].column = "B"
         query.where.children[-1].operator = "="
-        query.where.children.append(WhereNode())
+        query.where.children.append(WhereNode('default'))
         query.where.children[-1].connector = "OR"
-        query.where.children[-1].children.append(WhereNode())
+        query.where.children[-1].children.append(WhereNode('default'))
         query.where.children[-1].children[-1].column = "C"
         query.where.children[-1].children[-1].operator = "="
-        query.where.children[-1].children.append(WhereNode())
+        query.where.children[-1].children.append(WhereNode('default'))
         query.where.children[-1].children[-1].column = "D"
         query.where.children[-1].children[-1].operator = "="
 

@@ -7,6 +7,9 @@ from django.db import NotSupportedError
 from django.db.models.expressions import Star
 from django.db.models.sql.datastructures import EmptyResultSet
 from django.db.models.query import QuerySet
+from django.db.models.aggregates import Aggregate
+from django.db.models.sql.query import Query as DjangoQuery
+
 
 try:
     from django.db.models.query import FlatValuesListIterable
@@ -31,7 +34,7 @@ logger = logging.getLogger(__name__)
 
 
 INVALID_ORDERING_FIELD_MESSAGE = (
-    "Ordering on TextField or BinaryField is not supported on the datastore. "
+    "Ordering on TextField or BinaryField is not supported on the Datastore. "
     "You might consider using a ComputedCharField which stores the first "
     "_MAX_STRING_LENGTH (from google.appengine.api.datastore_types) bytes of the "
     "field and instead order on that."
@@ -106,15 +109,23 @@ class BaseParser(object):
         return "SELECT"
 
     def _prepare_for_transformation(self):
-        from django.db.models.sql.where import NothingNode, WhereNode as DjangoWhereNode
+        from django.db.models.sql.where import NothingNode
         query = self.django_query
+
+        def where_will_always_be_empty(where):
+            if isinstance(where, NothingNode):
+                return True
+
+            if where.connector == 'AND' and any(isinstance(x, NothingNode) for x in where.children):
+                return True
+
+            if where.connector == 'OR' and len(where.children) == 1 and isinstance(where.children[0], NothingNode):
+                return True
+
+            return False
+
         # It could either be a NothingNode, or a WhereNode(AND NothingNode)
-        if (
-                isinstance(query.where, NothingNode) or (
-                isinstance(query.where, DjangoWhereNode) and
-                len(query.where.children) == 1 and
-                isinstance(query.where.children[0], NothingNode)
-                )):
+        if where_will_always_be_empty(query.where):
             # Empty where means return nothing!
             raise EmptyResultSet()
 
@@ -173,7 +184,7 @@ class BaseParser(object):
                 query.add_annotation(k, v)
 
     def _where_node_trunk_callback(self, node, negated, new_parent, **kwargs):
-        new_node = WhereNode()
+        new_node = WhereNode(new_parent.using)
         new_node.connector = node.connector
         new_node.negated = node.negated
 
@@ -182,7 +193,7 @@ class BaseParser(object):
         return new_node
 
     def _where_node_leaf_callback(self, node, negated, new_parent, connection, model, compiler):
-        new_node = WhereNode()
+        new_node = WhereNode(new_parent.using)
 
         def convert_rhs_op(node):
             db_rhs = getattr(node.rhs, '_db', None)
@@ -199,12 +210,13 @@ class BaseParser(object):
             return operator
 
         if not hasattr(node, "lhs"):
-            raise NotSupportedError("Attempted probable subquery, these aren't supported on the datastore")
+            raise NotSupportedError("Attempted probable subquery, these aren't supported on the Datastore")
 
-        # Although we do nothing with this. We need to call it as many lookups
-        # perform validation etc.
-        if not hasattr(node.rhs, "_as_sql"): # Don't call on querysets
+        # Don't call on querysets
+        if not hasattr(node.rhs, "_as_sql") and not isinstance(node.rhs, DjangoQuery):
             try:
+                # Although we do nothing with this. We need to call it as many lookups
+                # perform validation etc.
                 node.process_rhs(compiler, connection)
             except EmptyResultSet:
                 if node.lookup_name == 'in':
@@ -218,6 +230,8 @@ class BaseParser(object):
             # as they might be wrapping date fields
             field = node.lhs.target
             operator = convert_rhs_op(node)
+        elif isinstance(node.lhs, Aggregate):
+            raise NotSupportedError("Aggregate filters are not supported on the Datastore")
         else:
             field = node.lhs.lhs.target
             operator = convert_rhs_op(node)
@@ -229,27 +243,38 @@ class BaseParser(object):
                 operator = "{}__{}".format(node.lhs.lookup_name, node.lookup_name)
 
         if get_top_concrete_parent(field.model) != get_top_concrete_parent(model):
-            raise NotSupportedError("Cross-join where filters are not supported on the datastore")
+            raise NotSupportedError("Cross-join where filters are not supported on the Datastore")
 
         # Make sure we don't let people try to filter on a text field, otherwise they just won't
         # get any results!
 
-        if field.db_type(connection) in ("bytes", "text"):
-            raise NotSupportedError("You can't filter on text or blob fields on the datastore")
+        lookup_supports_text = getattr(node, "lookup_supports_text", False)
+
+        if field.db_type(connection) in ("bytes", "text") and not lookup_supports_text:
+            raise NotSupportedError("You can't filter on text or blob fields on the Datastore")
 
         if operator == "isnull" and field.model._meta.parents.values():
-            raise NotSupportedError("isnull lookups on inherited relations aren't supported on the datastore")
+            raise NotSupportedError("isnull lookups on inherited relations aren't supported on the Datastore")
 
         lhs = field.column
 
         if hasattr(node.rhs, "get_compiler"):
-            # This is a subquery
-            raise NotSupportedError("Attempted to run a subquery on the datastore")
+            if len(node.rhs.select) == 1:
+                # In Django >= 1.11 this is a values list type query, which we explicitly handle
+                # because of the common case of pk__in=Something.objects.values_list("pk", flat=True)
+                qs = QuerySet(query=node.rhs, using=self.connection.alias)
+
+                # We make the query for the values, but wrap in a list to trick the
+                # was_iter code below. This whole set of if/elif statements needs rethinking!
+                rhs = [list(qs.values_list("pk", flat=True))]
+            else:
+                # This is a subquery
+                raise NotSupportedError("Attempted to run a subquery on the Datastore")
         elif isinstance(node.rhs, ValuesListQuerySet):
             # We explicitly handle ValuesListQuerySet because of the
             # common case of pk__in=Something.objects.values_list("pk", flat=True)
             # this WILL execute another query, but that is to be expected on a
-            # non-relational datastore.
+            # non-relational database.
 
             rhs = [x for x in node.rhs]  # Evaluate the queryset
 
@@ -286,7 +311,7 @@ class BaseParser(object):
         # For some reason, this test:
         # test_update_with_related_manager (get_or_create.tests.UpdateOrCreateTests)
         # ends up with duplicate nodes in the where tree. I don't know why. But this
-        # weirdly causes the datastore query to return nothing.
+        # weirdly causes the Datastore query to return nothing.
         # so here we don't add duplicate nodes, I can't think of a case where that would
         # change the query if it's under the same parent.
         if new_node in new_parent.children:
@@ -294,8 +319,8 @@ class BaseParser(object):
 
         new_parent.children.append(new_node)
 
-    def _generate_where_node(self):
-        output = WhereNode()
+    def _generate_where_node(self, query):
+        output = WhereNode(query.connection.alias)
         output.connector = self.django_query.where.connector
 
         _walk_django_where(
@@ -333,7 +358,7 @@ class BaseParser(object):
         ret.low_mark = self.django_query.low_mark
         ret.high_mark = self.django_query.high_mark
 
-        output = self._generate_where_node()
+        output = self._generate_where_node(ret)
 
         # If there no child nodes, just wipe out the where
         if not output.children:
@@ -375,7 +400,7 @@ class BaseParser(object):
             if len(cross_table_ordering):
                 log_once(
                     logger.warning if environment.is_development_environment() else logger.debug,
-                    "The following orderings were ignored as cross-table orderings are not supported on the datastore: %s", cross_table_ordering
+                    "The following orderings were ignored as cross-table orderings are not supported on the Datastore: %s", cross_table_ordering
                 )
 
             result = new_result
@@ -416,7 +441,7 @@ class BaseParser(object):
                 pk_col = "__key__"
                 final.append("-" + pk_col if col.startswith("-") else pk_col)
             elif col == "?":
-                raise NotSupportedError("Random ordering is not supported on the datastore")
+                raise NotSupportedError("Random ordering is not supported on the Datastore")
             elif col.lstrip("-").startswith("__") and col.endswith("__"):
                 # Allow stuff like __scatter__
                 final.append(col)
@@ -455,7 +480,7 @@ class BaseParser(object):
                     # into account the related model ordering. Note the difference between field.name == column
                     # and field.attname (X_id)
                     if field.related_model and field.name == column and field.related_model._meta.ordering:
-                        raise NotSupportedError("Related ordering is not supported on the datastore")
+                        raise NotSupportedError("Related ordering is not supported on the Datastore")
 
                     column = "__key__" if field.primary_key else field.column
                     final.append("-" + column if col.startswith("-") else column)
@@ -491,7 +516,7 @@ class BaseParser(object):
             diff = set(result) - set(final)
             log_once(
                 logger.warning if environment.is_development_environment() else logger.debug,
-                "The following orderings were ignored as cross-table and random orderings are not supported on the datastore: %s", diff
+                "The following orderings were ignored as cross-table and random orderings are not supported on the Datastore: %s", diff
             )
 
         return final

@@ -1,13 +1,6 @@
 # coding: utf-8
-import urllib
 import mimetypes
-import re
 import threading
-
-try:
-    from cStringIO import StringIO
-except ImportError:
-    from StringIO import StringIO
 
 from django.conf import settings
 from django.core.exceptions import SuspiciousFileOperation
@@ -18,6 +11,7 @@ from django.core.files.uploadedfile import UploadedFile
 from django.core.files.uploadhandler import FileUploadHandler, \
     StopFutureHandlers
 from django.http import HttpResponse
+from django.utils import six
 from django.utils.encoding import smart_str, force_unicode
 from django.test.client import encode_multipart, MULTIPART_CONTENT, BOUNDARY
 from djangae.db import transaction
@@ -56,6 +50,7 @@ KEY_CACHE = {}
 KEY_CACHE_LIST = []
 MAX_KEY_CACHE_SIZE = 500
 
+
 def _add_to_cache(blob_key_or_info, blob_key, file_info):
     """
         This helps remove overhead when serving cloud storage files
@@ -87,6 +82,7 @@ def _get_from_cache(blob_key_or_info):
     with CACHE_LOCK:
         return KEY_CACHE.get(blob_key_or_info)
 
+
 def _get_or_create_cached_blob_key_and_info(blob_key_or_info):
     cached_value = _get_from_cache(blob_key_or_info)
     if cached_value:
@@ -97,6 +93,7 @@ def _get_or_create_cached_blob_key_and_info(blob_key_or_info):
         blob_key = create_gs_key('/gs{0}'.format(blob_key_or_info))
         _add_to_cache(blob_key_or_info, blob_key, info)
     return (blob_key, info)
+
 
 def serve_file(request, blob_key_or_info, as_download=False, content_type=None, filename=None, offset=None, size=None):
     """
@@ -110,7 +107,7 @@ def serve_file(request, blob_key_or_info, as_download=False, content_type=None, 
     if isinstance(blob_key_or_info, BlobKey):
         info = BlobInfo.get(blob_key_or_info)
         blob_key = blob_key_or_info
-    elif isinstance(blob_key_or_info, basestring):
+    elif isinstance(blob_key_or_info, six.string_types):
         info = BlobInfo.get(BlobKey(blob_key_or_info))
         blob_key = BlobKey(blob_key_or_info)
     elif isinstance(blob_key_or_info, BlobInfo):
@@ -154,15 +151,22 @@ def serve_file(request, blob_key_or_info, as_download=False, content_type=None, 
     return response
 
 
+DEFAULT_GCS_BUCKET = None
+
+
 def get_bucket_name():
     """
         Returns the bucket name for Google Cloud Storage, either from your
         settings or the default app bucket.
     """
+    global DEFAULT_GCS_BUCKET
+
     bucket = getattr(settings, BUCKET_KEY, None)
     if not bucket:
         # No explicit setting, lets try the default bucket for your application.
-        bucket = app_identity.get_default_gcs_bucket_name()
+        bucket = DEFAULT_GCS_BUCKET or app_identity.get_default_gcs_bucket_name()
+        DEFAULT_GCS_BUCKET = bucket
+
     if not bucket:
         from django.core.exceptions import ImproperlyConfigured
         message = '%s not set or no default bucket configured' % BUCKET_KEY
@@ -183,7 +187,8 @@ class BlobstoreUploadMixin():
 
         url = self._create_upload_url()
 
-        response = urlfetch.fetch(url=url,
+        response = urlfetch.fetch(
+            url=url,
             payload=encode_multipart(BOUNDARY, {'file': content}),
             method=urlfetch.POST,
             deadline=60,
@@ -240,8 +245,7 @@ class BlobstoreStorage(Storage, BlobstoreUploadMixin):
             # down an argument saying whether it should be secure or not
             with transaction.non_atomic():
                 # This causes a Datastore lookup which we don't want to interfere with transactions
-                url = get_serving_url(self._get_blobinfo(name))
-            return re.sub("http://", "//", url)
+                return get_serving_url(self._get_blobinfo(name), secure_url=True)
         except (NotImageError, BlobKeyRequiredError, TransformationError, LargeImageError):
             # Django doesn't expect us to return None from this function, and in fact
             # relies on the "truthiness" of the return value when accessing .url on an
@@ -287,11 +291,14 @@ class CloudStorage(Storage, BlobstoreUploadMixin):
     write_options = None
 
     def __init__(self, bucket=None, google_acl=None):
-        if not bucket:
-            bucket = get_bucket_name()
-        self.bucket = bucket
-        # +2 for the slashes.
-        self._bucket_prefix_len = len(bucket) + 2
+        if callable(bucket):
+            # If the bucket is callable, just store the callable
+            self._bucket_calculator = bucket
+        else:
+            # Otherwise, store a callable which returns the bucket or
+            # use the get_bucket_name function (default bucket)
+            self._bucket_calculator = (lambda: bucket) if bucket else get_bucket_name
+
         if cloudstorage.common.local_run() and not cloudstorage.common.get_access_token():
             # We do it this way so that the stubs override in tests
             self.api_url = '/_ah/gcs'
@@ -303,19 +310,30 @@ class CloudStorage(Storage, BlobstoreUploadMixin):
             # If you don't specify an acl means you get the default permissions.
             self.write_options['x-goog-acl'] = google_acl
 
+    @property
+    def bucket(self):
+        return self._bucket_calculator()
+
+    @property
+    def _bucket_prefix_len(self):
+        # +2 for the slashes.
+        return len(self.bucket) + 2
+
     def url(self, filename):
         try:
             # Return a protocol-less URL, because django can't/won't pass
             # down an argument saying whether it should be secure or not
             with transaction.non_atomic():
                 # This causes a Datastore lookup which we don't want to interfere with transactions
-                url = get_serving_url(self._get_blobkey(filename))
-            return re.sub("http://", "//", url)
-        except (TransformationError):
+                return get_serving_url(self._get_blobkey(filename), secure_url=True)
+        except (TransformationError, cloudstorage.NotFoundError):
             # Sometimes TransformationError will be thrown if you call get_serving_url on video files
             # this is probably a bug in App Engine
             # Probably related to this: https://code.google.com/p/googleappengine/issues/detail?id=8601
-            quoted_filename = urllib.quote(self._add_bucket(filename))
+
+            # Also, Django requires that url() return something 'truthy' even if the file field hasn't been
+            # saved yet so we do the same thing if the file is not found (just add the bucket to the filename)
+            quoted_filename = six.moves.urllib.parse.quote(self._add_bucket(filename))
             return '{0}{1}'.format(self.api_url, quoted_filename)
 
     def _get_blobkey(self, name):
@@ -336,7 +354,7 @@ class CloudStorage(Storage, BlobstoreUploadMixin):
         return name
 
     def _add_bucket(self, name):
-        safe_name = urllib.quote(name.encode('utf-8'))
+        safe_name = six.moves.urllib.parse.quote(name.encode('utf-8'))
         return '/{0}/{1}'.format(self.bucket, safe_name)
 
     def _content_type_for_name(self, name):
@@ -378,12 +396,13 @@ class CloudStorage(Storage, BlobstoreUploadMixin):
             gs_bucket_name=self.bucket_name
         )
 
+
 class UniversalNewLineBlobReader(BlobReader):
     def readline(self, size=-1):
         limit_size = size > -1
 
         buf = []  # A buffer to store our line
-        #Read characters until we find a \r or \n, or hit the maximum size
+        # Read characters until we find a \r or \n, or hit the maximum size
         c = self.read(size=1)
         while c != '\n' and c != '\r' and (not limit_size or len(buf) < size):
             if not c:
@@ -396,11 +415,11 @@ class UniversalNewLineBlobReader(BlobReader):
         if c == '\r':
             n = self.read(size=1)
 
-            #If the \r wasn't followed by a \n, then it was a mac line ending
-            #so we seek backwards 1
+            # If the \r wasn't followed by a \n, then it was a mac line ending
+            # so we seek backwards 1
             if n and n != '\n':
-                #We only check n != '\n' if we weren't EOF (e.g. n evaluates to False) otherwise
-                #we'd read nothing, and then seek back 1 which would then be re-read next loop etc.
+                # We only check n != '\n' if we weren't EOF (e.g. n evaluates to False) otherwise
+                # we'd read nothing, and then seek back 1 which would then be re-read next loop etc.
                 self.seek(-1, 1)  # The second 1 means to seek relative to the current position
 
         # Only add a trailing \n (if it doesn't break the size constraint)

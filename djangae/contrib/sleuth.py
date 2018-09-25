@@ -41,6 +41,7 @@ def _patch(path, replacement):
     thing = _evaluate_path(
         ".".join(path.split(".")[:-1])
     )
+
     setattr(thing, path.split(".")[-1], replacement)
 
 
@@ -110,6 +111,12 @@ class Switch(ContextDecorator):
         self._original_func = _evaluate_path(func_path)
         self._func_path = func_path
         self._replacement = replacement
+
+        # If the original thing we're replacing is a property, make sure
+        # we make the replacement thing a property too
+        if isinstance(self._original_func, property):
+            self._replacement = property(self._replacement)
+
         self._watch = None
 
     def __enter__(self):
@@ -124,6 +131,42 @@ class Switch(ContextDecorator):
         _patch(self._func_path, self._original_func)
 
 switch = Switch
+
+
+class Emplace(ContextDecorator):
+    """
+        Given a list or dictionary, this will temporarily replace the
+        contents without changing the object reference itself.
+    """
+    def __init__(self, obj_path, replacement_values, clear=False):
+        self._clear = clear
+        self._target = _evaluate_path(obj_path)
+        self._original_values = None
+        assert(isinstance(self._target, (list, dict)))
+
+        self._replacement_values = replacement_values
+
+    def __enter__(self):
+        if isinstance(self._target, dict):
+            self._original_values = self._target.copy()
+            if self._clear:
+                self._target.clear()
+            self._target.update(self._replacement_values)
+        else:
+            self._original_values = self._target[:]
+            if self._clear:
+                self._target[:] = self._replacement_values
+            else:
+                self._target.extend(self._replacement_values)
+
+    def __exit__(self, *args, **kwargs):
+        if isinstance(self._target, dict):
+            self._target.clear()
+            self._target.update(self._original_values)
+        else:
+            self._target[:] = self._original_values
+
+emplace = Emplace
 
 
 class Detonate(Switch):

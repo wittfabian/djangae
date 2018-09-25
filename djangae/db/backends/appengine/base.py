@@ -1,47 +1,34 @@
 #STANDARD LIB
 import datetime
 import decimal
-import warnings
 import logging
+import warnings
 
-#LIBRARIES
-from django.conf import settings
-from django.utils import timezone
-
-from django.db.backends.base.operations import BaseDatabaseOperations
-from django.db.backends.base.client import BaseDatabaseClient
-from django.db.backends.base.introspection import BaseDatabaseIntrospection
-from django.db.backends.base.introspection import TableInfo
-from django.db.backends.base.base import BaseDatabaseWrapper
-from django.db.backends.base.features import BaseDatabaseFeatures
-from django.db.backends.base.validation import BaseDatabaseValidation
-from django.db.backends.base.creation import BaseDatabaseCreation
-from django.db.backends.base.schema import BaseDatabaseSchemaEditor
-
+from google.appengine.api import datastore_errors
 from google.appengine.api.datastore_types import Blob, Text
-from google.appengine.datastore import datastore_stub_util
-from google.appengine.api import datastore, datastore_errors
-
-#DJANGAE
-from djangae.db.utils import (
-    decimal_to_string,
-    make_timezone_naive,
-    get_datastore_key,
-)
-
-from djangae.db.backends.appengine.caching import get_context
-from djangae.db.backends.appengine.indexing import load_special_indexes
-from .commands import (
-    SelectCommand,
-    InsertCommand,
-    FlushCommand,
-    UpdateCommand,
-    DeleteCommand,
-    coerce_unicode
-)
 
 from djangae.db.backends.appengine import dbapi as Database
+from djangae.db.backends.appengine import rpc
+from djangae.db.backends.appengine.indexing import load_special_indexes
+#DJANGAE
+from djangae.db.utils import (decimal_to_string, get_datastore_key,
+                              make_timezone_naive)
+#LIBRARIES
+from django.conf import settings
+from django.db.backends.base.base import BaseDatabaseWrapper
+from django.db.backends.base.client import BaseDatabaseClient
+from django.db.backends.base.creation import BaseDatabaseCreation
+from django.db.backends.base.features import BaseDatabaseFeatures
+from django.db.backends.base.introspection import (BaseDatabaseIntrospection,
+                                                   TableInfo)
+from django.db.backends.base.operations import BaseDatabaseOperations
+from django.db.backends.base.schema import BaseDatabaseSchemaEditor
+from django.db.backends.base.validation import BaseDatabaseValidation
+from django.utils import six, timezone
+from django.utils.encoding import smart_text
 
+from .commands import (DeleteCommand, FlushCommand, InsertCommand,
+                       SelectCommand, UpdateCommand, coerce_unicode)
 
 logger = logging.getLogger(__name__)
 
@@ -125,14 +112,12 @@ class Cursor(object):
             return []
 
         result = []
-        i = 0
-        while i < size:
+        for i in range(size):
             entity = self.fetchone(delete_flag)
             if entity is None:
                 break
 
             result.append(entity)
-            i += 1
 
         return result
 
@@ -145,6 +130,7 @@ class Cursor(object):
 
     def close(self):
         pass
+
 
 MAXINT = 9223372036854775808
 
@@ -160,6 +146,13 @@ class DatabaseOperations(BaseDatabaseOperations):
         'PositiveSmallIntegerField': (0, MAXINT-1),
         'PositiveIntegerField': (0, MAXINT-1),
     }
+
+    def bulk_batch_size(self, field, objs):
+        # This value is used in cascade deletions, and also on bulk insertions
+        # Bulk insertions really need to be limited to 25 elsewhere (so that they can be done)
+        # transactionally, so setting to 30 doesn't matter but for cascade deletions
+        # (which explode to thing_id__in=[]) we need to limit to MAX_ALLOWABLE_QUERIES
+        return rpc.MAX_ALLOWABLE_QUERIES
 
     def quote_name(self, name):
         return name
@@ -235,10 +228,15 @@ class DatabaseOperations(BaseDatabaseOperations):
         return value
 
     def sql_flush(self, style, tables, seqs, allow_cascade=False):
-        return [FlushCommand(table, self.connection) for table in tables]
+        additional_djangaeidx_tables = [
+            x for x in self.connection.introspection.table_names()
+            if [y for y in tables if x.startswith("_djangae_idx_{}".format(y))]
+        ]
+
+        return [FlushCommand(table, self.connection) for table in tables + additional_djangaeidx_tables]
 
     def prep_lookup_key(self, model, value, field):
-        if isinstance(value, basestring):
+        if isinstance(value, six.string_types):
             value = value[:500]
             left = value[500:]
             if left:
@@ -342,7 +340,7 @@ class DatabaseOperations(BaseDatabaseOperations):
             in your SQL. Technically this is a bug in Django for assuming that sql is ASCII but
             it's only our backend that will ever trigger the problem
         """
-        return u"QUERY = {}".format(sql)
+        return u"QUERY = {}".format(smart_text(sql))
 
     def fetch_returned_insert_id(self, cursor):
         return cursor.lastrowid
@@ -468,41 +466,17 @@ class DatabaseCreation(BaseDatabaseCreation):
         return []
 
     def _create_test_db(self, verbosity, autoclobber, *args):
-        from google.appengine.ext import testbed # Imported lazily to prevent warnings on GAE
-
-        assert not self.testbed
-
-        if args:
-            logger.warning("'keepdb' argument is not currently supported on the AppEngine backend")
-
-        # We allow users to disable scattered IDs in tests. This primarily for running Django tests that
-        # assume implicit ordering (yeah, annoying)
-        use_scattered = not getattr(settings, "DJANGAE_SEQUENTIAL_IDS_IN_TESTS", False)
-
-        kwargs = {
-            "use_sqlite": True,
-            "auto_id_policy": testbed.AUTO_ID_POLICY_SCATTERED if use_scattered else testbed.AUTO_ID_POLICY_SEQUENTIAL,
-            "consistency_policy": datastore_stub_util.PseudoRandomHRConsistencyPolicy(probability=1)
-        }
-
-        self.testbed = testbed.Testbed()
-        self.testbed.activate()
-        self.testbed.init_datastore_v3_stub(**kwargs)
-        self.testbed.init_memcache_stub()
-        get_context().reset()
+        pass
 
     def _destroy_test_db(self, name, verbosity):
-        if self.testbed:
-            get_context().reset()
-            self.testbed.deactivate()
-            self.testbed = None
+        pass
 
 
 class DatabaseIntrospection(BaseDatabaseIntrospection):
-    @datastore.NonTransactional
+    @rpc.NonTransactional
     def get_table_list(self, cursor):
         namespace = self.connection.settings_dict.get("NAMESPACE")
-        kinds = [kind.key().id_or_name() for kind in datastore.Query('__kind__', namespace=namespace).Run()]
+        kinds = [kind.key().id_or_name() for kind in rpc.Query('__kind__', namespace=namespace).Run()]
         return [TableInfo(x, "t") for x in kinds]
 
 
@@ -567,15 +541,28 @@ class DatabaseWrapper(BaseDatabaseWrapper):
 
     Database = Database
 
+    # These attributes are only used by Django >= 1.11
+    client_class = DatabaseClient
+    features_class = DatabaseFeatures
+    introspection_class = DatabaseIntrospection
+    features_class = DatabaseFeatures
+    ops_class = DatabaseOperations
+    creation_class = DatabaseCreation
+    validation_class = BaseDatabaseValidation
+
     def __init__(self, *args, **kwargs):
         super(DatabaseWrapper, self).__init__(*args, **kwargs)
 
-        self.features = DatabaseFeatures(self)
-        self.ops = DatabaseOperations(self)
-        self.client = DatabaseClient(self)
-        self.creation = DatabaseCreation(self)
-        self.introspection = DatabaseIntrospection(self)
-        self.validation = BaseDatabaseValidation(self)
+        if not hasattr(self, "client"):
+            # Django 1.11 creates these automatically, when we call super
+            # These are here for Django <= 1.10
+            self.features = DatabaseFeatures(self)
+            self.ops = DatabaseOperations(self)
+            self.client = DatabaseClient(self)
+            self.creation = DatabaseCreation(self)
+            self.introspection = DatabaseIntrospection(self)
+            self.validation = BaseDatabaseValidation(self)
+
         self.autocommit = True
 
     def is_usable(self):
@@ -598,7 +585,8 @@ class DatabaseWrapper(BaseDatabaseWrapper):
     def _set_autocommit(self, enabled):
         self.autocommit = enabled
 
-    def create_cursor(self):
+    def create_cursor(self, name=None):
+        self.name = name  # Django >= 1.11
         if not self.connection:
             self.connection = self.get_new_connection(self.settings_dict)
 
@@ -606,3 +594,7 @@ class DatabaseWrapper(BaseDatabaseWrapper):
 
     def schema_editor(self, *args, **kwargs):
         return DatabaseSchemaEditor(self, *args, **kwargs)
+
+    def validate_no_broken_transaction(self):
+        # Override this to do nothing, because it's not relevant to the Datastore
+        pass

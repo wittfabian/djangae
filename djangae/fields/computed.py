@@ -10,7 +10,7 @@ class ComputedFieldMixin(object):
         super(ComputedFieldMixin, self).__init__(*args, **kwargs)
 
     def pre_save(self, model_instance, add):
-        value = self.computer(model_instance)
+        value = self.get_computed_value(model_instance)
         setattr(model_instance, self.attname, value)
         return value
 
@@ -24,6 +24,14 @@ class ComputedFieldMixin(object):
         if value is None:
             return value
         return self.to_python(value)
+
+    def get_computed_value(self, model_instance):
+        # self.computer is either a function or a string containing the name of a method
+        if callable(self.computer):
+            return self.computer(model_instance)
+        else:
+            computer = getattr(model_instance, self.computer)
+            return computer()
 
 
 class ComputedCharField(ComputedFieldMixin, models.CharField):
@@ -43,4 +51,8 @@ class ComputedPositiveIntegerField(ComputedFieldMixin, models.PositiveIntegerFie
 
 
 class ComputedBooleanField(ComputedFieldMixin, models.BooleanField):
+    pass
+
+
+class ComputedNullBooleanField(ComputedFieldMixin, models.NullBooleanField):
     pass

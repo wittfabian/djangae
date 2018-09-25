@@ -1,15 +1,15 @@
 from __future__ import absolute_import
 
 import collections
+import functools
+import logging
 import sys
 import time
-import logging
-import functools
 import warnings
+from socket import socket
 
-from socket import socket, SHUT_RDWR
-
-
+# No SDK imports allowed in module namespace because `./manage.py runserver`
+# imports this before the SDK is added to sys.path. See bugs #899, #1055.
 logger = logging.getLogger(__name__)
 
 
@@ -93,33 +93,59 @@ def get_in_batches(queryset, batch_size=10):
 
 
 def retry_until_successful(func, *args, **kwargs):
-    return retry(func, *args, _retries=float('inf'), **kwargs)
+    return retry(func, *args, _attempts=float('inf'), **kwargs)
 
 
 def retry(func, *args, **kwargs):
+    """ Calls a function that may intermittently fail, catching the given error(s) and (re)trying
+        for a maximum of `_attempts` times.
+    """
+    # Imported here to fix ImportError (see bugs #899, #1055).
     from google.appengine.api import datastore_errors
     from google.appengine.runtime import apiproxy_errors
     from google.appengine.runtime import DeadlineExceededError
-    from djangae.db.transaction import TransactionFailedError
+    from djangae.db.transaction import TransactionFailedError  # Avoid circular import
+    # Slightly weird `.pop(x, None) or default` thing here due to not wanting to repeat the tuple of
+    # default things in `retry_on_error` and having to do inline imports
+    catch = kwargs.pop('_catch', None) or (
+        datastore_errors.Error, apiproxy_errors.Error, TransactionFailedError
+    )
+    attempts = kwargs.pop('_attempts', 3)
+    timeout_ms = kwargs.pop('_initial_wait', 375)  # Try 375, 750, 1500
+    max_wait = kwargs.pop('_max_wait', 30000)
 
-    retries = kwargs.pop('_retries', 3)
     i = 0
     try:
-        timeout_ms = 100
         while True:
             try:
                 i += 1
                 return func(*args, **kwargs)
-            except (datastore_errors.Error, apiproxy_errors.Error, TransactionFailedError), exc:
-                logger.info("Retrying function: %s(%s, %s) - %s", str(func), str(args), str(kwargs), str(exc))
-                time.sleep(timeout_ms / 1000000.0)
-                timeout_ms *= 2
-                if i > retries:
+            except catch as exc:
+                if i >= attempts:
                     raise exc
+                logger.info("Retrying function: %s(%s, %s) - %s", func, args, kwargs, exc)
+                time.sleep(timeout_ms * 0.001)
+                timeout_ms *= 2
+                timeout_ms = min(timeout_ms, max_wait)
 
     except DeadlineExceededError:
-        logger.error("Timeout while running function: %s(%s, %s)", str(func), str(args), str(kwargs))
+        logger.error("Timeout while running function: %s(%s, %s)", func, args, kwargs)
         raise
+
+
+def retry_on_error(_catch=None, _attempts=3, _initial_wait=375, _max_wait=30000):
+    """ Decorator for wrapping a function with `retry`. """
+
+    def decorator(func):
+        @functools.wraps(func)
+        def replacement(*args, **kwargs):
+            return retry(
+                func,
+                _catch=_catch, _attempts=_attempts, _initial_wait=_initial_wait, _max_wait=_max_wait,
+                *args, **kwargs
+            )
+        return replacement
+    return decorator
 
 
 def djangae_webapp(request_handler):
@@ -143,7 +169,7 @@ def djangae_webapp(request_handler):
         view_func.dispatch()
 
         django_response = HttpResponse(response.body, status=int(str(response.status).split(" ")[0]))
-        for header, value in response.headers.iteritems():
+        for header, value in response.headers.items():
             django_response[header] = value
 
         return django_response
@@ -151,22 +177,23 @@ def djangae_webapp(request_handler):
     return request_handler_wrapper
 
 
-def port_is_open(port, url):
+def port_is_open(url, port):
     s = socket()
     try:
-        s.connect((url, int(port)))
-        s.shutdown(SHUT_RDWR)
+        s.bind((url, int(port)))
+        s.close()
         return True
-    except:
+    except Exception:
         return False
 
 
 def get_next_available_port(url, port):
-    for offset in xrange(10):
+    for offset in range(10):
         if port_is_open(url, port + offset):
-            port = port + offset
             break
-    return port
+    else:
+        raise Exception("Could not find available port between %d and %d", (port, port + offset))
+    return port + offset
 
 
 class memoized(object):
@@ -178,9 +205,9 @@ class memoized(object):
     def __call__(self, *args):
         args = self.args or args
         if not isinstance(args, collections.Hashable):
-         # uncacheable. a list, for instance.
-         # better to not cache than blow up.
-         return self.func(*args)
+            # uncacheable. a list, for instance.
+            # better to not cache than blow up.
+            return self.func(*args)
 
         if args in self.cache:
             return self.cache[args]

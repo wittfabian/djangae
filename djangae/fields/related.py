@@ -1,4 +1,7 @@
-import django
+# STANDARD LIB
+import copy
+
+# THIRD PARTY
 from django import forms
 from django.db import router, models
 from django.db.models.query import QuerySet
@@ -7,15 +10,28 @@ from django.utils.functional import cached_property
 from django.core.exceptions import ImproperlyConfigured, ValidationError
 from djangae.forms.fields import (
     encode_pk,
-    GenericRelationFormfield
+    GenericRelationFormfield,
+    OrderedModelMultipleChoiceField,
 )
-from django.utils import six
 
-from djangae.fields.iterable import IsEmptyLookup, ContainsLookup, OverlapLookup
+
+try:
+    from django.db.models.query import FlatValuesListIterable
+except ImportError:
+    # Django 1.8 only
+    from django.db.models.query import ValuesListQuerySet
+
+
+from django.utils import six
+import django
+
+# DJANGAE
+from djangae.core.validators import MinItemsValidator, MaxItemsValidator
+from djangae.fields.iterable import IsEmptyLookup, ContainsLookup, OverlapLookup, _serialize_value
 
 
 class RelatedIteratorRel(ForeignObjectRel):
-    def __init__(self, field, to, related_name=None, limit_choices_to=None, on_delete=models.DO_NOTHING):
+    def __init__(self, field, to, related_name=None, limit_choices_to=None, on_delete=models.DO_NOTHING, **kwargs):
         self.field = field
         if django.VERSION[1] < 9: # Django 1.8 compatibility
             self.to = to
@@ -26,10 +42,7 @@ class RelatedIteratorRel(ForeignObjectRel):
         self.parent_link = None
         self.on_delete = on_delete
         self.symmetrical = False
-
-        if limit_choices_to is None:
-            limit_choices_to = {}
-        self.limit_choices_to = limit_choices_to
+        self.limit_choices_to = {} if limit_choices_to is None else limit_choices_to
         self.multiple = True
 
     def is_hidden(self):
@@ -55,10 +68,92 @@ class OrderedQuerySet(QuerySet):
             Fetch all uses the standard iterator but sorts the values on the
             way out, this maintains the lazy evaluation of querysets
         """
+
+        def locate_pk_column(query):
+            pk_name = self.model._meta.pk.name
+            if django.VERSION >= (1, 9):
+                if "pk" in query.values_select:
+                    return query.values_select.index("pk")
+                elif pk_name in query.values_select:
+                    return query.values_select.index(pk_name)
+            else:
+                for i, col in enumerate(query.select):
+                    if hasattr(col, "field") and col.field.name == pk_name:
+                        return i
+
         if self._result_cache is None:
-            results = list(self.iterator())
+            # Making this work efficiently is tricky. We never want to fetch more than self.ordered_pks
+            # and the __getitem__ implementation sets this to a single item, so in that case we only want
+            # to fetch one. So we do a few things here:
+
+            # 1. We clone the Queryset as a normal Queryset, then we do a pk__in on the ordered_pks.
+            # 2. We add the primary key if this was a values_list query without it being specified, otherwise
+            #    we can't match up the ordering
+            # 3. We execute the clone, and then remove the additional PK column from the result set
+
+            # There are various combinations to handle depending on whether it's a "flat" values_list or
+            # whether or not we added the PK manually to the result set
+
+
+            if django.VERSION >= (1, 9):
+                clone = QuerySet(model=self.model, query=self.query, using=self._db)
+                clone._iterable_class = self._iterable_class
+            else:
+                if isinstance(self, ValuesListQuerySet):
+                    clone = ValuesListQuerySet(model=self.model, query=self.query, using=self._db)
+                    clone._fields = self._fields
+                    clone.field_names = self.field_names
+                    clone.extra_names = self.extra_names
+                    clone.annotation_names = self.annotation_names
+                    clone.flat = self.flat
+                else:
+                    clone = QuerySet(model=self.model, query=self.query, using=self._db)
+
+            clone = clone.filter(pk__in=self.ordered_pks)
+
+            pk_col = 0
+            pk_added = False
+
+            if django.VERSION >= (1, 9):
+                values_select = clone.query.values_select
+            else:
+                values_select = [x.field.name for x in clone.query.select]
+
+            if values_select:
+                pk_col = locate_pk_column(clone.query)
+                if pk_col is None:
+                    # Manually add the PK to the result set
+                    clone = clone.values_list(*(["pk"] + values_select))
+                    values_select = [x.field.name for x in clone.query.select]
+                    pk_col = 0
+                    pk_added = True
+
+            # Hit the database
+            results = list(clone)
+
             ordered_results = []
-            pk_hash = {x.pk: x for x in results}
+            pk_hash = {}
+
+            if django.VERSION >= (1, 9):
+                flat = self._iterable_class == FlatValuesListIterable
+            else:
+                # On Django 1.8 things are different
+                flat = getattr(self, "flat", False)
+
+            for x in results:
+                if isinstance(x, models.Model):
+                    # standard query case
+                    pk_hash[x.pk] = x
+                elif len(values_select) == 1:
+                    # Only PK case
+                    pk_hash[x if flat else x[pk_col]] = x
+                else:
+                    # Multiple columns (either passed in, or as a result of the PK being added)
+                    if flat:
+                        pk_hash[x[pk_col]] = x[1] if pk_added else x
+                    else:
+                        pk_hash[x[pk_col]] = x[1:] if pk_added else x
+
             for pk in self.ordered_pks:
                 obj = pk_hash.get(pk)
                 if obj:
@@ -116,15 +211,75 @@ class RelatedIteratorManagerBase(object):
         self.instance = instance
         self.field = field
         self.reverse = reverse
+        self.ordered = field.retain_underlying_order
 
         if reverse:
             self.core_filters = {'%s__contains' % self.field.column: instance.pk}
         else:
             self.core_filters = {'pk__in': field.value_from_object(instance)}
 
+    def get_prefetch_queryset(self, instances, queryset=None):
+        related_model = (
+            self.field.related_model if hasattr(self.field, "related_model") else self.field.related.to
+        )
+        if not queryset:
+            queryset = related_model.objects.all()
+
+        matchers = {}
+        related_ids = set()
+        for instance in instances:
+            for related_id in getattr(instance, self.field.attname):
+                related_ids.add(related_id)
+                matchers.setdefault(related_id, []).append(instance.pk)
+
+        queryset = queryset.filter(pk__in=related_ids)
+
+        def duplicator(queryset):
+            """
+                We have to duplicate the related objects for each source instance that
+                was passed in so we can convince Django to do the right thing when merging
+            """
+            for related_thing in queryset:
+                for i, matcher in enumerate(matchers[related_thing.pk]):
+                    if i == 0:
+                        # Optimisation to prevent unnecessary extra copy
+                        ret = related_thing
+                    else:
+                        ret = copy.copy(related_thing)
+
+                    # Set an id so we can fetch things out in the lambdas below
+                    ret._prefetch_instance_id = matcher
+                    yield ret
+
+        return (
+            duplicator(queryset),
+            lambda inst: inst._prefetch_instance_id,
+            lambda obj: obj.pk,
+            False,
+            self.field.name # Use the field name as the cache name
+        )
+
     def get_queryset(self):
-        db = self._db or router.db_for_read(self.instance.__class__, instance=self.instance)
-        if self.field.default == list and not self.reverse:
+        db = self._db or router.db_for_read(self.model, instance=self.instance)
+
+        if (hasattr(self.instance, "_prefetched_objects_cache") and
+            self.field.name in self.instance._prefetched_objects_cache):
+
+            qs = self.instance._prefetched_objects_cache[self.field.name]
+
+            if self.ordered:
+                lookup = {}
+                for item in qs._result_cache:
+                    lookup[item.pk] = item
+
+                # If this is a ListField make sure the result set retains the right order
+                qs._result_cache = []
+                for pk in getattr(self.instance, self.field.attname):
+                    qs._result_cache.append(lookup[pk])
+                return qs
+            else:
+                return qs
+        elif self.ordered and not self.reverse:
             values = self.field.value_from_object(self.instance)
             qcls = OrderedQuerySet(self.model, using=db)
             qcls.ordered_pks = values[:]
@@ -278,9 +433,54 @@ class RelatedIteratorField(ForeignObject):
     requires_unique_target = False
     generate_reverse_relation = True
     empty_strings_allowed = False
+    retain_underlying_order = False
+
+    rel_class = RelatedIteratorRel
 
     def __init__(self, to, limit_choices_to=None, related_name=None, on_delete=models.DO_NOTHING, **kwargs):
         # Make sure that we do nothing on cascade by default
+        self._check_sane_on_delete_value(on_delete)
+
+        from_fields = ['self']
+        to_fields = [None]
+
+        min_length, max_length = self._sanitize_min_and_max_length(kwargs)
+
+        if django.VERSION[1] == 8:
+            # in Django 1.8 ForeignObject uses get_lookup_constraint instead
+            # of get_lookup. We want to override it (but only for Django 1.8)
+            self.get_lookup_constraint = self._get_lookup_constraint
+
+            # Django 1.8 doesn't support the rel_class attribute so we have to pass it up
+            # manually.
+            kwargs["rel"] = self.rel_class(
+                self, to,
+                related_name=related_name,
+                related_query_name=kwargs.get("related_query_name"),
+                limit_choices_to=limit_choices_to,
+                parent_link=kwargs.get("parent_link"),
+                on_delete=on_delete
+            )
+
+            super(RelatedIteratorField, self).__init__(to, from_fields, to_fields, **kwargs)
+        else:
+            super(RelatedIteratorField, self).__init__(
+                to,
+                on_delete,
+                from_fields,
+                to_fields,
+                related_name=related_name,
+                limit_choices_to=limit_choices_to,
+                **kwargs
+            )
+
+        # Now that self.validators has been set up, we can add the min/max legnth validators
+        if min_length is not None:
+            self.validators.append(MinItemsValidator(min_length))
+        if max_length is not None:
+            self.validators.append(MaxItemsValidator(max_length))
+
+    def _check_sane_on_delete_value(self, on_delete):
         if on_delete == models.CASCADE:
             raise ImproperlyConfigured(
                 "on_delete=CASCADE is disabled for iterable fields as this will "
@@ -292,27 +492,21 @@ class RelatedIteratorField(ForeignObject):
                              " (e.g. wipeout the entire list) if you really want to do that "
                              "then use models.SET instead and return an empty list/set")
 
-        kwargs["rel"] = RelatedIteratorRel(
-            self,
-            to,
-            related_name=related_name,
-            limit_choices_to=limit_choices_to,
-            on_delete=on_delete
-        )
+    def _sanitize_min_and_max_length(self, kwargs):
+        # Pop the 'min_length' and 'max_length' from the kwargs, if they're there, as this avoids
+        # 'min_length' causing an error when calling super()
+        min_length = kwargs.pop("min_length", None)
+        max_length = kwargs.pop("max_length", None)
 
-        if django.VERSION[1] >= 9:  # Django 1.8 doesn't have on_delete as attribute
-            kwargs.update({
-                'on_delete': models.DO_NOTHING,
-            })
-        elif django.VERSION[1] == 8:
-            # in Django 1.8 ForeignObject uses get_lookup_constraint instead
-            # of get_lookup. We want to override it (but only for Django 1.8)
-            self.get_lookup_constraint = self._get_lookup_constraint
+        # Check that if there's a min_length that blank is not True.  This is partly because it
+        # doesn't make sense, and partly because if the value (i.e. the list or set) is empty then
+        # Django will skip the validators, thereby skipping the min_length check.
+        if min_length and kwargs.get("blank"):
+            raise ImproperlyConfigured(
+                "Setting blank=True and min_length=%d is contradictory." % min_length
+            )
 
-        from_fields = ['self']
-        to_fields = [None]
-
-        super(RelatedIteratorField, self).__init__(to, from_fields=from_fields, to_fields=to_fields, **kwargs)
+        return min_length, max_length
 
     def _get_lookup_constraint(self, constraint_class, alias, targets, sources, lookups, raw_value):
         from django.core import exceptions
@@ -396,6 +590,9 @@ class RelatedIteratorField(ForeignObject):
 
         if isinstance(ret, set):
             ret = list(ret)
+
+        ret = [self.rel.to._meta.pk.clean(x, self.rel.to) for x in ret]
+
         return ret
 
     def get_db_prep_lookup(self, *args, **kwargs):
@@ -409,17 +606,15 @@ class RelatedIteratorField(ForeignObject):
         return ret
 
     def value_to_string(self, obj):
-        """
-        Custom method for serialization, as JSON doesn't support
-        serializing sets.
-        """
-        return str(list(self._get_val_from_obj(obj)))
-
+        return u"[" + ",".join(
+            _serialize_value(o) for o in self._get_val_from_obj(obj)
+        ) + "]"
 
     def formfield(self, **kwargs):
         db = kwargs.pop('using', None)
+        form_class = kwargs.pop('form_class', forms.ModelMultipleChoiceField)
         defaults = {
-            'form_class': forms.ModelMultipleChoiceField,
+            'form_class': form_class,
             'queryset': self.rel.to._default_manager.using(db).complex_filter(self.rel.limit_choices_to)
         }
         defaults.update(kwargs)
@@ -444,6 +639,34 @@ class RelatedIteratorField(ForeignObject):
 
         return super(RelatedIteratorField, self).get_lookup(lookup_name)
 
+    def to_python(self, value):
+        if value is None:
+            return list()
+
+        # Deal with deserialization from a string
+        if isinstance(value, six.string_types):
+            if not (value.startswith("[") and value.endswith("]")):
+                raise ValidationError("Invalid input for {} instance", type(self).__name__)
+
+            value = value[1:-1].strip()
+
+            if not value:
+                return list()
+
+            ids = [
+                self.rel.to._meta.pk.to_python(x.strip("'").strip("\""))
+                for x in value.split(",")
+                if len(value) > 2
+            ]
+            # Annoyingly Django special cases FK and M2M in the Python deserialization code,
+            # to assign to the attname, whereas all other fields (including this one) are required to
+            # populate field.name instead. So we have to query here... we have no choice :(
+            objs = self.rel.to._default_manager.db_manager('default').in_bulk(ids)
+
+            # retain order
+            return [objs.get(_id) for _id in ids if _id in objs]
+
+        return list(value)
 
 RelatedIteratorField.register_lookup(RelatedContainsLookup)
 RelatedIteratorField.register_lookup(RelatedOverlapLookup)
@@ -471,27 +694,7 @@ class RelatedSetField(RelatedIteratorField):
         return name, path, args, kwargs
 
     def to_python(self, value):
-        if value is None:
-            return set()
-
-        # Deal with deserialization from a string
-        if isinstance(value, basestring):
-            if not (value.startswith("[") and value.endswith("]")) and \
-               not (value.startswith("{") and value.endswith("}")):
-                raise ValidationError("Invalid input for RelatedSetField instance")
-
-            value = value[1:-1].strip()
-
-            if not value:
-                return set()
-
-            ids = [self.rel.to._meta.pk.to_python(x) for x in value.split(",")]
-            # Annoyingly Django special cases FK and M2M in the Python deserialization code,
-            # to assign to the attname, whereas all other fields (including this one) are required to
-            # populate field.name instead. So we have to query here... we have no choice :(
-            return set(self.rel.to._default_manager.db_manager('default').filter(pk__in=ids))
-
-        return set(value)
+        return set(super(RelatedSetField, self).to_python(value))
 
     def save_form_data(self, instance, data):
         setattr(instance, self.attname, set()) #Wipe out existing things
@@ -505,6 +708,7 @@ class RelatedSetField(RelatedIteratorField):
 
 
 class RelatedListField(RelatedIteratorField):
+    retain_underlying_order = True
 
     def db_type(self, connection):
         return 'list'
@@ -524,27 +728,15 @@ class RelatedListField(RelatedIteratorField):
 
         return name, path, args, kwargs
 
-    def to_python(self, value):
-        if value is None:
-            return list()
-
-        # Deal with deserialization from a string
-        if isinstance(value, basestring):
-            if not (value.startswith("[") and value.endswith("]")):
-                raise ValidationError("Invalid input for RelatedListField instance")
-
-            value = value[1:-1].strip()
-
-            if not value:
-                return list()
-
-            ids = [self.rel.to._meta.pk.to_python(x) for x in value.split(",")]
-            # Annoyingly Django special cases FK and M2M in the Python deserialization code,
-            # to assign to the attname, whereas all other fields (including this one) are required to
-            # populate field.name instead. So we have to query here... we have no choice :(
-            return list(self.rel.to._default_manager.db_manager('default').filter(pk__in=ids))
-
-        return list(value)
+    def formfield(self, **kwargs):
+        """
+        Specify a OrderedModelMultipleChoiceField for the `form_class` so we
+        can retain ordering.
+        """
+        # change the form_class in defaults from using ModelMultipleChoiceField
+        # in preference for the djangae subclass OrderedModelMultipleChoiceField
+        kwargs['form_class'] = kwargs.pop('form_class', OrderedModelMultipleChoiceField)
+        return super(RelatedListField, self).formfield(**kwargs)
 
     def save_form_data(self, instance, data):
         setattr(instance, self.attname, []) #Wipe out existing things
@@ -595,7 +787,7 @@ class GRReverseCreator(property):
         return obj.__dict__[self.attname]
 
     def set(self, obj, value):
-        if not isinstance(value, basestring):
+        if not isinstance(value, six.string_types):
             value = self.field.get_prep_value(value)
         obj.__dict__[self.attname] = value
 

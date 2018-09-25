@@ -1,14 +1,13 @@
 # coding: utf-8
 # STANDARD LIB
 from unittest import skipIf
-import httplib
 import os
-import urlparse
 
 # THIRD PARTY
 from django.core.files.base import File, ContentFile
 from django.db import models
 from django.test.utils import override_settings
+from django.utils import six
 from google.appengine.api import urlfetch
 from google.appengine.api.images import TransformationError, LargeImageError
 
@@ -43,20 +42,20 @@ class CloudStorageTests(TestCase):
 
         f = ContentFile('content', name='my_file')
         filename = storage.save(name, f)
-        self.assertIsInstance(filename, basestring)
+        self.assertIsInstance(filename, six.string_types)
         self.assertTrue(filename.endswith(name))
 
         self.assertTrue(storage.exists(filename))
         self.assertEqual(storage.size(filename), len('content'))
         url = storage.url(filename)
-        self.assertIsInstance(url, basestring)
+        self.assertIsInstance(url, six.string_types)
         self.assertNotEqual(url, '')
 
-        abs_url = urlparse.urlunparse(
+        abs_url = six.moves.urllib.parse.urlunparse(
             ('http', os.environ['HTTP_HOST'], url, None, None, None)
         )
         response = urlfetch.fetch(abs_url)
-        self.assertEqual(response.status_code, httplib.OK)
+        self.assertEqual(response.status_code, six.moves.http_client.OK)
         self.assertEqual(response.content, 'content')
 
         f = storage.open(filename)
@@ -142,12 +141,28 @@ class CloudStorageTests(TestCase):
             text_file=ContentFile('content', name='my_file')
         )
         instance.save()
-        with sleuth.watch('urllib.quote') as urllib_quote_watcher:
+        with sleuth.watch('djangae.storage.six.moves.urllib.parse.quote') as urllib_quote_watcher:
             with sleuth.detonate('djangae.storage.get_serving_url', TransformationError):
                 instance.refresh_from_db()
                 instance.text_file.url
                 instance.save()
                 self.assertTrue(urllib_quote_watcher.called)
+
+    @override_settings(
+        CLOUD_STORAGE_BUCKET='test_bucket',
+        DEFAULT_FILE_STORAGE='djangae.storage.CloudStorage'
+    )
+    def test_image_serving_url_is_secure(self):
+        """ When we get a serving URL for an image, it should be https:// not http:// """
+        instance = ModelWithImage(
+            image=ContentFile('content', name='my_file')
+        )
+        instance.save()
+        # Because we're not on production, get_serving_url() actually just returns a relative URL,
+        # so we can't check the result, so instead we check the call to get_serving_url
+        with sleuth.watch("djangae.storage.get_serving_url") as watcher:
+            instance.image.url  # access the URL to trigger the call to get_serving_url
+        self.assertTrue(watcher.calls[0].kwargs['secure_url'])
 
 
 class BlobstoreStorageTests(TestCase):
@@ -159,22 +174,22 @@ class BlobstoreStorageTests(TestCase):
         f = ContentFile('content', name='my_file')
         filename = storage.save('tmp', f)
 
-        self.assertIsInstance(filename, basestring)
+        self.assertIsInstance(filename, six.string_types)
         self.assertTrue(filename.endswith('tmp'))
 
         # Check .exists(), .size() and .url()
         self.assertTrue(storage.exists(filename))
         self.assertEqual(storage.size(filename), len('content'))
         url = storage.url(filename)
-        self.assertIsInstance(url, basestring)
+        self.assertIsInstance(url, six.string_types)
         self.assertNotEqual(url, '')
 
         # Check URL can be fetched
-        abs_url = urlparse.urlunparse(
+        abs_url = six.moves.urllib.parse.urlunparse(
             ('http', os.environ['HTTP_HOST'], url, None, None, None)
         )
         response = urlfetch.fetch(abs_url)
-        self.assertEqual(response.status_code, httplib.OK)
+        self.assertEqual(response.status_code, six.moves.http_client.OK)
         self.assertEqual(response.content, 'content')
 
         # Open it, read it
@@ -201,3 +216,15 @@ class BlobstoreStorageTests(TestCase):
         storage = BlobstoreStorage()
         with sleuth.detonate('djangae.storage.get_serving_url', LargeImageError):
             self.assertEqual('thing', storage.url('thing'))
+
+    def test_image_serving_url_is_secure(self):
+        """ When we get a serving URL for an image, it should be https:// not http:// """
+        storage = BlobstoreStorage()
+        # Save a new file
+        f = ContentFile('content', name='my_file')
+        filename = storage.save('tmp', f)
+        # Because we're not on production, get_serving_url() actually just returns a relative URL,
+        # so we can't check the result, so instead we check the call to get_serving_url
+        with sleuth.watch("djangae.storage.get_serving_url") as watcher:
+            storage.url(filename)  # access the URL to trigger the call to get_serving_url
+        self.assertTrue(watcher.calls[0].kwargs['secure_url'])

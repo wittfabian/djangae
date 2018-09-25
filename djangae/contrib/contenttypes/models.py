@@ -58,7 +58,7 @@ class SimulatedContentTypeManager(models.Manager):
     def _get_opts(self, model, for_concrete_model):
         if for_concrete_model:
             model = model._meta.concrete_model
-        elif model._deferred:
+        elif getattr(model, '_deferred', False) or model is getattr(models, 'DEFERRED', None):
             model = model._meta.proxy_for_model
         return model._meta
 
@@ -143,7 +143,16 @@ class SimulatedContentTypeManager(models.Manager):
             ContentType = self._get_model()
             raise ContentType.DoesNotExist()
 
-    def get(self, **kwargs):
+    def get(self, *args, **kwargs):
+        # Special case for Django >= 1.11 which sometimes generates Q() objects
+        # with a single filter when querying content types. This handles that one
+        # case.. if we find there are others we'll have to do something less hacky!
+        if args and not kwargs:
+            if len(args) == 1 and len(args[0].children) == 1 and not args[0].negated:
+                kwargs = dict(args[0].children)
+            else:
+                raise ValueError("Unsupported Q operation")
+
         ContentType = self._get_model()
         self._repopulate_if_necessary()
 

@@ -7,8 +7,9 @@ import datetime
 from itertools import chain, imap
 from django.db.models.sql.datastructures import EmptyResultSet
 
+from django.db import connections
 from django.db.models import AutoField
-
+from django.utils import six
 
 try:
     from django.db.models.query import FlatValuesListIterable
@@ -38,7 +39,7 @@ from djangae.db.utils import (
     ensure_datetime,
 )
 
-from google.appengine.api import datastore
+from djangae.db.backends.appengine import rpc
 
 
 logger = logging.getLogger(__name__)
@@ -87,7 +88,9 @@ def convert_operator(operator):
 
 
 class WhereNode(object):
-    def __init__(self):
+    def __init__(self, using):
+        self.using = using
+
         self.column = None
         self.operator = None
         self.value = None
@@ -109,14 +112,18 @@ class WhereNode(object):
     def append_child(self, node):
         self.children.append(node)
 
-    def set_leaf(self, column, operator, value, is_pk_field, negated, lookup_name, namespace, target_field=None):
+    def set_leaf(
+            self, column, operator, value, is_pk_field, negated, lookup_name, namespace,
+            target_field=None):
+
         assert column
         assert operator
         assert isinstance(is_pk_field, bool)
         assert isinstance(negated, bool)
 
         if operator == "iexact" and isinstance(target_field, AutoField):
-            # When new instance is created, automatic primary key 'id' does not generate '_idx_iexact_id'.
+            # When new instance is created, automatic primary key 'id'
+            # does not generate '_idx_iexact_id'.
             # As the primary key 'id' (AutoField) is integer and is always case insensitive,
             # we can deal with 'id_iexact=' query by using 'exact' rather than 'iexact'.
             operator = "exact"
@@ -131,16 +138,28 @@ class WhereNode(object):
 
             if isinstance(value, (list, tuple)):
                 value = [
-                    datastore.Key.from_path(table, x, namespace=namespace)
+                    rpc.Key.from_path(table, x, namespace=namespace)
                     for x in value if x
                 ]
             else:
-                if (operator == "isnull" and value is True) or not value:
+                # Django 1.11 has operators as symbols, earlier versions use "exact" etc.
+                if (operator == "isnull" and value is True) or (operator in ("exact", "lt", "lte", "<", "<=", "=") and not value):
                     # id=None will never return anything and
                     # Empty strings and 0 are forbidden as keys
                     self.will_never_return_results = True
+                elif operator in ("gt", "gte", ">", ">=") and not value:
+                    # If the value is 0 or "", then we need to manipulate the value and operator here to
+                    # get the right result (given that both are invalid keys) so for both we return
+                    # >= 1 or >= "\0" for strings
+                    if isinstance(value, six.integer_types):
+                        value = 1
+                    else:
+                        value = "\0"
+
+                    value = rpc.Key.from_path(table, value, namespace=namespace)
+                    operator = "gte"
                 else:
-                    value = datastore.Key.from_path(table, value, namespace=namespace)
+                    value = rpc.Key.from_path(table, value, namespace=namespace)
             column = "__key__"
 
         # Do any special index conversions necessary to perform this lookup
@@ -153,7 +172,12 @@ class WhereNode(object):
 
             add_special_index(target_field.model, column, special_indexer, operator, value)
             index_type = special_indexer.prepare_index_type(operator, value)
-            value = special_indexer.prep_value_for_query(value)
+            value = special_indexer.prep_value_for_query(
+                value,
+                model=target_field.model,
+                column=column,
+                connection=connections[self.using]
+            )
             column = special_indexer.indexed_column_name(column, value, index_type)
             operator = special_indexer.prep_query_operator(operator)
 
@@ -549,7 +573,7 @@ class Query(object):
 
             if len(inequality_fields) > 1:
                 raise NotSupportedError(
-                    "You can only have one inequality filter per query on the datastore. "
+                    "You can only have one inequality filter per query on the rpc. "
                     "Filters were: %s" % ' '.join(inequality_fields)
                 )
 
@@ -590,17 +614,17 @@ class Query(object):
             if self.polymodel_filter_added:
                 return
 
-            new_filter = WhereNode()
+            new_filter = WhereNode(self.connection.alias)
             new_filter.column = POLYMODEL_CLASS_ATTRIBUTE
             new_filter.operator = '='
             new_filter.value = self.model._meta.db_table
 
             # We add this bare AND just to stay consistent with what Django does
-            new_and = WhereNode()
+            new_and = WhereNode(self.connection.alias)
             new_and.connector = 'AND'
             new_and.children = [new_filter]
 
-            new_root = WhereNode()
+            new_root = WhereNode(self.connection.alias)
             new_root.connector = 'AND'
             new_root.children = [new_and]
             if self._where:
@@ -642,8 +666,13 @@ class Query(object):
                 assert node.connector == 'AND'
 
                 query = {}
-                for lookup in node.children:
-                    query[''.join([lookup.column, lookup.operator])] = unicode(lookup.value)
+
+                if node.children:
+                    for lookup in node.children:
+
+                        query[''.join([lookup.column, lookup.operator])] = _serialize_sql_value(lookup.value)
+                else:
+                    query[''.join([node.column, node.operator])] = _serialize_sql_value(node.value)
 
                 where.append(query)
 
@@ -653,12 +682,17 @@ class Query(object):
 
 
 INVALID_ORDERING_FIELD_MESSAGE = (
-    "Ordering on TextField or BinaryField is not supported on the datastore. "
+    "Ordering on TextField or BinaryField is not supported on the rpc. "
     "You might consider using a ComputedCharField which stores the first "
     "_MAX_STRING_LENGTH (from google.appengine.api.datastore_types) bytes of the "
     "field and instead order on that."
 )
 
+def _serialize_sql_value(value):
+    if isinstance(value, six.integer_types):
+        return value
+    else:
+        return six.text_type("NULL" if value is None else value)
 
 def _get_parser(query, connection=None):
     version = django.VERSION[:2]

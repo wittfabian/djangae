@@ -1,5 +1,4 @@
-from google.appengine.api import datastore
-
+import functools
 from djangae.db.backends.appengine import caching
 
 
@@ -28,7 +27,7 @@ class DisableCache(object):
         if not self.func:
             assert args and callable(args[0])
             self.func = args[0]
-            return call_func
+            return functools.wraps(self.func)(call_func)
 
         if self.func:
             return call_func(*args, **kwargs)

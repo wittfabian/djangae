@@ -6,6 +6,7 @@ Instructions:
 
 1. Add the mapreduce library to your project, e.g. `$ pip install GoogleAppEngineMapReduce` or from [https://github.com/GoogleCloudPlatform/appengine-mapreduce](https://github.com/GoogleCloudPlatform/appengine-mapreduce).
 1. Ensure that you have included `djangae.urls` in your URL config.
+1. Add `'djangae.contrib.processing.mapreduce'` to `INSTALLED_APPS` in your Django settings.
 1. Subclass `djangae.contrib.mappers.pipes.MapReduceTask`, and define your `map` method.
 1. Your class can also override attributes such as `shard_count`, `job_name`, and `queue_name` (see the code for all options).
 1. The model to map over can either be defined as a attribute on the class or can be passed in when you instantiate it.
@@ -24,8 +25,5 @@ callback function on each Django model instance in the queryset.
 
 * The shard size is the number of instance which it will attempt to process in a single task, and defaults to 500.
     * Depending on how long your callback function is likely to take on each instance, you should reduce the shard size in order that it can safely process that many instances in App Engine's task time limit of 10 minutes.
-* The ordering of the queryset is set to `order_by('pk')`.
-    * This does not guarantee that objects will be processed in this order.
-    * Due to the Datastore's limitations, this creates a restriction that you cannot use an inequality filter other than on the PK field in your queryset.
 * There is no exception handling around the callback function, so an exception is raised when processing one of the instances then that task will fail and be retried, thus re-processing any prior instances in that same shard.
     * Your callback function should be idempotent.

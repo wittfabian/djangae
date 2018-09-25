@@ -35,7 +35,7 @@ Here is a brief list of hard limitations you may encounter when using the Djanga
 
  - `bulk_create()` is limited to 25 instances if the model has active unique constraints, or the instances being inserted have
    the primary key specified. In other cases the limit is 1000.
- - `filter(field__in=[...])` queries are limited to 30 entries in the list if `field` is not the primary key
+ - `filter(field__in=[...])` queries are limited to 100 entries (by default) in the list if `field` is not the primary key
  - `filter(pk__in=[...])` queries are limited to 1000 entries
  - You are limited to a single inequality filter per query, although excluding by primary key is not included in this count
  - Queries without primary key equality filters are not allowed within an `atomic` block
@@ -49,6 +49,8 @@ Here is a brief list of hard limitations you may encounter when using the Djanga
   should be done using djangae.db.transactional.atomic](db_backend.md#transactions).
 - If unique constraints are enabled, then you are limited to a maximum of 25 unique or unique_together constraints per model (see [Unique Constraint Checking](#unique-constraint-checking)).
 - You are also restricted to altering 12 unique field values on an instance in a single save
+- `select_related` **does nothing**. It is ignored when specified as joins are not possible on the datastore. This can result in slow
+performance on queries which are not designed for the datastore. `prefetch_related` works correctly however.
 
 There are probably more but the list changes regularly as we improve the datastore backend. If you find another limitation not
 mentioned above please consider sending a documentation PR.
@@ -122,6 +124,11 @@ The following settings are available to control the caching:
 
  - `DJANGAE_CACHE_ENABLED` (default `True`). Setting to False it all off, I really wouldn't suggest doing that!
  - `DJANGAE_CACHE_TIMEOUT_SECONDS` (default `60 * 60`). The length of time stuff should be kept in memcache.
+ - `DJANGAE_CACHE_MAX_CONTEXT_SIZE` (default `1024 * 1024 * 8`). This is (approximately) the max size of a local context cache instance. Each request and each nested transaction gets its own
+    context cache instance so be aware that this total can rapidly add up, especially on F1 instances. If you have an F2 or F4 instance you might want to increase this value. If you hit the limit
+    the least used entities will be evicted from the cache.
+ - `DJANGAE_CACHE_MAX_ENTITY_COUNT` (default 8). This is the max number of entities returned by a pk__in query which will be cached in the context or memcache upon their return. If more
+    results than this number are returned then the remainder won't be cached.
 
 ## Datastore Behaviours
 
@@ -184,9 +191,10 @@ There is also an equivalent function for ensuring the consistency of multiple it
 * Doing an `.only('foo')` or `.defer('bar')` with a `pk_in=[...]` filter may not be more efficient. This is because we must perform a projection query for each key, and although we send them over the RPC in batches of 30, the RPC costs may outweigh the savings of a plain old datastore.Get. You should profile and check to see whether using only/defer results in a speed improvement for your use case.
 * Due to the way it has to be implemented on the Datastore, an `update()` query is not particularly fast, and other than avoiding calling the `save()` method on each object it doesn't offer much speed advantage over iterating over the objects and modifying them.  However, it does offer significant integrity advantages, see [General behaviours](#general-behaviours) section above.
 * Doing filter(pk__in=Something.objects.values_list('pk', flat=True)) will implicitly evaluate the inner query while preparing to run the outer one. This means two queries, not one like SQL would do!
-
-
-
+* IN queries and queries with OR branches which aren't filtered on PK result in multiple queries to the datastore. By default you will get an error
+  if you exceed 100 IN filters but this is configurable via the `DJANGAE_MAX_QUERY_BRANCHES` setting. Be aware that
+  the more IN/OR filters in a query, the slower the query becomes. 100 is already a high value for this setting so
+  raising it isn't recommended (it's probably better to rethink your data structure or querying)
 
 ## Unique Constraint Checking
 
@@ -240,9 +248,83 @@ The following functions are available to manage transactions:
  - `djangae.db.transaction.atomic` - Decorator and Context Manager. Starts a new transaction, accepted `xg`, `indepedendent` and `mandatory` args
  - `djangae.db.transaction.non_atomic` - Decorator and Context Manager. Breaks out of any current transactions so you can run queries outside the transaction
  - `djangae.db.transaction.in_atomic_block` - Returns True if inside a transaction, False otherwise
+ - `djangae.db.transaction.current_transaction` - Returns an object representing the currently active transaction
 
-  **Do not use `google.appengine.ext.db.run_in_transaction` and friends, it will break.**
+**Do not use `google.appengine.ext.db.run_in_transaction` and friends, it will break.**
 
+### Writing safe Transactional code
+
+Transactions on App Engine are a little strange and it's easy to get caught out by unexpected behaviour when using them. Take the following code for example:
+
+```python
+    MyModel.objects.create(pk=1, value=0)
+
+    with atomic():
+        instance = MyModel.objects.get(pk=1)
+        instance.value = 1
+        instance.save()
+
+        instance.refresh_from_db()
+        assert(instance.value == 1)
+```
+
+By default, this code would raise an AssertionError and the value of `instance.value` would be zero. This is because until the moment that the transaction commits, all datastore reads will read the value from *outside* the transaction, not the value you saved from within the atomic block.
+
+To make things behave in a more preditable way Djangae provides two features to you:
+
+ - The "Context Cache"
+ - The `Transaction` object
+
+The context cache is enabled by default, and is a thread-level in-memory cache of entities that have been saved within the transaction. When the context cache
+is enabled the above code would not raise an AssertionError. `instance.value` would equal `1`, because `refresh_from_db()` would hit the local cache and not
+actually read from the Datastore.
+
+There are times when it's necessary to read from the Datastore directly, and you can use `djangae.db.caching.disable_cache()` for that.
+
+The other feature that Djangae provides are `Transaction` objects, and in particular, `Transaction.has_already_been_read(instance)` and
+`Transaction.refresh_if_unread(instance)`:
+
+```python
+
+instance = MyModel.objects.create(pk=1, value=0)
+with atomic() as txn:
+    assert(not txn.has_already_been_read(instance))
+
+    txn.refresh_if_unread(instance)
+
+    assert(txn.has_already_been_read(instance))
+
+    instance.value = 1
+    instance.save()
+```
+
+Transactions in the Datastore generally need to be made up of a Get, and Put. If you don't do both within the atomic block, then you could overwrite
+data by accident. It's important to understand that nested transactions don't exist, if you nest `atomic()` decorators (without the `independent` flag) your inner `atomic()` call will be a no-op.
+
+And for that reason, if you blindly call refresh_from_db() from an `atomic()` function, and that function is called from another `atomic()` function then
+you can overwrite local changes:
+
+```python
+
+@atomic()
+def method1(self):
+    self.refresh_from_db()
+    self.value += 1
+    self.save()
+
+@atomic()
+def method2(self):
+    self.refresh_from_db()
+    self.value += 1
+    self.method1()
+    self.save()
+
+instance.method1()
+instance.refresh_from_db()
+instance.value -> 1  # Oops!
+```
+
+You can write safer code by using `refresh_if_unread(instance)` which will only update the instance if you haven't already done it in the current transaction.
 
 
 ## Multiple Namespaces
@@ -271,15 +353,42 @@ Cross-namespace foreign keys aren't supported. Also namespaces effect caching ke
 
 ## Special Indexes
 
-The App Engine datastore backend handles certain queries which are unsupported natively by adding hidden fields to the datastore instances.
+The App Engine datastore backend handles certain queries which are unsupported natively, by adding hidden fields to the Datastore entities or by storing additional child entities.
 The mechanism for adding these fields and then using them during querying is called "special indexing".
 
-For example, querying for `name__iexact` is not supported by the datastore. In this case Djangae generate an additional entity property with the name
+For example, querying for `name__iexact` is not supported by the Datastore. In this case Djangae generates an additional entity property with the name
 value lower-cased, and then when performing an iexact query, will lower case the lookup value and use the generated column rather than the `name` column.
 
 When you run a query that requires special indexes for the first time, an entry will be added to a generated file called `djangaeidx.yaml`. You will
 see this file appear in your project root. From that point on, any entities that are saved will have the additional property added. If a new entry
 appears in djangaeidx.yaml, you will need to resave all of your entities of that kind so that they will be returned by query lookups.
+
+### `contains` and `icontains` Filters
+
+When you use `__contains` or `__icontains` in a query, the djangaeidx.yaml file will be updated so that all subsequent entity saves will generate an additional descendent entity per-instance-field to store
+indexing data for that field. This approach will add an additional `Put()` for each `save()` and an additional `Query()` for each `__contains`
+look up.
+
+Previously, Djangae used to store this index data on the entity itself which caused a number of problems that are now avoided:
+
+1. The index data had more permutations than were necessary. This was each set of possible characters had to be stored in a List property so that
+ the lookup could use an equality query. Djangae couldn't rely on an inequality (which would allow storing fewer permutations) because that would
+ greatly restrict the queries that a user could perform.
+2. The large number of permutations caused the entities to bloat with additional properties and it wasn't possible to filter them out when querying
+ which means every query (whether using `contains` or not) would transfer a large amount of data over the RPC, slowing down every single query on an instance
+ which had contains data indexed.
+3. The implementation was flawed. It was originally thought that list properties were limited to 500 entries, this may have been true at some point
+ in datastore history but it's certainly not true now. Because of this incorrect assumption, indexed data was split across properties which made the code
+ very confusing
+
+For now, the legacy behaviour is available by setting `DJANGAE_USE_LEGACY_CONTAINS_LOGIC = True` in your settings file. This setting
+will be removed so it's recommended that upon upgrading to Djangae 0.9.10 you resave all of your entities (that use `contains`) instead.
+
+Resaving will not remove old indexed properties, we hope to provide a migration file in future that will do that for you.
+
+### Querying `date` and `datetime` Fields with `contains`
+The same as when Django is used with a SQL database, Djangae's indexing allows `contains` and `icontains` filters to be used on `DateField` and `DateTimeField`.  When this is used, the field values are converted to ISO format and then indexed as strings, allowing you to perform `contains` queries on any part of the ISO format string.
+
 
 ### Distributing djangaeidx.yaml
 
@@ -288,15 +397,4 @@ your Django app. The indexes in this file will be combined with the user's main 
 
 ## Migrations
 
-The App Engine Datastore is a schemaless database, so the idea of migrations in the normal Django sense doesn't really apply in the same way.
-
-In order to add a new Django model, you just save an instance of that model, you don't need to tell the database to add a "table" (called a "Kind" in the Datastore) for it.
-Similarly, if you want to add a new field to a model, you just add the field and start saving your objects, there's no need to create a new column in the database first.
-
-However, there are some behaviours of the Datastore which mean that in some cases you will want to run some kind of "migration".  The relevant behaviours are:
-
-* If you remove one of your Django models and you want to delete all of the instances, you can't just `DROP` the "table", you must run a task which maps over each object and deletes it.
-* If you add a new model field with a default value, that value won't get populated into the database until you re-save each instance.  When you load an instance of the model, the default value will be assigned, but the value won't actually be stored in the database until you re-save the object.  This means that querying for objects with that value will not return any objects that have not been re-saved.  This is true even if the default value is `None` (because the Datastore differentiates between a value being set to `None` and a value not existing at all).
-* If you remove a model field, the underlying Datastore entities will still contain the value until they are re-saved.  When you re-save each instance of the model the underlying entity will be overwritten, wiping out the removed field, but if you want to immediately destroy some sensitive data or reduce your used storage quota then simplying removing the field from the model will have no effect.
-
-For these reasons there is a legitimate case for implementing some kind of variant of the Django migration system for Datastore-backed models.  See the [migrations ticket on GitHub](https://github.com/potatolondon/djangae/issues/438) for more info.
+Djangae has support for migrating data using the Django migrations infrastructure.  See [Migrations](migrations.md).

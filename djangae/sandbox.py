@@ -6,9 +6,14 @@ import contextlib
 import subprocess
 import getpass
 import logging
-import urllib
 
 from os.path import commonprefix
+
+# try both the python 2 and 3 import to avoid six dependency or django import
+try:
+    from urllib import quote
+except ImportError:
+    from urllib.parse import quote
 
 from . import environment
 from .utils import get_next_available_port
@@ -16,6 +21,51 @@ from .utils import get_next_available_port
 _SCRIPT_NAME = 'dev_appserver.py'
 
 _API_SERVER = None
+
+# We use this list to prevent user using certain dev_appserver options that
+# might collide with some Django settings.
+WHITELISTED_DEV_APPSERVER_OPTIONS = [
+    'A',
+    'admin_host',
+    'admin_port',
+    'auth_domain',
+    'storage_path',
+    'log_level',
+    'max_module_instances',
+    'use_mtime_file_watcher',
+    'appidentity_email_address',
+    'appidentity_private_key_path',
+    'blobstore_path',
+    'datastore_path',
+    'clear_datastore',
+    'datastore_consistency_policy',
+    'require_indexes',
+    'auto_id_policy',
+    'logs_path',
+    'show_mail_body',
+    'enable_sendmail',
+    'prospective_search_path',
+    'clear_prospective_search',
+    'search_indexes_path',
+    'clear_search_indexes',
+    'enable_task_running',
+    'allow_skipped_files',
+    'api_port',
+    'dev_appserver_log_level',
+    'skip_sdk_update_check',
+    'default_gcs_bucket_name',
+]
+
+DEFAULT_API_PORT = 8010
+DEFAULT_ADMIN_PORT = 8011
+DEFAULT_BLOBSTORE_SERVICE_PORT = 8012
+
+# This is a temporary workaround for the issue with 1.9.49 version where
+# version is set to [0, 0, 0] instead of [1, 9, 49]. This could be removed
+# after this: https://code.google.com/p/googleappengine/issues/detail?id=13439
+# issue is resolved. If that is done, we should remove all references to
+# TEMP_1_9_49_VERSION_NO here and in djangae/management/command/runserver.
+TEMP_1_9_49_VERSION_NO = [0, 0, 0]
 
 
 class Filter(object):
@@ -66,14 +116,24 @@ def _find_sdk_from_path():
 
 def _create_dispatcher(configuration, options):
     from google.appengine.tools.devappserver2 import dispatcher
-    from google.appengine.tools.devappserver2.devappserver2 import (
-        DevelopmentServer, _LOG_LEVEL_TO_RUNTIME_CONSTANT
-    )
+    from google.appengine.tools.devappserver2.devappserver2 import DevelopmentServer
+
+    from djangae.compat import _LOG_LEVEL_TO_RUNTIME_CONSTANT
+
     from google.appengine.tools.sdk_update_checker import GetVersionObject, \
                                                           _VersionList
 
     if hasattr(_create_dispatcher, "singleton"):
         return _create_dispatcher.singleton
+
+    class UnsupportedOption(object):
+        pass
+
+    current_version = _VersionList(GetVersionObject()['release'])
+    supports_go_config = current_version >= _VersionList('1.9.50')
+    supports_custom_config = current_version >= _VersionList('1.9.22') or current_version == TEMP_1_9_49_VERSION_NO
+    supports_external_port = current_version >= _VersionList('1.9.19') or current_version == TEMP_1_9_49_VERSION_NO
+    supports_watcher_ignore_re = current_version >= _VersionList('1.9.54')
 
     dispatcher_args = [
         configuration,
@@ -84,24 +144,22 @@ def _create_dispatcher(configuration, options):
         DevelopmentServer._create_php_config(options),
         DevelopmentServer._create_python_config(options),
         DevelopmentServer._create_java_config(options),
+        DevelopmentServer._create_go_config(options) if supports_go_config else UnsupportedOption,
+        None if supports_custom_config else UnsupportedOption,
         DevelopmentServer._create_cloud_sql_config(options),
         DevelopmentServer._create_vm_config(options),
         DevelopmentServer._create_module_to_setting(options.max_module_instances,
                                        configuration, '--max_module_instances'),
         options.use_mtime_file_watcher,
+        None if supports_watcher_ignore_re else UnsupportedOption,
         options.automatic_restart,
         options.allow_skipped_files,
         DevelopmentServer._create_module_to_setting(options.threadsafe_override,
-                                       configuration, '--threadsafe_override')
+                                       configuration, '--threadsafe_override'),
+        options.external_port if supports_external_port else UnsupportedOption
     ]
 
-    # External port is a new flag introduced in 1.9.19
-    current_version = _VersionList(GetVersionObject()['release'])
-    if current_version >= _VersionList('1.9.19'):
-        dispatcher_args.append(options.external_port)
-
-    if current_version >= _VersionList('1.9.22'):
-        dispatcher_args.insert(8, None) # Custom config setting
+    dispatcher_args = [x for x in dispatcher_args if not x is UnsupportedOption]
 
     _create_dispatcher.singleton = dispatcher.Dispatcher(*dispatcher_args)
 
@@ -133,7 +191,7 @@ def _local(devappserver2=None, configuration=None, options=None, wsgi_request_in
                 if port != '80':
                     host += ':' + port
             url = 'http://' + host
-            url += urllib.quote(os.environ.get('PATH_INFO', '/'))
+            url += quote(os.environ.get('PATH_INFO', '/'))
             if os.environ.get('QUERY_STRING'):
                 url += '?' + os.environ['QUERY_STRING']
             return url
@@ -144,24 +202,71 @@ def _local(devappserver2=None, configuration=None, options=None, wsgi_request_in
 
     original_environ = os.environ.copy()
 
-    # Silence warnings about this being unset, localhost:8080 is the dev_appserver default
+    # Silence warnings about this being unset, localhost:8080 is the dev_appserver default.
+    # Note that we're setting things for the *Blobstore* handler in os.environ here, which seems
+    # kind of crazy, and probably is, but it seems to be necessary to make stuff work.
     url = "localhost"
-    port = get_next_available_port(url, 8080)
+    port = get_next_available_port(url, DEFAULT_BLOBSTORE_SERVICE_PORT)
     os.environ.setdefault("HTTP_HOST", "{}:{}".format(url, port))
     os.environ['SERVER_NAME'] = url
     os.environ['SERVER_PORT'] = str(port)
     os.environ['DEFAULT_VERSION_HOSTNAME'] = '%s:%s' % (os.environ['SERVER_NAME'], os.environ['SERVER_PORT'])
 
     devappserver2._setup_environ(configuration.app_id)
-    storage_path = devappserver2._get_storage_path(options.storage_path, configuration.app_id)
+
+    from google.appengine.tools.devappserver2 import api_server
+    from google.appengine.tools.sdk_update_checker import GetVersionObject, _VersionList
+
+    if hasattr(api_server, "get_storage_path"):
+        storage_path = api_server.get_storage_path(options.storage_path, configuration.app_id)
+    else:
+        # SDK < 1.9.51
+        storage_path = devappserver2._get_storage_path(options.storage_path, configuration.app_id)
 
     dispatcher = _create_dispatcher(configuration, options)
     request_data = CustomWSGIRequestInfo(dispatcher)
     # Remember the wsgi request info object so it can be reused to avoid duplication.
     dispatcher._request_data = request_data
 
-    _API_SERVER = devappserver2.DevelopmentServer._create_api_server(
-        request_data, storage_path, options, configuration)
+    # We set the API and Admin ports so that they are beyond any modules (if you
+    # have 10 modules then these values will shift, but it's better that they are predictable
+    # in the common case)
+    options.api_port = get_next_available_port(url, max(DEFAULT_API_PORT, port + 1))
+    options.admin_port = get_next_available_port(url, max(DEFAULT_ADMIN_PORT, options.api_port + 1))
+
+    if hasattr(api_server, "create_api_server"):
+        current_version = _VersionList(GetVersionObject()['release'])
+        app_rather_than_config = current_version >= _VersionList('1.9.54')
+
+        # Google changed the argument structure in version 1.9.54 so we have to
+        # conditionally supply the args here
+        if app_rather_than_config:
+            _API_SERVER = api_server.create_api_server(
+                request_data,
+                storage_path,
+                options,
+                configuration.app_id,
+                environment.get_application_root()
+            )
+        else:
+            _API_SERVER = api_server.create_api_server(
+                request_data, storage_path, options, configuration
+            )
+
+        # We have to patch api_server.create_api_server to return _API_SERVER
+        # every time it's called, without this we end up with all kinds of
+        # problems. Basically we need one api server for the lifetime of the
+        # sandbox (including in `runserver`)
+        def create_api_server_patch(*args, **kwargs):
+            return _API_SERVER
+
+        api_server.create_api_server = create_api_server_patch
+
+    else:
+
+        _API_SERVER = devappserver2.DevelopmentServer._create_api_server(
+            request_data, storage_path, options, configuration
+        )
 
     from .blobstore_service import start_blobstore_service, stop_blobstore_service
 
@@ -169,6 +274,7 @@ def _local(devappserver2=None, configuration=None, options=None, wsgi_request_in
     try:
         yield
     finally:
+        api_server.cleanup_stubs()
         os.environ = original_environ
         stop_blobstore_service()
 
@@ -240,7 +346,54 @@ def _remote(configuration=None, remote_api_stub=None, apiproxy_stub_map=None, **
 
 @contextlib.contextmanager
 def _test(**kwargs):
-    yield
+    """
+        This stub uses the testbed to initialize the bare minimum to use the
+        Datastore connector. Tests themselves should setup/tear down their own
+        stubs by using DjangaeDiscoverRunner or the nose plugin.
+
+        The stubs here are just for bootstrapping the tests. Obviously any data inserted
+        between here, and the tests themselves will be wiped out when the tests begin!
+    """
+
+    from google.appengine.ext import testbed
+    from google.appengine.datastore import datastore_stub_util
+
+    MINIMAL_STUBS = {
+        "init_app_identity_stub": {},
+        "init_memcache_stub": {},
+        "init_datastore_v3_stub": {
+            "use_sqlite": True,
+            "auto_id_policy": testbed.AUTO_ID_POLICY_SCATTERED,
+            "consistency_policy": datastore_stub_util.PseudoRandomHRConsistencyPolicy(probability=1)
+        }
+    }
+
+    from .blobstore_service import start_blobstore_service, stop_blobstore_service
+
+    # Dummy values for testing, based on the defaults for dev_appserver
+    # (differentiating between the default runserver port of 8000 can also be useful
+    # for picking up hard-coding issues etc.)
+    os.environ["HTTP_HOST"] = "localhost:8080"
+    os.environ['SERVER_NAME'] = "localhost"
+    os.environ['SERVER_PORT'] = "8080"
+
+    os.environ['DEFAULT_VERSION_HOSTNAME'] = '%s:%s' % (
+        os.environ['SERVER_NAME'], os.environ['SERVER_PORT']
+    )
+
+    testbed = testbed.Testbed()
+    testbed.activate()
+    for init_name, stub_kwargs in MINIMAL_STUBS.items():
+        getattr(testbed, init_name)(**stub_kwargs)
+
+    start_blobstore_service()
+    try:
+        yield
+    finally:
+        stop_blobstore_service()
+        if testbed:
+            testbed.deactivate()
+
 
 LOCAL = 'local'
 REMOTE = 'remote'
@@ -255,7 +408,7 @@ _OPTIONS = None
 _CONFIG = None
 
 @contextlib.contextmanager
-def activate(sandbox_name, add_sdk_to_path=False, new_env_vars=None, app_id=None, **overrides):
+def activate(sandbox_name, add_sdk_to_path=False, new_env_vars=None, **overrides):
     """Context manager for command-line scripts started outside of dev_appserver.
 
     :param sandbox_name: str, one of 'local', 'remote' or 'test'
@@ -346,14 +499,19 @@ def activate(sandbox_name, add_sdk_to_path=False, new_env_vars=None, app_id=None
     # Initialize as though `dev_appserver.py` is about to run our app, using all the
     # configuration provided in app.yaml.
     import google.appengine.tools.devappserver2.application_configuration as application_configuration
-    import google.appengine.tools.devappserver2.python.sandbox as sandbox
     import google.appengine.tools.devappserver2.devappserver2 as devappserver2
     import google.appengine.tools.devappserver2.wsgi_request_info as wsgi_request_info
     import google.appengine.ext.remote_api.remote_api_stub as remote_api_stub
     import google.appengine.api.apiproxy_stub_map as apiproxy_stub_map
+    from djangae.compat import sandbox
+
+    gae_args = [
+        s for s in sys.argv
+        if any(s.lstrip('--').startswith(gae_option) for gae_option in WHITELISTED_DEV_APPSERVER_OPTIONS)
+    ]
 
     # The argparser is the easiest way to get the default options.
-    options = devappserver2.PARSER.parse_args([project_root])
+    options = devappserver2.PARSER.parse_args([project_root] + gae_args)
     options.enable_task_running = False # Disable task running by default, it won't work without a running server
     options.skip_sdk_update_check = True
 
@@ -363,10 +521,7 @@ def activate(sandbox_name, add_sdk_to_path=False, new_env_vars=None, app_id=None
 
         setattr(options, option, overrides[option])
 
-    if app_id:
-        configuration = application_configuration.ApplicationConfiguration(options.config_paths, app_id=app_id)
-    else:
-        configuration = application_configuration.ApplicationConfiguration(options.config_paths)
+    configuration = application_configuration.ApplicationConfiguration(options.config_paths, app_id=options.app_id)
 
     # Enable built-in libraries from app.yaml without enabling the full sandbox.
     module = configuration.modules[0]

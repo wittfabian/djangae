@@ -11,7 +11,7 @@ class TransactionTests(TestCase):
     def test_repeated_usage_in_a_loop(self):
         from .test_connector import TestUser
         pk = TestUser.objects.create(username="foo").pk
-        for i in xrange(4):
+        for i in range(4):
             with transaction.atomic(xg=True):
                 TestUser.objects.get(pk=pk)
                 continue
@@ -20,12 +20,12 @@ class TransactionTests(TestCase):
             TestUser.objects.get(pk=pk)
 
     def test_recursive_atomic(self):
-        l = []
+        lst = []
 
         @transaction.atomic
         def txn():
-            l.append(True)
-            if len(l) == 3:
+            lst.append(True)
+            if len(lst) == 3:
                 return
             else:
                 txn()
@@ -33,12 +33,12 @@ class TransactionTests(TestCase):
         txn()
 
     def test_recursive_non_atomic(self):
-        l = []
+        lst = []
 
         @transaction.non_atomic
         def txn():
-            l.append(True)
-            if len(l) == 3:
+            lst.append(True)
+            if len(lst) == 3:
                 return
             else:
                 txn()
@@ -107,7 +107,7 @@ class TransactionTests(TestCase):
 
             try:
                 return do_stuff
-            except:
+            except Exception:
                 return
 
         with transaction.atomic():
@@ -232,3 +232,64 @@ class TransactionTests(TestCase):
         # then behave properly in a nested transaction.
         inner_txn()
         outer_txn()
+
+
+class TransactionStateTests(TestCase):
+
+    def test_has_already_read(self):
+        from .test_connector import TestFruit
+
+        apple = TestFruit.objects.create(name="Apple", color="Red")
+        pear = TestFruit.objects.create(name="Pear", color="Green")
+
+        with transaction.atomic(xg=True) as txn:
+            self.assertFalse(txn.has_already_been_read(apple))
+            self.assertFalse(txn.has_already_been_read(pear))
+
+            apple.refresh_from_db()
+
+            self.assertTrue(txn.has_already_been_read(apple))
+            self.assertFalse(txn.has_already_been_read(pear))
+
+            with transaction.atomic(xg=True) as txn:
+                self.assertTrue(txn.has_already_been_read(apple))
+                self.assertFalse(txn.has_already_been_read(pear))
+                pear.refresh_from_db()
+                self.assertTrue(txn.has_already_been_read(pear))
+
+                with transaction.atomic(independent=True) as txn2:
+                    self.assertFalse(txn2.has_already_been_read(apple))
+                    self.assertFalse(txn2.has_already_been_read(pear))
+
+    def test_refresh_if_unread(self):
+        from .test_connector import TestFruit
+
+        apple = TestFruit.objects.create(name="Apple", color="Red")
+
+        with transaction.atomic() as txn:
+            apple.color = "Pink"
+
+            txn.refresh_if_unread(apple)
+
+            self.assertEqual(apple.name, "Apple")
+
+            apple.color = "Pink"
+
+            # Already been read this transaction, don't read it again!
+            txn.refresh_if_unread(apple)
+
+            self.assertEqual(apple.color, "Pink")
+
+    def test_non_atomic_only(self):
+        from .test_connector import TestFruit
+
+        apple = TestFruit.objects.create(name="Apple", color="Red")
+        apple.save()
+
+        apple2 = TestFruit.objects.get(pk=apple.pk)
+
+        with transaction.non_atomic():
+            apple.delete()
+
+        # Apple should no longer be in the cache!
+        self.assertRaises(TestFruit.DoesNotExist, apple2.refresh_from_db)

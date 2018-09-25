@@ -1,5 +1,8 @@
 import random
 from functools import partial
+
+from django.utils import six
+
 from djangae.fields import ComputedCharField
 from django.db.models.fields import FieldDoesNotExist
 
@@ -71,7 +74,7 @@ class PaginatedModel(object):
         # Allow orderings to be specified either as single fields, or tuples/lists of fields
         _orderings = []
         for ordering in orderings:
-            if isinstance(ordering, basestring):
+            if isinstance(ordering, six.string_types):
                 _orderings.append((ordering,))
             else:
                 _orderings.append(ordering)

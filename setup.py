@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 
 
 NAME = 'djangae'
-PACKAGES = find_packages()
+PACKAGES = find_packages(exclude=["testapp", "testprodapp"])
 DESCRIPTION = 'Django integration with Google App Engine'
 URL = "https://github.com/potatolondon/djangae"
 LONG_DESCRIPTION = open(os.path.join(os.path.dirname(__file__), 'README.md')).read()
@@ -15,13 +15,15 @@ EXTRAS = {
 
 setup(
     name=NAME,
-    version='0.9.9-alpha',
+    version='0.9.12 alpha',
     packages=PACKAGES,
 
     # metadata for upload to PyPI
     author=AUTHOR,
+    author_email='mail@p.ota.to',
     description=DESCRIPTION,
     long_description=LONG_DESCRIPTION,
+    long_description_content_type='text/markdown',
     keywords=["django", "Google App Engine", "GAE"],
     url=URL,
     classifiers=[
@@ -30,8 +32,9 @@ setup(
         'Framework :: Django :: 1.8',
         'Framework :: Django :: 1.9',
         'Framework :: Django :: 1.10',
+        'Framework :: Django :: 1.11',
         'Intended Audience :: Developers',
-        'License :: OSI Approved :: BSD 3-Clause License',
+        'License :: OSI Approved :: BSD License',
         'Operating System :: OS Independent',
         'Programming Language :: Python',
     ],

@@ -2,16 +2,23 @@
 from bs4 import BeautifulSoup
 from django import forms
 from django.db import models
+from django.utils.six.moves import range
 
 # DJANGAE
-from djangae.fields import ListField
+from djangae.fields import ListField, RelatedListField
 from djangae.test import TestCase
-from djangae.tests.test_db_fields import JSONFieldModel
+from djangae.tests.test_db_fields import CharFieldModel, JSONFieldModel, NullableJSONFieldModel
 
 
 class JSONModelForm(forms.ModelForm):
     class Meta:
         model = JSONFieldModel
+        fields = ['json_field']
+
+
+class NullableJSONModelForm(forms.ModelForm):
+    class Meta:
+        model = NullableJSONFieldModel
         fields = ['json_field']
 
 
@@ -24,8 +31,42 @@ class ListFieldForm(forms.ModelForm):
         model = BlankableListFieldModel
         fields = ['list_field']
 
+class RelatedListFieldModel(models.Model):
+    related_list_field = RelatedListField(CharFieldModel)
+
+
+class RelatedListFieldForm(forms.ModelForm):
+    class Meta:
+        model = RelatedListFieldModel
+        fields = ['related_list_field']
+
+
+class RequiredRelatedListFieldForm(forms.ModelForm):
+
+    class Meta:
+        model = RelatedListFieldModel
+        fields = ['related_list_field']
+
+    def __init__(self, *args, **kwargs):
+        super(RequiredRelatedListFieldForm, self).__init__(*args, **kwargs)
+        self.fields['related_list_field'].required = True
+
 
 class JSONFieldFormsTest(TestCase):
+
+    def test_empty_string_submission(self):
+        data = dict(json_field="")
+        form = JSONModelForm(data)
+        assert form.is_valid()  # Sanity, and to trigger cleaned_data
+        expected_data = None
+        self.assertEqual(form.cleaned_data['json_field'], expected_data)
+
+    def test_nullable_field(self):
+        data = dict(json_field="")
+        form = NullableJSONModelForm(data)
+        assert form.is_valid()  # Sanity, and to trigger cleaned_data
+        expected_data = None
+        self.assertEqual(form.cleaned_data['json_field'], expected_data)
 
     def test_json_data_is_python_after_cleaning(self):
         """ In the forms' `cleaned_data`, the json_field data should be python, rather than still
@@ -60,3 +101,43 @@ class ListFieldFormsTest(TestCase):
         self.assertTrue(form.is_valid())
         obj = form.save()
         self.assertEqual(obj.list_field, [])
+
+    def test_none_value_in_dict(self):
+        """ Check that value_from_datadict returns None if value provided is None """
+        data = dict(list_field=None)
+        form = ListFieldForm(data)
+        self.assertTrue(form.is_valid())
+
+
+class OrderedModelMultipleChoiceField(TestCase):
+
+    def test_order_retained(self):
+        """
+        Assert that when a list of values are saved, their order is preserved.
+        """
+        instance_one, instance_two, instance_three = [
+            CharFieldModel.objects.create(
+                char_field=str(x)
+            ) for x in range(3)
+        ]
+        data = dict(related_list_field=[
+            instance_two.pk, instance_three.pk, instance_one.pk]
+        )
+        form = RelatedListFieldForm(data)
+        self.assertTrue(form.is_valid())
+        obj = form.save()
+
+        self.assertEqual(
+            obj.related_list_field_ids,
+            [instance_two.pk, instance_three.pk, instance_one.pk]
+        )
+
+    def test_validation_still_performed(self):
+        """
+        Assert the normal validation of the field value occurs despite
+        adding extra logic to the clean method.
+        """
+        data = dict(related_list_field=[])
+        form = RelatedListFieldForm(data)
+        self.assertFalse(form.is_valid())
+        self.assertIn('related_list_field', form.errors)

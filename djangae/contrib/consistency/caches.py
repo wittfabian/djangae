@@ -103,7 +103,7 @@ class SessionCache(object):
 def strip_old_objects(objects, max_age):
     to_keep = {}
     threshold = timezone.now() - datetime.timedelta(seconds=max_age)
-    for obj_pk, created_time in objects.iteritems():
+    for obj_pk, created_time in objects.items():
         if created_time >= threshold:
             # object is still new enough to keep in the cache
             to_keep[obj_pk] = created_time

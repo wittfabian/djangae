@@ -6,14 +6,17 @@ from django.apps import apps
 from django.db import models, connections
 from django.dispatch import receiver
 from django.db.models.signals import post_save
+from django.utils import six
 
 from google.appengine.api import datastore
 from google.appengine.ext import deferred
 
 from djangae.db import transaction
 from djangae.fields import RelatedSetField
-from djangae.contrib.mappers.pipes import MapReduceTask, DjangaeMapperPipeline, PIPELINE_BASE_PATH
-from djangae.db.utils import django_instance_to_entity
+from djangae.contrib.mappers.pipes import MapReduceTask
+from djangae.contrib.processing.mapreduce import map_entities
+from djangae.contrib.processing.mapreduce.utils import qualname
+from djangae.db.utils import django_instance_to_entities
 from djangae.db.unique_utils import unique_identifiers_from_entity
 from djangae.db.constraints import UniqueMarker
 from djangae.db.caching import disable_cache
@@ -126,23 +129,28 @@ class RawMapperMixin(object):
         return None
 
     def start(self, *args, **kwargs):
-        kwargs['db'] = self.db
-        mapper_parameters = {
-            'entity_kind': self.kind,
-            'keys_only': False,
-            'kwargs': kwargs,
-            'args': args,
-            'namespace': settings.DATABASES.get(self.db, {}).get('NAMESPACE'),
-        }
-        mapper_parameters['_map'] = self.get_relative_path(self.map)
-        pipe = DjangaeMapperPipeline(
-            self.job_name,
-            'djangae.contrib.mappers.thunks.thunk_map',
-            'mapreduce.input_readers.RawDatastoreInputReader',
-            params=mapper_parameters,
-            shards=self.shard_count
+        if 'map' not in self.__class__.__dict__:
+            raise TypeError('No static map method defined on class {cls}'.format(self.__class__))
+
+        if 'finish' in self.__class__.__dict__:
+            finish = self.__class__.finish
+        else:
+            finish = None
+
+        kwargs["db"] = self.db
+
+        return map_entities(
+            self.model._meta.db_table if self.model else self.kind,
+            settings.DATABASES.get(self.db, {}).get('NAMESPACE', ''),
+            ".".join([qualname(self.__class__), "run_map"]),
+            finalize_func=".".join([qualname(self.__class__), "finish"]) if finish else None,
+            _output_writer=self.output_writer_spec,
+            _shards=self.shard_count,
+            _job_name=self.job_name,
+            _queue_name=kwargs.pop('queue_name', self.queue_name),
+            *args,
+            **kwargs
         )
-        pipe.start(base_path=PIPELINE_BASE_PATH)
 
 
 class CheckRepairMapper(MapReduceTask):
@@ -167,7 +175,7 @@ class CheckRepairMapper(MapReduceTask):
         alias = kwargs.get("db", "default")
         namespace = settings.DATABASES.get(alias, {}).get("NAMESPACE")
         assert alias == (instance._state.db or "default")
-        entity = django_instance_to_entity(connections[alias], type(instance), instance._meta.fields, raw=True, instance=instance, check_null=False)
+        entity, _ = django_instance_to_entities(connections[alias], instance._meta.fields, raw=True, instance=instance, check_null=False)
         identifiers = unique_identifiers_from_entity(type(instance), entity, ignore_pk=True)
         identifier_keys = [datastore.Key.from_path(UniqueMarker.kind(), i, namespace=namespace) for i in identifiers]
 
@@ -198,7 +206,7 @@ class CheckRepairMapper(MapReduceTask):
 
             elif m['instance'] != entity.key():
 
-                if isinstance(m['instance'], basestring):
+                if isinstance(m['instance'], six.string_types):
                     m['instance'] = datastore.Key(m['instance'])
 
                     if repair:
@@ -247,7 +255,7 @@ class CleanMapper(RawMapperMixin, MapReduceTask):
                 return
 
             # Get the possible unique markers for the entity, if this one doesn't exist in that list then delete it
-            instance_entity = django_instance_to_entity(connections[alias], model, instance._meta.fields, raw=True, instance=instance, check_null=False)
+            instance_entity, _ = django_instance_to_entities(connections[alias], instance._meta.fields, raw=True, instance=instance, check_null=False)
             identifiers = unique_identifiers_from_entity(model, instance_entity, ignore_pk=True)
             identifier_keys = [datastore.Key.from_path(UniqueMarker.kind(), i, namespace=entity["instance"].namespace()) for i in identifiers]
             if entity.key() not in identifier_keys:
