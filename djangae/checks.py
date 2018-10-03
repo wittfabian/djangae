@@ -5,7 +5,10 @@ from django.core.checks import register, Tags, Error, Warning
 
 from djangae.environment import get_application_root
 
-from google.appengine.tools.sdk_update_checker import GetVersionObject, _VersionList
+try:
+    from google.appengine.tools.sdk_update_checker import GetVersionObject, _VersionList
+except ImportError:
+    GetVersionObject = None
 
 
 # django 1.8 didn't declare a "caches" tag
@@ -32,8 +35,9 @@ CSP_SOURCE_NAMES = [
 @register
 def check_app_engine_sdk_version(app_configs=None, **kwargs):
     errors = []
-    sdk_version = tuple(_VersionList(GetVersionObject()['release']))
-    if sdk_version > MAX_APP_ENGINE_SDK_VERSION:
+    if GetVersionObject:
+        sdk_version = tuple(_VersionList(GetVersionObject()['release']))
+        if sdk_version > MAX_APP_ENGINE_SDK_VERSION:
             errors.append(Warning(
                 "MAX_APP_ENGINE_SDK_VERSION",
                 hint="You are using a version of the App Engine SDK that is not yet supported",
