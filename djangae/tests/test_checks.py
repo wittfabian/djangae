@@ -98,14 +98,3 @@ class ChecksTestCase(TestCase):
         with override_settings(TEMPLATES=template_setting):
             errors = checks.check_cached_template_loader_used()
             self.assertEqual(len(errors), 0)
-
-    def test_app_engine_sdk_version_check_supported(self):
-        with sleuth.switch('djangae.checks._VersionList', lambda x: [1, 0, 0]):
-            errors = checks.check_app_engine_sdk_version()
-            self.assertEqual(len(errors), 0)
-
-    def test_app_engine_sdk_version_check_unsupported(self):
-        with sleuth.switch('djangae.checks._VersionList', lambda x: [100, 0, 0]):
-            errors = checks.check_app_engine_sdk_version()
-            self.assertEqual(len(errors), 1)
-            self.assertEqual(errors[0].id, 'djangae.W002')
