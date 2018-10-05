@@ -6,6 +6,7 @@ from django.core.checks import register, Tags, Error, Warning
 from djangae.environment import get_application_root
 
 try:
+    # `sdk_update_checker` only exists in the development SDK
     from google.appengine.tools.sdk_update_checker import GetVersionObject, _VersionList
 except ImportError:
     GetVersionObject = None
