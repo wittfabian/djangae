@@ -1,6 +1,9 @@
 # STANDARD LIB
 import threading
 
+# THIRD PARTY
+from google.appengine.runtime import DeadlineExceededError
+
 # DJANGAE
 from djangae.db import transaction
 from djangae.contrib import sleuth
@@ -85,6 +88,23 @@ class TransactionTests(TestCase):
 
         self.assertEqual(0, TestUser.objects.count())
 
+    def test_atomic_decorator_catches_deadlineexceedederror(self):
+        """ Regression test for #1107 . Make sure DeadlineExceededError causes the transaction to
+            be rolled back.
+        """
+        from .test_connector import TestUser
+
+        @transaction.atomic
+        def txn():
+            TestUser.objects.create(username="foo", field2="bar")
+            self.assertTrue(transaction.in_atomic_block())
+            raise DeadlineExceededError()
+
+        with self.assertRaises(DeadlineExceededError):
+            txn()
+
+        self.assertEqual(0, TestUser.objects.count())
+
     def test_interaction_with_datastore_txn(self):
         from google.appengine.ext import db
         from google.appengine.datastore.datastore_rpc import TransactionOptions
@@ -138,6 +158,20 @@ class TransactionTests(TestCase):
             with transaction.atomic():
                 TestUser.objects.create(username="foo", field2="bar")
                 raise ValueError()
+
+        self.assertEqual(0, TestUser.objects.count())
+
+    def test_atomic_context_manager_catches_deadlineexceedederror(self):
+        """ Make sure that DeadlineExceededError causes the transaction to be rolled back when
+            using atomic() as a context manager.
+        """
+        from .test_connector import TestUser
+
+        with self.assertRaises(DeadlineExceededError):
+            with transaction.atomic():
+                TestUser.objects.create(username="foo", field2="bar")
+
+                raise DeadlineExceededError()
 
         self.assertEqual(0, TestUser.objects.count())
 
