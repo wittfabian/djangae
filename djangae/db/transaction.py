@@ -186,10 +186,9 @@ def current_transaction():
             break
         elif isinstance(txn, NormalTransaction):
             active_transaction = txn
-            # Keep searching... there may be an independent or further transaction
+            break
         elif isinstance(txn, NoTransaction):
             # Bail immediately for non_atomic blocks. There is no transaction there.
-            active_transaction = None
             break
 
     return active_transaction
