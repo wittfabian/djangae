@@ -10,6 +10,7 @@ from django.core.exceptions import ValidationError
 from django.db import models
 from django.apps import apps
 from django.conf import settings
+from django.utils import six
 
 from djangae import environment
 from djangae.db.utils import get_top_concrete_parent
@@ -387,7 +388,7 @@ class HourIndexer(TimeIndexerMixin, Indexer):
         if isinstance(value, (int, long)):
             return value
 
-        if isinstance(value, basestring):
+        if isinstance(value, six.string_types):
             value = datetime.datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
         return value.hour
 
@@ -410,7 +411,7 @@ class MinuteIndexer(TimeIndexerMixin, Indexer):
         if isinstance(value, (int, long)):
             return value
 
-        if isinstance(value, basestring):
+        if isinstance(value, six.string_types):
             value = datetime.datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
         return value.minute
 
@@ -432,7 +433,7 @@ class SecondIndexer(TimeIndexerMixin, Indexer):
         if isinstance(value, (int, long)):
             return value
 
-        if isinstance(value, basestring):
+        if isinstance(value, six.string_types):
             value = datetime.datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
         return value.second
 
@@ -455,7 +456,7 @@ class DayIndexer(DateIndexerMixin, Indexer):
         if isinstance(value, (int, long)):
             return value
 
-        if isinstance(value, basestring):
+        if isinstance(value, six.string_types):
             value = datetime.datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
         return value.day
 
@@ -478,7 +479,7 @@ class YearIndexer(DateIndexerMixin, Indexer):
         if isinstance(value, (int, long)):
             return value
 
-        if isinstance(value, basestring):
+        if isinstance(value, six.string_types):
             value = datetime.datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
 
         return value.year
@@ -502,7 +503,7 @@ class MonthIndexer(DateIndexerMixin, Indexer):
         if isinstance(value, (int, long)):
             return value
 
-        if isinstance(value, basestring):
+        if isinstance(value, six.string_types):
             value = datetime.datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
 
         return value.month
@@ -651,7 +652,7 @@ class LegacyContainsIndexer(StringIndexerMixin, Indexer):
     def validate_can_be_indexed(self, value, negated):
         if negated:
             return False
-        return isinstance(value, basestring) and len(value) <= 500
+        return isinstance(value, six.string_types) and len(value) <= 500
 
     def prep_value_for_database(self, value, index, **kwargs):
         results = []
@@ -751,7 +752,7 @@ class EndsWithIndexer(StringIndexerMixin, Indexer):
         if negated:
             return False
 
-        return isinstance(value, basestring) and len(value) < 500
+        return isinstance(value, six.string_types) and len(value) < 500
 
     def prep_value_for_database(self, value, index, **kwargs):
         if value is None:
@@ -817,7 +818,7 @@ class StartsWithIndexer(StringIndexerMixin, Indexer):
         if negated:
             return False
 
-        return isinstance(value, basestring) and len(value) < 500
+        return isinstance(value, six.string_types) and len(value) < 500
 
     def prep_value_for_database(self, value, index, **kwargs):
         if value is None:

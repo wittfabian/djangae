@@ -644,7 +644,7 @@ class RelatedIteratorField(ForeignObject):
             return list()
 
         # Deal with deserialization from a string
-        if isinstance(value, basestring):
+        if isinstance(value, six.string_types):
             if not (value.startswith("[") and value.endswith("]")):
                 raise ValidationError("Invalid input for {} instance", type(self).__name__)
 
@@ -787,7 +787,7 @@ class GRReverseCreator(property):
         return obj.__dict__[self.attname]
 
     def set(self, obj, value):
-        if not isinstance(value, basestring):
+        if not isinstance(value, six.string_types):
             value = self.field.get_prep_value(value)
         obj.__dict__[self.attname] = value
 

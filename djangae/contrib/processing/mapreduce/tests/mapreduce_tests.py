@@ -5,6 +5,7 @@ from mapreduce.mapreduce_pipeline import MapreducePipeline
 from django.db import models
 from djangae.test import TestCase
 from djangae.test import process_task_queues
+from djangae.contrib.processing.mapreduce.helpers import DjangoInputReader
 from djangae.contrib.processing.mapreduce.utils import qualname
 # from djangae.contrib.processing.mapreduce.pipelines import MapPipeline
 
@@ -41,39 +42,49 @@ class MRTestNode(models.Model):
 #         for node in nodes:
 #             self.assertEqual(node.counter, 2)
 #
-#
-# class DjangoInputReaderTestCase(TestCase):
-#
-#     def setUp(self):
-#         for x in range(100):
-#             self.testnode = TestNode()
-#             self.testnode.data = 'Lol'
-#             self.testnode.counter = 1
-#             self.testnode.save()
-#         super(DjangoInputReaderTestCase, self).setUp()
-#
-#     def test_split_input(self):
-#         from mapreduce.model import MapperSpec
-#         shards = 12
-#         mapper_spec = MapperSpec(
-#             '',
-#             '',
-#             {
-#                 'input_reader': {
-#                     'model': 'mapreduce.TestNode'
-#                 }
-#             },
-#             shards,
-#         )
-#         readers = DjangoInputReader.split_input(mapper_spec)
-#         self.assertEqual(len(readers), shards)
-#         models = []
-#         for reader in readers:
-#             for model in reader:
-#                 models.append(model.pk)
-#         self.assertEqual(len(models), 100)
-#         self.assertEqual(len(models), len(set(models)))
 
+class DjangoInputReaderTestCase(TestCase):
+    ENTITY_COUNT = 300
+
+    def setUp(self):
+        for x in range(self.ENTITY_COUNT):
+            self.testnode = MRTestNode()
+            self.testnode.data = 'Lol'
+            self.testnode.counter = 1
+            if x < self.ENTITY_COUNT / 4:
+                self.testnode.id = x + 1
+            self.testnode.save()
+        super(DjangoInputReaderTestCase, self).setUp()
+
+    def _test_split_input_on_n_shards(self, shards):
+        from mapreduce.model import MapperSpec
+        mapper_spec = MapperSpec(
+            '',
+            '',
+            {
+                'input_reader': {
+                    'model': 'mapreduce.MRTestNode'
+                }
+            },
+            shards,
+        )
+        readers = DjangoInputReader.split_input(mapper_spec)
+        self.assertEqual(len(readers), shards)
+        models = []
+        for reader in readers:
+            for model in reader:
+                models.append(model.pk)
+        self.assertEqual(len(models), self.ENTITY_COUNT)
+        self.assertEqual(len(models), len(set(models)))
+
+    def test_split_input_on_one_shard(self):
+        self._test_split_input_on_n_shards(1)
+
+    def test_split_input_on_two_shards(self):
+        self._test_split_input_on_n_shards(2)
+
+    def test_split_input_one_batch_per_shard(self):
+        self._test_split_input_on_n_shards(6)
 
 class MapreduceTestCase(TestCase):
 

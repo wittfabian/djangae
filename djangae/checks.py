@@ -5,11 +5,20 @@ from django.core.checks import register, Tags, Error, Warning
 
 from djangae.environment import get_application_root
 
+try:
+    # `sdk_update_checker` only exists in the development SDK
+    from google.appengine.tools.sdk_update_checker import GetVersionObject, _VersionList
+except ImportError:
+    GetVersionObject = None
+
+
 # django 1.8 didn't declare a "caches" tag
 if not hasattr(Tags, "caches"):
     Tags.caches = "caches"
     Tags.urls = "urls"
 
+
+MAX_APP_ENGINE_SDK_VERSION = (1, 9, 57)
 
 CSP_SOURCE_NAMES = [
     'CSP_DEFAULT_SRC',
@@ -22,6 +31,20 @@ CSP_SOURCE_NAMES = [
     'CSP_STYLE_SRC',
     'CSP_CONNECT_SRC',
 ]
+
+
+@register
+def check_app_engine_sdk_version(app_configs=None, **kwargs):
+    errors = []
+    if GetVersionObject:
+        sdk_version = tuple(_VersionList(GetVersionObject()['release']))
+        if sdk_version > MAX_APP_ENGINE_SDK_VERSION:
+            errors.append(Warning(
+                "MAX_APP_ENGINE_SDK_VERSION",
+                hint="You are using a version of the App Engine SDK that is not yet supported",
+                id='djangae.W002',
+            ))
+    return errors
 
 
 @register(Tags.security)

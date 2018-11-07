@@ -17,6 +17,7 @@ class FormattingTestModel(models.Model):
     field1 = models.IntegerField()
     field2 = models.CharField(max_length=10)
     field3 = models.TextField()
+    field4 = models.BinaryField()
 
 
 class SelectFormattingTest(TestCase):
@@ -99,10 +100,23 @@ SELECT (*) FROM {} ORDER BY field1, field2 DESC
 
         self.assertEqual(expected, sql)
 
+    def test_unicode_error(self):
+        command = SelectCommand(
+            connections['default'],
+            FormattingTestModel.objects.filter(field2=u"Jacqu\xe9s").query
+        )
+        sql = generate_sql_representation(command)
+
+        expected = u"""
+SELECT (*) FROM {} WHERE (field2='Jacqu\xe9s')
+""".format(FormattingTestModel._meta.db_table).strip()
+
+        self.assertEqual(expected, sql)
+
 
 class InsertFormattingTest(TestCase):
     def test_single_insert(self):
-        instance = FormattingTestModel(field1=1, field2="Two", field3="Three")
+        instance = FormattingTestModel(field1=1, field2="Two", field3="Three", field4=b'\xff')
 
         command = InsertCommand(
             connections["default"],
@@ -110,14 +124,14 @@ class InsertFormattingTest(TestCase):
             [instance],
             [
                 FormattingTestModel._meta.get_field(x)
-                for x in ("field1", "field2", "field3")
+                for x in ("field1", "field2", "field3", "field4")
             ], True
         )
 
         sql = generate_sql_representation(command)
 
         expected = """
-INSERT INTO {} (field1, field2, field3) VALUES (1, "Two", "Three")
+INSERT INTO {} (field1, field2, field3, field4) VALUES (1, 'Two', 'Three', '<binary>')
 """.format(FormattingTestModel._meta.db_table).strip()
 
         self.assertEqual(expected, sql)
@@ -209,4 +223,4 @@ class GenerateValuesExpressionTest(TestCase):
 
         m = Mock()
         output = _generate_values_expression([m], ['value1'])
-        self.assertEqual(output, '("' + m.value1 + '")')
+        self.assertEqual(output, '(\'' + m.value1 + '\')')

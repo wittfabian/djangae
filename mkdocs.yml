@@ -10,6 +10,7 @@ pages:
 - Djangae Model Fields: fields.md
 - Local/remote management commands: sandbox.md
 - Environment: environment.md
+- Utils: utils.md
 - Storage backends: storage.md
 - Background Processing: deferred.md
 - Contrib apps:

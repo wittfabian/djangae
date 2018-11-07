@@ -1,8 +1,8 @@
 import logging
-import urllib
 
 from django.apps import apps
 from django.http import HttpResponse
+from django.utils.six.moves import urllib
 from djangae.environment import task_or_admin_only
 from google.appengine.api import taskqueue
 
@@ -65,7 +65,7 @@ def create_datastore_backup(request):
     if queue:
         params.append(('queue', queue))
 
-    query = urllib.urlencode(params, doseq=True)
+    query = urllib.parse.urlencode(params, doseq=True)
     backup_url = '{}?{}'.format(BACKUP_HANDLER, query)
 
     # Backups must be started via task queue or cron.

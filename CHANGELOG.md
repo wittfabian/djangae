@@ -1,4 +1,36 @@
-## v0.9.11 (in development)
+## v0.9.12 (in development)
+
+### New features & improvements:
+
+- Take some steps to make the code Python 3 compatible.
+- Additional option to not start mapper pipeline; and provide outputs to finalize function.
+- `atomic()` (when used as a context manager) now returns an object representing the current transaction
+- Added `djangae.db.transaction.current_transaction()` to return the same thing from inside an `atomic()` decorator
+- Added `Transaction.has_been_read(instance)`, `Transaction.has_been_written` and `Transaction.refresh_if_unread(instance)` which allows writing safe transactional code.
+- Added `Transaction.has_already_been_read(instance)` and `Transaction.refresh_if_unread(instance)` which allows writing safe transactional code.
+- Added App Engine SDK version check on project startup.
+
+### Bug fixes:
+
+- Fixed `ImportError` when running `./manage.py runserver` and the SDK is not already on the Python import path.
+- Fix a ValueError when sharding string keys in the migrations mapper library.
+- Fixed Djangae's project description on pypi.org.
+- Fixed installing dependencies when running tests with pip version 10.
+- Worked around a bug where App Engine would return projected values as `str` instead of `unicode`
+- Replace binary values in sql value generation with `<binary>` identifier.
+- Fix a couple sql unicode bugs.
+- Use single quotes for sql string literals, and do not quote integers.
+- Fixed a bug in the AsyncMultiQuery that would prevent returning all results in the case when an `OR` query was used with an offset and some entities matched more than one branch of the `OR` query.
+- Add an option to ignore pull tasks in testing
+- Fix occasions where the default value of a field would not be correctly set on save()
+- Simplified the atomic() and non_atomic() decorator/context managers to hopefully eliminate edge-case/threading bugs that have been seen.
+- Fix a bug where the context cache would be incorrectly set after leaving a non_atomic block
+- Fixed serialization/deserialization of JSONFields
+- Fixed migrations failing to map all entities of a kind.
+- Mapping queryset should support shard slicing.
+- Replaced deprecated resources(`models.get_models`, `models.get_apps` and `Options.module_name`) in `djangae.forms.fields.py`.
+
+## v0.9.11
 
 ### New features & improvements:
 
@@ -16,8 +48,14 @@
 - Add a ComputedNullBooleanField
 - Updated the `sleuth` library in djangae.contrib
 - Updated the csrf session check to respect Django's `CSRF_USE_SESSIONS` flag
-- `djangae.utils.retry` now waits for 375ms by default before retrying to avoid excerbating contention (previous value of 100ms was far too low).
-- `djangae.utils.retry` now accepts overriding the initial retry time with the `_initial_wait` kwarg.
+- Improvements to `djangae.utils.retry`:
+    - Now allows you to specify which exceptions to catch.
+    - Now waits for 375ms by default before retrying to avoid excerbating contention (previous value of 100ms was far too low, and was actually about 0.1ms due to a bug).
+    - Now allows overriding the initial retry time with the `_initial_wait` kwarg.
+    - Now allows specifying a `_max_wait` time.
+    - Now provides an accompanying `@retry_on_error` decorator for applying it to function definitions.
+    - Is now documented.
+    - changed `_retries` argument to `_attempts` which is better API
 - Add `djangae.deferred.defer` to fix issues with `google.appengine.ext.deferred.defer`
 
 ### Bug fixes:
@@ -48,7 +86,6 @@
  - Locked down the backup creation view in `djangae.contrib.backups`
  - Fixed the backup creation URL to have a trailing slash (optional, to prevent breaking apps)
  - Fixed an issue with ComputedCollationField where the sort order would be incorrect for some values. (Will need a resave of objects to fix existing data.)
- - Replaced deprecated resources(`models.get_models`, `models.get_apps` and `Options.module_name`) in `djangae.forms.fields.py`.
 
 ## v0.9.10
 

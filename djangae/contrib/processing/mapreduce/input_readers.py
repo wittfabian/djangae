@@ -1,12 +1,18 @@
 from mapreduce import input_readers
+from djangae.utils import get_in_batches
 from django.apps import apps
+from django.utils.six.moves import range
 import logging
 import cPickle
 
 class DjangoInputReader(input_readers.InputReader):
+
+    # Use same batch size as mapreduce's built-in DatastoreInputReader
+    _BATCH_SIZE = 50
+
     """
     """
-    def __init__(self, model_path=None, pk__gt=None, pk__lte=None, query=None, shard_id=None, db='default'):
+    def __init__(self, model_path=None, pk__gt=None, pk__lte=None, pk_last_read=None, query=None, shard_id=None, db='default'):
         self.model_path = model_path
         try:
             app, model = self.model_path.split('.')
@@ -15,6 +21,7 @@ class DjangoInputReader(input_readers.InputReader):
         self.model = apps.get_model(app, model)
         self.pk__gt = pk__gt
         self.pk__lte = pk__lte
+        self.pk_last_read = pk_last_read
         self.query = query
         self.shard_id = shard_id
         self.db = db
@@ -26,11 +33,19 @@ class DjangoInputReader(input_readers.InputReader):
         if self.pk__lte is not None:
             pk_filters['pk__lte'] = self.pk__lte
 
+        if self.pk_last_read is not None:
+            pk_filters['pk__gt'] = max(self.pk_last_read, pk_filters.get('pk__gt', self.pk_last_read))
+
         qs = self.model.objects.all()
         if self.query is not None:
             qs.query = self.query
         qs = qs.using(self.db).filter(**pk_filters).order_by('pk')
-        for model in qs:
+
+        for model in get_in_batches(qs, batch_size=self._BATCH_SIZE):
+            # From the mapreduce docs (AbstractDatastoreInputReader):
+            #     The caller must consume yielded values so advancing the KeyRange
+            #     before yielding is safe.
+            self.pk_last_read = model.id
             yield model
 
     @classmethod
@@ -48,6 +63,7 @@ class DjangoInputReader(input_readers.InputReader):
             'model_path': self.model_path,
             'pk__gt': self.pk__gt,
             'pk__lte': self.pk__lte,
+            'pk_last_read': self.pk_last_read,
             'query': cPickle.dumps(self.query),
             'shard_id': self.shard_id,
             'db': self.db
@@ -87,7 +103,7 @@ class DjangoInputReader(input_readers.InputReader):
         keyranges = []
         if len(keys) > 1:
             keyranges.append(DjangoInputReader(params['model'], pk__lte=keys[0], query=query, shard_id=0, db=db))
-            for x in xrange((len(keys) - 1)):
+            for x in range((len(keys) - 1)):
                 keyranges.append(DjangoInputReader(params['model'], pk__gt=keys[x], pk__lte=keys[x+1], query=query, shard_id=x+1, db=db))
             keyranges.append(DjangoInputReader(params['model'], pk__gt=keys[x+1], query=query, shard_id=x+2, db=db))
         elif len(keys) == 1:

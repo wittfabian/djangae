@@ -171,7 +171,7 @@ class GenericRelationWidget(forms.MultiWidget):
         super(GenericRelationWidget, self).__init__(widgets=widgets, *args, **kwargs)
 
     def decompress(self, value):
-        if isinstance(value, basestring):
+        if isinstance(value, six.string_types):
             return decode_pk(value)
         if value:
             return [value._meta.db_table, value.pk]
@@ -269,7 +269,7 @@ class GenericRelationFormfield(forms.MultiValueField):
         if value is None:
             return None
 
-        if isinstance(value, basestring):
+        if isinstance(value, six.string_types):
             return value
         return encode_pk(value.pk, value)
 

@@ -1,40 +1,19 @@
-import cPickle
 import pipeline
 
 from importlib import import_module
 from mapreduce import context
-from mapreduce.mapper_pipeline import MapperPipeline
+from mapreduce import mapper_pipeline
 from mapreduce.mapreduce_pipeline import MapreducePipeline
 from mapreduce import pipeline_base
 from mapreduce.model import MapreduceState
 from mapreduce.input_readers import RawDatastoreInputReader, GoogleCloudStorageInputReader
+from mapreduce import model
+from pipeline.util import for_name
 
 from django.utils import six
 from djangae.contrib.processing.mapreduce.input_readers import DjangoInputReader
 
 from utils import qualname
-
-
-class DynamicPipeline(pipeline_base.PipelineBase):
-    """
-        Horrific class which uses pickle to store pipelines for
-        yielding via run(). This wouldn't be necessary if the pipeline
-        library wasn't built for Java and had a sensible interface that
-        didn't require inheritence.
-    """
-    def __init__(self, pipelines, *args, **kwargs):
-        # This gets reinstantiated somewhere with the already-pickled pipelines argument
-        # so we prevent double pickling by checking it's not a string
-        if not isinstance(pipelines, six.string_types):
-            pipelines = str(cPickle.dumps(pipelines))
-        super(DynamicPipeline, self).__init__(pipelines, *args, **kwargs)
-
-    def run(self, pipelines):
-        with pipeline.InOrder():
-            pipelines = cPickle.loads(str(pipelines))
-            for pipe in pipelines:
-                yield pipe
-
 
 def import_callable(dotted_path):
     module_path = dotted_path.rsplit(".", 1)[0]
@@ -64,16 +43,20 @@ def import_callable(dotted_path):
 
     return func
 
+class MapperPipeline(mapper_pipeline.MapperPipeline):
 
-class CallbackPipeline(pipeline_base.PipelineBase):
-    """
-        Simply calls the specified function.
-        Takes a dotted-path to the callback
-    """
-    def run(self, func, *args, **kwargs):
-        func = import_callable(func)
-        func(*args, **kwargs)
-
+    def finalized(self):
+        mapreduce_id = self.outputs.job_id.value
+        mapreduce_state = model.MapreduceState.get_by_job_id(mapreduce_id)
+        params = mapreduce_state.mapreduce_spec.mapper.params
+        finalized_func = params.get('_finalized', None)
+        if not finalized_func:
+            return None
+        finalized_func = for_name(finalized_func)
+        return finalized_func(job_name=self.args[0],
+                              outputs=self.outputs,
+                              *params.get('args', []),
+                              **params.get('kwargs', {}))
 
 def unpacker(obj):
     params = context.get().mapreduce_spec.mapper.params
@@ -86,38 +69,31 @@ def _do_map(
     _shards, _output_writer, _output_writer_kwargs, _job_name, _queue_name,
     *processor_args, **processor_kwargs):
 
+    start_pipeline = processor_kwargs.pop('start_pipeline', True)
+
     handler_spec = qualname(unpacker)
     handler_params = {
         "func": qualname(processor_func) if callable(processor_func) else processor_func,
         "args": processor_args,
-        "kwargs": processor_kwargs
+        "kwargs": processor_kwargs,
+        "_finalized": qualname(finalize_func) if callable(finalize_func) else finalize_func
     }
 
     handler_params.update(params)
 
-    pipelines = []
-    pipelines.append(MapperPipeline(
+    new_pipeline = MapperPipeline(
         _job_name,
         handler_spec=handler_spec,
         input_reader_spec=qualname(input_reader),
         output_writer_spec=qualname(_output_writer) if _output_writer else None,
         params=handler_params,
         shards=_shards
-    ))
+    )
 
-    if finalize_func:
-        pipelines.append(
-            CallbackPipeline(
-                qualname(finalize_func) if callable(finalize_func) else finalize_func,
-                *processor_args,
-                **processor_kwargs
-            )
-        )
+    if start_pipeline:
+        new_pipeline.start(queue_name=_queue_name or 'default')
 
-    new_pipeline = DynamicPipeline(pipelines)
-    new_pipeline.start(queue_name=_queue_name or 'default')
     return new_pipeline
-
 
 def extract_options(kwargs, additional=None):
     VALID_OPTIONS = {

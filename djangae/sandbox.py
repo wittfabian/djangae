@@ -6,9 +6,14 @@ import contextlib
 import subprocess
 import getpass
 import logging
-import urllib
 
 from os.path import commonprefix
+
+# try both the python 2 and 3 import to avoid six dependency or django import
+try:
+    from urllib import quote
+except ImportError:
+    from urllib.parse import quote
 
 from . import environment
 from .utils import get_next_available_port
@@ -186,7 +191,7 @@ def _local(devappserver2=None, configuration=None, options=None, wsgi_request_in
                 if port != '80':
                     host += ':' + port
             url = 'http://' + host
-            url += urllib.quote(os.environ.get('PATH_INFO', '/'))
+            url += quote(os.environ.get('PATH_INFO', '/'))
             if os.environ.get('QUERY_STRING'):
                 url += '?' + os.environ['QUERY_STRING']
             return url
