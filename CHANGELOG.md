@@ -6,6 +6,7 @@
 - Additional option to not start mapper pipeline; and provide outputs to finalize function.
 - `atomic()` (when used as a context manager) now returns an object representing the current transaction
 - Added `djangae.db.transaction.current_transaction()` to return the same thing from inside an `atomic()` decorator
+- Added `Transaction.has_been_read(instance)`, `Transaction.has_been_written` and `Transaction.refresh_if_unread(instance)` which allows writing safe transactional code.
 - Added `Transaction.has_already_been_read(instance)` and `Transaction.refresh_if_unread(instance)` which allows writing safe transactional code.
 - Added App Engine SDK version check on project startup.
 
