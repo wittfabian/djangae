@@ -6,6 +6,7 @@
 - Additional option to not start mapper pipeline; and provide outputs to finalize function.
 - `atomic()` (when used as a context manager) now returns an object representing the current transaction
 - Added `djangae.db.transaction.current_transaction()` to return the same thing from inside an `atomic()` decorator
+- Added `Transaction.has_been_read(instance)`, `Transaction.has_been_written` and `Transaction.refresh_if_unread(instance)` which allows writing safe transactional code.
 - Added `Transaction.has_already_been_read(instance)` and `Transaction.refresh_if_unread(instance)` which allows writing safe transactional code.
 - Added App Engine SDK version check on project startup.
 
@@ -26,6 +27,7 @@
 - Fix a bug where the context cache would be incorrectly set after leaving a non_atomic block
 - Fixed serialization/deserialization of JSONFields
 - Fixed migrations failing to map all entities of a kind.
+- Mapping queryset should support shard slicing.
 
 ## v0.9.11
 
