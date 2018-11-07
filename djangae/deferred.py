@@ -18,14 +18,17 @@ This defer is an adapted version of that one, with the following changes:
 """
 
 import copy
+import logging
 
 from django.db import models
-
+from django.utils import timezone
 from google.appengine.api.datastore import Delete
-from google.appengine.ext.deferred import (  # noqa
-    PermanentTaskFailure,
-    SingularTaskFailure
-)
+from google.appengine.ext.deferred import PermanentTaskFailure  # noqa
+
+from djangae.db import transaction
+from djangae.models import DeferIterationMarker
+from djangae.processing import find_key_ranges_for_queryset
+from djangae.utils import retry
 
 
 def _wipe_caches(args, kwargs):
@@ -127,3 +130,159 @@ def defer(obj, *args, **kwargs):
         if key:
             Delete(key)
         raise
+
+
+_TASK_TIME_LIMIT = 10 * 60
+_BUFFER_TIME = 15  # Arbitrary but reasonable value
+
+
+class TimeoutException(Exception):
+    "Exception thrown to indicate that a new shard should begin and the current one should end"
+    pass
+
+
+def _process_shard(marker_id, model, query, callback, finalize, queue_name, args):
+    args = args or tuple()
+
+    start_time = timezone.now()
+
+    try:
+        marker = DeferIterationMarker.objects.get(pk=marker_id)
+    except DeferIterationMarker.DoesNotExist:
+        logging.warning("DeferIterationMarker with ID: %s has vanished, cancelling task", marker_id)
+        return
+
+    # Redefer if the task isn't ready to begin
+    if not marker.is_ready:
+        defer(
+            _process_shard, marker_id, model, query, callback, finalize,
+            queue_name=queue_name,
+            args=args,
+            _queue=queue_name,
+            _countdown=1
+        )
+        return
+
+    try:
+        qs = model.objects.all()
+        qs.query = query
+        qs.order_by("pk")
+
+        last_pk = None
+        for instance in qs.all():
+            last_pk = instance.pk
+            callback(instance, *args)
+
+            if (timezone.now() - start_time).total_seconds() > _TASK_TIME_LIMIT - _BUFFER_TIME:
+                raise TimeoutException()
+        else:
+            with transaction.atomic(xg=True):
+                try:
+                    marker.refresh_from_db()
+                except DeferIterationMarker.DoesNotExist:
+                    logging.warning("TaskMarker with ID: %s has vanished, cancelling task", marker_id)
+                    return
+
+                marker.shards_complete += 1
+                marker.save()
+
+                if marker.shards_complete == marker.shard_count:
+                    # Delete the marker if we were asked to
+                    if marker.delete_on_completion:
+                        marker.delete()
+
+                    defer(
+                        finalize,
+                        *args,
+                        _transactional=True,
+                        _queue=queue_name
+                    )
+
+    except (Exception, TimeoutException) as e:
+        # We intentionally don't catch DeadlineExceededError here. There's not enough time to redefer a task
+        # and so the only option is to retry the current shard. It shouldn't happen though, 15 seconds should be
+        # ample time... DeadlineExceededError doesn't subclass Exception, it subclasses BaseException so it'll
+        # never enter here (if it does occur, somehow)
+
+        if isinstance(e, TimeoutException):
+            logging.debug("Ran out of time processing shard. Deferring new shard to continue from: %s", last_pk)
+        else:
+            logging.exception("Error processing shard. Retrying.")
+
+        if last_pk:
+            qs = qs.filter(pk__gt=last_pk)
+
+        defer(
+            _process_shard, marker_id, qs.model, qs.query, callback, finalize,
+            queue_name=queue_name,
+            args=args,
+            _queue=queue_name,
+            _countdown=1
+        )
+
+
+def _generate_shards(model, query, callback, finalize, args, queue_name, _shards, _delete_marker):
+    queryset = model.objects.all()
+    queryset.query = query
+
+    key_ranges = find_key_ranges_for_queryset(queryset, _shards)
+
+    marker = DeferIterationMarker.objects.create(delete_on_completion=_delete_marker)
+
+    for i, (start, end) in enumerate(key_ranges):
+        is_last = i == (len(key_ranges) - 1)
+
+        qs = model.objects.all()
+        qs.query = query
+
+        filter_kwargs = {}
+        if start:
+            filter_kwargs["pk__gte"] = start
+
+        if end:
+            filter_kwargs["pk__lt"] = end
+
+        qs = qs.filter(**filter_kwargs)
+
+        @transaction.atomic(xg=True)
+        def make_shard():
+            marker.refresh_from_db()
+            marker.shard_count += 1
+            if is_last:
+                marker.is_ready = True
+            marker.save()
+
+            defer(
+                _process_shard,
+                marker.pk,
+                qs.model, qs.query, callback, finalize,
+                args=args,
+                queue_name=queue_name,
+                _queue=queue_name,
+                _transactional=True
+            )
+
+        try:
+            retry(make_shard, _attempts=5)
+        except:  # noqa
+            marker.delete()  # This will cause outstanding tasks to abort
+            raise
+
+
+def defer_iteration_with_finalize(
+        queryset, callback, finalize, args=None, _queue='default', _shards=5,
+        _delete_marker=True, _transactional=False):
+
+    defer(
+        _generate_shards,
+        queryset.model,
+        queryset.query,
+        callback,
+        finalize,
+        args=args,
+        queue_name=_queue,
+        _delete_marker=_delete_marker,
+        _shards=_shards,
+        _queue=_queue,
+        _transactional=_transactional
+    )
