@@ -141,6 +141,8 @@ DATABASES = {
     },
 }
 
+DATABASE_ROUTERS = ['testapp.routers.TestRouter']
+
 # Internationalization
 # https://docs.djangoproject.com/en/dev/topics/i18n/
 

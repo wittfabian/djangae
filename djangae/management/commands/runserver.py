@@ -5,10 +5,12 @@ import logging
 from datetime import datetime
 
 from django.conf import settings
-from django.core.management.base import CommandError
 from django.core.management.commands import runserver
 
-from djangae.sandbox import WHITELISTED_DEV_APPSERVER_OPTIONS
+from djangae import (
+    sandbox,
+    VERSION as DJANGAE_VERSION
+)
 
 from google.appengine.tools.devappserver2 import shutdown
 from google.appengine.tools.sdk_update_checker import (
@@ -81,30 +83,28 @@ class Command(runserver.Command):
     dev_appserver that emulates the live environment your application
     will be deployed to.
     """
+    def __init__(self, *args, **kwargs):
+        super(Command, self).__init__(*args, **kwargs)
+        self.sandbox_options = sorted([option for option in dir(sandbox._OPTIONS) if not option.startswith('_')])
+
     def add_arguments(self, parser):
         super(Command, self).add_arguments(parser)
 
-        sandbox_options = self._get_sandbox_options()
+        parser.description = 'Starts Appengine SDK\'s dev_appserver.py for development and also serves static files.'
+        parser.usage = '%(prog)s [options]'
 
         # Extra parameters that we're going to pass to GAE's `dev_appserver.py`.
-        for option in sandbox_options:
-            if option in WHITELISTED_DEV_APPSERVER_OPTIONS:
-                parser.add_argument('--%s' % option, action='store', dest=option)
-
-    @staticmethod
-    def _get_sandbox_options():
-        # We read the options from Djangae's sandbox
-        from djangae import sandbox
-        return [option for option in dir(sandbox._OPTIONS) if not option.startswith('_')]
+        group = parser.add_argument_group('dev_appserver.py options')
+        for option in self.sandbox_options:
+            group.add_argument('--%s' % option, action='store', dest=option)
 
     def handle(self, addrport='', *args, **options):
         self.gae_options = {}
-        sandbox_options = self._get_sandbox_options()
 
         # this way we populate the dictionary with the options that relevant
         # just for `dev_appserver.py`
         for option, value in options.items():
-            if option in sandbox_options and value is not None:
+            if option in self.sandbox_options and value is not None:
                 self.gae_options[option] = value
 
         super(Command, self).handle(addrport=addrport, *args, **options)
@@ -152,16 +152,18 @@ class Command(runserver.Command):
         self.check(display_num_errors=True)
         self.stdout.write((
             "%(started_at)s\n"
-            "Django version %(version)s, using settings %(settings)r\n"
+            "Djangae version %(djangae_version)s\n"
+            "Django version %(django_version)s, using settings %(settings)r\n"
             "Starting development server at http://%(addr)s:%(port)s/\n"
             "Quit the server with %(quit_command)s.\n"
         ) % {
             "started_at": datetime.now().strftime('%B %d, %Y - %X'),
-            "version": self.get_version(),
+            "django_version": self.get_version(),
             "settings": settings.SETTINGS_MODULE,
             "addr": self._raw_ipv6 and '[%s]' % self.addr or self.addr,
             "port": self.port,
             "quit_command": quit_command,
+            "djangae_version": DJANGAE_VERSION
         })
         sys.stdout.write("\n")
         sys.stdout.flush()

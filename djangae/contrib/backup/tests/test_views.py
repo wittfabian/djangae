@@ -1,3 +1,5 @@
+import os
+
 from djangae.contrib import sleuth
 from djangae.test import TestCase
 
@@ -23,17 +25,25 @@ class DataStoreBackupTest(TestCase):
             Site
         ]
         with sleuth.fake('django.apps.apps.get_models', models):
-            with self.settings(
-                    DJANGAE_BACKUP_ENABLED=True,
-                    DJANGAE_BACKUP_GCS_BUCKET='testapp',
-                    DJANGAE_BACKUP_NAME='testapp-bk',
-                    DJANGAE_BACKUP_EXCLUDE_APPS=[
-                        'sites'
-                    ],
-                    DJANGAE_BACKUP_EXCLUDE_MODELS=[
-                        'gauth_datastore.Group'
-                    ]):
-                create_datastore_backup(None)
+            bucket = 'testapp/19991231-235900'
+
+            with sleuth.fake('djangae.contrib.backup.views.get_backup_path', bucket):
+                with self.settings(
+                        DJANGAE_BACKUP_ENABLED=True,
+                        DJANGAE_BACKUP_GCS_BUCKET='testapp',
+                        DJANGAE_BACKUP_NAME='testapp-bk',
+                        DJANGAE_BACKUP_EXCLUDE_APPS=[
+                            'sites'
+                        ],
+                        DJANGAE_BACKUP_EXCLUDE_MODELS=[
+                            'gauth_datastore.Group'
+                        ]):
+
+                    try:
+                        os.environ["HTTP_X_APPENGINE_CRON"] = "1"
+                        create_datastore_backup(None)
+                    finally:
+                        del os.environ["HTTP_X_APPENGINE_CRON"]
 
         # assert task was triggered
         tasks = self.taskqueue_stub.get_filtered_tasks()
@@ -42,8 +52,8 @@ class DataStoreBackupTest(TestCase):
         self.assertEqual(tasks[0].url,
             '/_ah/datastore_admin/backup.create?'
             'name=testapp-bk'
-            '&amp;gs_bucket_name=testapp'
-            '&amp;filesystem=gs'
-            '&amp;kind=django_admin_log'
-            '&amp;kind=djangae_gaedatastoreuser'
+            '&gs_bucket_name=testapp%2F19991231-235900'
+            '&filesystem=gs'
+            '&kind=django_admin_log'
+            '&kind=djangae_gaedatastoreuser'
         )

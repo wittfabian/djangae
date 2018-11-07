@@ -7,9 +7,11 @@ want to) using Django's models with the App Engine Datastore as the underlying d
 
 Google Group: [https://groups.google.com/forum/#!forum/djangae-users](https://groups.google.com/forum/#!forum/djangae-users)
 
-Website: [https://potatolondon.github.io/djangae/](https://potatolondon.github.io/djangae/)
+Website: [https://djangae.org](https://djangae.org)
 
 GitHub: [https://github.com/potatolondon/djangae](https://github.com/potatolondon/djangae)
+
+Gitter: [https://gitter.im/potatolondon/djangae](https://gitter.im/potatolondon/djangae)
 
 **Note: Djangae is under heavy development, stability is not guaranteed. A 1.0 release will happen when it's ready**
 

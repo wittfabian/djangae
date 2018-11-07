@@ -211,7 +211,7 @@ class IterableField(models.Field):
 
         # If possible, parse the string into the iterable
         if not hasattr(value, "__iter__"): # Allows list/set, not string
-            if isinstance(value, basestring):
+            if isinstance(value, six.string_types):
                 if value.startswith("[") and value.endswith("]"):
                     value = value[1:-1].strip()
 
@@ -238,7 +238,7 @@ class IterableField(models.Field):
                 self.__class__.__name__, str(self._iterable_type())
             ))
 
-        if isinstance(value, basestring):
+        if isinstance(value, six.string_types):
             # Catch accidentally assigning a string to a ListField
             raise ValueError("Tried to assign a string to a {}".format(self.__class__.__name__))
 
@@ -393,7 +393,7 @@ def _serialize_value(value):
     if hasattr(value, 'isoformat'):
         # handle datetime, date, and time objects
         value = value.isoformat()
-    elif not isinstance(value, basestring):
+    elif not isinstance(value, six.string_types):
         value = str(value)
 
     return "'{0}'".format(value.encode('utf-8'))

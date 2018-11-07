@@ -1,6 +1,6 @@
 # encoding: utf-8
 # STANDARD LIB
-from unittest import skipIf
+import unittest
 
 # THIRD PARTY
 from django.apps.registry import apps  # Apps
@@ -8,6 +8,7 @@ from django.conf import settings
 from django.db import connection, models
 from django.db.migrations.state import ProjectState
 from django.test import override_settings
+
 from google.appengine.api import datastore
 from google.appengine.runtime import DeadlineExceededError
 
@@ -15,10 +16,7 @@ from google.appengine.runtime import DeadlineExceededError
 from djangae.contrib import sleuth
 from djangae.db.migrations import operations
 from djangae.db.migrations.mapper_library import (
-    _get_range,
-    _mid_key,
-    _mid_string,
-    _next_string,
+    generate_shards,
     shard_query,
     ShardedTaskMarker,
     start_mapping,
@@ -225,7 +223,7 @@ class MigrationOperationTests(TestCase):
 
     def test_queue_option(self):
         """ The `queue` kwarg should determine the task queue that the operation runs on. """
-        for x in xrange(3):
+        for x in range(3):
             TestModel.objects.create()
 
         operation = operations.AddFieldData(
@@ -250,7 +248,7 @@ class MigrationOperationTests(TestCase):
         """ If no `queue` kwarg is passed then the DJANGAE_MIGRATION_DEFAULT_QUEUE setting should
             be used to determine the task queue.
         """
-        for x in xrange(2):
+        for x in range(2):
             TestModel.objects.create()
 
         operation = operations.AddFieldData(
@@ -310,7 +308,7 @@ class MigrationOperationTests(TestCase):
 
     def test_addfielddata(self):
         """ Test the AddFieldData operation. """
-        for x in xrange(2):
+        for x in range(2):
             TestModel.objects.create()
 
         # Just for sanity, check that none of the entities have the new field value yet
@@ -329,7 +327,7 @@ class MigrationOperationTests(TestCase):
 
     def test_removefielddata(self):
         """ Test the RemoveFieldData operation. """
-        for x in xrange(2):
+        for x in range(2):
             TestModel.objects.create(name="name_%s" % x)
 
         # Just for sanity, check that all of the entities have `name` value
@@ -348,7 +346,7 @@ class MigrationOperationTests(TestCase):
 
     def test_copyfielddata(self):
         """ Test the CopyFieldData operation. """
-        for x in xrange(2):
+        for x in range(2):
             TestModel.objects.create(name="name_%s" % x)
 
         # Just for sanity, check that none of the entities have the new "new_field" value
@@ -367,7 +365,7 @@ class MigrationOperationTests(TestCase):
 
     def test_deletemodeldata(self):
         """ Test the DeleteModelData operation. """
-        for x in xrange(2):
+        for x in range(2):
             TestModel.objects.create()
 
         # Just for sanity, check that the entities exist!
@@ -386,7 +384,7 @@ class MigrationOperationTests(TestCase):
         """ Test the CopyModelData operation with overwrite_existing=True. """
 
         # Create the TestModel instances, with OtherModel instances with matching PKs
-        for x in xrange(2):
+        for x in range(2):
             instance = TestModel.objects.create(name="name_which_will_be_copied")
             OtherModel.objects.create(name="original_name", id=instance.pk)
 
@@ -413,7 +411,7 @@ class MigrationOperationTests(TestCase):
 
         # Create the TestModel instances, with OtherModel instances with matching PKs only for
         # odd PKs
-        for x in xrange(1, 5):
+        for x in range(1, 5):
             TestModel.objects.create(id=x, name="name_which_will_be_copied")
             if x % 2:
                 OtherModel.objects.create(id=x, name="original_name")
@@ -440,12 +438,12 @@ class MigrationOperationTests(TestCase):
             else:
                 self.assertEqual(entity["name"], "name_which_will_be_copied")
 
-    @skipIf("ns1" not in settings.DATABASES, "This test is designed for the Djangae testapp settings")
+    @unittest.skipIf("ns1" not in settings.DATABASES, "This test is designed for the Djangae testapp settings")
     def test_copymodeldatatonamespace_overwrite(self):
         """ Test the CopyModelDataToNamespace operation with overwrite_existing=True. """
         ns1 = settings.DATABASES["ns1"]["NAMESPACE"]
         # Create instances, with copies in the other namespace with matching IDs
-        for x in xrange(2):
+        for x in range(2):
             instance = TestModel.objects.create(name="name_which_will_be_copied")
             instance.save(using="ns1")
 
@@ -467,13 +465,13 @@ class MigrationOperationTests(TestCase):
             entity["name"] == "name_which_will_be_copied" for entity in ns1_entities
         ))
 
-    @skipIf("ns1" not in settings.DATABASES, "This test is designed for the Djangae testapp settings")
+    @unittest.skipIf("ns1" not in settings.DATABASES, "This test is designed for the Djangae testapp settings")
     def test_copymodeldatatonamespace_no_overwrite(self):
         """ Test the CopyModelDataToNamespace operation with overwrite_existing=False. """
         ns1 = settings.DATABASES["ns1"]["NAMESPACE"]
         # Create the TestModel instances, with OtherModel instances with matching PKs only for
         # odd PKs
-        for x in xrange(1, 5):
+        for x in range(1, 5):
             TestModel.objects.create(id=x, name="name_which_will_be_copied")
             if x % 2:
                 ns1_instance = TestModel(id=x, name="original_name")
@@ -501,7 +499,7 @@ class MigrationOperationTests(TestCase):
             else:
                 self.assertEqual(entity["name"], "name_which_will_be_copied")
 
-    @skipIf(
+    @unittest.skipIf(
         "ns1" not in settings.DATABASES or "testapp" not in settings.INSTALLED_APPS,
         "This test is designed for the Djangae testapp settings"
     )
@@ -510,7 +508,7 @@ class MigrationOperationTests(TestCase):
             a new app as well as in a new namespace.
         """
         ns1 = settings.DATABASES["ns1"]["NAMESPACE"]
-        for x in xrange(2):
+        for x in range(2):
             TestModel.objects.create(name="name_which_will_be_copied")
 
         # Just for sanity, check that the entities exist
@@ -534,7 +532,7 @@ class MigrationOperationTests(TestCase):
 
     def test_mapfunctiononentities(self):
         """ Test the MapFunctionOnEntities operation. """
-        for x in xrange(2):
+        for x in range(2):
             TestModel.objects.create()
         # Test that our entities have not had our function called on them
         entities = self.get_entities()
@@ -549,151 +547,13 @@ class MigrationOperationTests(TestCase):
         self.assertTrue(all(entity.get("is_tickled") for entity in entities))
 
 
-class MidStringTestCase(TestCase):
-    """ Tests for the _mid_string function in the mapper_library. """
-
-    def test_handles_args_in_either_order(self):
-        """ It shouldn't matter whether we pass the "higher" string as the first or second param. """
-        low = "aaaaa"
-        high = "zzzzz"
-        mid1 = _mid_string(low, high)
-        mid2 = _mid_string(low, high)
-        self.assertEqual(mid1, mid2)
-        self.assertTrue(low < mid1 < high)
-
-    def test_basic_behaviour(self):
-        """ Test finding the midpoint between two string in an obvious case. """
-        start = "a"
-        end = "c"
-        self.assertEqual(_mid_string(start, end), "b")
-
-    def test_slightly_less_basic_behaviour(self):
-        start = "aaaaaaaaaaaa"
-        end = "z"
-        mid_low_apprx = "l"
-        mid_high_apprx = "n"
-        result = _mid_string(start, end)
-        self.assertTrue(mid_low_apprx < result < mid_high_apprx)
-
-    def test_handles_strings_of_different_lengths(self):
-        """ Strings of different lengths should return another of a length mid way between """
-        start = "aaa"
-        end = "zzzzzzzzzzzzz"
-        mid = _mid_string(start, end)
-
-        self.assertTrue(start < mid < end)
-
-    def test_handles_unicode(self):
-        """ It should be able to do comparisions on non-ascii strings. """
-        start = u"aaa£¢$›😇"
-        end = u"zzz🤡"
-        mid = _mid_string(start, end)
-        self.assertTrue(start < mid < end)
-
-    def test_does_not_return_string_starting_with_double_underscore(self):
-        """ A string that starts with a double underscore is not a valid Datastore key and so
-            should not be returned.
-        """
-        # The true mid point between this start and end combination is a double underscore
-        start = "^^"
-        end = "``"
-        result = _mid_string(start, end)
-        self.assertNotEqual(result, "__")
-
-
-class MidKeyTestCase(TestCase):
-    """ Tests for the `_mid_key` function. """
-
-    def test_mixed_integers_and_strings_not_allowed(self):
-        """ Finding the mid point between keys of different types is not currently supported and
-            should therefore raise an error.
-        """
-        key1 = datastore.Key.from_path("my_kind", 1)
-        key2 = datastore.Key.from_path("my_kind", "1")
-        self.assertRaises(NotImplementedError, _mid_key, key1, key2)
-
-    def test_mid_integer_key(self):
-        """ Given 2 keys with integer `id_or_name` values, the returned key should have an
-            `id_or_name` which is an integer somewhere between the two.
-        """
-        key1 = datastore.Key.from_path("my_kind", 1)
-        key2 = datastore.Key.from_path("my_kind", 100)
-        result = _mid_key(key1, key2)
-        self.assertEqual(result.kind(), key1.kind())
-        self.assertEqual(result.namespace(), key1.namespace())
-        self.assertTrue(1 < result.id_or_name() < 100)
-
-    def test_mid_string_key(self):
-        """ Given 2 keys with string `id_or_name` values, the returned key should have an
-            `id_or_name` which is a string somewhere between the two.
-        """
-        key1 = datastore.Key.from_path("my_kind", "1")
-        key2 = datastore.Key.from_path("my_kind", "100")
-        result = _mid_key(key1, key2)
-        self.assertEqual(result.kind(), key1.kind())
-        self.assertEqual(result.namespace(), key1.namespace())
-        self.assertTrue("1" < result.id_or_name() < "100")
-
-
-class NextStringTestCase(TestCase):
-    """ Tests for the _next_string function in the mapper_library. """
-
-    def test_basic_behaviour(self):
-        try:
-            unichr(65536)
-            # Python wide-unicode build (Linux) UTF-32
-            highest_unicode_char = unichr(0x10ffff)
-        except ValueError:
-            # Python narrow build (OSX)
-            # Python 2 using 16 bit unicode, so the highest possible character is (2**16) - 1
-            highest_unicode_char = unichr(2 ** 16 - 1)
-
-        checks = (
-            # Pairs of (input, expected_output)
-            ("a", "b"),
-            ("aaaa", "aaab"),
-            # unichr((2 ** 32) - 1) is the last possible unicode character
-            (highest_unicode_char, highest_unicode_char + unichr(1)),
-            (u"aaa" + highest_unicode_char, u"aaa" + highest_unicode_char + unichr(1)),
-        )
-        for input_text, expected_output in checks:
-            self.assertEqual(_next_string(input_text), expected_output)
-
-
-class GetKeyRangeTestCase(TestCase):
-    """ Tests for the `_get_range` function. """
-
-    def test_integer_range(self):
-        """ Given 2 integer-based keys, it should return the range that the IDs span. """
-        key1 = datastore.Key.from_path("my_kind", 4012809128)
-        key2 = datastore.Key.from_path("my_kind", 9524773032)
-        self.assertEqual(_get_range(key1, key2), 9524773032 - 4012809128)
-
-    def test_string_range(self):
-        """ Given 2 string-based keys, it should return a representation of the range that the two
-            keys span.
-        """
-        key1 = datastore.Key.from_path("my_kind", "a")
-        key2 = datastore.Key.from_path("my_kind", "b")
-        # The difference between "a" and "b" is 1 character
-        self.assertEqual(_get_range(key1, key2), unichr(1))
-
-    def test_mixed_keys_cause_exception(self):
-        """ Trying to get a range between 2 keys when one is an integer and the other is a string
-            should cause an explosion.
-        """
-        key1 = datastore.Key.from_path("my_kind", "a")
-        key2 = datastore.Key.from_path("my_kind", 12345)
-        self.assertRaises(Exception, _get_range, key1, key2)
-
-
 class ShardQueryTestCase(TestCase):
     """ Tests for the `shard_query` function. """
 
     def test_query_sharding(self):
         ns1 = settings.DATABASES["default"]["NAMESPACE"]
 
-        for x in xrange(1, 21):
+        for x in range(1, 21):
             TestModel.objects.create(pk=x)
 
         qry = datastore.Query(TestModel._meta.db_table, namespace=ns1)
@@ -701,11 +561,11 @@ class ShardQueryTestCase(TestCase):
         self.assertEqual(1, len(shards))
 
         shards = shard_query(qry, 20)
-        self.assertEqual(20, len(shards))
+        self.assertEqual(12, len(shards))
 
         shards = shard_query(qry, 50)
         # We can't create 50 shards if there are only 20 objects
-        self.assertEqual(20, len(shards))
+        self.assertEqual(12, len(shards))
 
 
 class MapperLibraryTestCase(TestCase):
@@ -732,7 +592,7 @@ class MapperLibraryTestCase(TestCase):
             processing.
         """
         objs = []
-        for x in xrange(2):
+        for x in range(2):
             objs.append(TestModel(name="Test-%s" % x))
         TestModel.objects.bulk_create(objs)
         start_mapping("my_lovely_mapper", self._get_testmodel_query(), tickle_entity)
@@ -745,7 +605,7 @@ class MapperLibraryTestCase(TestCase):
             mappers.
         """
         objs = []
-        for x in xrange(2):
+        for x in range(2):
             objs.append(TestModel(name="Test-%s" % x))
         TestModel.objects.bulk_create(objs)
 
@@ -769,7 +629,7 @@ class MapperLibraryTestCase(TestCase):
         # Create some objects in 2 different namespaces
         for db in dbs:
             objs = []
-            for x in xrange(2):
+            for x in range(2):
                 objs.append(TestModel(name="Test-%s" % x))
             TestModel.objects.using(db).bulk_create(objs)
 
@@ -790,7 +650,7 @@ class MapperLibraryTestCase(TestCase):
             should redefer and continue.
         """
         objs = []
-        for x in xrange(8):
+        for x in range(8):
             objs.append(TestModel(name="Test-%s" % x))
         TestModel.objects.bulk_create(objs)
 
@@ -810,3 +670,41 @@ class MapperLibraryTestCase(TestCase):
         # self.assertTrue(tickle_entity_volitle.call_count > TestModel.objects.count())
         # And check that every entity has been tickled
         self.assertTrue(all(e['is_tickled'] for e in self._get_testmodel_query().Run()))
+
+
+class GenerateShardsTestCase(unittest.TestCase):
+    def test_key_pairs_returned_in_order(self):
+        keys = [5, 3, 1, 2, 4]
+        result = generate_shards(keys, 2)
+
+        self.assertEqual(result, [(1, 4), (4, None)])
+
+    def test_key_pairs_for_1_shard(self):
+        keys = [1, 2, 3, 4, 5]
+        result = generate_shards(keys, 1)
+
+        self.assertEqual(result, [(1, None)])
+
+    def test_key_pairs_for_shards_equal_to_keys(self):
+        keys = [1, 2, 3, 4, 5]
+        result = generate_shards(keys, 5)
+
+        self.assertEqual(result, [(1, 2), (2, 3), (3, 4), (4, 5), (5, None)])
+
+    def test_key_pairs_for_shards_evenly_dividing_num_keys(self):
+        keys = [1, 2, 3, 4]
+        result = generate_shards(keys, 2)
+
+        self.assertEqual(result, [(1, 3), (3, None)])
+
+    def test_key_pairs_for_shards_not_evenly_dividing_num_keys(self):
+        keys = [1, 2, 3, 4, 5]
+        result = generate_shards(keys, 2)
+
+        self.assertEqual(result, [(1, 4), (4, None)])
+
+    def test_key_pairs_for_more_shards_than_keys(self):
+        keys = [1, 2, 3, 4, 5]
+        result = generate_shards(keys, 999)
+
+        self.assertEqual(result, [(1, 2), (2, 3), (3, 4), (4, 5), (5, None)])

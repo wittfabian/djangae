@@ -80,7 +80,7 @@ if __name__ == '__main__':
     p.wait()
 
     print("Installing Django {}".format(DJANGO_VERSION))
-    args = ["pip", "install", "--no-deps", DJANGO_FOR_PIP, "-t", TARGET_DIR, "-I", "--no-use-wheel"]
+    args = ["pip", "install", "--no-deps", DJANGO_FOR_PIP, "-t", TARGET_DIR, "-I", "--no-binary", ":all:"]
     p = subprocess.Popen(args)
     p.wait()
 

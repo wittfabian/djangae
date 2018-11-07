@@ -30,3 +30,10 @@ Supports the following optional parameters:
 * `--show_allowed_methods` HTTP methods supported by this view (CBVs only)
 * `--show_class_parents` CBVs only.  Shows which classes this view inherits from
 * `--output_file_type` Export dumpurl data to a json or csv file.  Choices: `json` or `csv`
+
+
+# CSRF session check
+
+The built in Djangae checks enforce the use of session-based (rather than cookie-based) CSRF tokens. To satisfy this check
+either the `CSRF_USE_SESSIONS` setting must be True, or Mozilla's `session-csrf` app must be installed and configured.
+

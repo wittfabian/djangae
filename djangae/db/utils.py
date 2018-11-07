@@ -1,25 +1,20 @@
-#STANDARD LIB
+
 from datetime import datetime
 from decimal import Decimal
 from itertools import chain
 
-import warnings
-
-#LIBRARIES
+from djangae.db.backends.appengine import rpc
+from djangae.utils import memoized
 from django.apps import apps
 from django.conf import settings
-from django.db.backends.utils import format_number
 from django.db import IntegrityError
-from django.utils import timezone, six
-from google.appengine.api import datastore
-from google.appengine.api.datastore import Key, Query
+from django.db.backends.utils import format_number
+from django.utils import six, timezone
+
 try:
     from django.db.models.expressions import BaseExpression
 except ImportError:
     from django.db.models.expressions import ExpressionNode as BaseExpression
-
-#DJANGAE
-from djangae.utils import memoized
 
 
 def make_timezone_naive(value):
@@ -30,7 +25,9 @@ def make_timezone_naive(value):
         if settings.USE_TZ:
             value = value.astimezone(timezone.utc).replace(tzinfo=None)
         else:
-            raise ValueError("Djangae backend does not support timezone-aware datetimes when USE_TZ is False.")
+            raise ValueError(
+                "Djangae backend does not support timezone-aware datetimes when USE_TZ is False."
+            )
     return value
 
 
@@ -95,7 +92,16 @@ def get_datastore_kind(model):
 
 
 def get_prepared_db_value(connection, instance, field, raw=False):
-    value = getattr(instance, field.attname) if raw else field.pre_save(instance, instance._state.adding)
+    value = (
+        getattr(instance, field.attname)
+        if raw else field.pre_save(instance, instance._state.adding)
+    )
+
+    # If value is None, but there is a default, and the field is
+    # not nullable then we should populate it
+    # Otherwise thing get hairy when you add new fields to models
+    if value is None and field.has_default() and not field.null:
+        value = field.get_default()
 
     if isinstance(value, BaseExpression):
         from djangae.db.backends.appengine.expressions import evaluate_expression
@@ -103,7 +109,7 @@ def get_prepared_db_value(connection, instance, field, raw=False):
         # We can't actually support F expressions on the datastore, but we can simulate
         # them, evaluating the expression in place.
 
-        #TODO: For saves and updates we should raise a Warning. When evaluated in a filter
+        # TODO: For saves and updates we should raise a Warning. When evaluated in a filter
         # we should raise an Error
         value = evaluate_expression(value, instance, connection)
 
@@ -121,14 +127,19 @@ def get_prepared_db_value(connection, instance, field, raw=False):
 
 
 def get_concrete_parents(model, ignore_leaf=False):
-    ret = [x for x in model.mro() if hasattr(x, "_meta") and not x._meta.abstract and not x._meta.proxy]
+    ret = [
+        x for x in model.mro()
+        if hasattr(x, "_meta") and not x._meta.abstract and not x._meta.proxy
+    ]
     if ignore_leaf:
-        ret = [ x for x in ret if x != model ]
+        ret = [x for x in ret if x != model]
     return ret
+
 
 @memoized
 def get_top_concrete_parent(model):
     return get_concrete_parents(model)[-1]
+
 
 def get_concrete_fields(model, ignore_leaf=False):
     """
@@ -142,13 +153,16 @@ def get_concrete_fields(model, ignore_leaf=False):
 
     return fields
 
+
 @memoized
 def get_concrete_db_tables(model):
-    return [ x._meta.db_table for x in get_concrete_parents(model) ]
+    return [x._meta.db_table for x in get_concrete_parents(model)]
+
 
 @memoized
 def has_concrete_parents(model):
     return get_concrete_parents(model) != [model]
+
 
 @memoized
 def get_field_from_column(model, column):
@@ -179,7 +193,9 @@ def django_instance_to_entities(connection, fields, raw, instance, check_null=Tr
        is useful for special indexes (e.g. contains)
     """
 
-    from djangae.db.backends.appengine.indexing import special_indexes_for_column, get_indexer, IgnoreForIndexing
+    from djangae.db.backends.appengine.indexing import (
+        special_indexes_for_column, get_indexer, IgnoreForIndexing
+    )
     from djangae.db.backends.appengine import POLYMODEL_CLASS_ATTRIBUTE
 
     model = model or type(instance)
@@ -190,14 +206,10 @@ def django_instance_to_entities(connection, fields, raw, instance, check_null=Tr
     def value_from_instance(_instance, _field):
         value = get_prepared_db_value(connection, _instance, _field, raw)
 
-        # If value is None, but there is a default, and the field is not nullable then we should populate it
-        # Otherwise thing get hairy when you add new fields to models
-        if value is None and _field.has_default() and not _field.null:
-            value = connection.ops.value_for_db(_field.get_default(), _field)
-
         if check_null and (not _field.null and not _field.primary_key) and value is None:
-            raise IntegrityError("You can't set %s (a non-nullable "
-                                     "field) to None!" % _field.name)
+            raise IntegrityError(
+                "You can't set %s (a non-nullable field) to None!" % _field.name
+            )
 
         is_primary_key = False
         if _field.primary_key and _field.model == inheritance_root:
@@ -224,7 +236,9 @@ def django_instance_to_entities(connection, fields, raw, instance, check_null=Tr
 
             unindex = False
             try:
-                values = indexer.prep_value_for_database(value, index, model=model, column=field.column)
+                values = indexer.prep_value_for_database(
+                    value, index, model=model, column=field.column
+                )
             except IgnoreForIndexing as e:
                 # We mark this value as being wiped out for indexing
                 unindex = True
@@ -266,7 +280,7 @@ def django_instance_to_entities(connection, fields, raw, instance, check_null=Tr
             raise ValueError("Invalid primary key value")
 
     namespace = connection.settings_dict.get("NAMESPACE")
-    entity = datastore.Entity(db_table, namespace=namespace, **kwargs)
+    entity = rpc.Entity(db_table, namespace=namespace, **kwargs)
     entity.update(field_values)
 
     if fields_to_unindex:
@@ -280,11 +294,11 @@ def django_instance_to_entities(connection, fields, raw, instance, check_null=Tr
 
 
 def get_datastore_key(model, pk, namespace):
-    """ Return a datastore.Key for the given model and primary key.
+    """ Return a rpc.Key for the given model and primary key.
     """
 
     kind = get_top_concrete_parent(model)._meta.db_table
-    return Key.from_path(kind, pk, namespace=namespace)
+    return rpc.Key.from_path(kind, pk, namespace=namespace)
 
 
 class MockInstance(object):
@@ -315,7 +329,7 @@ class MockInstance(object):
 
 
 def key_exists(key):
-    qry = Query(keys_only=True, namespace=key.namespace())
+    qry = rpc.Query(keys_only=True, namespace=key.namespace())
     qry.Ancestor(key)
     return qry.Count(limit=1) > 0
 
@@ -380,6 +394,7 @@ def entity_matches_query(entity, query):
         query
     """
     from djangae.db.backends.appengine.dbapi import CouldBeSupportedError
+    from djangae.db.backends.appengine.meta_queries import AsyncMultiQuery
 
     OPERATORS = {
         "=": lambda x, y: x == y,
@@ -390,14 +405,14 @@ def entity_matches_query(entity, query):
     }
 
     queries = [query]
-    if isinstance(query, datastore.MultiQuery):
+    if isinstance(query, AsyncMultiQuery):
         raise CouldBeSupportedError("We just need to separate the multiquery "
                                     "into 'queries' then everything should work")
 
     for query in queries:
         comparisons = chain(
-            [("_Query__kind", "=", "_Query__kind") ],
-            [tuple(x.split(" ") + [ x ]) for x in query.keys()]
+            [("_Query__kind", "=", "_Query__kind")],
+            [tuple(x.split(" ") + [x]) for x in query.keys()]
         )
 
         for ent_attr, op, query_attr in comparisons:
@@ -428,11 +443,11 @@ def entity_matches_query(entity, query):
             )
 
             if not isinstance(ent_attr, (list, tuple)):
-                ent_attr = [ ent_attr ]
+                ent_attr = [ent_attr]
 
             matches = False
             for query_attr in query_attrs:  # [22, 23]
-                #If any of the values don't match then this query doesn't match
+                # If any of the values don't match then this query doesn't match
                 if not any(op(attr, query_attr) for attr in ent_attr):
                     matches = False
                     break

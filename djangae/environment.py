@@ -9,6 +9,10 @@ from django.http import HttpResponseForbidden
 from djangae.utils import memoized
 
 
+# No SDK imports allowed in module namespace because `./manage.py runserver`
+# imports this before the SDK is added to sys.path. See bugs #899, #1055.
+
+
 def application_id():
     from google.appengine.api import app_identity
 

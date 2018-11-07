@@ -1,6 +1,8 @@
 """
     Tests for "special indexing" (E.g. __contains, __startswith etc.)
 """
+import logging
+
 from djangae.contrib import sleuth
 from djangae.db.caching import disable_cache
 from djangae.test import TestCase
@@ -39,15 +41,15 @@ class ContainsIndexerTests(TestCase):
             not when the queryset is created.
         """
         ContainsModel.objects.create(field1="Adam")
-        with sleuth.watch("google.appengine.api.datastore.Query.Run") as datastore_query:
-            with sleuth.watch("google.appengine.api.datastore.Get") as datastore_get:
+        with sleuth.watch("djangae.db.backends.appengine.rpc.Query.Run") as datastore_query:
+            with sleuth.watch("djangae.db.backends.appengine.rpc.Get") as datastore_get:
                 queryset = ContainsModel.objects.filter(field1__contains="Ad")
                 self.assertFalse(datastore_query.called)
                 self.assertFalse(datastore_get.called)
-                print len(datastore_query.calls)
+                logging.debug('datastore_query.calls count: %d', len(datastore_query.calls))
                 list(queryset)
                 self.assertTrue(datastore_query.called)
-                print len(datastore_query.calls)
+                logging.debug('datastore_query.called count: %d', datastore_query.called)
                 self.assertTrue(datastore_get.called)
 
     def test_flush_wipes_descendent_kinds(self):
