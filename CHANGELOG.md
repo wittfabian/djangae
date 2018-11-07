@@ -28,6 +28,7 @@
 - Fixed serialization/deserialization of JSONFields
 - Fixed migrations failing to map all entities of a kind.
 - Mapping queryset should support shard slicing.
+- Replaced deprecated resources(`models.get_models`, `models.get_apps` and `Options.module_name`) in `djangae.forms.fields.py`.
 
 ## v0.9.11
 
