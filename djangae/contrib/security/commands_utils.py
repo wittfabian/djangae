@@ -60,15 +60,13 @@ def extract_views_from_urlpatterns(urlpatterns, base='', namespace=None, ignored
     return views
 
 
-def display_as_table(views):
+def display_as_table(views, headers=('URL', 'Handler path', 'Decorators & Mixins')):
     """
         Get list of views from dumpurls security management command
         and returns them in the form of table to print in command line
     """
-    headers = ('URL', 'Handler path', 'Decorators & Mixins')
-    views = [row.split('||', 3) for row in sorted(views)]
     # Find the longest value in each column
-    widths = [len(max(columns, key=len)) for columns in zip(*[headers] + views)]
+    widths = [len(max(columns, key=len)) for columns in zip(*[headers] + sorted(views))]
     widths = [width  if width < 100 else 100 for width in widths]
     table_views = []
 
@@ -78,26 +76,19 @@ def display_as_table(views):
     table_views.append('-+-'.join('-' * width for width in widths))
 
     for row in views:
-        if len(row[2]) > 100:
-            row[2] = row[2].split(',')
-            row[2] = [",".join(row[2][i:i+2]) for i in range(0, len(row[2]), 2)]
+        for cell in row:
+            if len(cell) > 100:
+                cell = cell.split(',')
+                cell = [",".join(cell[i:i+2]) for i in range(0, len(cell), 2)]
 
-        mixins = row[2]
-        if type(mixins) == list:
-            i = 0
-            for line in mixins:
-                row[2] = line.strip()
-                if i > 0:
-                    row[0] = ''
-                    row[1] = ''
-                table_views.append(
-                    ' | '.join('{0:<{1}}'.format(cdata, width) for width, cdata in zip(widths, row))
-                )
-                i += 1
-        else:
-            table_views.append(
-                ' | '.join('{0:<{1}}'.format(cdata, width) for width, cdata in zip(widths, row))
-            )
+            mixins = cell
+            if type(mixins) == list:
+                for i, line in enumerate(mixins):
+                    cell = line.strip()
+
+        table_views.append(
+            ' | '.join('{0:<{1}}'.format(cdata, width) for width, cdata in zip(widths, row))
+        )
 
     return "\n".join([v for v in table_views]) + "\n"
 

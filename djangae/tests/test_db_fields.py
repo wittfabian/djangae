@@ -1,22 +1,28 @@
 # -*- encoding: utf-8 -*
 from collections import OrderedDict
+from datetime import timedelta
 import datetime
 import pickle
 
 # LIBRARIES
 from django import forms
 from django.core import serializers
+from django.db import connection
 from django.db import models
 from django.db.utils import IntegrityError
 from django.conf import settings
 from django.core.exceptions import ValidationError, ImproperlyConfigured
 from django.core.files.base import ContentFile
 from django.core.validators import EmailValidator
+from django.test import override_settings
+from django.utils.encoding import python_2_unicode_compatible
+from django.utils.six.moves import range
 import django
 
 # DJANGAE
 from djangae.contrib import sleuth
 from djangae.db import transaction
+from djangae.db.caching import disable_cache
 from djangae.fields import (
     ComputedBooleanField,
     ComputedCharField,
@@ -124,10 +130,11 @@ class ModelWithCounterWithManyShards(models.Model):
         app_label = "djangae"
 
 
+@python_2_unicode_compatible
 class ISOther(models.Model):
     name = models.CharField(max_length=500)
 
-    def __unicode__(self):
+    def __str__(self):
         return "%s:%s" % (self.pk, self.name)
 
     class Meta:
@@ -215,6 +222,21 @@ class ModelWithCharField(models.Model):
 class ModelWithCharOrNoneField(models.Model):
 
     char_or_none_field = CharOrNoneField(max_length=100)
+
+
+class ModelDatabaseA(models.Model):
+    set_of_bs = RelatedSetField('ModelDatabaseB', related_name='+')
+    list_of_bs = RelatedListField('ModelDatabaseB', related_name='+')
+
+    class Meta:
+        app_label = 'djangae'
+
+
+class ModelDatabaseB(models.Model):
+    test_database = 'ns1'
+
+    class Meta:
+        app_label = 'djangae'
 
 
 class ShardedCounterTest(TestCase):
@@ -622,6 +644,7 @@ class IterableFieldTests(TestCase):
 
 class RelatedIterableFieldTests(TestCase):
     """ Combined tests for common RelatedListField and RelatedSetField tests. """
+    multi_db = True
 
     def test_cannot_have_min_length_and_blank(self):
         """ Having min_length=X, blank=True doesn't make any sense, especially when you consider
@@ -752,6 +775,34 @@ class RelatedIterableFieldTests(TestCase):
 
         self.assertEqual(instance.related_set_ids, [x.pk for x in others])
         self.assertEqual(instance.related_list_ids, [x.pk for x in others])
+
+    def test_related_set_field_cross_database(self):
+        a = ModelDatabaseA.objects.create()
+        b = ModelDatabaseB.objects.create()
+
+        self.assertItemsEqual(a.set_of_bs.all(), [])
+
+        a.set_of_bs.add(b)
+        a.save()
+        self.assertItemsEqual(a.set_of_bs.all(), [b])
+
+        a.set_of_bs.remove(b)
+        a.save()
+        self.assertItemsEqual(a.set_of_bs.all(), [])
+
+    def test_related_list_field_cross_database(self):
+        a = ModelDatabaseA.objects.create()
+        b = ModelDatabaseB.objects.create()
+
+        self.assertItemsEqual(a.list_of_bs.all(), [])
+
+        a.list_of_bs.add(b)
+        a.save()
+        self.assertItemsEqual(a.list_of_bs.all(), [b])
+
+        a.list_of_bs.remove(b)
+        a.save()
+        self.assertItemsEqual(a.list_of_bs.all(), [])
 
 
 class RelatedListFieldModelTests(TestCase):
@@ -1229,6 +1280,24 @@ class TestGenericRelationField(TestCase):
         GenericRelationModel.objects.create(unique_relation_to_anything=None)
         GenericRelationModel.objects.create() # It should work even if we don't explicitly set it to None
 
+    def test_saving_forms(self):
+        class TestForm(forms.ModelForm):
+            class Meta:
+                model = GenericRelationModel
+                fields = ("relation_to_anything",)
+
+        related = ISOther.objects.create()
+        post_data = {
+            "relation_to_anything_0": related.__class__._meta.db_table,
+            "relation_to_anything_1": related.pk
+        }
+
+        form = TestForm(post_data)
+        self.assertTrue(form.is_valid())
+        instance = form.save()
+        self.assertEqual(related, instance.relation_to_anything)
+
+
 
 class JSONFieldModelTests(TestCase):
 
@@ -1312,6 +1381,11 @@ class JSONFieldModelTests(TestCase):
         thing = JSONFieldWithDefaultModel()
         self.assertEqual(thing.json_field, {})
 
+class CharFieldModel(models.Model):
+    char_field = CharField(max_length=500)
+
+    class Meta:
+        app_label = "djangae"
 
 class CharFieldModelTests(TestCase):
 
@@ -1523,3 +1597,141 @@ class ComputedCollationFieldTests(TestCase):
     def test_model(self):
         """Tests for a model using a `ComputedCollationField`."""
         ModelWithComputedCollationField.objects.create(name='demo1')
+
+class BinaryFieldModel(models.Model):
+    binary = models.BinaryField(null=True)
+
+    class Meta:
+        app_label = "djangae"
+
+class BinaryFieldModelTests(TestCase):
+    binary_value = b'\xff'
+
+    def test_insert(self):
+
+        obj = BinaryFieldModel.objects.create(binary = self.binary_value)
+        obj.save()
+
+        readout = BinaryFieldModel.objects.get(pk = obj.pk)
+
+        assert(readout.binary == self.binary_value)
+
+    def test_none(self):
+
+        obj = BinaryFieldModel.objects.create()
+        obj.save()
+
+        readout = BinaryFieldModel.objects.get(pk = obj.pk)
+
+        assert(readout.binary is None)
+
+    def test_update(self):
+
+        obj = BinaryFieldModel.objects.create()
+        obj.save()
+
+        toupdate = BinaryFieldModel.objects.get(pk = obj.pk)
+        toupdate.binary = self.binary_value
+        toupdate.save()
+
+        readout = BinaryFieldModel.objects.get(pk = obj.pk)
+
+        assert(readout.binary == self.binary_value)
+
+
+class CharFieldModelTest(TestCase):
+
+    def test_query(self):
+        instance = CharFieldModel(char_field="foo")
+        instance.save()
+
+        readout = CharFieldModel.objects.get(char_field="foo")
+        self.assertEqual(readout, instance)
+
+    def test_query_unicode(self):
+        name = u'Jacqu\xe9s'
+
+        instance = CharFieldModel(char_field=name)
+        instance.save()
+
+        readout = CharFieldModel.objects.get(char_field=name)
+        self.assertEqual(readout, instance)
+
+    @override_settings(DEBUG=True)
+    def test_query_unicode_debug(self):
+        """ Test that unicode query can be performed in DEBUG mode,
+            which will use CursorDebugWrapper and call last_executed_query.
+        """
+        name = u'Jacqu\xe9s'
+
+        instance = CharFieldModel(char_field=name)
+        instance.save()
+
+        readout = CharFieldModel.objects.get(char_field=name)
+        self.assertEqual(readout, instance)
+
+class DurationFieldModelWithDefault(models.Model):
+    duration = models.DurationField(default=timedelta(1,0))
+
+    class Meta:
+        app_label = "djangae"
+
+class DurationFieldModelTests(TestCase):
+
+    def test_creates_with_default(self):
+        instance = DurationFieldModelWithDefault()
+
+        self.assertEqual(instance.duration, timedelta(1,0))
+
+        instance.save()
+
+        readout = DurationFieldModelWithDefault.objects.get(pk=instance.pk)
+        self.assertEqual(readout.duration, timedelta(1,0))
+
+    def test_none_saves_as_default(self):
+        instance = DurationFieldModelWithDefault()
+        # this could happen if we were reading an existing instance out of the database that didn't have this field
+        instance.duration = None
+        instance.save()
+
+        readout = DurationFieldModelWithDefault.objects.get(pk=instance.pk)
+        self.assertEqual(readout.duration, timedelta(1,0))
+
+class ModelWithNonNullableFieldAndDefaultValue(models.Model):
+    some_field = models.IntegerField(null=False, default=1086)
+
+# ModelWithNonNullableFieldAndDefaultValueTests verifies that we maintain same
+# behavior as Django with respect to a model field that is non-nullable with default value.
+class ModelWithNonNullableFieldAndDefaultValueTests(TestCase):
+
+    def _create_instance_with_null_field_value(self):
+
+        instance = ModelWithNonNullableFieldAndDefaultValue.objects.create(some_field=1)
+
+        entity = datastore.Get(datastore.Key.from_path(ModelWithNonNullableFieldAndDefaultValue._meta.db_table,
+                               instance.pk, namespace=connection.settings_dict["NAMESPACE"]))
+        del entity["some_field"]
+        datastore.Put(entity)
+
+        instance.refresh_from_db()
+
+        return instance
+
+    @disable_cache()
+    def test_none_in_db_reads_as_none_in_model(self):
+
+        instance = self._create_instance_with_null_field_value()
+
+        self.assertIsNone(instance.some_field)
+
+    @disable_cache()
+    def test_none_in_model_saved_as_default(self):
+
+        instance = self._create_instance_with_null_field_value()
+
+        instance.save()
+        instance.refresh_from_db()
+
+        self.assertEqual(instance.some_field, 1086)
+
+

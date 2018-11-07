@@ -1,14 +1,17 @@
 # encoding: utf-8
 
+import logging
 import os
 import zipfile
 
-from .computed import ComputedFieldMixin
 from .charfields import CharField
+from .computed import ComputedFieldMixin
 
 # pyuca only supports version 5.2.0 of the collation algorithm on Python 2.x
 COLLATION_FILE = "allkeys-5.2.0.txt"
 COLLATION_ZIP_FILE = os.path.join(os.path.dirname(__file__), "allkeys-5.2.0.zip")
+
+logger = logging.getLogger(__file__)
 
 
 class ZipLoaderMixin(object):
@@ -74,11 +77,24 @@ class ComputedCollationField(ComputedFieldMixin, CharField):
 
             ComputedCollationField.collator = Collator(COLLATION_ZIP_FILE, COLLATION_FILE)
 
+        def truncate(unicode_str):
+            encoded = unicode_str.encode("utf-8")[:1500]
+            # We ignore unrecognized chars as the truncation might
+            # have split a unicode char down the middle
+            return encoded.decode("utf-8", "ignore")
+
         def computer(instance):
-            source_value = getattr(instance, source_field_name, u"")
+            source_value = getattr(instance, source_field_name) or u""
             if not isinstance(source_value, unicode):
                 source_value = unicode(source_value, "utf-8")
-            return self.collator.sort_key(source_value)
+            sort_key = self.collator.sort_key(source_value)
+            sort_key = u"".join([unichr(x) for x in sort_key])
+            truncated_key = truncate(sort_key)
+            if truncated_key != sort_key:
+                logger.warn(
+                    "Truncated sort key for '%s.%s'", instance._meta.db_table, source_field_name
+                )
+            return truncated_key
 
         super(ComputedCollationField, self).__init__(computer)
 
@@ -86,4 +102,3 @@ class ComputedCollationField(ComputedFieldMixin, CharField):
         name, path, args, kwargs = super(ComputedCollationField, self).deconstruct()
         del kwargs["max_length"]
         return name, path, args, kwargs
-

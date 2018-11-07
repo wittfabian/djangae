@@ -1,3 +1,5 @@
+import time
+
 from mapreduce import output_writers
 from django.db import models
 from djangae.test import TestCase
@@ -36,6 +38,9 @@ def count(instance, counter_id):
     counter.count = models.F('count') + 1
     counter.save()
 
+def slow_count(instance, counter_id, sleep_duration):
+    time.sleep(sleep_duration)
+    count(instance, counter_id)
 
 def count_entity_to_default_counter(entity):
     """ Dirty hack to work around the fact that when using  `map_reduce_entities` we cannot pass
@@ -68,7 +73,6 @@ def reduce_count(key, values):
 
 def delete(*args, **kwargs):
     TestModel.objects.all().delete()
-
 
 class MapReduceEntityTests(TestCase):
 
@@ -182,6 +186,28 @@ class MapQuerysetTests(TestCase):
         self.assertEqual(5, counter.count)
         self.assertFalse(TestModel.objects.count())
 
+    def test_slicing(self):
+        counter = Counter.objects.create()
+
+        pipeline = map_queryset(
+            TestModel.objects.all(),
+            slow_count,
+            finalize_func=delete,
+            counter_id=counter.pk,
+            # mapreduce default slice duration is 15 seconds
+            # slow down processing enough to split into two slices
+            sleep_duration=4,
+            _shards=1
+        )
+
+        self.process_task_queues()
+        pipeline = get_pipeline_by_id(pipeline.pipeline_id)
+        self.assertTrue(pipeline.has_finalized)
+        counter.refresh_from_db()
+
+        self.assertEqual(5, counter.count)
+        self.assertFalse(TestModel.objects.count())
+
     def test_filters_apply(self):
         counter = Counter.objects.create()
 
@@ -200,6 +226,17 @@ class MapQuerysetTests(TestCase):
         self.assertEqual(3, counter.count)
         self.assertFalse(TestModel.objects.count())
 
+    def test_no_start_pipeline(self):
+        counter = Counter.objects.create()
+
+        pipeline = map_queryset(
+            TestModel.objects.all(),
+            count,
+            counter_id=counter.pk,
+            start_pipeline=False
+        )
+
+        self.assertIsNone(pipeline._pipeline_key)
 
 @skipIf(not has_cloudstorage, "Cloud Storage not available")
 class MapFilesTests(TestCase):

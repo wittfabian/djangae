@@ -1,13 +1,6 @@
 # coding: utf-8
-import urllib
 import mimetypes
-import re
 import threading
-
-try:
-    from cStringIO import StringIO
-except ImportError:
-    from StringIO import StringIO
 
 from django.conf import settings
 from django.core.exceptions import SuspiciousFileOperation
@@ -18,6 +11,7 @@ from django.core.files.uploadedfile import UploadedFile
 from django.core.files.uploadhandler import FileUploadHandler, \
     StopFutureHandlers
 from django.http import HttpResponse
+from django.utils import six
 from django.utils.encoding import smart_str, force_unicode
 from django.test.client import encode_multipart, MULTIPART_CONTENT, BOUNDARY
 from djangae.db import transaction
@@ -56,6 +50,7 @@ KEY_CACHE = {}
 KEY_CACHE_LIST = []
 MAX_KEY_CACHE_SIZE = 500
 
+
 def _add_to_cache(blob_key_or_info, blob_key, file_info):
     """
         This helps remove overhead when serving cloud storage files
@@ -87,6 +82,7 @@ def _get_from_cache(blob_key_or_info):
     with CACHE_LOCK:
         return KEY_CACHE.get(blob_key_or_info)
 
+
 def _get_or_create_cached_blob_key_and_info(blob_key_or_info):
     cached_value = _get_from_cache(blob_key_or_info)
     if cached_value:
@@ -97,6 +93,7 @@ def _get_or_create_cached_blob_key_and_info(blob_key_or_info):
         blob_key = create_gs_key('/gs{0}'.format(blob_key_or_info))
         _add_to_cache(blob_key_or_info, blob_key, info)
     return (blob_key, info)
+
 
 def serve_file(request, blob_key_or_info, as_download=False, content_type=None, filename=None, offset=None, size=None):
     """
@@ -110,7 +107,7 @@ def serve_file(request, blob_key_or_info, as_download=False, content_type=None, 
     if isinstance(blob_key_or_info, BlobKey):
         info = BlobInfo.get(blob_key_or_info)
         blob_key = blob_key_or_info
-    elif isinstance(blob_key_or_info, basestring):
+    elif isinstance(blob_key_or_info, six.string_types):
         info = BlobInfo.get(BlobKey(blob_key_or_info))
         blob_key = BlobKey(blob_key_or_info)
     elif isinstance(blob_key_or_info, BlobInfo):
@@ -156,6 +153,7 @@ def serve_file(request, blob_key_or_info, as_download=False, content_type=None, 
 
 DEFAULT_GCS_BUCKET = None
 
+
 def get_bucket_name():
     """
         Returns the bucket name for Google Cloud Storage, either from your
@@ -189,7 +187,8 @@ class BlobstoreUploadMixin():
 
         url = self._create_upload_url()
 
-        response = urlfetch.fetch(url=url,
+        response = urlfetch.fetch(
+            url=url,
             payload=encode_multipart(BOUNDARY, {'file': content}),
             method=urlfetch.POST,
             deadline=60,
@@ -334,7 +333,7 @@ class CloudStorage(Storage, BlobstoreUploadMixin):
 
             # Also, Django requires that url() return something 'truthy' even if the file field hasn't been
             # saved yet so we do the same thing if the file is not found (just add the bucket to the filename)
-            quoted_filename = urllib.quote(self._add_bucket(filename))
+            quoted_filename = six.moves.urllib.parse.quote(self._add_bucket(filename))
             return '{0}{1}'.format(self.api_url, quoted_filename)
 
     def _get_blobkey(self, name):
@@ -355,7 +354,7 @@ class CloudStorage(Storage, BlobstoreUploadMixin):
         return name
 
     def _add_bucket(self, name):
-        safe_name = urllib.quote(name.encode('utf-8'))
+        safe_name = six.moves.urllib.parse.quote(name.encode('utf-8'))
         return '/{0}/{1}'.format(self.bucket, safe_name)
 
     def _content_type_for_name(self, name):
@@ -397,12 +396,13 @@ class CloudStorage(Storage, BlobstoreUploadMixin):
             gs_bucket_name=self.bucket_name
         )
 
+
 class UniversalNewLineBlobReader(BlobReader):
     def readline(self, size=-1):
         limit_size = size > -1
 
         buf = []  # A buffer to store our line
-        #Read characters until we find a \r or \n, or hit the maximum size
+        # Read characters until we find a \r or \n, or hit the maximum size
         c = self.read(size=1)
         while c != '\n' and c != '\r' and (not limit_size or len(buf) < size):
             if not c:
@@ -415,11 +415,11 @@ class UniversalNewLineBlobReader(BlobReader):
         if c == '\r':
             n = self.read(size=1)
 
-            #If the \r wasn't followed by a \n, then it was a mac line ending
-            #so we seek backwards 1
+            # If the \r wasn't followed by a \n, then it was a mac line ending
+            # so we seek backwards 1
             if n and n != '\n':
-                #We only check n != '\n' if we weren't EOF (e.g. n evaluates to False) otherwise
-                #we'd read nothing, and then seek back 1 which would then be re-read next loop etc.
+                # We only check n != '\n' if we weren't EOF (e.g. n evaluates to False) otherwise
+                # we'd read nothing, and then seek back 1 which would then be re-read next loop etc.
                 self.seek(-1, 1)  # The second 1 means to seek relative to the current position
 
         # Only add a trailing \n (if it doesn't break the size constraint)

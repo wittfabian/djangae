@@ -1,4 +1,37 @@
-## v0.9.11 (in development)
+## v0.9.12 (in development)
+
+### New features & improvements:
+
+- Take some steps to make the code Python 3 compatible.
+- Additional option to not start mapper pipeline; and provide outputs to finalize function.
+- `atomic()` (when used as a context manager) now returns an object representing the current transaction
+- Added `djangae.db.transaction.current_transaction()` to return the same thing from inside an `atomic()` decorator
+- Added `Transaction.has_been_read(instance)`, `Transaction.has_been_written` and `Transaction.refresh_if_unread(instance)` which allows writing safe transactional code.
+- Added `Transaction.has_already_been_read(instance)` and `Transaction.refresh_if_unread(instance)` which allows writing safe transactional code.
+- Added App Engine SDK version check on project startup.
+- Added support for named class-based views to dumpurls.  Also now supports export to either json or csv 
+
+### Bug fixes:
+
+- Fixed `ImportError` when running `./manage.py runserver` and the SDK is not already on the Python import path.
+- Fix a ValueError when sharding string keys in the migrations mapper library.
+- Fixed Djangae's project description on pypi.org.
+- Fixed installing dependencies when running tests with pip version 10.
+- Worked around a bug where App Engine would return projected values as `str` instead of `unicode`
+- Replace binary values in sql value generation with `<binary>` identifier.
+- Fix a couple sql unicode bugs.
+- Use single quotes for sql string literals, and do not quote integers.
+- Fixed a bug in the AsyncMultiQuery that would prevent returning all results in the case when an `OR` query was used with an offset and some entities matched more than one branch of the `OR` query.
+- Add an option to ignore pull tasks in testing
+- Fix occasions where the default value of a field would not be correctly set on save()
+- Simplified the atomic() and non_atomic() decorator/context managers to hopefully eliminate edge-case/threading bugs that have been seen.
+- Fix a bug where the context cache would be incorrectly set after leaving a non_atomic block
+- Fixed serialization/deserialization of JSONFields
+- Fixed migrations failing to map all entities of a kind.
+- Mapping queryset should support shard slicing.
+- Replaced deprecated resources(`models.get_models`, `models.get_apps` and `Options.module_name`) in `djangae.forms.fields.py`.
+
+## v0.9.11
 
 ### New features & improvements:
 
@@ -15,9 +48,20 @@
 - Added custom `FileField` and `ImageField` which accept an optional `url_field` argument to allow you to specify the name of another field on the model on which the URL to the file or image is cached.
 - Add a ComputedNullBooleanField
 - Updated the `sleuth` library in djangae.contrib
+- Updated the csrf session check to respect Django's `CSRF_USE_SESSIONS` flag
+- Improvements to `djangae.utils.retry`:
+    - Now allows you to specify which exceptions to catch.
+    - Now waits for 375ms by default before retrying to avoid excerbating contention (previous value of 100ms was far too low, and was actually about 0.1ms due to a bug).
+    - Now allows overriding the initial retry time with the `_initial_wait` kwarg.
+    - Now allows specifying a `_max_wait` time.
+    - Now provides an accompanying `@retry_on_error` decorator for applying it to function definitions.
+    - Is now documented.
+    - changed `_retries` argument to `_attempts` which is better API
+- Add `djangae.deferred.defer` to fix issues with `google.appengine.ext.deferred.defer`
 
 ### Bug fixes:
 
+ - Fixed ComputedCollationField logic to work with nullable fields
  - Fixed performance issues and bugs in the Djangae core paginator
  - Fix several issues with the test sandbox
  - Initialize the app_identity stub in the test sandbox
@@ -36,6 +80,14 @@
  - Make `value_from_datadict` in `forms.fields.ListWidget` return None when the value provided is None as the existing comment describes. This prevents an exception when `save()` is called on a `ListWidget` whose value is `None`.
  - Fixed test to remove dependency on mock
  - Use '' as default namespace for memcache keys, instead of None.
+ - Set a default app_id (`managepy`) so you can use use gcloud compatible app.yaml files (which cannot contain an app_id).  Override with --app_id
+ - Restricted access to the `clearsessions` view to tasks and admins only
+ - Fixed the `sleep()` time in `djangae.utils.retry` which was sleeping in `ns` rather than `ms`
+ - Fix unicode error when creating a SQL representation
+ - Fix cross-database relationship support for `RelatedSetField` and `RelatedListField`.
+ - Locked down the backup creation view in `djangae.contrib.backups`
+ - Fixed the backup creation URL to have a trailing slash (optional, to prevent breaking apps)
+ - Fixed an issue with ComputedCollationField where the sort order would be incorrect for some values. (Will need a resave of objects to fix existing data.)
 
 ## v0.9.10
 

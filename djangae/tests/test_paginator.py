@@ -3,6 +3,7 @@
     count on a query.
 """
 from django.db import models
+from django.utils.six.moves import range
 
 from djangae.contrib import sleuth
 from djangae.test import TestCase

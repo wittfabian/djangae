@@ -7,6 +7,7 @@ from django.contrib import admin
 from django.db import models
 from django.forms.fields import MultipleChoiceField
 from django.forms.widgets import SelectMultiple
+from django.apps import apps
 from django.utils import six
 from django.utils.encoding import force_text
 from django.utils.safestring import mark_safe
@@ -192,7 +193,7 @@ class GenericRelationWidget(forms.MultiWidget):
         super(GenericRelationWidget, self).__init__(widgets=widgets, *args, **kwargs)
 
     def decompress(self, value):
-        if isinstance(value, basestring):
+        if isinstance(value, six.string_types):
             return decode_pk(value)
         if value:
             return [value._meta.db_table, value.pk]
@@ -206,7 +207,7 @@ class GenericFKInput(forms.TextInput):
     def render(self, name, value, attrs):
         urls = {}
         for m in admin.site._registry:
-            urls[model_path(m)] = reverse('admin:%s_%s_changelist' % (m._meta.app_label, m._meta.module_name))
+            urls[model_path(m)] = reverse('admin:%s_%s_changelist' % (m._meta.app_label, m._meta.model_name))
         urls = json.dumps(urls)
         safe_name = name.replace('-', '_')
         extra = []
@@ -229,10 +230,9 @@ class GenericFKInput(forms.TextInput):
 
 @memoized
 def model_from_db_table(db_table):
-    for app in models.get_apps():
-        for model in models.get_models(app):
-            if model._meta.db_table == db_table:
-                return model
+    for model in apps.get_models():
+        if model._meta.db_table == db_table:
+            return model
     raise ValueError("Couldn't find model class for %s" % db_table)
 
 _CHOICES = None
@@ -243,7 +243,7 @@ def get_all_model_choices():
     if _CHOICES is None:
         _CHOICES = [
             ('', 'None')] + [(model_path(m), m.__name__)
-            for m in models.get_models()
+            for m in apps.get_models()
         ]
     return _CHOICES
 
@@ -291,7 +291,7 @@ class GenericRelationFormfield(forms.MultiValueField):
         if value is None:
             return None
 
-        if isinstance(value, basestring):
+        if isinstance(value, six.string_types):
             return value
         return encode_pk(value.pk, value)
 

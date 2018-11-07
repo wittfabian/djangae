@@ -1,8 +1,12 @@
 # STANDARD LIB
 import threading
 
+# THIRD PARTY
+from google.appengine.runtime import DeadlineExceededError
+
 # DJANGAE
 from djangae.db import transaction
+from djangae.db.caching import DisableCache
 from djangae.contrib import sleuth
 from djangae.test import TestCase
 
@@ -20,12 +24,12 @@ class TransactionTests(TestCase):
             TestUser.objects.get(pk=pk)
 
     def test_recursive_atomic(self):
-        l = []
+        lst = []
 
         @transaction.atomic
         def txn():
-            l.append(True)
-            if len(l) == 3:
+            lst.append(True)
+            if len(lst) == 3:
                 return
             else:
                 txn()
@@ -33,12 +37,12 @@ class TransactionTests(TestCase):
         txn()
 
     def test_recursive_non_atomic(self):
-        l = []
+        lst = []
 
         @transaction.non_atomic
         def txn():
-            l.append(True)
-            if len(l) == 3:
+            lst.append(True)
+            if len(lst) == 3:
                 return
             else:
                 txn()
@@ -85,6 +89,23 @@ class TransactionTests(TestCase):
 
         self.assertEqual(0, TestUser.objects.count())
 
+    def test_atomic_decorator_catches_deadlineexceedederror(self):
+        """ Regression test for #1107 . Make sure DeadlineExceededError causes the transaction to
+            be rolled back.
+        """
+        from .test_connector import TestUser
+
+        @transaction.atomic
+        def txn():
+            TestUser.objects.create(username="foo", field2="bar")
+            self.assertTrue(transaction.in_atomic_block())
+            raise DeadlineExceededError()
+
+        with self.assertRaises(DeadlineExceededError):
+            txn()
+
+        self.assertEqual(0, TestUser.objects.count())
+
     def test_interaction_with_datastore_txn(self):
         from google.appengine.ext import db
         from google.appengine.datastore.datastore_rpc import TransactionOptions
@@ -107,7 +128,7 @@ class TransactionTests(TestCase):
 
             try:
                 return do_stuff
-            except:
+            except Exception:
                 return
 
         with transaction.atomic():
@@ -138,6 +159,20 @@ class TransactionTests(TestCase):
             with transaction.atomic():
                 TestUser.objects.create(username="foo", field2="bar")
                 raise ValueError()
+
+        self.assertEqual(0, TestUser.objects.count())
+
+    def test_atomic_context_manager_catches_deadlineexceedederror(self):
+        """ Make sure that DeadlineExceededError causes the transaction to be rolled back when
+            using atomic() as a context manager.
+        """
+        from .test_connector import TestUser
+
+        with self.assertRaises(DeadlineExceededError):
+            with transaction.atomic():
+                TestUser.objects.create(username="foo", field2="bar")
+
+                raise DeadlineExceededError()
 
         self.assertEqual(0, TestUser.objects.count())
 
@@ -232,3 +267,108 @@ class TransactionTests(TestCase):
         # then behave properly in a nested transaction.
         inner_txn()
         outer_txn()
+
+
+class TransactionStateTests(TestCase):
+
+    def test_has_already_read(self):
+        from .test_connector import TestFruit
+
+        apple = TestFruit.objects.create(name="Apple", color="Red")
+        pear = TestFruit.objects.create(name="Pear", color="Green")
+
+        with transaction.atomic(xg=True) as txn:
+            self.assertFalse(txn.has_been_read(apple))
+            self.assertFalse(txn.has_been_read(pear))
+
+            apple.refresh_from_db()
+
+            self.assertTrue(txn.has_been_read(apple))
+            self.assertFalse(txn.has_been_read(pear))
+
+            with transaction.atomic(xg=True) as txn:
+                self.assertTrue(txn.has_been_read(apple))
+                self.assertFalse(txn.has_been_read(pear))
+                pear.refresh_from_db()
+                self.assertTrue(txn.has_been_read(pear))
+
+                with transaction.atomic(independent=True) as txn2:
+                    self.assertFalse(txn2.has_been_read(apple))
+                    self.assertFalse(txn2.has_been_read(pear))
+
+    def test_refresh_if_unread(self):
+        from .test_connector import TestFruit
+
+        apple = TestFruit.objects.create(name="Apple", color="Red")
+
+        with transaction.atomic() as txn:
+            apple.color = "Pink"
+
+            txn.refresh_if_unread(apple)
+
+            self.assertEqual(apple.name, "Apple")
+
+            apple.color = "Pink"
+
+            # Already been read this transaction, don't read it again!
+            txn.refresh_if_unread(apple)
+
+            self.assertEqual(apple.color, "Pink")
+
+    def test_refresh_if_unread_for_created_objects(self):
+        """ refresh_if_unread should not refresh objects which have been *created* within the
+            transaction, as at the DB level they will not exist.
+        """
+        from .test_connector import TestFruit
+
+        # With caching
+        with transaction.atomic() as txn:
+            apple = TestFruit.objects.create(name="Apple", color="Red")
+            apple.color = "Pink"  # Deliberately don't save
+            txn.refresh_if_unread(apple)
+            self.assertEqual(apple.color, "Pink")
+
+        # Without caching
+        with DisableCache():
+            with transaction.atomic() as txn:
+                apple = TestFruit.objects.create(name="Radish", color="Red")
+                apple.color = "Pink"  # Deliberately don't save
+                txn.refresh_if_unread(apple)
+                self.assertEqual(apple.color, "Pink")
+
+    def test_refresh_if_unread_for_resaved_objects(self):
+        """ refresh_if_unread should not refresh objects which have been re-saved within the
+            transaction.
+        """
+        from .test_connector import TestFruit
+
+        # With caching
+        apple = TestFruit.objects.create(name="Apple", color="Red")
+        with transaction.atomic() as txn:
+            apple.save()
+            apple.color = "Pink"  # Deliberately don't save
+            txn.refresh_if_unread(apple)
+            self.assertEqual(apple.color, "Pink")
+
+        # Without caching
+        radish = TestFruit.objects.create(name="Radish", color="Red")
+        with DisableCache():
+            with transaction.atomic() as txn:
+                radish.save()
+                radish.color = "Pink"  # Deliberately don't save
+                txn.refresh_if_unread(radish)
+                self.assertEqual(radish.color, "Pink")
+
+    def test_non_atomic_only(self):
+        from .test_connector import TestFruit
+
+        apple = TestFruit.objects.create(name="Apple", color="Red")
+        apple.save()
+
+        apple2 = TestFruit.objects.get(pk=apple.pk)
+
+        with transaction.non_atomic():
+            apple.delete()
+
+        # Apple should no longer be in the cache!
+        self.assertRaises(TestFruit.DoesNotExist, apple2.refresh_from_db)

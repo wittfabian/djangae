@@ -15,13 +15,15 @@ EXTRAS = {
 
 setup(
     name=NAME,
-    version='0.9.11-alpha',
+    version='0.9.12 alpha',
     packages=PACKAGES,
 
     # metadata for upload to PyPI
     author=AUTHOR,
+    author_email='mail@p.ota.to',
     description=DESCRIPTION,
     long_description=LONG_DESCRIPTION,
+    long_description_content_type='text/markdown',
     keywords=["django", "Google App Engine", "GAE"],
     url=URL,
     classifiers=[

@@ -1,3 +1,5 @@
+import os
+
 from djangae.contrib import sleuth
 from djangae.test import TestCase
 
@@ -36,7 +38,12 @@ class DataStoreBackupTest(TestCase):
                         DJANGAE_BACKUP_EXCLUDE_MODELS=[
                             'gauth_datastore.Group'
                         ]):
-                    create_datastore_backup(None)
+
+                    try:
+                        os.environ["HTTP_X_APPENGINE_CRON"] = "1"
+                        create_datastore_backup(None)
+                    finally:
+                        del os.environ["HTTP_X_APPENGINE_CRON"]
 
         # assert task was triggered
         tasks = self.taskqueue_stub.get_filtered_tasks()
