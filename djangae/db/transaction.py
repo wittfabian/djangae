@@ -210,10 +210,9 @@ def current_transaction():
             break
         elif isinstance(txn, NormalTransaction):
             active_transaction = txn
-            # Keep searching... there may be an independent or further transaction
+            break
         elif isinstance(txn, NoTransaction):
             # Bail immediately for non_atomic blocks. There is no transaction there.
-            active_transaction = None
             break
 
     return active_transaction
@@ -274,15 +273,15 @@ class ContextDecorator(object):
 
         def decorated(*_args, **_kwargs):
             decorator_args = self.decorator_args.copy()
-            exception = False
+            exception_type = None
             self.__class__._do_enter(self._push_state(), decorator_args)
             try:
                 return self.func(*_args, **_kwargs)
-            except Exception:
-                exception = True
+            except BaseException as e:
+                exception_type = type(e)
                 raise
             finally:
-                self.__class__._do_exit(self._pop_state(), decorator_args, exception)
+                self.__class__._do_exit(self._pop_state(), decorator_args, exception_type)
 
         if not self.func:
             # We were instantiated with args
