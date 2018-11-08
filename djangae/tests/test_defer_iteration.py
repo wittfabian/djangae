@@ -15,6 +15,21 @@ def callback(instance):
     instance.save()
 
 
+sporadic_error_counter = 0
+
+
+def sporadic_error(instance):
+    global sporadic_error_counter
+
+    if instance.pk == 1:
+        sporadic_error_counter += 1
+        if sporadic_error_counter in (0, 1, 2):
+            raise ValueError("Boom!")
+
+    instance.touched = True
+    instance.save()
+
+
 def finalize():
     for instance in DeferIterationTestModel.objects.all():
         instance.finalized = True
@@ -51,3 +66,19 @@ class DeferIterationTestCase(TestCase):
         self.assertEqual(20, DeferIterationTestModel.objects.filter(touched=True).count())
         self.assertEqual(25, DeferIterationTestModel.objects.filter(finalized=True).count())
 
+    def test_shard_continue_on_error(self):
+        [DeferIterationTestModel.objects.create(pk=i + 1) for i in range(25)]
+
+        global sporadic_error_counter
+        sporadic_error_counter = 0
+
+        defer_iteration_with_finalize(
+            DeferIterationTestModel.objects.all(),
+            sporadic_error,
+            finalize
+        )
+
+        self.process_task_queues()
+
+        self.assertEqual(25, DeferIterationTestModel.objects.filter(touched=True).count())
+        self.assertEqual(25, DeferIterationTestModel.objects.filter(finalized=True).count())

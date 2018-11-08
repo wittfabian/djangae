@@ -171,10 +171,11 @@ def _process_shard(marker_id, model, query, callback, finalize, queue_name, args
         last_pk = None
         for instance in qs.all():
             last_pk = instance.pk
-            callback(instance, *args)
 
             if (timezone.now() - start_time).total_seconds() > _TASK_TIME_LIMIT - _BUFFER_TIME:
                 raise TimeoutException()
+
+            callback(instance, *args)
         else:
             with transaction.atomic(xg=True):
                 try:
@@ -210,7 +211,7 @@ def _process_shard(marker_id, model, query, callback, finalize, queue_name, args
             logging.exception("Error processing shard. Retrying.")
 
         if last_pk:
-            qs = qs.filter(pk__gt=last_pk)
+            qs = qs.filter(pk__gte=last_pk)
 
         defer(
             _process_shard, marker_id, qs.model, qs.query, callback, finalize,
