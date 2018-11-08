@@ -11,7 +11,6 @@ import itertools
 import logging
 from datetime import datetime
 
-from djangae.db.backends.appengine import rpc
 from django.conf import settings
 from django.utils.six.moves import range
 from google.appengine.api import datastore_errors
@@ -19,11 +18,12 @@ from google.appengine.api.taskqueue.taskqueue import _DEFAULT_QUEUE
 from google.appengine.ext import deferred
 from google.appengine.runtime import DeadlineExceededError
 
+from djangae.db.backends.appengine import rpc
+
 
 class Redefer(Exception):
     """ Custom exception class to allow triggering of the re-deferring of a processing task. """
     pass
-
 
 
 def pairwise(iterable):
@@ -227,7 +227,7 @@ class ShardedTaskMarker(rpc.Entity):
                 shard,
                 operation,
                 operation_method,
-                offset=offset+num_entities_processed,
+                offset=offset + num_entities_processed,
                 entities_per_task=entities_per_task,
                 # Defer this task onto the correct queue (with `_queue`), passing the `queue`
                 # parameter back to the function again so that it can do the same next time
