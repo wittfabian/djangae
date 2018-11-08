@@ -9,7 +9,8 @@
 - Added `Transaction.has_been_read(instance)`, `Transaction.has_been_written` and `Transaction.refresh_if_unread(instance)` which allows writing safe transactional code.
 - Added `Transaction.has_already_been_read(instance)` and `Transaction.refresh_if_unread(instance)` which allows writing safe transactional code.
 - Added App Engine SDK version check on project startup.
-- Added support for named class-based views to dumpurls.  Also now supports export to either json or csv 
+- Added support for named class-based views to dumpurls.  Also now supports export to either json or csv
+- Added `deferred.defer_iteration_with_finalize`
 
 ### Bug fixes:
 

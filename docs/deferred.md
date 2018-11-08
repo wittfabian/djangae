@@ -16,3 +16,22 @@ The built-in `defer()` method suffers from a number of issues with both bugs, an
 
 Everything else should behave in the same way. The actual running of deferred tasks still uses the Google handler (which is wrapped by Djangae)
 
+# djange.deferred.defer_iteration_with_finalize
+
+`defer_iteration_with_finalize(queryset, callback, finalize, args=None, _queue='default', _shards=5, _delete_marker=True, _transactional=False)`
+
+This function provides similar functionality to a Mapreduce pipeline, but it's entirely self-contained and leverages
+defer to process the tasks.
+
+The function iterates the passed Queryset in shards, calling `callback` on each instance. Once all shards complete then
+the `finalize` callback is called. If a shard gets close to the 10-minute deadline, or it hits an unhandled exception it re-defers another shard to continue processing.
+
+`DeadlineExceededError` is explicitly not handled. This is because there is rarely enough time between the exception being caught, and the request being terminated, to correctly defer a new shard. If a new shard is deferred but then the request is terminated before it completes then this will create duplicate shards. For this reason it's safer to let the shard
+raise the error and retry from the beginning if this ever happens. The deadline handling should prevent this however.
+
+If `args` is specified, these arguments are passed as positional arguments to both `callback` (after the instance) and `finalize`.
+
+`_shards` is the number of shards to use for processing. If `_delete_marker` is `True` then the Datastore entity that
+tracks complete shards is deleted. If you want to keep these (as a log of sorts) then set this to `False`.
+
+`_transactional` and `_queue` work in the same way as `defer()`
