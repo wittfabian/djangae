@@ -22,25 +22,35 @@ def in_atomic_block():
 def _datastore_get_handler(signal, sender, keys, **kwargs):
     txn = current_transaction()
     if txn:
-        txn._seen_keys.update(set(keys))
+        txn._fetched_keys.update(set(keys))
+
+
+def _datastore_post_put_handler(signal, sender, keys, **kwargs):
+    txn = current_transaction()
+    if txn:
+        txn._put_keys.update(set(keys))
 
 
 rpc.datastore_get.connect(_datastore_get_handler, dispatch_uid='_datastore_get_handler')
+rpc.datastore_post_put.connect(_datastore_post_put_handler, dispatch_uid='_datastore_post_put_handler')
 
 
 class Transaction(object):
     def __init__(self, connection):
         self._connection = connection
         self._previous_connection = None
-        self._seen_keys = set()
+        self._fetched_keys = set()
+        self._put_keys = set()
 
     def enter(self):
-        self._seen_keys = set()
+        self._fetched_keys = set()
+        self._put_keys = set()
         self._enter()
 
     def exit(self):
         self._exit()
-        self._seen_keys = set()
+        self._fetched_keys = set()
+        self._put_keys = set()
 
     def _enter(self):
         raise NotImplementedError()
@@ -48,7 +58,8 @@ class Transaction(object):
     def _exit(self):
         raise NotImplementedError()
 
-    def has_already_been_read(self, instance, connection=None):
+    def _check_instance_actions(self, instance, connection=None, check_fetched=True, check_put=True):
+        """ Return True if the instance has been used in ANY of the given actions. """
         if instance.pk is None:
             return False
 
@@ -62,7 +73,20 @@ class Transaction(object):
             namespace=connection.settings_dict.get('NAMESPACE', '')
         )
 
-        return key in self._seen_keys
+        if check_put and key in self._put_keys:
+            return True
+
+        if check_fetched and key in self._fetched_keys:
+            return True
+
+        return False
+
+
+    def has_been_read(self, instance, connection=None):
+        return self._check_instance_actions(instance, connection, check_fetched=True, check_put=False)
+
+    def has_been_written(self, instance, connection=None):
+        return self._check_instance_actions(instance, connection, check_fetched=False, check_put=True)
 
     def refresh_if_unread(self, instance):
         """
@@ -91,12 +115,12 @@ class Transaction(object):
                     self.save()
         """
 
-        if self.has_already_been_read(instance):
-            # If the instance has already been read this transaction,
-            # then don't refresh it again.
+        # If the instance has already been read or put in this transaction, then don't refresh it
+        # (again)
+        if self._check_instance_actions(instance):
             return
-        else:
-            instance.refresh_from_db()
+
+        instance.refresh_from_db()
 
     def _commit(self):
         if self._connection:
