@@ -25,7 +25,15 @@ Use the `dumpurls` management command to generate a report listing all the confi
 
 For each pattern, the report shows the regular expression for the full path, the Python dotted module name for the view that handles requests, and the names of decorators that may have been applied to the view.
 
+Supports the following optional parameters:
+
+* `--show_allowed_methods` HTTP methods supported by this view (CBVs only)
+* `--show_class_parents` CBVs only.  Shows which classes this view inherits from
+* `--output_file_type` Export dumpurl data to a json or csv file.  Choices: `json` or `csv`
+
+
 # CSRF session check
 
 The built in Djangae checks enforce the use of session-based (rather than cookie-based) CSRF tokens. To satisfy this check
 either the `CSRF_USE_SESSIONS` setting must be True, or Mozilla's `session-csrf` app must be installed and configured.
+

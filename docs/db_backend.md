@@ -281,18 +281,18 @@ actually read from the Datastore.
 
 There are times when it's necessary to read from the Datastore directly, and you can use `djangae.db.caching.disable_cache()` for that.
 
-The other feature that Djangae provides are `Transaction` objects, and in particular, `Transaction.has_already_been_read(instance)` and
+The other feature that Djangae provides are `Transaction` objects, and in particular, `Transaction.has_been_read(instance)`, `Transaction.has_been_written(instance)` and
 `Transaction.refresh_if_unread(instance)`:
 
 ```python
 
 instance = MyModel.objects.create(pk=1, value=0)
 with atomic() as txn:
-    assert(not txn.has_already_been_read(instance))
+    assert(not txn.has_been_read(instance))
 
     txn.refresh_if_unread(instance)
 
-    assert(txn.has_already_been_read(instance))
+    assert(txn.has_been_read(instance))
 
     instance.value = 1
     instance.save()
