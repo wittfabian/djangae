@@ -259,9 +259,9 @@ class UniqueActionAdminTest(TestCase):
         self.site = AdminSite()
 
     def test_model_choices_all_models(self):
-        """When _model_choices is not defined, it returns models which
-        have at least one field marked as `unique=True` or at least one
-        entry in the `_meta.unique_together` definition."""
+        """It returns models which have at least one field
+        marked as `unique=True` or at least one entry in
+        the `_meta.unique_together` definition."""
         unique_action_admin = UniqueActionAdmin(UniqueAction, self.site)
 
         self.assertFalse(getattr(unique_action_admin, '_model_choices', False))
