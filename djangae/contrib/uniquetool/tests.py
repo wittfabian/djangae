@@ -270,16 +270,3 @@ class UniqueActionAdminTest(TestCase):
 
         self.assertTrue(getattr(unique_action_admin, '_model_choices'))
         self.assertTrue(isinstance(model_choices, list))
-
-    def test_model_choices_provided_list(self):
-        """If a _model_choice is defined, it's not overriden by all models."""
-        class UniqueCustomAdmin(UniqueActionAdmin):
-            _model_choices = [('applabel,MyModel', 'MyModel')]
-
-        unique_action_admin = UniqueCustomAdmin(UniqueAction, self.site)
-
-        model_choices = unique_action_admin.model_choices()
-
-        self.assertTrue(getattr(unique_action_admin, '_model_choices'))
-        self.assertTrue(isinstance(model_choices, list))
-        self.assertEqual(len(model_choices), 1)
