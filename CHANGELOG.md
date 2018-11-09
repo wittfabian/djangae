@@ -30,6 +30,7 @@
 - Fixed migrations failing to map all entities of a kind.
 - Mapping queryset should support shard slicing.
 - Replaced deprecated resources(`models.get_models`, `models.get_apps` and `Options.module_name`) in `djangae.forms.fields.py`.
+- Fixed AttributeError when calling method `UniqueActionAdmin.model_choices()` on `djangae.contrib.uniquetool` app
 
 ## v0.9.11
 
