@@ -178,7 +178,8 @@ def _process_shard(marker_id, model, query, callback, finalize, buffer_time, arg
 
             callback(instance, *args, **kwargs)
         else:
-            with transaction.atomic(xg=True):
+            @transaction.atomic(xg=True)
+            def mark_shard_complete():
                 try:
                     marker.refresh_from_db()
                 except DeferIterationMarker.DoesNotExist:
@@ -200,6 +201,8 @@ def _process_shard(marker_id, model, query, callback, finalize, buffer_time, arg
                         _queue=task_queue_name(),
                         **kwargs
                     )
+
+            retry(mark_shard_complete, _attempts=6)
 
     except (Exception, TimeoutException) as e:
         # We intentionally don't catch DeadlineExceededError here. There's not enough time to redefer a task
