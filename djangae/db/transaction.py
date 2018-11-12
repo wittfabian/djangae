@@ -13,7 +13,7 @@ from google.appengine.datastore.datastore_rpc import (TransactionalConnection,
                                                       TransactionOptions)
 
 
-class ProtectedReadError(ValueError):
+class PreventedReadError(ValueError):
     pass
 
 
@@ -28,9 +28,9 @@ def _datastore_get_handler(signal, sender, keys, **kwargs):
     if txn:
         for key in keys:
             if key in txn._protected_keys:
-                raise ProtectedReadError(
-                    "Attempted to read key (%s) inside a transaction "
-                    "where it was marked protected" % key
+                raise PreventedReadError(
+                    "Attempted to read key (%s:%s) inside a transaction "
+                    "where it was marked protected" % (key.kind(), key.id_or_name())
                 )
 
         txn._fetched_keys.update(set(keys))
@@ -95,7 +95,7 @@ class Transaction(object):
 
         return False
 
-    def protect_read(self, model, pk, connection=None):
+    def prevent_read(self, model, pk, connection=None):
         if not connection:
             connection = router.db_for_read(model)
 
@@ -113,7 +113,7 @@ class Transaction(object):
     def has_been_written(self, instance, connection=None):
         return self._check_instance_actions(instance, connection, check_fetched=False, check_put=True)
 
-    def refresh_if_unread(self, instance, protect_further_reads=True):
+    def refresh_if_unread(self, instance, prevent_further_reads=False):
         """
             Calls instance.refresh_from_db() if the instance hasn't already
             been read this transaction. This helps prevent oddities if you
@@ -148,9 +148,9 @@ class Transaction(object):
         instance.refresh_from_db()
 
         # Enable read-protection if the flag was specified
-        if protect_further_reads:
+        if prevent_further_reads:
             connection = router.db_for_read(instance.__class__, instance=instance)
-            self.protect_read(type(instance), instance.pk, connection=connection)
+            self.prevent_read(type(instance), instance.pk, connection=connection)
 
     def _commit(self):
         if self._connection:
