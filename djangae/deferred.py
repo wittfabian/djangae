@@ -140,7 +140,7 @@ class TimeoutException(Exception):
     pass
 
 
-def _process_shard(marker_id, model, query, callback, finalize, queue_name, buffer_time, args):
+def _process_shard(marker_id, model, query, callback, finalize, queue_name, buffer_time, args, kwargs):
     args = args or tuple()
 
     start_time = timezone.now()
@@ -158,6 +158,7 @@ def _process_shard(marker_id, model, query, callback, finalize, queue_name, buff
             queue_name=queue_name,
             buffer_time=buffer_time,
             args=args,
+            kwargs=kwargs,
             _queue=queue_name,
             _countdown=1
         )
@@ -175,7 +176,7 @@ def _process_shard(marker_id, model, query, callback, finalize, queue_name, buff
             if (timezone.now() - start_time).total_seconds() > _TASK_TIME_LIMIT - buffer_time:
                 raise TimeoutException()
 
-            callback(instance, *args)
+            callback(instance, *args, **kwargs)
         else:
             with transaction.atomic(xg=True):
                 try:
@@ -197,6 +198,7 @@ def _process_shard(marker_id, model, query, callback, finalize, queue_name, buff
                         *args,
                         _transactional=True,
                         _queue=queue_name
+                        **kwargs
                     )
 
     except (Exception, TimeoutException) as e:
@@ -218,12 +220,13 @@ def _process_shard(marker_id, model, query, callback, finalize, queue_name, buff
             queue_name=queue_name,
             buffer_time=buffer_time,
             args=args,
+            kwargs=kwargs,
             _queue=queue_name,
             _countdown=1
         )
 
 
-def _generate_shards(model, query, callback, finalize, args, queue_name, _shards, _delete_marker, _buffer_time):
+def _generate_shards(model, query, callback, finalize, args, kwargs, queue_name, _shards, _delete_marker, _buffer_time):
     queryset = model.objects.all()
     queryset.query = query
 
@@ -259,6 +262,7 @@ def _generate_shards(model, query, callback, finalize, args, queue_name, _shards
                 marker.pk,
                 qs.model, qs.query, callback, finalize,
                 args=args,
+                kwargs=kwargs,
                 queue_name=queue_name,
                 buffer_time=_buffer_time,
                 _queue=queue_name,
@@ -273,8 +277,8 @@ def _generate_shards(model, query, callback, finalize, args, queue_name, _shards
 
 
 def defer_iteration_with_finalize(
-        queryset, callback, finalize, args=None, _queue='default', _shards=5,
-        _delete_marker=True, _transactional=False, _buffer_time=15):
+        queryset, callback, finalize, _queue='default', _shards=5,
+        _delete_marker=True, _transactional=False, _buffer_time=15, *args, **kwargs):
 
     defer(
         _generate_shards,
@@ -283,6 +287,7 @@ def defer_iteration_with_finalize(
         callback,
         finalize,
         args=args,
+        kwargs=kwargs,
         queue_name=_queue,
         _delete_marker=_delete_marker,
         _shards=_shards,
