@@ -94,7 +94,9 @@ class TaskFailedError(Exception):
         self.original_exception = original_exception
 
         super(TaskFailedError, self).__init__(
-            "Task {} failed with status code: {}".format(task_name, status_code)
+            "Task {} failed with status code: {}. \n\nMessage was: {}".format(
+                task_name, status_code, original_exception
+            )
         )
 
 
