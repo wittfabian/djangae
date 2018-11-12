@@ -32,6 +32,9 @@ from djangae.processing import find_key_ranges_for_queryset
 from djangae.utils import retry
 
 
+logger = logging.getLogger(__name__)
+
+
 def _wipe_caches(args, kwargs):
     # Django related fields (E.g. foreign key) store a "cache" of the related
     # object when it's first accessed. These caches can drastically bloat up
@@ -149,7 +152,7 @@ def _process_shard(marker_id, model, query, callback, finalize, buffer_time, arg
     try:
         marker = DeferIterationMarker.objects.get(pk=marker_id)
     except DeferIterationMarker.DoesNotExist:
-        logging.warning("DeferIterationMarker with ID: %s has vanished, cancelling task", marker_id)
+        logger.warning("DeferIterationMarker with ID: %s has vanished, cancelling task", marker_id)
         return
 
     # Redefer if the task isn't ready to begin
@@ -183,7 +186,7 @@ def _process_shard(marker_id, model, query, callback, finalize, buffer_time, arg
                 try:
                     marker.refresh_from_db()
                 except DeferIterationMarker.DoesNotExist:
-                    logging.warning("TaskMarker with ID: %s has vanished, cancelling task", marker_id)
+                    logger.warning("TaskMarker with ID: %s has vanished, cancelling task", marker_id)
                     return
 
                 marker.shards_complete += 1
@@ -211,9 +214,9 @@ def _process_shard(marker_id, model, query, callback, finalize, buffer_time, arg
         # never enter here (if it does occur, somehow)
 
         if isinstance(e, TimeoutException):
-            logging.debug("Ran out of time processing shard. Deferring new shard to continue from: %s", last_pk)
+            logger.debug("Ran out of time processing shard. Deferring new shard to continue from: %s", last_pk)
         else:
-            logging.exception("Error processing shard. Retrying.")
+            logger.exception("Error processing shard. Retrying.")
 
         if last_pk:
             qs = qs.filter(pk__gte=last_pk)
