@@ -11,6 +11,7 @@
 - Added App Engine SDK version check on project startup.
 - Added support for named class-based views to dumpurls.  Also now supports export to either json or csv
 - Added `deferred.defer_iteration_with_finalize`
+- Added `Transaction.protect_read` which prevents a specific instance being read inside a transaction.
 
 ### Bug fixes:
 
@@ -31,6 +32,7 @@
 - Fixed migrations failing to map all entities of a kind.
 - Mapping queryset should support shard slicing.
 - Replaced deprecated resources(`models.get_models`, `models.get_apps` and `Options.module_name`) in `djangae.forms.fields.py`.
+- Fixed AttributeError when calling method `UniqueActionAdmin.model_choices()` on `djangae.contrib.uniquetool` app
 
 ## v0.9.11
 

@@ -6,8 +6,10 @@ from unittest import skipIf
 from google.appengine.api import datastore, datastore_errors
 
 from .models import UniqueAction, encode_model
+from .admin import UniqueActionAdmin
 from djangae.test import TestCase, process_task_queues
 from djangae.db.constraints import UniqueMarker, UniquenessMixin
+from django.contrib.admin.sites import AdminSite
 
 
 DEFAULT_NAMESPACE = settings.DATABASES.get("default", {}).get("NAMESPACE")
@@ -250,3 +252,21 @@ class MapperTests(TestCase):
         self.assertTrue(isinstance(marker["instance"], datastore.Key))
         self.assertEqual(instance_key_ns1, marker["instance"])
         self.assertTrue(marker["created"])
+
+
+class UniqueActionAdminTest(TestCase):
+    def setUp(self):
+        self.site = AdminSite()
+
+    def test_model_choices_all_models(self):
+        """It returns models which have at least one field
+        marked as `unique=True` or at least one entry in
+        the `_meta.unique_together` definition."""
+        unique_action_admin = UniqueActionAdmin(UniqueAction, self.site)
+
+        self.assertFalse(getattr(unique_action_admin, '_model_choices', False))
+
+        model_choices = unique_action_admin.model_choices()
+
+        self.assertTrue(getattr(unique_action_admin, '_model_choices'))
+        self.assertTrue(isinstance(model_choices, list))

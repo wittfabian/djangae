@@ -296,6 +296,20 @@ class TransactionStateTests(TestCase):
                     self.assertFalse(txn2.has_been_read(apple))
                     self.assertFalse(txn2.has_been_read(pear))
 
+    def test_prevent_read(self):
+        from .test_connector import TestFruit
+
+        apple = TestFruit.objects.create(name="Apple", color="Red")
+
+        # Don't allow reading apple within the transaction
+        with transaction.atomic() as txn:
+            txn.prevent_read(TestFruit, apple.pk)
+
+            self.assertRaises(
+                transaction.PreventedReadError,
+                TestFruit.objects.get, pk=apple.pk
+            )
+
     def test_refresh_if_unread(self):
         from .test_connector import TestFruit
 

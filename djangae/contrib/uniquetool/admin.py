@@ -1,7 +1,8 @@
 from django import forms
-from django.db import models
 from django.contrib import admin
 from .models import UniqueAction, ActionLog, encode_model
+from django.apps import apps
+
 
 def _show_model(m):
 
@@ -40,7 +41,7 @@ class UniqueActionAdmin(admin.ModelAdmin):
         if not hasattr(cls, '_model_choices'):
             all_models = sorted([
                 (encode_model(m), m.__name__)
-                for m in models.get_models()
+                for m in apps.get_models()
                 if _show_model(m)
             ], key=lambda x: x[1])
             cls._model_choices = all_models
