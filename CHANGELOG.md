@@ -75,6 +75,7 @@
  - Create .editorconfig to ensure basic editor settings are consistent between users
  - Fix import error in SDK 1.9.60
  - Add .flake8 file to move towards enforcement code standard
+ - Correctly select initial values for SetField form widget
  - Previously `instance.relatedlistfield.all()[0]` would retrieve all items before indexing, now it only grabs the first
  - Fixed `instance.relatedlistfield.values_list(...)` which would die with an error in 0.9.10 and earlier
  - Add missing `djangae/fields/allkeys-5.2.0.zip` file to `MANIFEST.in`
