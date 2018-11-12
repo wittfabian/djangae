@@ -26,8 +26,9 @@ defer to process the tasks.
 The function iterates the passed Queryset in shards, calling `callback` on each instance. Once all shards complete then
 the `finalize` callback is called. If a shard gets close to the 10-minute deadline, or it hits an unhandled exception it re-defers another shard to continue processing.
 
-`DeadlineExceededError` is explicitly not handled. This is because there is rarely enough time between the exception being caught, and the request being terminated, to correctly defer a new shard. If a new shard is deferred but then the request is terminated before it completes then this will create duplicate shards. For this reason it's safer to let the shard
-raise the error and retry from the beginning if this ever happens. The deadline handling should prevent this however.
+`DeadlineExceededError` is explicitly not handled. This is because there is rarely enough time between the exception being caught, and the request being terminated, to correctly defer a new shard.
+
+Each processing task keeps track of its execution time and re-defers itself to avoid hitting App Engine's `DeadlineExceededError`. However, this check is only performed in between the processing of each object and the re-deferring only happens when the task is within 15 seconds of hitting the deadline. So if the processing of an individual model instance takes more than 15 seconds then the `DeadlineExceededError` may still be hit, which will cause that task to be retried from the beginning, thus re-processing some of the model instances.
 
 If `args` is specified, these arguments are passed as positional arguments to both `callback` (after the instance) and `finalize`.
 
