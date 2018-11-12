@@ -10,8 +10,9 @@ class DeferIterationTestModel(models.Model):
     ignored = models.BooleanField(default=False)
 
 
-def callback(instance):
-    instance.touched = True
+def callback(instance, touch=True):
+    if touch:
+        instance.touched = True
     instance.save()
 
 
@@ -30,13 +31,27 @@ def sporadic_error(instance):
     instance.save()
 
 
-def finalize():
+def finalize(touch=True):
     for instance in DeferIterationTestModel.objects.all():
         instance.finalized = True
         instance.save()
 
 
 class DeferIterationTestCase(TestCase):
+    def test_passing_args_and_kwargs(self):
+        [DeferIterationTestModel.objects.create() for i in range(25)]
+
+        defer_iteration_with_finalize(
+            DeferIterationTestModel.objects.all(),
+            callback,
+            finalize,
+            touch=False  # kwarg to not touch the objects at all
+        )
+
+        self.process_task_queues()
+
+        self.assertEqual(0, DeferIterationTestModel.objects.filter(touched=True).count())
+
     def test_instances_hit(self):
         [DeferIterationTestModel.objects.create() for i in range(25)]
 
