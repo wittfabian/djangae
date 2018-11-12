@@ -234,7 +234,11 @@ def _generate_shards(model, query, callback, finalize, args, kwargs, shards, del
 
     key_ranges = find_key_ranges_for_queryset(queryset, shards)
 
-    marker = DeferIterationMarker.objects.create(delete_on_completion=delete_marker)
+    marker = DeferIterationMarker.objects.create(
+        delete_on_completion=delete_marker,
+        callback_name=callback.__name__,
+        finalize_name=finalize.__name__
+    )
 
     for i, (start, end) in enumerate(key_ranges):
         is_last = i == (len(key_ranges) - 1)

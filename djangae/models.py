@@ -25,9 +25,20 @@ class DeferIterationMarker(models.Model):
 
     delete_on_completion = models.BooleanField(default=True)
 
+    created = models.DateTimeField(auto_now_add=True)
+    callback_name = models.CharField(max_length=100)
+    finalize_name = models.CharField(max_length=100)
+
     class Meta:
         app_label = "djangae"
 
     @property
     def is_finished(self):
         return self.is_ready and self.shard_count == self.shards_complete
+
+    def __unicode__(self):
+        return "Background Task (%s -> %s) at %s" % (
+            self.callback_name,
+            self.finalize_name,
+            self.created
+        )
