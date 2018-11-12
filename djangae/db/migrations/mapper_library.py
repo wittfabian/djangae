@@ -21,6 +21,9 @@ from google.appengine.runtime import DeadlineExceededError
 from djangae.db.backends.appengine import rpc
 
 
+logger = logging.getLogger(__name__)
+
+
 class Redefer(Exception):
     """ Custom exception class to allow triggering of the re-deferring of a processing task. """
     pass
@@ -282,7 +285,7 @@ class ShardedTaskMarker(rpc.Entity):
 
                 marker.put()
             except datastore_errors.EntityNotFoundError:
-                logging.error(
+                logger.error(
                     "Unable to start task %s as marker is missing",
                     self.key().id_or_name()
                 )

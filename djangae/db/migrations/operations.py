@@ -22,6 +22,7 @@ from .constants import TASK_RECHECK_INTERVAL
 from .utils import clone_entity
 
 
+logger = logging.getLogger(__name__)
 TESTING = 'test' in sys.argv
 
 
@@ -118,7 +119,7 @@ class BaseEntityMapperOperation(Operation, DjangaeMigration):
             raise
         except Exception:
             if self.skip_errors:
-                logging.exception(
+                logger.exception(
                     "Error processing operation %s for entity %s.  Skipping.",
                     self.identifier, entity.key()
                 )
