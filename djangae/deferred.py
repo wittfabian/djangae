@@ -225,13 +225,13 @@ def _process_shard(marker_id, model, query, callback, finalize, buffer_time, arg
         )
 
 
-def _generate_shards(model, query, callback, finalize, args, kwargs, _shards, _delete_marker, _buffer_time):
+def _generate_shards(model, query, callback, finalize, args, kwargs, shards, delete_marker, buffer_time):
     queryset = model.objects.all()
     queryset.query = query
 
-    key_ranges = find_key_ranges_for_queryset(queryset, _shards)
+    key_ranges = find_key_ranges_for_queryset(queryset, shards)
 
-    marker = DeferIterationMarker.objects.create(delete_on_completion=_delete_marker)
+    marker = DeferIterationMarker.objects.create(delete_on_completion=delete_marker)
 
     for i, (start, end) in enumerate(key_ranges):
         is_last = i == (len(key_ranges) - 1)
@@ -262,7 +262,7 @@ def _generate_shards(model, query, callback, finalize, args, kwargs, _shards, _d
                 qs.model, qs.query, callback, finalize,
                 args=args,
                 kwargs=kwargs,
-                buffer_time=_buffer_time,
+                buffer_time=buffer_time,
                 _queue=task_queue_name(),
                 _transactional=True
             )
@@ -286,9 +286,9 @@ def defer_iteration_with_finalize(
         finalize,
         args=args,
         kwargs=kwargs,
-        _delete_marker=_delete_marker,
-        _shards=_shards,
+        delete_marker=_delete_marker,
+        shards=_shards,
+        buffer_time=_buffer_time,
         _queue=_queue,
-        _transactional=_transactional,
-        _buffer_time=_buffer_time
+        _transactional=_transactional
     )
