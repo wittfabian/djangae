@@ -28,7 +28,7 @@ the `finalize` callback is called. If a shard gets close to the 10-minute deadli
 
 `DeadlineExceededError` is explicitly not handled. This is because there is rarely enough time between the exception being caught, and the request being terminated, to correctly defer a new shard.
 
-Each processing task keeps track of its execution time and re-defers itself to avoid hitting App Engine's `DeadlineExceededError`. However, this check is only performed in between the processing of each object and the re-deferring only happens when the task is within 15 seconds of hitting the deadline. So if the processing of an individual model instance takes more than 15 seconds then the `DeadlineExceededError` may still be hit, which will cause that task to be retried from the beginning, thus re-processing some of the model instances.
+Each processing task keeps track of its execution time and re-defers itself to avoid hitting App Engine's `DeadlineExceededError`. However, this check is only performed in between the processing of each object and the re-deferring only happens when the task is within `_buffer_time` seconds of hitting the deadline. So if the processing of an individual model instance takes more than `_buffer_time` seconds then the `DeadlineExceededError` may still be hit, which will cause that task to be retried from the beginning, thus re-processing some of the model instances.
 
 If `args` is specified, these arguments are passed as positional arguments to both `callback` (after the instance) and `finalize`.
 
