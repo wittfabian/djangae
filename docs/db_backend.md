@@ -326,6 +326,21 @@ instance.value -> 1  # Oops!
 
 You can write safer code by using `refresh_if_unread(instance)` which will only update the instance if you haven't already done it in the current transaction.
 
+`refresh_if_unread()` also takes an optional keyword argument called `protect_further_reads` which adds additional protection against reading the same instance twice inside a transaction (see below).
+
+Sometimes when working with transactions you might find you accidentally introduce an additional entity group into the
+transaction unintentionally. This is very easily done by following a ForeignKey relationship inside the transaction and if
+the related instance is shared by a large number of objects you'll rapidly see a large number of `TransactionFailedError`s thrown.
+
+The Djangae `Transaction` object exposes a method to help protect against this situation called `protect_read`.
+
+```
+with transaction.atomic() as txn:
+    txn.protect_read(MyModel, 1)
+
+    MyModel.objects.get(pk=1)  # Raises ProtectedReadError
+```
+
 
 ## Multiple Namespaces
 
