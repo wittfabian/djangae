@@ -5,7 +5,7 @@ import os
 
 # we can't find the right google namespace packages on the path without this
 from google.appengine.ext import vendor
-vendor.add('third_party')
+vendor.add('libs') # this will always be different per app - just a WIP for testapp
 from google.appengine.api import app_identity
 
 from google.auth import app_engine
