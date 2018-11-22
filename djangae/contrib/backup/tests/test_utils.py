@@ -1,12 +1,14 @@
 from django.conf import settings
 from djangae.contrib import sleuth
 from djangae.test import TestCase
+
 from google.appengine.api import app_identity
 
 from ..utils import get_backup_setting, get_gcs_bucket
 
 
 class GetDatastoreSettingTest(TestCase):
+
     def test_set_as_expected(self):
         with self.settings(DJANGAE_BACKUP_FOO=True):
             self.assertTrue(
@@ -33,6 +35,7 @@ class GetDatastoreSettingTest(TestCase):
 
 
 class GetGcsBucketTest(TestCase):
+
     def test_custom_bucket_setting(self):
         with self.settings(DJANGAE_BACKUP_GCS_BUCKET='foo-bar-baz/qux'):
             result = get_gcs_bucket()

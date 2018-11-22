@@ -22,6 +22,8 @@ def get_gcs_bucket():
     Raises an exception if DJANGAE_BACKUP_GCS_BUCKET is missing and there is
     no default bucket.
     """
+    # we don't use `get_backup_setting` here as default would be a callable
+    # redundantly called if the setting was specified.
     try:
         bucket = settings.DJANGAE_BACKUP_GCS_BUCKET
     except AttributeError:
@@ -36,13 +38,15 @@ def get_gcs_bucket():
     return bucket
 
 
-def get_backup_path():
-    bucket = get_gcs_bucket()
+def get_backup_path(bucket=None):
+    """
+    Returns the full path to write the backup to in GCS. This looks
+    something like 
+    `gs://codein-staging.appspot.com/scheduled-backups/2018-20-10/202059`
 
-    # And then we create a new, time-stamped directory for every backup run.
-    # This will give us UTC even if USE_TZ=False and we aren't running on
-    # App Engine (local development?).
+    Bucket can be provided as a kwarg (e.g. passed in from a GET param),
+    otherwise we fallback to the `DJANGAE_BACKUP_GCS_BUCKET` setting.
+    """
+    bucket = bucket if bucket else get_gcs_bucket()
     dt = datetime.datetime.utcnow()
-    bucket_path = '{}/{:%Y%m%d-%H%M%S}'.format(bucket, dt)
-
-    return bucket_path
+    return 'gs://{}/{:%Y%m%d}/{:%H%M%S}'.format(bucket, dt, dt)
