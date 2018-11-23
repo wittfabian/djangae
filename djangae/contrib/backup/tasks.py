@@ -1,5 +1,3 @@
-import datetime
-import json
 import logging
 import os
 
@@ -13,9 +11,10 @@ from google.oauth2 import service_account
 import googleapiclient.discovery
 
 from django.apps import apps
-from django.conf import settings
 
 from djangae.environment import is_production_environment
+
+from .utils import get_backup_setting, get_backup_path
 
 
 logger = logging.getLogger(__name__)
@@ -96,7 +95,7 @@ def _get_valid_export_models(kinds=None):
 
 def _get_service():
     """Creates an Admin API service object for talking to the API."""
-    credentials = get_authentication_credentials()
+    credentials = _get_authentication_credentials()
     return googleapiclient.discovery.build(
         'admin', 'v1',
         credentials=credentials,
@@ -117,5 +116,4 @@ def _get_authentication_credentials():
             service_account_path, scopes=AUTH_SCOPES
         )
     return credentials
-
 
