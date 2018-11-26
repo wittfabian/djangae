@@ -12,6 +12,7 @@
 - Added support for named class-based views to dumpurls.  Also now supports export to either json or csv
 - Added `deferred.defer_iteration_with_finalize`
 - Added `Transaction.protect_read` which prevents a specific instance being read inside a transaction.
+- Fixed bug where when running test suite with a target module, if any of the targetted tests had an import error, they were being skipped / silently failing.
 
 ### Bug fixes:
 
