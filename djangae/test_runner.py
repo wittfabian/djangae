@@ -212,7 +212,9 @@ class DjangaeTestSuiteRunner(DiscoverRunner):
             if hasattr(test, 'available_apps'):
                 test.available_apps = None
 
-            if args[0] and not any([test.id().startswith(x) for x in args[0]]):
+            # make sure we don't run any of the extra tests if a particular
+            # module target was provided at runtime
+            if args[0] and not any([x in test.id() for x in args[0]]):
                 continue
 
             if test.id() in DJANGO_TESTS_TO_SKIP:
