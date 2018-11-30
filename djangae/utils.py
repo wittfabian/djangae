@@ -135,8 +135,8 @@ def retry(func, *args, **kwargs):
 
                 logger.info("Retrying function: %s(%s, %s) - %s", func, args, kwargs, exc)
 
-                # Add a slight bit of randomness (up to a second) to avoid competing tasks repeatedly
-                # clashing with each other on retries.
+                # Add a slight bit of randomness (up to a second) to avoid competing tasks
+                # repeatedly clashing with each other on retries.
                 random_factor = random.randint(0, 1000)
 
                 time.sleep((timeout_ms + random_factor) * 0.001)
@@ -156,7 +156,8 @@ def retry_on_error(_catch=None, _attempts=3, _initial_wait=375, _max_wait=30000)
         def replacement(*args, **kwargs):
             return retry(
                 func,
-                _catch=_catch, _attempts=_attempts, _initial_wait=_initial_wait, _max_wait=_max_wait,
+                _catch=_catch, _attempts=_attempts,
+                _initial_wait=_initial_wait, _max_wait=_max_wait,
                 *args, **kwargs
             )
         return replacement
@@ -183,7 +184,9 @@ def djangae_webapp(request_handler):
         view_func = request_handler(req, response)
         view_func.dispatch()
 
-        django_response = HttpResponse(response.body, status=int(str(response.status).split(" ")[0]))
+        django_response = HttpResponse(
+            response.body, status=int(str(response.status).split(" ")[0])
+        )
         for header, value in response.headers.items():
             django_response[header] = value
 
