@@ -108,10 +108,13 @@ def retry(func, *args, **kwargs):
     # Slightly weird `.pop(x, None) or default` thing here due to not wanting to repeat the tuple of
     # default things in `retry_on_error` and having to do inline imports
     catch = kwargs.pop('_catch', None) or (
-        datastore_errors.Error, apiproxy_errors.Error, TransactionFailedError
+        datastore_errors.Error,
+        apiproxy_errors.Error,
+        TransactionFailedError,
+        datastore_errors.InternalError
     )
     attempts = kwargs.pop('_attempts', 3)
-    timeout_ms = kwargs.pop('_initial_wait', 750)  # Try 375, 750, 1500
+    timeout_ms = kwargs.pop('_initial_wait', 750)  # Try 750, 1500, 3000 etc.
     max_wait = kwargs.pop('_max_wait', 30000)
 
     i = 0
