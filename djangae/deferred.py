@@ -19,18 +19,17 @@ This defer is an adapted version of that one, with the following changes:
 
 import copy
 import logging
+import time
 
-from django.db import models
-from django.utils import timezone
 from google.appengine.api.datastore import Delete
-from google.appengine.ext.deferred import PermanentTaskFailure  # noqa
 
 from djangae.db import transaction
 from djangae.environment import task_queue_name
 from djangae.models import DeferIterationMarker
 from djangae.processing import find_key_ranges_for_queryset
 from djangae.utils import retry
-
+from django.db import models
+from google.appengine.ext.deferred import PermanentTaskFailure  # noqa
 
 logger = logging.getLogger(__name__)
 
@@ -147,7 +146,7 @@ class TimeoutException(Exception):
 def _process_shard(marker_id, model, query, callback, finalize, buffer_time, args, kwargs):
     args = args or tuple()
 
-    start_time = timezone.now()
+    start_time = time.time()
 
     try:
         marker = DeferIterationMarker.objects.get(pk=marker_id)
@@ -172,21 +171,45 @@ def _process_shard(marker_id, model, query, callback, finalize, buffer_time, arg
         qs.query = query
         qs.order_by("pk")
 
+        calculate_buffer_time = buffer_time is None
+        longest_iteration = 0
+        longest_iteration_multiplier = 1.1
+
         last_pk = None
         for instance in qs.all():
             last_pk = instance.pk
 
-            if (timezone.now() - start_time).total_seconds() > _TASK_TIME_LIMIT - buffer_time:
+            buffer_time_to_apply = (
+                longest_iteration * longest_iteration_multiplier
+                if calculate_buffer_time
+                else buffer_time
+            )
+
+            # The first iteration, buffer_time_to_apply will be zero if buffer_time was None
+            # that's not a problem.
+            shard_time = (time.time() - start_time)
+            if shard_time > _TASK_TIME_LIMIT - buffer_time_to_apply:
                 raise TimeoutException()
 
+            iteration_start = time.time()
+
             callback(instance, *args, **kwargs)
+
+            iteration_end = time.time()
+            iteration_time = iteration_end - iteration_start
+
+            # Store the iteration time if it's the longest
+            longest_iteration = max(longest_iteration, iteration_time)
         else:
             @transaction.atomic(xg=True)
             def mark_shard_complete():
                 try:
                     marker.refresh_from_db()
                 except DeferIterationMarker.DoesNotExist:
-                    logger.warning("TaskMarker with ID: %s has vanished, cancelling task", marker_id)
+                    logger.warning(
+                        "TaskMarker with ID: %s has vanished, cancelling task",
+                        marker_id
+                    )
                     return
 
                 marker.shards_complete += 1
@@ -214,7 +237,10 @@ def _process_shard(marker_id, model, query, callback, finalize, buffer_time, arg
         # never enter here (if it does occur, somehow)
 
         if isinstance(e, TimeoutException):
-            logger.debug("Ran out of time processing shard. Deferring new shard to continue from: %s", last_pk)
+            logger.debug(
+                "Ran out of time processing shard. Deferring new shard to continue from: %s",
+                last_pk
+            )
         else:
             logger.exception("Error processing shard. Retrying.")
 
@@ -231,7 +257,10 @@ def _process_shard(marker_id, model, query, callback, finalize, buffer_time, arg
         )
 
 
-def _generate_shards(model, query, callback, finalize, args, kwargs, shards, delete_marker, buffer_time):
+def _generate_shards(
+    model, query, callback, finalize, args, kwargs, shards, delete_marker, buffer_time
+):
+
     queryset = model.objects.all()
     queryset.query = query
 
@@ -286,7 +315,7 @@ def _generate_shards(model, query, callback, finalize, args, kwargs, shards, del
 
 def defer_iteration_with_finalize(
         queryset, callback, finalize, _queue='default', _shards=5,
-        _delete_marker=True, _transactional=False, _buffer_time=15, *args, **kwargs):
+        _delete_marker=True, _transactional=False, _buffer_time=None, *args, **kwargs):
 
     defer(
         _generate_shards,
