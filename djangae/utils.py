@@ -125,6 +125,10 @@ def retry(func, *args, **kwargs):
                     logger.error("Ran out of attempts while retrying function")
                     raise  # Re-raise original exception
 
+                # The location of the errors on each attempt may change, so we log
+                # each one
+                logger.exception("Exception during retry attempt. Will retry.")
+
                 logger.info("Retrying function: %s(%s, %s) - %s", func, args, kwargs, exc)
                 time.sleep(timeout_ms * 0.001)
                 timeout_ms *= 2
