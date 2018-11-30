@@ -111,7 +111,7 @@ def retry(func, *args, **kwargs):
         datastore_errors.Error, apiproxy_errors.Error, TransactionFailedError
     )
     attempts = kwargs.pop('_attempts', 3)
-    timeout_ms = kwargs.pop('_initial_wait', 375)  # Try 375, 750, 1500
+    timeout_ms = kwargs.pop('_initial_wait', 750)  # Try 375, 750, 1500
     max_wait = kwargs.pop('_max_wait', 30000)
 
     i = 0
