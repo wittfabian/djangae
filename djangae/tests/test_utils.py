@@ -220,7 +220,7 @@ class RetryTestCase(TestCase):
             should be doubled for each subsequent retry.
         """
 
-        @retry_on_error(_initial_wait=5, _attempts=3, _catch=Exception)
+        @retry_on_error(_initial_wait=5, _attempts=3, _catch=Exception, _avoid_clashes=False)
         def flakey():
             raise Exception("Oops")
 
@@ -231,8 +231,8 @@ class RetryTestCase(TestCase):
                 pass
 
             self.assertEqual(len(sleep_watch.calls), 2)  # It doesn't sleep after the final attempt
-            self.assertEqual(sleep_watch.calls[0].args[0], 0.005) # initial wait in milliseconds
-            self.assertEqual(sleep_watch.calls[1].args[0], 0.01) # initial wait doubled during backoff
+            self.assertEqual(sleep_watch.calls[0].args[0], 0.005)  # initial wait in milliseconds
+            self.assertEqual(sleep_watch.calls[1].args[0], 0.01)  # initial wait doubled
 
     def test_max_wait_param(self):
         """ The _max_wait parameter should limit the backoff time for retries, otherwise they will

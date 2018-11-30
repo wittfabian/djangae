@@ -118,6 +118,9 @@ def retry(func, *args, **kwargs):
     timeout_ms = kwargs.pop('_initial_wait', 750)  # Try 750, 1500, 3000 etc.
     max_wait = kwargs.pop('_max_wait', 30000)
 
+    # Whether or not to add a random element to the sleep times
+    randomize = kwargs.pop('_avoid_clashes', True)
+
     i = 0
     try:
         while True:
@@ -136,10 +139,15 @@ def retry(func, *args, **kwargs):
                 logger.info("Retrying function: %s(%s, %s) - %s", func, args, kwargs, exc)
 
                 # Add a slight bit of randomness (up to a second) to avoid competing tasks
-                # repeatedly clashing with each other on retries.
-                random_factor = random.randint(0, 1000)
+                # repeatedly clashing with each other on retries. We still cap at max_wait,
+                # because that's what the user requested, we also respect initial wait so don't
+                # add a random factor on the first sleep
+                if randomize:
+                    random_factor = random.randint(0, 1000) if i > 1 else 0
+                else:
+                    random_factor = 0
 
-                time.sleep((timeout_ms + random_factor) * 0.001)
+                time.sleep(min((timeout_ms + random_factor), max_wait) * 0.001)
                 timeout_ms *= 2
                 timeout_ms = min(timeout_ms, max_wait)
 
@@ -148,7 +156,9 @@ def retry(func, *args, **kwargs):
         raise
 
 
-def retry_on_error(_catch=None, _attempts=3, _initial_wait=375, _max_wait=30000):
+def retry_on_error(
+    _catch=None, _attempts=3, _initial_wait=375, _max_wait=30000, _avoid_clashes=True
+):
     """ Decorator for wrapping a function with `retry`. """
 
     def decorator(func):
@@ -158,6 +168,7 @@ def retry_on_error(_catch=None, _attempts=3, _initial_wait=375, _max_wait=30000)
                 func,
                 _catch=_catch, _attempts=_attempts,
                 _initial_wait=_initial_wait, _max_wait=_max_wait,
+                _avoid_clashes=_avoid_clashes,
                 *args, **kwargs
             )
         return replacement
