@@ -12,6 +12,7 @@
 - Added support for named class-based views to dumpurls.  Also now supports export to either json or csv
 - Added `deferred.defer_iteration_with_finalize`
 - Added `Transaction.protect_read` which prevents a specific instance being read inside a transaction.
+- Improved `djangae.utils.retry` to catch the Datastore's `InternalError`, and to better select wait times between attempts. Also improved the logging and prevented losing the source of the final exception when retrying fails.
 
 ### Bug fixes:
 
