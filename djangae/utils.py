@@ -3,6 +3,7 @@ from __future__ import absolute_import
 import collections
 import functools
 import logging
+import random
 import sys
 import time
 import warnings
@@ -133,7 +134,12 @@ def retry(func, *args, **kwargs):
                 logger.exception("Exception during retry attempt. Will retry.")
 
                 logger.info("Retrying function: %s(%s, %s) - %s", func, args, kwargs, exc)
-                time.sleep(timeout_ms * 0.001)
+
+                # Add a slight bit of randomness (up to a second) to avoid competing tasks repeatedly
+                # clashing with each other on retries.
+                random_factor = random.randint(0, 1000)
+
+                time.sleep((timeout_ms + random_factor) * 0.001)
                 timeout_ms *= 2
                 timeout_ms = min(timeout_ms, max_wait)
 
