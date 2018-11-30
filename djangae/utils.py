@@ -122,7 +122,9 @@ def retry(func, *args, **kwargs):
                 return func(*args, **kwargs)
             except catch as exc:
                 if i >= attempts:
-                    raise exc
+                    logger.error("Ran out of attempts while retrying function")
+                    raise  # Re-raise original exception
+
                 logger.info("Retrying function: %s(%s, %s) - %s", func, args, kwargs, exc)
                 time.sleep(timeout_ms * 0.001)
                 timeout_ms *= 2
