@@ -11,7 +11,7 @@ want to) using Django's models with the App Engine Datastore as the underlying d
 :octocat:&nbsp;&nbsp;[GitHub](https://github.com/potatolondon/djangae)&nbsp;&nbsp;|&nbsp;&nbsp;
 :closed_book:&nbsp;&nbsp; [Docs](https://djangae.readthedocs.io/)&nbsp;&nbsp;|&nbsp;&nbsp;
 :speech_balloon:&nbsp;&nbsp;[Gitter](https://gitter.im/potatolondon/djangae)&nbsp;&nbsp;|&nbsp;&nbsp;
-:busts_in_silhouette:&nbsp;&nbsp;[Google Group](https://groups.google.com/forum/#!forum/djangae-users)  
+:busts_in_silhouette:&nbsp;&nbsp;[Google Group](https://groups.google.com/forum/#!forum/djangae-users)
 
 **Note: Djangae is under heavy development, stability is not guaranteed. See [1.0 release changes issue](https://github.com/potatolondon/djangae/issues/593) to follow progress on Djangae 1.0 release.**
 
@@ -85,9 +85,9 @@ For running the tests, you just need to run:
 
 On the first run this will download the App Engine SDK, pip install a bunch of stuff locally (into a folder, no virtualenv needed), download the Django tests and run them.  Subsequent runs will just run the tests. If you want to run the tests on a specific Django version, you can switch the installed version by doing:
 
-    $ DJANGO_VERSION=1.8 ./runtests.sh --install_deps
+    $ DJANGO_VERSION=1.11 ./runtests.sh --install_deps
 
-Currently the default is 1.8. TravisCI runs on 1.8 and 1.9 currently.
+Currently the default is 1.8. TravisCI runs on 1.8, 1.9, 1.10 and 1.11 currently.
 
 If you want to run the tests on a specific App Engine SDK version, then you can switch the installed version by doing:
 
