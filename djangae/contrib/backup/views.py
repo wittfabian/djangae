@@ -25,7 +25,7 @@ def create_datastore_backup(request):
 
     if backup_enabled:
         bucket = request.GET.get('bucket')
-        kinds = request.GET.getlist('kind')
+        kinds = request.GET.getlist('kind') or None
 
         # there isn't much overhead of calling this within the request cycle...
         backup_datastore(bucket=bucket, kinds=kinds)
