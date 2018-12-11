@@ -75,7 +75,7 @@ if __name__ == '__main__':
             shutil.rmtree(path)
 
     print("Running pip...")
-    args = ["pip", "install", "-r", REQUIREMENTS_FILE, "-t", TARGET_DIR, "-I", "-V"]
+    args = ["pip", "install", "-r", REQUIREMENTS_FILE, "-t", TARGET_DIR, "-I"]
     p = subprocess.Popen(args)
     p.wait()
 
