@@ -42,7 +42,7 @@ def get_backup_path(bucket=None):
     """
     Returns the full path to write the backup to in GCS. This looks
     something like 
-    `gs://codein-staging.appspot.com/scheduled-backups/2018-20-10/202059`
+    `gs://example.appspot.com/scheduled-backups/2018-20-10/202059`
 
     Bucket can be provided as a kwarg (e.g. passed in from a GET param),
     otherwise we fallback to the `DJANGAE_BACKUP_GCS_BUCKET` setting.
