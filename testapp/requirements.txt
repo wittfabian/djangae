@@ -8,3 +8,5 @@ beautifulsoup4
 pytz
 django-session-csrf
 pyuca
+google-api-python-client
+google-auth

@@ -18,7 +18,7 @@ TARGET_DIR = os.path.join(PROJECT_DIR, "libs")
 APPENGINE_TARGET_DIR = os.path.join(TARGET_DIR, "google_appengine")
 
 DJANGO_VERSION = os.environ.get("DJANGO_VERSION", "1.8")
-APPENGINE_SDK_VERSION = os.environ.get("SDK_VERSION", "1.9.54")
+APPENGINE_SDK_VERSION = os.environ.get("SDK_VERSION", "1.9.57")
 APPENGINE_SDK_FILENAME = "google_appengine_%s.zip" % APPENGINE_SDK_VERSION
 INSTALL_APPENGINE_SDK = "--install_sdk" in sys.argv
 
@@ -75,7 +75,7 @@ if __name__ == '__main__':
             shutil.rmtree(path)
 
     print("Running pip...")
-    args = ["pip", "install", "--no-deps", "-r", REQUIREMENTS_FILE, "-t", TARGET_DIR, "-I"]
+    args = ["pip", "install", "-r", REQUIREMENTS_FILE, "-t", TARGET_DIR, "-I"]
     p = subprocess.Popen(args)
     p.wait()
 

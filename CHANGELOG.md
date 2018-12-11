@@ -12,6 +12,9 @@
 - Added support for named class-based views to dumpurls.  Also now supports export to either json or csv
 - Added `deferred.defer_iteration_with_finalize`
 - Added `Transaction.protect_read` which prevents a specific instance being read inside a transaction.
+- Updated `djangae.contrib.backup` to use the new export API (the existing API was deprecated in Feb 2018). This adds a dependency of `google-auth` and `google-api-python-client`,
+  and also requires some manual permissions to be configured for the app service account. Existing djangae settings will be respected. Read https://cloud.google.com/datastore/docs/schedule-export for details on the new permissions required, and https://cloud.google.com/datastore/docs/export-import-entities
+  for an overview including differences between the two APIs.
 - Fixed bug where when running test suite with a target module, if any of the targetted tests had an import error, they were being skipped / silently failing.
 
 ### Bug fixes:
