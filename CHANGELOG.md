@@ -37,6 +37,7 @@
 - Mapping queryset should support shard slicing.
 - Replaced deprecated resources(`models.get_models`, `models.get_apps` and `Options.module_name`) in `djangae.forms.fields.py`.
 - Fixed AttributeError when calling method `UniqueActionAdmin.model_choices()` on `djangae.contrib.uniquetool` app
+- Fixed a bug where UUIDField values weren't correctly converted to uuid.UUID objects when read from the Datastore
 
 ## v0.9.11
 
