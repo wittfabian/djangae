@@ -2,54 +2,57 @@
 
 import datetime
 import decimal
-import re
-import random
 import logging
-
+import random
+import re
+import uuid
+from hashlib import md5
 from io import StringIO
 from string import letters
-from hashlib import md5
 from unittest import skipIf
 
 # LIBRARIES
 import django
 from django.conf import settings
-from django.core.files.uploadhandler import StopFutureHandlers
 from django.core.cache import cache
-from django.core.exceptions import ValidationError
-from django.db import connection as default_connection, DataError, models
+from django.core.exceptions import FieldError, ValidationError
+from django.core.files.uploadhandler import StopFutureHandlers
+from django.db import DataError, IntegrityError, NotSupportedError
+from django.db import connection as default_connection
+from django.db import models
 from django.db.models.query import Q
 from django.forms import ModelForm
-from django.test import RequestFactory
-from django.utils.safestring import SafeText
 from django.forms.models import modelformset_factory
+from django.template import Context, Template
+from django.test import RequestFactory
+from django.test.utils import override_settings
 from django.utils import six
+from django.utils.safestring import SafeText
 from django.utils.six.moves import range
-from google.appengine.api.datastore_errors import EntityNotFoundError, TransactionFailedError
+from google.appengine.api import taskqueue
+from google.appengine.api.datastore_errors import (EntityNotFoundError,
+                                                   TransactionFailedError)
 from google.appengine.datastore import datastore_rpc
 from google.appengine.ext import deferred
-from google.appengine.api import taskqueue
-from django.test.utils import override_settings
-from django.core.exceptions import FieldError
-from django.template import Template, Context
 
 # DJANGAE
 from djangae.contrib import sleuth
-from djangae.fields import CharField
-from djangae.test import inconsistent_db, TestCase
-from django.db import IntegrityError, NotSupportedError
-from djangae.db.backends.appengine.commands import FlushCommand
-from djangae.db import constraints
-from djangae.db.constraints import UniqueMarker, UniquenessMixin
-from djangae.db.unique_utils import _unique_combinations, unique_identifiers_from_entity
-from djangae.db.backends.appengine.indexing import add_special_index, IExactIndexer, get_indexer
-from djangae.db.backends.appengine import indexing
-from djangae.db.backends.appengine import rpc
-from djangae.db.utils import entity_matches_query, decimal_to_string, normalise_field_value
-from djangae.db.caching import disable_cache
-from djangae.fields import SetField, ListField, RelatedSetField
-from djangae.storage import BlobstoreFileUploadHandler
 from djangae.core import paginator
+from djangae.db import constraints
+from djangae.db.backends.appengine import indexing, rpc
+from djangae.db.backends.appengine.commands import FlushCommand
+from djangae.db.backends.appengine.indexing import (IExactIndexer,
+                                                    add_special_index,
+                                                    get_indexer)
+from djangae.db.caching import disable_cache
+from djangae.db.constraints import UniqueMarker, UniquenessMixin
+from djangae.db.unique_utils import (_unique_combinations,
+                                     unique_identifiers_from_entity)
+from djangae.db.utils import (decimal_to_string, entity_matches_query,
+                              normalise_field_value)
+from djangae.fields import CharField, ListField, RelatedSetField, SetField
+from djangae.storage import BlobstoreFileUploadHandler
+from djangae.test import TestCase, inconsistent_db
 
 DEFAULT_NAMESPACE = default_connection.ops.connection.settings_dict.get("NAMESPACE")
 
@@ -2385,3 +2388,16 @@ class AsyncMultiQueryTests(TestCase):
 
         self.assertEqual(len(qs), 1)
         self.assertItemsEqual([u2], qs)
+
+
+class UUIDTestModel(models.Model):
+    uuid = models.UUIDField(default=uuid.uuid4)
+
+
+class FieldConversionTests(TestCase):
+    def test_uuid_field_handled(self):
+        instance = UUIDTestModel.objects.create()
+        self.assertTrue(isinstance(instance.uuid, uuid.UUID))
+
+        instance.refresh_from_db()
+        self.assertTrue(isinstance(instance.uuid, uuid.UUID))

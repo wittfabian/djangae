@@ -1,19 +1,9 @@
-#STANDARD LIB
 import datetime
 import decimal
 import logging
+import uuid
 import warnings
 
-from google.appengine.api import datastore_errors
-from google.appengine.api.datastore_types import Blob, Text
-
-from djangae.db.backends.appengine import dbapi as Database
-from djangae.db.backends.appengine import rpc
-from djangae.db.backends.appengine.indexing import load_special_indexes
-#DJANGAE
-from djangae.db.utils import (decimal_to_string, get_datastore_key,
-                              make_timezone_naive)
-#LIBRARIES
 from django.conf import settings
 from django.db.backends.base.base import BaseDatabaseWrapper
 from django.db.backends.base.client import BaseDatabaseClient
@@ -26,6 +16,15 @@ from django.db.backends.base.schema import BaseDatabaseSchemaEditor
 from django.db.backends.base.validation import BaseDatabaseValidation
 from django.utils import six, timezone
 from django.utils.encoding import smart_text
+from google.appengine.api import datastore_errors
+from google.appengine.api.datastore_types import Blob, Text
+
+from djangae.db.backends.appengine import dbapi as Database
+from djangae.db.backends.appengine import rpc
+from djangae.db.backends.appengine.indexing import load_special_indexes
+
+from djangae.db.utils import (decimal_to_string, get_datastore_key,
+                              make_timezone_naive)
 
 from .commands import (DeleteCommand, FlushCommand, InsertCommand,
                        SelectCommand, UpdateCommand, coerce_unicode)
@@ -185,12 +184,19 @@ class DatabaseOperations(BaseDatabaseOperations):
             converters.append(self.convert_time_value)
         elif internal_type == 'DecimalField':
             converters.append(self.convert_decimal_value)
+        elif internal_type == 'UUIDField':
+            converters.append(self.convert_uuidfield_value)
         elif db_type == 'list':
             converters.append(self.convert_list_value)
         elif db_type == 'set':
             converters.append(self.convert_set_value)
 
         return converters
+
+    def convert_uuidfield_value(self, value, expression, connection, context):
+        if value is not None:
+            value = uuid.UUID(value)
+        return value
 
     def convert_textfield_value(self, value, expression, connection, context=None):
         if isinstance(value, str):
