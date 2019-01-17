@@ -13,9 +13,13 @@
 - Added `deferred.defer_iteration_with_finalize`
 - Added `Transaction.protect_read` which prevents a specific instance being read inside a transaction.
 - Improved `djangae.utils.retry` to catch the Datastore's `InternalError`, and to better select wait times between attempts. Also improved the logging and prevented losing the source of the final exception when retrying fails.
+- Updated `djangae.contrib.backup` to use the new export API (the existing API was deprecated in Feb 2018). This adds a dependency of `google-auth` and `google-api-python-client`,
+  and also requires some manual permissions to be configured for the app service account. Existing djangae settings will be respected. Read https://cloud.google.com/datastore/docs/schedule-export for details on the new permissions required, and https://cloud.google.com/datastore/docs/export-import-entities
+  for an overview including differences between the two APIs.
 
 ### Bug fixes:
 
+- Fixed bug where when running test suite with a target module, if any of the targetted tests had an import error, they were being skipped / silently failing.
 - Fixed `ImportError` when running `./manage.py runserver` and the SDK is not already on the Python import path.
 - Fix a ValueError when sharding string keys in the migrations mapper library.
 - Fixed Djangae's project description on pypi.org.
@@ -34,6 +38,7 @@
 - Mapping queryset should support shard slicing.
 - Replaced deprecated resources(`models.get_models`, `models.get_apps` and `Options.module_name`) in `djangae.forms.fields.py`.
 - Fixed AttributeError when calling method `UniqueActionAdmin.model_choices()` on `djangae.contrib.uniquetool` app
+- Fixed a bug where UUIDField values weren't correctly converted to uuid.UUID objects when read from the Datastore
 
 ## v0.9.11
 

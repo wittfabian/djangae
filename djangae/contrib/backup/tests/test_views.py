@@ -1,59 +1,33 @@
-import os
-
+from django.test import override_settings
+from djangae.test import TestCase, RequestFactory
 from djangae.contrib import sleuth
-from djangae.test import TestCase
 
-from django.contrib.admin.models import LogEntry
-from djangae.contrib.gauth_datastore.models import (
-    GaeDatastoreUser,
-    Group,
-)
-from django.contrib.sites.models import Site
-
-from ..views import (
-    create_datastore_backup,
-    GAE_BUILTIN_MODULE,
-)
+from ..views import create_datastore_backup
 
 
-class DataStoreBackupTest(TestCase):
-    def test_task_is_queued(self):
-        models = [
-            LogEntry,
-            GaeDatastoreUser,
-            Group,
-            Site
-        ]
-        with sleuth.fake('django.apps.apps.get_models', models):
-            bucket = 'testapp/19991231-235900'
+class DatastoreBackupViewTestCase(TestCase):
+    """Tests for djangae.contrib.backup.views"""
 
-            with sleuth.fake('djangae.contrib.backup.views.get_backup_path', bucket):
-                with self.settings(
-                        DJANGAE_BACKUP_ENABLED=True,
-                        DJANGAE_BACKUP_GCS_BUCKET='testapp',
-                        DJANGAE_BACKUP_NAME='testapp-bk',
-                        DJANGAE_BACKUP_EXCLUDE_APPS=[
-                            'sites'
-                        ],
-                        DJANGAE_BACKUP_EXCLUDE_MODELS=[
-                            'gauth_datastore.Group'
-                        ]):
+    @override_settings(DJANGAE_BACKUP_ENABLED=False)
+    @sleuth.switch('djangae.environment.is_in_task', lambda: True)
+    def test_flag_prevents_backup(self):
+        request = RequestFactory().get('/')
 
-                    try:
-                        os.environ["HTTP_X_APPENGINE_CRON"] = "1"
-                        create_datastore_backup(None)
-                    finally:
-                        del os.environ["HTTP_X_APPENGINE_CRON"]
+        with sleuth.watch('djangae.contrib.backup.views.backup_datastore') as backup_fn:
+            create_datastore_backup(request)
+            self.assertFalse(backup_fn.called)
 
-        # assert task was triggered
-        tasks = self.taskqueue_stub.get_filtered_tasks()
-        self.assertEqual(len(tasks), 1)
-        self.assertEqual(tasks[0].target, GAE_BUILTIN_MODULE)
-        self.assertEqual(tasks[0].url,
-            '/_ah/datastore_admin/backup.create?'
-            'name=testapp-bk'
-            '&gs_bucket_name=testapp%2F19991231-235900'
-            '&filesystem=gs'
-            '&kind=django_admin_log'
-            '&kind=djangae_gaedatastoreuser'
-        )
+    @override_settings(DJANGAE_BACKUP_ENABLED=True)
+    @sleuth.switch('djangae.environment.is_in_task', lambda: True)
+    def test_get_params_propogate(self):
+        request = RequestFactory().get('/?kind=django_admin_log&bucket=foobar')
+        with sleuth.watch('djangae.contrib.backup.views.backup_datastore') as backup_fn:
+            create_datastore_backup(request)
+            self.assertTrue(backup_fn.called)
+            self.assertEqual(
+                backup_fn.calls[0][1],
+                {
+                    'bucket': 'foobar',
+                    'kinds': [u'django_admin_log']
+                }
+            )
