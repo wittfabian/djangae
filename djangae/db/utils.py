@@ -473,3 +473,12 @@ def ensure_datetime(value):
     if isinstance(value, long):
         return datetime.fromtimestamp(value / 1e6)
     return value
+
+
+def remove_duplicates_form_list(list_to_scan):
+    remove_duplicates = []
+    for idx in xrange(len(list_to_scan)):
+        el = list_to_scan[idx]
+        if el not in remove_duplicates:
+            remove_duplicates.append(el)
+    return remove_duplicates

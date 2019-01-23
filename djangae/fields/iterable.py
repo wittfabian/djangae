@@ -12,6 +12,7 @@ from django.utils import six
 from django.utils.text import capfirst
 
 # DJANGAE
+from djangae.db.utils import remove_duplicates_form_list
 from djangae.core.validators import MinItemsValidator, MaxItemsValidator
 from djangae.forms.fields import ListFormField, SetMultipleChoiceField
 
@@ -260,7 +261,6 @@ class IterableField(models.Field):
         return self._map(self.item_field_type.get_db_prep_save, value,
                          connection=connection)
 
-
     def get_db_prep_lookup(self, lookup_type, value, connection,
                            prepared=False):
         """
@@ -339,6 +339,7 @@ IterableField.register_lookup(IsEmptyLookup)
 class ListField(IterableField):
     def __init__(self, *args, **kwargs):
         self.ordering = kwargs.pop('ordering', None)
+        self.remove_duplicates = kwargs.pop('remove_duplicates', False)
         if self.ordering is not None and not callable(self.ordering):
             raise TypeError("'ordering' has to be a callable or None, "
                             "not of type %r." % type(self.ordering))
@@ -353,6 +354,11 @@ class ListField(IterableField):
         if value and self.ordering:
             value.sort(key=self.ordering)
 
+        if value and self.remove_duplicates:
+            value = remove_duplicates_form_list(value)
+            # We should also update the model attribute to hold correct reference
+            setattr(model_instance, self.attname, value)
+
         return value
 
     @property
@@ -362,6 +368,7 @@ class ListField(IterableField):
     def deconstruct(self):
         name, path, args, kwargs = super(ListField, self).deconstruct()
         kwargs['ordering'] = self.ordering
+        kwargs['remove_duplicates'] = self.remove_duplicates
         return name, path, args, kwargs
 
 
