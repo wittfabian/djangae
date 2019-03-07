@@ -280,71 +280,6 @@ def _local(devappserver2=None, configuration=None, options=None, wsgi_request_in
 
 
 @contextlib.contextmanager
-def _remote(configuration=None, remote_api_stub=None, apiproxy_stub_map=None, **kwargs):
-
-    def auth_func():
-        return raw_input('Google Account Login: '), getpass.getpass('Password: ')
-
-    original_apiproxy = apiproxy_stub_map.apiproxy
-
-    if configuration.app_id.startswith('dev~'):
-        app_id = configuration.app_id[4:]
-    else:
-        app_id = configuration.app_id
-
-    os.environ['HTTP_HOST'] = '{0}.appspot.com'.format(app_id)
-    os.environ['DEFAULT_VERSION_HOSTNAME'] = os.environ['HTTP_HOST']
-
-    try:
-        from google.appengine.tools.appcfg import APPCFG_CLIENT_ID, APPCFG_CLIENT_NOTSOSECRET
-        from google.appengine.tools import appengine_rpc_httplib2
-
-        params = appengine_rpc_httplib2.HttpRpcServerOAuth2.OAuth2Parameters(
-            access_token=None,
-            client_id=APPCFG_CLIENT_ID,
-            client_secret=APPCFG_CLIENT_NOTSOSECRET,
-            scope=remote_api_stub._OAUTH_SCOPES,
-            refresh_token=None,
-            credential_file=os.path.expanduser("~/.djangae_oauth2_tokens"),
-            token_uri=None
-        )
-
-        def factory(*args, **kwargs):
-            kwargs["auth_tries"] = 3
-            return appengine_rpc_httplib2.HttpRpcServerOAuth2(*args, **kwargs)
-
-        remote_api_stub.ConfigureRemoteApi(
-            app_id=None,
-            path='/_ah/remote_api',
-            auth_func=params,
-            servername='{0}.appspot.com'.format(app_id),
-            secure=True,
-            save_cookies=True,
-            rpc_server_factory=factory
-        )
-    except ImportError:
-        logging.exception("Unable to use oauth2 falling back to username/password")
-        remote_api_stub.ConfigureRemoteApi(
-            None,
-            '/_ah/remote_api',
-            auth_func,
-            servername='{0}.appspot.com'.format(app_id),
-            secure=True,
-        )
-
-    ps1 = getattr(sys, 'ps1', None)
-    red = "\033[0;31m"
-    native = "\033[m"
-    sys.ps1 = red + '(remote) ' + app_id + native + ' >>> '
-
-    try:
-        yield
-    finally:
-        apiproxy_stub_map.apiproxy = original_apiproxy
-        sys.ps1 = ps1
-
-
-@contextlib.contextmanager
 def _test(**kwargs):
     """
         This stub uses the testbed to initialize the bare minimum to use the
@@ -396,22 +331,22 @@ def _test(**kwargs):
 
 
 LOCAL = 'local'
-REMOTE = 'remote'
 TEST = 'test'
+
 SANDBOXES = {
     LOCAL: _local,
-    REMOTE: _remote,
     TEST: _test,
 }
 
 _OPTIONS = None
 _CONFIG = None
 
+
 @contextlib.contextmanager
 def activate(sandbox_name, add_sdk_to_path=False, new_env_vars=None, **overrides):
     """Context manager for command-line scripts started outside of dev_appserver.
 
-    :param sandbox_name: str, one of 'local', 'remote' or 'test'
+    :param sandbox_name: str, one of 'local' or 'test'
     :param add_sdk_to_path: bool, optionally adds the App Engine SDK to sys.path
     :param options_override: an options structure to pass down to dev_appserver setup
 
@@ -419,8 +354,6 @@ def activate(sandbox_name, add_sdk_to_path=False, new_env_vars=None, **overrides
 
       local: Adds libraries specified in app.yaml to the path and initializes local service stubs as though
              dev_appserver were running.
-
-      remote: Adds libraries specified in app.yaml to the path and initializes remote service stubs.
 
       test: Adds libraries specified in app.yaml to the path and sets up no service stubs. Use this
             with `google.appengine.ext.testbed` to provide isolation for tests.
