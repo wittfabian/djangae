@@ -10,6 +10,7 @@ env:
 matrix:
   fast_finish: true
 before_install:
+- apt-get install google-cloud-sdk-app-engine-python
 - pip install codecov
 
 install:
