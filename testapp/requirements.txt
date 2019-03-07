@@ -9,4 +9,4 @@ pytz
 django-session-csrf
 pyuca
 google-api-python-client
-google-auth
+google-auth==1.6.2

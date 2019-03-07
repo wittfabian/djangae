@@ -30,6 +30,7 @@ def app_engine_is_installed():
     data = json.loads(data)
     # Results are alphabetical so the first result should always be the
     # normal app-engine-python and not app-engine-python-extras
+    data = sorted(data, key=lambda x: x["id"])
     assert(data[0]["id"] == "app-engine-python")
     return data[0]["state"]["name"] != "Not Installed"
 
@@ -48,12 +49,12 @@ if __name__ == '__main__':
         print('Not updating SDK as it exists. Pass --install-sdk to install it.')
 
     print("Running pip...")
-    args = ["pip2", "install", "-r", REQUIREMENTS_FILE, "-t", TARGET_DIR, "-I"]
+    args = ["pip2", "install", "-r", REQUIREMENTS_FILE, "-t", TARGET_DIR, "-I", "--upgrade"]
     p = subprocess.Popen(args)
     p.wait()
 
     print("Installing Django {}".format(DJANGO_VERSION))
-    args = ["pip2", "install", "--no-deps", DJANGO_FOR_PIP, "-t", TARGET_DIR, "-I", "--no-binary", ":all:"]
+    args = ["pip2", "install", "--no-deps", DJANGO_FOR_PIP, "-t", TARGET_DIR, "-I", "--no-binary", ":all:", "--upgrade"]
     p = subprocess.Popen(args)
     p.wait()
 
