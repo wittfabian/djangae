@@ -1,34 +1,18 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2
+import json
 import os
-import stat
-import shutil
 import subprocess
 import sys
-
 import tarfile
 from StringIO import StringIO
-from zipfile import ZipFile
 from urllib import urlopen
-
 
 PROJECT_DIR = os.path.abspath(os.path.dirname(__file__))
 REQUIREMENTS_FILE = os.path.join(PROJECT_DIR, "requirements.txt")
 TARGET_DIR = os.path.join(PROJECT_DIR, "libs")
 
-APPENGINE_TARGET_DIR = os.path.join(TARGET_DIR, "google_appengine")
-
-DJANGO_VERSION = os.environ.get("DJANGO_VERSION", "1.8")
-APPENGINE_SDK_VERSION = os.environ.get("SDK_VERSION", "1.9.57")
-APPENGINE_SDK_FILENAME = "google_appengine_%s.zip" % APPENGINE_SDK_VERSION
-INSTALL_APPENGINE_SDK = "--install_sdk" in sys.argv
-
-# Google move versions from 'featured' to 'deprecated' when they bring
-# out new releases
-FEATURED_SDK_REPO = "https://storage.googleapis.com/appengine-sdks/featured/"
-DEPRECATED_SDK_REPO = "https://storage.googleapis.com/appengine-sdks/deprecated/%s/" % APPENGINE_SDK_VERSION.replace('.', '')
-
-DJANGO_VERSION = os.environ.get("DJANGO_VERSION", "1.8")
-
+DJANGO_VERSION = os.environ.get("DJANGO_VERSION", "1.11")
+INSTALL_APPENGINE_SDK = "--install-sdk" in sys.argv
 
 if any([x in DJANGO_VERSION for x in ['master', 'a', 'b', 'rc']]):
     # For master, beta, alpha or rc versions, get exact versions
@@ -37,50 +21,39 @@ else:
     # For normal (eg. 1.8, 1.9) releases, get latest (.x)
     DJANGO_FOR_PIP = "https://github.com/django/django/archive/stable/{}.x.tar.gz".format(DJANGO_VERSION)
 
+
+def app_engine_is_installed():
+    data = subprocess.check_output([
+        "gcloud", "components", "list", "--filter=app-engine-python", "--format=json"
+    ])
+
+    data = json.loads(data)
+    # Results are alphabetical so the first result should always be the
+    # normal app-engine-python and not app-engine-python-extras
+    assert(data[0]["id"] == "app-engine-python")
+    return data[0]["state"]["name"] != "Not Installed"
+
+
+def install_app_engine():
+    subprocess.check_call(
+        ["gcloud", "components", "install", "app-engine-python"]
+    )
+
+
 if __name__ == '__main__':
-
-    if INSTALL_APPENGINE_SDK or not os.path.exists(APPENGINE_TARGET_DIR):
-
-        # If we're going to install the App Engine SDK then we can just wipe the entire TARGET_DIR
-        if os.path.exists(TARGET_DIR):
-            shutil.rmtree(TARGET_DIR)
-
+    if INSTALL_APPENGINE_SDK or not app_engine_is_installed():
         print('Downloading the AppEngine SDK...')
-
-        #First try and get it from the 'featured' folder
-        sdk_file = urlopen(FEATURED_SDK_REPO + APPENGINE_SDK_FILENAME)
-        if sdk_file.getcode() == 404:
-            #Failing that, 'deprecated'
-            sdk_file = urlopen(DEPRECATED_SDK_REPO + APPENGINE_SDK_FILENAME)
-
-        #Handle other errors
-        if sdk_file.getcode() >= 299:
-            raise Exception('App Engine SDK could not be found. {} returned code {}.'.format(sdk_file.geturl(), sdk_file.getcode()))
-
-        zipfile = ZipFile(StringIO(sdk_file.read()))
-        zipfile.extractall(TARGET_DIR)
-
-        #Make sure the dev_appserver and appcfg are executable
-        for module in ("dev_appserver.py", "appcfg.py"):
-            app = os.path.join(APPENGINE_TARGET_DIR, module)
-            st = os.stat(app)
-            os.chmod(app, st.st_mode | stat.S_IEXEC)
+        install_app_engine()
     else:
-        print('Not updating SDK as it exists. Pass --install_sdk to install it.')
-        # In this sencario we need to wipe everything except the SDK from the TARGET_DIR
-        for name in os.listdir(TARGET_DIR):
-            path = os.path.join(TARGET_DIR, name)
-            if path == APPENGINE_TARGET_DIR:
-                continue
-            shutil.rmtree(path)
+        print('Not updating SDK as it exists. Pass --install-sdk to install it.')
 
     print("Running pip...")
-    args = ["pip", "install", "-r", REQUIREMENTS_FILE, "-t", TARGET_DIR, "-I"]
+    args = ["pip2", "install", "-r", REQUIREMENTS_FILE, "-t", TARGET_DIR, "-I"]
     p = subprocess.Popen(args)
     p.wait()
 
     print("Installing Django {}".format(DJANGO_VERSION))
-    args = ["pip", "install", "--no-deps", DJANGO_FOR_PIP, "-t", TARGET_DIR, "-I", "--no-binary", ":all:"]
+    args = ["pip2", "install", "--no-deps", DJANGO_FOR_PIP, "-t", TARGET_DIR, "-I", "--no-binary", ":all:"]
     p = subprocess.Popen(args)
     p.wait()
 
