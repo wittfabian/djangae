@@ -10,3 +10,4 @@ django-session-csrf
 pyuca
 google-api-python-client
 google-auth==1.6.2
+httplib2==0.12.0

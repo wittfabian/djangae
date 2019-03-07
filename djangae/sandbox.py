@@ -4,7 +4,6 @@ import os
 import sys
 import contextlib
 import subprocess
-import getpass
 import logging
 
 from os.path import commonprefix
@@ -120,8 +119,10 @@ def _create_dispatcher(configuration, options):
 
     from djangae.compat import _LOG_LEVEL_TO_RUNTIME_CONSTANT
 
-    from google.appengine.tools.sdk_update_checker import GetVersionObject, \
-                                                          _VersionList
+    from google.appengine.tools.sdk_update_checker import (
+        GetVersionObject,
+        _VersionList,
+    )
 
     if hasattr(_create_dispatcher, "singleton"):
         return _create_dispatcher.singleton
@@ -159,7 +160,7 @@ def _create_dispatcher(configuration, options):
         options.external_port if supports_external_port else UnsupportedOption
     ]
 
-    dispatcher_args = [x for x in dispatcher_args if not x is UnsupportedOption]
+    dispatcher_args = [x for x in dispatcher_args if x is not UnsupportedOption]
 
     _create_dispatcher.singleton = dispatcher.Dispatcher(*dispatcher_args)
 
@@ -212,9 +213,11 @@ def _local(devappserver2=None, configuration=None, options=None, wsgi_request_in
     os.environ['SERVER_PORT'] = str(port)
     os.environ['DEFAULT_VERSION_HOSTNAME'] = '%s:%s' % (os.environ['SERVER_NAME'], os.environ['SERVER_PORT'])
 
-    devappserver2._setup_environ(configuration.app_id)
+    from google.appengine.tools.devappserver2 import util
+    util.setup_environ(configuration.app_id)
 
     from google.appengine.tools.devappserver2 import api_server
+    from google.appengine.tools.devappserver2 import stub_util
     from google.appengine.tools.sdk_update_checker import GetVersionObject, _VersionList
 
     if hasattr(api_server, "get_storage_path"):
@@ -274,7 +277,7 @@ def _local(devappserver2=None, configuration=None, options=None, wsgi_request_in
     try:
         yield
     finally:
-        api_server.cleanup_stubs()
+        stub_util.cleanup_stubs()
         os.environ = original_environ
         stop_blobstore_service()
 
@@ -372,7 +375,7 @@ def activate(sandbox_name, add_sdk_to_path=False, new_env_vars=None, **overrides
 
     project_root = environment.get_application_root()
 
-   # Store our original sys.path before we do anything, this must be tacked
+    # Store our original sys.path before we do anything, this must be tacked
     # onto the end of the other paths so we can access globally installed things (e.g. ipdb etc.)
     original_path = sys.path[:]
 
@@ -388,7 +391,9 @@ def activate(sandbox_name, add_sdk_to_path=False, new_env_vars=None, **overrides
         try:
             import wrapper_util
         except ImportError:
-            raise RuntimeError("Couldn't find a recent enough Google App Engine SDK, make sure you are using at least 1.9.6")
+            raise RuntimeError(
+                "Couldn't find a recent enough Google App Engine SDK, make sure you are using at least 1.9.6"
+            )
 
     sdk_path = _find_sdk_from_python_path()
     _PATHS = wrapper_util.Paths(sdk_path)
@@ -491,6 +496,7 @@ def activate(sandbox_name, add_sdk_to_path=False, new_env_vars=None, **overrides
 
     finally:
         sys.path = original_path
+
 
 @contextlib.contextmanager
 def allow_mode_write():
