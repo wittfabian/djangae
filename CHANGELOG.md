@@ -16,6 +16,10 @@
 - Updated `djangae.contrib.backup` to use the new export API (the existing API was deprecated in Feb 2018). This adds a dependency of `google-auth` and `google-api-python-client`,
   and also requires some manual permissions to be configured for the app service account. Existing djangae settings will be respected. Read https://cloud.google.com/datastore/docs/schedule-export for details on the new permissions required, and https://cloud.google.com/datastore/docs/export-import-entities
   for an overview including differences between the two APIs.
+- Dropped support for Django versions below 1.11
+- Add support for the SDK shipped with gcloud
+- Dropped support for the standalone SDK
+- Remove the remote sandbox in favour of a `remote` subcommand (e.g. `manage.py remote shell`)
 
 ### Bug fixes:
 
