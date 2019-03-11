@@ -12,7 +12,6 @@ from django.utils import six
 from django.utils.text import capfirst
 
 # DJANGAE
-from djangae.db.utils import remove_duplicates_form_list
 from djangae.core.validators import MinItemsValidator, MaxItemsValidator
 from djangae.forms.fields import ListFormField, SetMultipleChoiceField
 
@@ -106,7 +105,8 @@ class IterableField(models.Field):
     choices_form_field_class = forms.MultipleChoiceField
 
     @property
-    def _iterable_type(self): raise NotImplementedError()
+    def _iterable_type(self):
+        raise NotImplementedError()
 
     def from_db_value(self, value, expression, connection, context):
         return self.to_python(value)
@@ -141,7 +141,9 @@ class IterableField(models.Field):
         # *we* abuse None values for our own purposes (to represent an empty iterable) if someone else tries to then
         # all hell breaks loose
         if kwargs.get("null", False):
-            raise RuntimeError("IterableFields cannot be set as nullable (as the datastore doesn't differentiate None vs []")
+            raise RuntimeError(
+                "IterableFields cannot be set as nullable (as the datastore doesn't differentiate None vs []"
+            )
 
         kwargs["null"] = True
 
@@ -307,9 +309,13 @@ class IterableField(models.Field):
             NB: The choices must be set on *this* field, e.g. this_field = ListField(CharField(), choices=x)
             as opposed to: this_field = ListField(CharField(choices=x))
         """
-        #Largely lifted straight from Field.formfield() in django.models.__init__.py
-        defaults = {'required': not self.blank, 'label': capfirst(self.verbose_name), 'help_text': self.help_text}
-        if self.has_default(): #No idea what this does
+        # Largely lifted straight from Field.formfield() in django.models.__init__.py
+        defaults = {
+            'required': not self.blank,
+            'label': capfirst(self.verbose_name),
+            'help_text': self.help_text
+        }
+        if self.has_default():  # No idea what this does
             if callable(self.default):
                 defaults['initial'] = self.default
                 defaults['show_hidden_initial'] = True
@@ -318,7 +324,7 @@ class IterableField(models.Field):
 
         if self.choices:
             form_field_class = self.choices_form_field_class
-            defaults['choices'] = self.get_choices(include_blank=False) #no empty value on a multi-select
+            defaults['choices'] = self.get_choices(include_blank=False)  # no empty value on a multi-select
         else:
             form_field_class = ListFormField
         defaults.update(**kwargs)
@@ -355,7 +361,8 @@ class ListField(IterableField):
             value.sort(key=self.ordering)
 
         if value and self.remove_duplicates:
-            value = remove_duplicates_form_list(value)
+            seen = set()
+            value = [x for x in value if not (x in seen or seen.add(x))]
             # We should also update the model attribute to hold correct reference
             setattr(model_instance, self.attname, value)
 
