@@ -41,7 +41,9 @@ def check_app_engine_sdk_version(app_configs=None, **kwargs):
         if sdk_version > MAX_APP_ENGINE_SDK_VERSION:
             errors.append(Warning(
                 "MAX_APP_ENGINE_SDK_VERSION",
-                hint="You are using a version of the App Engine SDK that is not yet supported (%s)" % sdk_version,
+                hint="You are using a version of the App Engine SDK that is not yet supported ({})".format(
+                    unicode(sdk_version)
+                ),
                 id='djangae.W002',
             ))
     return errors
