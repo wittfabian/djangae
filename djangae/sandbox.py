@@ -277,7 +277,11 @@ def _local(devappserver2=None, configuration=None, options=None, wsgi_request_in
     try:
         yield
     finally:
-        stub_util.cleanup_stubs()
+        # cleanup_stubs deletes the apiproxy attribute, so if it's called
+        # twice then it will die.
+        if hasattr(stub_util.apiproxy_stub_map, "apiproxy"):
+            stub_util.cleanup_stubs()
+
         os.environ = original_environ
         stop_blobstore_service()
 
