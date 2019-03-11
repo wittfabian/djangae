@@ -1,4 +1,10 @@
-## v0.9.12 (in development)
+## v1.0 (in development)
+
+### New features & improvements:
+
+### Bug fixes:
+
+## v0.9.12
 
 ### New features & improvements:
 
