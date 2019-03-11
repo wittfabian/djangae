@@ -26,6 +26,7 @@ from django.utils import six
 import django
 
 # DJANGAE
+from djangae.db.utils import remove_duplicates_form_list
 from djangae.core.validators import MinItemsValidator, MaxItemsValidator
 from djangae.fields.iterable import IsEmptyLookup, ContainsLookup, OverlapLookup, _serialize_value
 
@@ -581,7 +582,6 @@ class RelatedIteratorField(ForeignObject):
         if not self.rel.is_hidden() and not related.to._meta.swapped:
             setattr(cls, related.get_accessor_name(), RelatedIteratorObjectsDescriptor(related))
 
-
     def get_db_prep_save(self, *args, **kwargs):
         ret = super(RelatedIteratorField, self).get_db_prep_save(*args, **kwargs)
 
@@ -717,6 +717,7 @@ class RelatedListField(RelatedIteratorField):
 
         kwargs["default"] = list
         kwargs["null"] = True
+        self.remove_duplicates = kwargs.pop('remove_duplicates', False)
 
         super(RelatedListField, self).__init__(*args, **kwargs)
 
@@ -725,6 +726,8 @@ class RelatedListField(RelatedIteratorField):
         # We hardcode a number of arguments for RelatedIteratorField, those arguments need to be removed here
         for hardcoded_kwarg in ["default", "null"]:
             del kwargs[hardcoded_kwarg]
+
+        kwargs['remove_duplicates'] = self.remove_duplicates
 
         return name, path, args, kwargs
 
@@ -748,6 +751,16 @@ class RelatedListField(RelatedIteratorField):
             # Add to the underlying list
             field = getattr(instance, self.attname)
             field.append(value)
+
+    def pre_save(self, model_instance, add):
+        value = super(RelatedListField, self).pre_save(model_instance, add)
+
+        if value and self.remove_duplicates:
+            value = remove_duplicates_form_list(value)
+            # We should also update the model attribute to hold correct reference
+            setattr(model_instance, self.attname, value)
+
+        return value
 
 
 class GRCreator(property):
