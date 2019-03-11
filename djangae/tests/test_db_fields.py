@@ -140,6 +140,7 @@ class ISOther(models.Model):
     class Meta:
         app_label = "djangae"
 
+
 class StringPkModel(models.Model):
     name = models.CharField(max_length=500, primary_key=True)
 
@@ -186,13 +187,16 @@ class IterableFieldModel(models.Model):
     class Meta:
         app_label = "djangae"
 
+
 class IterableRelatedModel(models.Model):
     related_set = RelatedListField(ISOther, related_name="+")
     related_list = RelatedListField(ISOther, related_name="+")
 
+
 class IterableRelatedWithNonIntPkModel(models.Model):
     related_set = RelatedListField(StringPkModel, related_name="+")
     related_list = RelatedListField(StringPkModel, related_name="+")
+
 
 class IterableFieldsWithValidatorsModel(models.Model):
     set_field = SetField(models.CharField(max_length=100), min_length=2, max_length=3, blank=False)
@@ -237,6 +241,23 @@ class ModelDatabaseB(models.Model):
 
     class Meta:
         app_label = 'djangae'
+
+
+class CharFieldModel(models.Model):
+    char_field = CharField(max_length=500)
+
+    class Meta:
+        app_label = "djangae"
+
+
+class RelatedListFieldRemoveDuplicatesModel(models.Model):
+    related_list_field = RelatedListField(CharFieldModel, remove_duplicates=True)
+
+
+class RelatedListFieldRemoveDuplicatesForm(forms.ModelForm):
+    class Meta:
+        model = RelatedListFieldRemoveDuplicatesModel
+        fields = ['related_list_field']
 
 
 class ShardedCounterTest(TestCase):
@@ -871,6 +892,33 @@ class RelatedListFieldModelTests(TestCase):
         instance = form.save()
         self.assertEqual([related.pk], instance.related_list_ids)
 
+    def test_remove_duplicates(self):
+        """
+        make sure that remove_duplicates option works fine for RelatedListField
+        """
+        instance_one, instance_two, instance_three, instance_four, instance_five = [
+            CharFieldModel.objects.create(
+                char_field=str(x)
+            ) for x in range(5)
+        ]
+        data = {'related_list_field': [
+            instance_two.pk, instance_three.pk, instance_one.pk, instance_two.pk, instance_four.pk
+        ]}
+        form = RelatedListFieldRemoveDuplicatesForm(data)
+        self.assertTrue(form.is_valid())
+        obj = form.save()
+
+        self.assertEqual(
+            obj.related_list_field_ids,
+            [instance_two.pk, instance_three.pk, instance_one.pk, instance_four.pk]
+        )
+        obj.related_list_field.add(instance_four, instance_five)
+        obj.save()
+        self.assertEqual(
+            obj.related_list_field_ids,
+            [instance_two.pk, instance_three.pk, instance_one.pk, instance_four.pk, instance_five.pk]
+        )
+
 
 class Post(models.Model):
     content = models.TextField()
@@ -1298,7 +1346,6 @@ class TestGenericRelationField(TestCase):
         self.assertEqual(related, instance.relation_to_anything)
 
 
-
 class JSONFieldModelTests(TestCase):
 
     def test_invalid_data_in_datastore_doesnt_throw_an_error(self):
@@ -1381,11 +1428,6 @@ class JSONFieldModelTests(TestCase):
         thing = JSONFieldWithDefaultModel()
         self.assertEqual(thing.json_field, {})
 
-class CharFieldModel(models.Model):
-    char_field = CharField(max_length=500)
-
-    class Meta:
-        app_label = "djangae"
 
 class CharFieldModelTests(TestCase):
 
@@ -1482,7 +1524,6 @@ class StringReferenceRelatedSetFieldModelTests(TestCase):
         self.assertEqual({related.pk}, instance.related_things_ids)
 
 
-
 class PFPost(models.Model):
     content = models.TextField()
     authors = RelatedSetField('PFAuthor', related_name='posts')
@@ -1490,12 +1531,14 @@ class PFPost(models.Model):
     class Meta:
         app_label = "djangae"
 
+
 class PFAuthor(models.Model):
     name = models.CharField(max_length=32)
     awards = RelatedSetField('PFAwards')
 
     class Meta:
         app_label = "djangae"
+
 
 class PFAwards(models.Model):
     name = models.CharField(max_length=32)
@@ -1598,11 +1641,13 @@ class ComputedCollationFieldTests(TestCase):
         """Tests for a model using a `ComputedCollationField`."""
         ModelWithComputedCollationField.objects.create(name='demo1')
 
+
 class BinaryFieldModel(models.Model):
     binary = models.BinaryField(null=True)
 
     class Meta:
         app_label = "djangae"
+
 
 class BinaryFieldModelTests(TestCase):
     binary_value = b'\xff'
@@ -1670,11 +1715,13 @@ class CharFieldModelTest(TestCase):
         readout = CharFieldModel.objects.get(char_field=name)
         self.assertEqual(readout, instance)
 
+
 class DurationFieldModelWithDefault(models.Model):
     duration = models.DurationField(default=timedelta(1,0))
 
     class Meta:
         app_label = "djangae"
+
 
 class DurationFieldModelTests(TestCase):
 
@@ -1697,8 +1744,10 @@ class DurationFieldModelTests(TestCase):
         readout = DurationFieldModelWithDefault.objects.get(pk=instance.pk)
         self.assertEqual(readout.duration, timedelta(1,0))
 
+
 class ModelWithNonNullableFieldAndDefaultValue(models.Model):
     some_field = models.IntegerField(null=False, default=1086)
+
 
 # ModelWithNonNullableFieldAndDefaultValueTests verifies that we maintain same
 # behavior as Django with respect to a model field that is non-nullable with default value.
