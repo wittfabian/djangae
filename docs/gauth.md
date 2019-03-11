@@ -131,7 +131,7 @@ There is a `switch_accounts` view which allows a user to change which of their G
 
 The URL for the user to be sent to afterwards should be provided in `request.GET['next']``.
 
-Learn more about [Google multiple sign-in on App Engine here](https://p.ota.to/blog/2014/2/google-multiple-sign-in-on-app-engine/).
+Learn more about [Google multiple sign-in on App Engine here](https://medium.com/potato/multiple-google-account-sign-in-on-app-engine-738788ddec70).
 
 ### Example usage:
 
