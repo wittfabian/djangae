@@ -1,31 +1,7 @@
-language: python
 sudo: false
+language: python
 python:
-- 2.7
-env:
-  - DJANGO_VERSION=1.11
-matrix:
-  fast_finish: true
-before_install:
- - export CLOUD_SDK_REPO="cloud-sdk-$(lsb_release -c -s)"
- - echo "deb http://packages.cloud.google.com/apt $CLOUD_SDK_REPO main" | sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
- - curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -
- - sudo apt-get update
- - sudo apt-get install -y google-cloud-sdk-app-engine-python
- - pip install codecov
-
-install:
-- cd testapp
-- python install_deps.py
-script:
-- python manage.py test
-after_script:
-- cd ..
-- rm django_tests
-after_success:
-- codecov
-notifications:
-  slack:
-    rooms:
-      - djangae:3tHoJEVCSGLDrLj9ZZAOSMhr#general
-      - secure: UBhOWAtUrp9sqN6hm4PWir23GK67wo3tb0Ic7tXLpvKYnACz8kjRIiLUMZjl6kftwO+hwhVQdyZ2iSD6isGfB8Q/CyKCej693N2GZ7wxl/dCGqm6CmKrTQZ7Bkwov22fe1/j8U1fhIuR2j/qkFPkvONi+fXirQqFYxmqor1I9a0=
+  - "3.6"
+  - "3.7"
+install: pip install tox-travis
+script: tox
