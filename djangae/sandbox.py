@@ -4,7 +4,6 @@ import os
 import sys
 import contextlib
 import subprocess
-import getpass
 import logging
 
 from os.path import commonprefix
@@ -120,8 +119,10 @@ def _create_dispatcher(configuration, options):
 
     from djangae.compat import _LOG_LEVEL_TO_RUNTIME_CONSTANT
 
-    from google.appengine.tools.sdk_update_checker import GetVersionObject, \
-                                                          _VersionList
+    from google.appengine.tools.sdk_update_checker import (
+        GetVersionObject,
+        _VersionList,
+    )
 
     if hasattr(_create_dispatcher, "singleton"):
         return _create_dispatcher.singleton
@@ -159,7 +160,7 @@ def _create_dispatcher(configuration, options):
         options.external_port if supports_external_port else UnsupportedOption
     ]
 
-    dispatcher_args = [x for x in dispatcher_args if not x is UnsupportedOption]
+    dispatcher_args = [x for x in dispatcher_args if x is not UnsupportedOption]
 
     _create_dispatcher.singleton = dispatcher.Dispatcher(*dispatcher_args)
 
@@ -212,9 +213,11 @@ def _local(devappserver2=None, configuration=None, options=None, wsgi_request_in
     os.environ['SERVER_PORT'] = str(port)
     os.environ['DEFAULT_VERSION_HOSTNAME'] = '%s:%s' % (os.environ['SERVER_NAME'], os.environ['SERVER_PORT'])
 
-    devappserver2._setup_environ(configuration.app_id)
+    from google.appengine.tools.devappserver2 import util
+    util.setup_environ(configuration.app_id)
 
     from google.appengine.tools.devappserver2 import api_server
+    from google.appengine.tools.devappserver2 import stub_util
     from google.appengine.tools.sdk_update_checker import GetVersionObject, _VersionList
 
     if hasattr(api_server, "get_storage_path"):
@@ -274,74 +277,13 @@ def _local(devappserver2=None, configuration=None, options=None, wsgi_request_in
     try:
         yield
     finally:
-        api_server.cleanup_stubs()
+        # cleanup_stubs deletes the apiproxy attribute, so if it's called
+        # twice then it will die.
+        if hasattr(stub_util.apiproxy_stub_map, "apiproxy"):
+            stub_util.cleanup_stubs()
+
         os.environ = original_environ
         stop_blobstore_service()
-
-
-@contextlib.contextmanager
-def _remote(configuration=None, remote_api_stub=None, apiproxy_stub_map=None, **kwargs):
-
-    def auth_func():
-        return raw_input('Google Account Login: '), getpass.getpass('Password: ')
-
-    original_apiproxy = apiproxy_stub_map.apiproxy
-
-    if configuration.app_id.startswith('dev~'):
-        app_id = configuration.app_id[4:]
-    else:
-        app_id = configuration.app_id
-
-    os.environ['HTTP_HOST'] = '{0}.appspot.com'.format(app_id)
-    os.environ['DEFAULT_VERSION_HOSTNAME'] = os.environ['HTTP_HOST']
-
-    try:
-        from google.appengine.tools.appcfg import APPCFG_CLIENT_ID, APPCFG_CLIENT_NOTSOSECRET
-        from google.appengine.tools import appengine_rpc_httplib2
-
-        params = appengine_rpc_httplib2.HttpRpcServerOAuth2.OAuth2Parameters(
-            access_token=None,
-            client_id=APPCFG_CLIENT_ID,
-            client_secret=APPCFG_CLIENT_NOTSOSECRET,
-            scope=remote_api_stub._OAUTH_SCOPES,
-            refresh_token=None,
-            credential_file=os.path.expanduser("~/.djangae_oauth2_tokens"),
-            token_uri=None
-        )
-
-        def factory(*args, **kwargs):
-            kwargs["auth_tries"] = 3
-            return appengine_rpc_httplib2.HttpRpcServerOAuth2(*args, **kwargs)
-
-        remote_api_stub.ConfigureRemoteApi(
-            app_id=None,
-            path='/_ah/remote_api',
-            auth_func=params,
-            servername='{0}.appspot.com'.format(app_id),
-            secure=True,
-            save_cookies=True,
-            rpc_server_factory=factory
-        )
-    except ImportError:
-        logging.exception("Unable to use oauth2 falling back to username/password")
-        remote_api_stub.ConfigureRemoteApi(
-            None,
-            '/_ah/remote_api',
-            auth_func,
-            servername='{0}.appspot.com'.format(app_id),
-            secure=True,
-        )
-
-    ps1 = getattr(sys, 'ps1', None)
-    red = "\033[0;31m"
-    native = "\033[m"
-    sys.ps1 = red + '(remote) ' + app_id + native + ' >>> '
-
-    try:
-        yield
-    finally:
-        apiproxy_stub_map.apiproxy = original_apiproxy
-        sys.ps1 = ps1
 
 
 @contextlib.contextmanager
@@ -396,22 +338,22 @@ def _test(**kwargs):
 
 
 LOCAL = 'local'
-REMOTE = 'remote'
 TEST = 'test'
+
 SANDBOXES = {
     LOCAL: _local,
-    REMOTE: _remote,
     TEST: _test,
 }
 
 _OPTIONS = None
 _CONFIG = None
 
+
 @contextlib.contextmanager
 def activate(sandbox_name, add_sdk_to_path=False, new_env_vars=None, **overrides):
     """Context manager for command-line scripts started outside of dev_appserver.
 
-    :param sandbox_name: str, one of 'local', 'remote' or 'test'
+    :param sandbox_name: str, one of 'local' or 'test'
     :param add_sdk_to_path: bool, optionally adds the App Engine SDK to sys.path
     :param options_override: an options structure to pass down to dev_appserver setup
 
@@ -419,8 +361,6 @@ def activate(sandbox_name, add_sdk_to_path=False, new_env_vars=None, **overrides
 
       local: Adds libraries specified in app.yaml to the path and initializes local service stubs as though
              dev_appserver were running.
-
-      remote: Adds libraries specified in app.yaml to the path and initializes remote service stubs.
 
       test: Adds libraries specified in app.yaml to the path and sets up no service stubs. Use this
             with `google.appengine.ext.testbed` to provide isolation for tests.
@@ -439,7 +379,7 @@ def activate(sandbox_name, add_sdk_to_path=False, new_env_vars=None, **overrides
 
     project_root = environment.get_application_root()
 
-   # Store our original sys.path before we do anything, this must be tacked
+    # Store our original sys.path before we do anything, this must be tacked
     # onto the end of the other paths so we can access globally installed things (e.g. ipdb etc.)
     original_path = sys.path[:]
 
@@ -455,7 +395,9 @@ def activate(sandbox_name, add_sdk_to_path=False, new_env_vars=None, **overrides
         try:
             import wrapper_util
         except ImportError:
-            raise RuntimeError("Couldn't find a recent enough Google App Engine SDK, make sure you are using at least 1.9.6")
+            raise RuntimeError(
+                "Couldn't find a recent enough Google App Engine SDK, make sure you are using at least 1.9.6"
+            )
 
     sdk_path = _find_sdk_from_python_path()
     _PATHS = wrapper_util.Paths(sdk_path)
@@ -558,6 +500,7 @@ def activate(sandbox_name, add_sdk_to_path=False, new_env_vars=None, **overrides
 
     finally:
         sys.path = original_path
+
 
 @contextlib.contextmanager
 def allow_mode_write():

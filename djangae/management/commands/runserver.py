@@ -177,7 +177,7 @@ class Command(runserver.Command):
         sdk_path = _find_sdk_from_python_path()
 
         from google.appengine.tools.devappserver2 import devappserver2
-        from google.appengine.tools.devappserver2 import python_runtime
+        from google.appengine.tools.devappserver2.python import instance_factory
 
         from djangae import sandbox
 
@@ -267,7 +267,6 @@ class Command(runserver.Command):
                     logging.warning("Attempted to set _dispatcher twice")
                     return
 
-
                 # When the dispatcher is created this property is set so we use it
                 # to construct *our* dispatcher
                 configuration = dispatcher._configuration
@@ -282,7 +281,11 @@ class Command(runserver.Command):
                 )
 
                 # the dispatcher may have passed environment variables, it should be propagated
-                env_vars = self._dispatcher._configuration.modules[0]._app_info_external.env_variables or EnvironmentVariables()
+                env_vars = (
+                    self._dispatcher._configuration.modules[0]._app_info_external.env_variables or
+                    EnvironmentVariables()
+                )
+
                 for module in configuration.modules:
                     module_name = module._module_name
                     if module_name == 'default' or module_name is None:
@@ -378,8 +381,8 @@ class Command(runserver.Command):
 
         module.logging.log = logging_wrapper(module.logging.log)
 
-        python_runtime._RUNTIME_PATH = os.path.join(sdk_path, '_python_runtime.py')
-        python_runtime._RUNTIME_ARGS = [sys.executable, python_runtime._RUNTIME_PATH]
+        instance_factory._RUNTIME_PATH = os.path.join(sdk_path, '_python_runtime.py')
+        instance_factory._RUNTIME_ARGS = [sys.executable, instance_factory._RUNTIME_PATH]
 
         dev_server = NoConfigDevServer()
 

@@ -34,8 +34,9 @@ https://djangae.readthedocs.io/
 
 ## Supported Django Versions
 
-The intention is always to support the currently-supported versions of Django, although older versions may work. Currently
-Django 1.8, 1.9, 1.10 and 1.11 are supported.
+The intention is always to support the currently-supported versions of Django, although older versions may work.
+
+Currently Django 1.11 (as the only supported Python 2.x version of Django) is supported.
 
 # Installation
 
@@ -63,7 +64,7 @@ For help with creating the pull request, check out [Github documentation](https:
 
 ## Code style
 
-Code style should follow PEP-8 with a loose line length of 100 characters.
+Code style should follow PEP-8 with a loose line length of 120 characters.
 
 ## Need help?
 
@@ -83,24 +84,13 @@ For running the tests, you just need to run:
 
     $ ./runtests.sh
 
-On the first run this will download the App Engine SDK, pip install a bunch of stuff locally (into a folder, no virtualenv needed), download the Django tests and run them.  Subsequent runs will just run the tests. If you want to run the tests on a specific Django version, you can switch the installed version by doing:
+On the first run this will download the App Engine SDK (if necessary) using gcloud, pip install a bunch of stuff locally (into a folder, no virtualenv needed), download the Django tests and run them.  Subsequent runs will just run the tests. If you want to run the tests on a specific Django version, you can switch the installed version by doing:
 
-    $ DJANGO_VERSION=1.11 ./runtests.sh --install_deps
-
-Currently the default is 1.8. TravisCI runs on 1.8, 1.9, 1.10 and 1.11 currently.
-
-If you want to run the tests on a specific App Engine SDK version, then you can switch the installed version by doing:
-
-    $ SDK_VERSION=1.9.35 ./runtests.sh --install_sdk
-
-Note that this also re-installs the dependencies, so will reset the Django version to the default of 1.8.
-
-
+    $ DJANGO_VERSION=1.10 ./runtests.sh --install_deps
 
 You can run specific tests in the usual way by doing:
 
     ./runtests.sh some_app.SomeTestCase.some_test_method
-
 
 [build-status-image]: https://secure.travis-ci.org/potatolondon/djangae.png?branch=master
 [travis]: https://travis-ci.org/potatolondon/djangae?branch=master

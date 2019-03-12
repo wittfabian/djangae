@@ -32,4 +32,4 @@ Gitter: [https://gitter.im/potatolondon/djangae](https://gitter.im/potatolondon/
 
 The intention is always to support the last two versions of Django, although older versions may work.
 
-**Currently Django 1.8, 1.10 and 1.11 are supported. 1.9 works but is unsupported by Django so not recommended.**
+**Currently Django 1.11 are supported. 1.8 to 1.10 might work but are unsupported by Django so not recommended.**

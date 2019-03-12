@@ -1,10 +1,4 @@
-## v1.0 (in development)
-
-### New features & improvements:
-
-### Bug fixes:
-
-## v0.9.12
+## v0.9.12 (in development)
 
 ### New features & improvements:
 
@@ -23,6 +17,10 @@
   and also requires some manual permissions to be configured for the app service account. Existing djangae settings will be respected. Read https://cloud.google.com/datastore/docs/schedule-export for details on the new permissions required, and https://cloud.google.com/datastore/docs/export-import-entities
   for an overview including differences between the two APIs.
 - Added new option `remove_duplicates` to ListField and RelatedListField which removes duplicated elements and retain order while saving.
+- Dropped support for Django versions below 1.11
+- Add support for the SDK shipped with gcloud
+- Dropped support for the standalone SDK
+- Remove the remote sandbox in favour of a `remote` subcommand (e.g. `manage.py remote shell`)
 
 ### Bug fixes:
 

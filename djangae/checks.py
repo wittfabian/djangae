@@ -18,7 +18,7 @@ if not hasattr(Tags, "caches"):
     Tags.urls = "urls"
 
 
-MAX_APP_ENGINE_SDK_VERSION = (1, 9, 57)
+MAX_APP_ENGINE_SDK_VERSION = (1, 9, 83)
 
 CSP_SOURCE_NAMES = [
     'CSP_DEFAULT_SRC',
@@ -41,7 +41,9 @@ def check_app_engine_sdk_version(app_configs=None, **kwargs):
         if sdk_version > MAX_APP_ENGINE_SDK_VERSION:
             errors.append(Warning(
                 "MAX_APP_ENGINE_SDK_VERSION",
-                hint="You are using a version of the App Engine SDK that is not yet supported",
+                hint="You are using a version of the App Engine SDK that is not yet supported ({})".format(
+                    unicode(sdk_version)
+                ),
                 id='djangae.W002',
             ))
     return errors
