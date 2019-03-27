@@ -8,7 +8,7 @@ class Command(BaseCommand):
     help = 'Call a command on the remote instance'
 
     def add_arguments(self, parser):
-        parser.add_argument('subcommand', type=unicode, nargs=1)
+        parser.add_argument('subcommand', type=unicode)
         parser.add_argument('--project', type=unicode, required=True)
 
     def handle(self, *args, **options):
