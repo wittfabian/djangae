@@ -1,4 +1,10 @@
-## v0.9.12 (in development)
+## v1.0 (in development)
+
+### New features & improvements:
+
+### Bug fixes:
+
+## v0.9.12
 
 ### New features & improvements:
 
@@ -20,6 +26,7 @@
 - Add support for the SDK shipped with gcloud
 - Dropped support for the standalone SDK
 - Remove the remote sandbox in favour of a `remote` subcommand (e.g. `manage.py remote shell`)
+- Added new option `remove_duplicates` to ListField and RelatedListField which removes duplicated elements and retain order while saving.
 
 ### Bug fixes:
 

@@ -10,6 +10,7 @@ This is often useful when structuring data for a non-relational database. [See e
 
 * `item_field`: An instance of a Django model field which defines the data type and validation for each item in the list.
 * `ordering`: A callable which allows the items in the list to be automatically sorted.
+* `remove_duplicates`: False by default, while saving will remove any duplicated elements and retain order. 
 
 ### `SetField(item_field, **kwargs)`
 
@@ -112,6 +113,8 @@ The value of a `RelatedSetField` also has all of the methods of a normal `QueryS
 * Because the `RelatedSetField` stores the IDs of objects, its queryset is immediately consistent, i.e. is unaffected by the Datastore's eventual consistency.  For example, `my_obj.my_related_set_field.filter(colour="blue")` will always return the latest versions of those objects.
 
 ## RelatedListField
+
+* `remove_duplicates`: False by default, while saving will remove any duplicated elements and retain order. 
 
 RelatedListField shares the same behavior as RelatedSetField but has the qualities of a list; it maintains the ordering of related objects and allows duplicates.
 

@@ -1,4 +1,5 @@
 # STANDARD LIB
+from abc import ABCMeta
 import copy
 
 # THIRD PARTY
@@ -94,7 +95,6 @@ class OrderedQuerySet(QuerySet):
             # There are various combinations to handle depending on whether it's a "flat" values_list or
             # whether or not we added the PK manually to the result set
 
-
             if django.VERSION >= (1, 9):
                 clone = QuerySet(model=self.model, query=self.query, using=self._db)
                 clone._iterable_class = self._iterable_class
@@ -179,10 +179,14 @@ class OrderedQuerySet(QuerySet):
         """
         if not isinstance(k, (slice,) + six.integer_types):
             raise TypeError
-        assert ((not isinstance(k, slice) and (k >= 0))
-                or (isinstance(k, slice) and (k.start is None or k.start >= 0)
-                    and (k.stop is None or k.stop >= 0))), \
-                "Negative indexing is not supported."
+
+        assert (
+            (not isinstance(k, slice) and (k >= 0)) or
+            (isinstance(k, slice) and
+            (k.start is None or k.start >= 0) and
+            (k.stop is None or k.stop >= 0))
+        ), "Negative indexing is not supported."
+
         if self._result_cache is not None:
             return self._result_cache[k]
 
@@ -263,7 +267,7 @@ class RelatedIteratorManagerBase(object):
         db = self._db or router.db_for_read(self.model, instance=self.instance)
 
         if (hasattr(self.instance, "_prefetched_objects_cache") and
-            self.field.name in self.instance._prefetched_objects_cache):
+                self.field.name in self.instance._prefetched_objects_cache):
 
             qs = self.instance._prefetched_objects_cache[self.field.name]
 
@@ -408,9 +412,6 @@ class ReverseRelatedObjectsDescriptor(object):
         obj.__dict__[self.field.attname] = self.field.to_python([x.pk for x in value])
 
 
-from abc import ABCMeta
-
-
 class RelatedContainsLookup(ContainsLookup):
     def get_prep_lookup(self):
         # If this is an instance, then we want to lookup based on the PK
@@ -422,7 +423,7 @@ class RelatedContainsLookup(ContainsLookup):
 class RelatedOverlapLookup(OverlapLookup):
     def get_prep_lookup(self):
         # Transform any instances to primary keys
-        self.rhs = [ x.pk if isinstance(x, models.Model) else x for x in self.rhs ]
+        self.rhs = [x.pk if isinstance(x, models.Model) else x for x in self.rhs]
         return super(RelatedOverlapLookup, self).get_prep_lookup()
 
 
@@ -542,7 +543,8 @@ class RelatedIteratorField(ForeignObject):
             )
 
         return super(RelatedIteratorField, self).get_lookup_constraint(
-                constraint_class, alias, targets, sources, lookups, raw_value)
+            constraint_class, alias, targets, sources, lookups, raw_value
+        )
 
     def deconstruct(self):
         name, path, args, kwargs = super(RelatedIteratorField, self).deconstruct()
@@ -580,7 +582,6 @@ class RelatedIteratorField(ForeignObject):
         # and swapped models don't get a related descriptor.
         if not self.rel.is_hidden() and not related.to._meta.swapped:
             setattr(cls, related.get_accessor_name(), RelatedIteratorObjectsDescriptor(related))
-
 
     def get_db_prep_save(self, *args, **kwargs):
         ret = super(RelatedIteratorField, self).get_db_prep_save(*args, **kwargs)
@@ -635,7 +636,9 @@ class RelatedIteratorField(ForeignObject):
         elif lookup_name == 'contains':
             return RelatedContainsLookup
         elif lookup_name in ('in', 'exact', 'isnull'):
-            raise TypeError("RelatedIteratorFields don't allow exact, in or isnull. Use contains, overlap or isempty respectively")
+            raise TypeError(
+                "RelatedIteratorFields don't allow exact, in or isnull. Use contains, overlap or isempty"
+            )
 
         return super(RelatedIteratorField, self).get_lookup(lookup_name)
 
@@ -668,6 +671,7 @@ class RelatedIteratorField(ForeignObject):
 
         return list(value)
 
+
 RelatedIteratorField.register_lookup(RelatedContainsLookup)
 RelatedIteratorField.register_lookup(RelatedOverlapLookup)
 RelatedIteratorField.register_lookup(IsEmptyLookup)
@@ -697,7 +701,7 @@ class RelatedSetField(RelatedIteratorField):
         return set(super(RelatedSetField, self).to_python(value))
 
     def save_form_data(self, instance, data):
-        setattr(instance, self.attname, set()) #Wipe out existing things
+        setattr(instance, self.attname, set())  # Wipe out existing things
         for value in data:
             # If this is a model instance then add the pk
             if isinstance(value, self.rel.to):
@@ -717,6 +721,7 @@ class RelatedListField(RelatedIteratorField):
 
         kwargs["default"] = list
         kwargs["null"] = True
+        self.remove_duplicates = kwargs.pop('remove_duplicates', False)
 
         super(RelatedListField, self).__init__(*args, **kwargs)
 
@@ -725,6 +730,8 @@ class RelatedListField(RelatedIteratorField):
         # We hardcode a number of arguments for RelatedIteratorField, those arguments need to be removed here
         for hardcoded_kwarg in ["default", "null"]:
             del kwargs[hardcoded_kwarg]
+
+        kwargs['remove_duplicates'] = self.remove_duplicates
 
         return name, path, args, kwargs
 
@@ -739,7 +746,7 @@ class RelatedListField(RelatedIteratorField):
         return super(RelatedListField, self).formfield(**kwargs)
 
     def save_form_data(self, instance, data):
-        setattr(instance, self.attname, []) #Wipe out existing things
+        setattr(instance, self.attname, [])  # Wipe out existing things
         for value in data:
             # If this is a model instance then grab the PK
             if isinstance(value, self.rel.to):
@@ -748,6 +755,17 @@ class RelatedListField(RelatedIteratorField):
             # Add to the underlying list
             field = getattr(instance, self.attname)
             field.append(value)
+
+    def pre_save(self, model_instance, add):
+        value = super(RelatedListField, self).pre_save(model_instance, add)
+
+        if value and self.remove_duplicates:
+            seen = set()
+            value = [x for x in value if not (x in seen or seen.add(x))]
+            # We should also update the model attribute to hold correct reference
+            setattr(model_instance, self.attname, value)
+
+        return value
 
 
 class GRCreator(property):
