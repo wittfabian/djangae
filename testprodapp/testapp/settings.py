@@ -38,6 +38,7 @@ else:
 INSTALLED_APPS = (
     'djangae',
     'django.contrib.admin',
+    'django.contrib.auth',
     'djangae.contrib.gauth_datastore',
     'djangae.contrib.security',
     'django.contrib.contenttypes',
