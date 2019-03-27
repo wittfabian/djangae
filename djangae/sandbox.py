@@ -280,7 +280,14 @@ def _local(devappserver2=None, configuration=None, options=None, wsgi_request_in
         # cleanup_stubs deletes the apiproxy attribute, so if it's called
         # twice then it will die.
         if hasattr(stub_util.apiproxy_stub_map, "apiproxy"):
-            stub_util.cleanup_stubs()
+            # The remote datastore stub doesn't have a Write method which
+            # cleanup_stubs tries to call and thus this fails.
+            # If we know we're using the datastore stub then we just skip the
+            # cleanup.
+            datastore_stub = stub_util.apiproxy_stub_map.apiproxy.GetStub('datastore_v3')
+            from google.appengine.ext.remote_api.remote_api_stub import RemoteDatastoreStub
+            if not isinstance(datastore_stub, RemoteDatastoreStub):
+                stub_util.cleanup_stubs()
 
         os.environ = original_environ
         stop_blobstore_service()
