@@ -18,7 +18,7 @@ if not hasattr(Tags, "caches"):
     Tags.urls = "urls"
 
 
-MAX_APP_ENGINE_SDK_VERSION = (1, 9, 83)
+MAX_APP_ENGINE_SDK_VERSION = (1, 9, 85)
 
 CSP_SOURCE_NAMES = [
     'CSP_DEFAULT_SRC',
