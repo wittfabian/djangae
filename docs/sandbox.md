@@ -44,9 +44,13 @@ You also need to ensure that the `application` in app.yaml is set to the applica
 
 Then run your management command through the `remote` management command
 
-    ./manage.py remote shell --project=my-cloud-project
+    ./manage.py --sandbox=remote shell
 
 This will use your **local** Python code, but all database operations will be performed on the remote Datastore.
+
+Additionally, you can specify the application to run commands against by providing an `--app_id`. Eg
+
+  ./manage.py --sandbox=remote --app_id=myapp shell  # Starts a remote shell with the "myapp" instance
 
 
 ### Deferring Tasks Remotely

@@ -24,8 +24,8 @@
   for an overview including differences between the two APIs.
 - Dropped support for Django versions below 1.11
 - Add support for the SDK shipped with gcloud
+- Add support for datastore emulator
 - Dropped support for the standalone SDK
-- Remove the remote sandbox in favour of a `remote` subcommand (e.g. `manage.py remote shell`)
 - Added new option `remove_duplicates` to ListField and RelatedListField which removes duplicated elements and retain order while saving.
 
 ### Bug fixes:
