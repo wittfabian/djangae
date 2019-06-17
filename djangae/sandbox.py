@@ -265,6 +265,13 @@ def _local(devappserver2=None, configuration=None, options=None, wsgi_request_in
 
         api_server.create_api_server = create_api_server_patch
 
+        # We have to start api server when activating the sandbox, rather than in the Command handler,
+        # so that django app initialization is able to connect to the datastore emulator (e.g., read SECRET_KEY).
+        _API_SERVER.start()
+        def start_api_server():
+            pass
+        api_server.start = start_api_server
+
     else:
 
         _API_SERVER = devappserver2.DevelopmentServer._create_api_server(
@@ -292,6 +299,24 @@ def _local(devappserver2=None, configuration=None, options=None, wsgi_request_in
         os.environ = original_environ
         stop_blobstore_service()
 
+@contextlib.contextmanager
+def _remote(options={}, **kwargs):
+
+    app_id = options.app_id
+
+    from google.appengine.tools.devappserver2 import util
+    util.setup_environ(app_id)
+
+    from google.appengine.ext.remote_api import remote_api_stub
+    remote_api_stub.ConfigureRemoteApiForOAuth(
+        '{}.appspot.com'.format(app_id),
+        '/_ah/remote_api',
+        save_cookies=True,
+        # I don't know what 's~' is or why it needs to be prefixed, but it simply won't work without it.
+        app_id='s~'+app_id
+    )
+
+    yield
 
 @contextlib.contextmanager
 def _test(**kwargs):
@@ -345,10 +370,12 @@ def _test(**kwargs):
 
 
 LOCAL = 'local'
+REMOTE = 'remote'
 TEST = 'test'
 
 SANDBOXES = {
     LOCAL: _local,
+    REMOTE: _remote,
     TEST: _test,
 }
 
@@ -360,7 +387,7 @@ _CONFIG = None
 def activate(sandbox_name, add_sdk_to_path=False, new_env_vars=None, **overrides):
     """Context manager for command-line scripts started outside of dev_appserver.
 
-    :param sandbox_name: str, one of 'local' or 'test'
+    :param sandbox_name: str, one of 'local', 'remote' or 'test'
     :param add_sdk_to_path: bool, optionally adds the App Engine SDK to sys.path
     :param options_override: an options structure to pass down to dev_appserver setup
 
@@ -368,6 +395,8 @@ def activate(sandbox_name, add_sdk_to_path=False, new_env_vars=None, **overrides
 
       local: Adds libraries specified in app.yaml to the path and initializes local service stubs as though
              dev_appserver were running.
+
+     remote: Initializes remote service stubs.
 
       test: Adds libraries specified in app.yaml to the path and sets up no service stubs. Use this
             with `google.appengine.ext.testbed` to provide isolation for tests.
