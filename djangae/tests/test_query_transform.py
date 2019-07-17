@@ -331,7 +331,6 @@ class QueryNormalizationTests(TestCase):
         self.assertEqual(query.where.children[0].children[1].operator, "=")
         self.assertEqual(query.where.children[0].children[1].value, u"Fir")
 
-
     def test_or_queries(self):
         from .test_connector import TestUser
         qs = TestUser.objects.filter(
@@ -480,3 +479,14 @@ class QueryNormalizationTests(TestCase):
                 query.where.children[2].children[0].value,
             }
         )
+
+    def test_removal_of_multiple_pk_equalities(self):
+        """ Regression test for #1174/#1175.
+            Make sure that we don't get an error when a query has multiple different equality
+            filters on the PK.
+        """
+        query = TransformTestModel.objects.filter(pk=1).filter(pk=2).filter(pk=3)
+        try:
+            list(query)
+        except ValueError:
+            self.fail("ValueError raised when filtering on multiple different PK equalities")
