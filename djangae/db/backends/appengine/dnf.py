@@ -260,6 +260,7 @@ def normalize_query(query):
                     if pk_equality_found and pk_equality_found != child.value:
                         # Remove this AND branch as it's impossible to return anything
                         node.children.remove(and_branch)
+                        break
                     else:
                         pk_equality_found = child.value
             if not node.children:
