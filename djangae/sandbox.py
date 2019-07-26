@@ -296,8 +296,6 @@ def _remote(options={}, **kwargs):
         '{}.appspot.com'.format(app_id),
         '/_ah/remote_api',
         save_cookies=True,
-        # I don't know what 's~' is or why it needs to be prefixed, but it simply won't work without it.
-        app_id='s~'+app_id
     )
 
     yield
