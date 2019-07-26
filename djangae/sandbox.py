@@ -86,31 +86,15 @@ def _disable_sqlite_stub_logging():
     logging.getLogger().addFilter(Filter())
 
 
-def _find_sdk_from_python_path():
-    import google.appengine
-    # Make sure we get the path of the 'google' module which contains 'appengine', as it's possible
-    # that there are several.
-    return os.path.abspath(os.path.dirname(os.path.dirname(google.appengine.__path__[0])))
+def _find_sdk_path():
+    return subprocess.check_output(
+        ['gcloud', 'info', '--quiet', '--format=value(installation.sdk_root)']
+    ).strip()
 
 
-def _find_sdk_from_path():
-    # Assumes `script_name` is on your PATH - SDK installers set this up
-    which = 'where' if sys.platform == "win32" else 'which'
-    path = subprocess.check_output([which, _SCRIPT_NAME]).strip()
-    sdk_dir = os.path.dirname(os.path.realpath(path))
-
-    if os.path.exists(os.path.join(sdk_dir, 'bootstrapping')):
-        # Cloud SDK
-        sdk_dir = os.path.abspath(os.path.join(sdk_dir, '..', 'platform', 'google_appengine'))
-        if not os.path.exists(sdk_dir):
-            raise RuntimeError(
-                'The Cloud SDK is on the path, but the app engine SDK dir could not be found'
-            )
-        else:
-            return sdk_dir
-    else:
-        # Regular App Engine SDK
-        return sdk_dir
+def _find_sdk_python_path():
+    sdk_path = _find_sdk_path()
+    return os.path.join(sdk_path, 'platform', 'google_appengine')
 
 
 def _create_dispatcher(configuration, options):
@@ -421,21 +405,17 @@ def activate(sandbox_name, add_sdk_to_path=False, new_env_vars=None, **overrides
 
     # Setup paths as though we were running dev_appserver. This is similar to
     # what the App Engine script wrappers do.
-    if add_sdk_to_path:
-        try:
-            import wrapper_util  # Already on sys.path
-        except ImportError:
-            sys.path[0:0] = [_find_sdk_from_path()]
-            import wrapper_util
-    else:
-        try:
-            import wrapper_util
-        except ImportError:
-            raise RuntimeError(
-                "Couldn't find a recent enough Google App Engine SDK, make sure you are using at least 1.9.6"
-            )
+    sdk_path = _find_sdk_python_path()
 
-    sdk_path = _find_sdk_from_python_path()
+    try:
+        import wrapper_util  # Already on sys.path
+    except ImportError:
+        sys.path[0:0] = [sdk_path]
+        if 'google' in sys.modules:
+            del sys.modules['google']
+
+        import wrapper_util
+
     _PATHS = wrapper_util.Paths(sdk_path)
 
     project_paths = [] # Paths under the application root

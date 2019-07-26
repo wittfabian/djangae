@@ -134,7 +134,7 @@ class Command(runserver.Command):
         quit_command = 'CTRL-BREAK' if sys.platform == 'win32' else 'CONTROL-C'
 
         from djangae.environment import get_application_root
-        from djangae.sandbox import _find_sdk_from_python_path
+        from djangae.sandbox import _find_sdk_python_path
         from djangae.blobstore_service import stop_blobstore_service
 
         from django.conf import settings
@@ -174,7 +174,7 @@ class Command(runserver.Command):
         translation.activate(settings.LANGUAGE_CODE)
 
         # Will have been set by setup_paths
-        sdk_path = _find_sdk_from_python_path()
+        sdk_path = _find_sdk_python_path()
 
         from google.appengine.tools.devappserver2 import devappserver2
         from google.appengine.tools.devappserver2.python import instance_factory

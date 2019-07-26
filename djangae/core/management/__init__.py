@@ -14,6 +14,7 @@ DEFAULTS = {
     "automatic_restart": "True",
     "allow_skipped_files": "True",
     "app_id": "managepy",
+    "support_datastore_emulator": True,
 }
 
 
@@ -34,7 +35,28 @@ def execute_from_command_line(argv=None, **sandbox_overrides):
 
     argv = ['manage.py'] + other_args + stashed_args
 
+    datastore_path = os.path.abspath(
+        os.path.join(
+            environment.get_application_root(),
+            '.storage',
+            'datastore.db'
+        )
+    )
+
+    datastore_emulator_cmd = os.path.join(
+        sandbox._find_sdk_path(),
+        "platform",
+        "cloud-datastore-emulator",
+        "cloud_datastore_emulator"
+    )
+
+    datastore_overrides = {
+        "datastore_emulator_cmd": datastore_emulator_cmd,
+        "datastore_path": datastore_path,
+    }
+
     overrides = DEFAULTS.copy()
+    overrides.update(datastore_overrides)
     overrides.update(sandbox_overrides)
 
     if djangae_namespace.app_id:
