@@ -46,7 +46,6 @@ def backup_datastore(bucket=None, kinds=None):
         'outputUrlPrefix': get_backup_path(bucket),
         'entityFilter': {
             'kinds': valid_models,
-            'namespaceIds': [''],
         }
     }
     app_id = app_identity.get_application_id()
@@ -113,4 +112,3 @@ def _get_authentication_credentials():
             service_account_path, scopes=AUTH_SCOPES
         )
     return credentials
-
