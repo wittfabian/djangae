@@ -2,6 +2,8 @@
 
 ### New features & improvements:
 
+- Backup all datastore namespaces.
+
 ### Bug fixes:
 
 ## v0.9.12
