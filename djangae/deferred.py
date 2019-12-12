@@ -17,6 +17,7 @@ This defer is an adapted version of that one, with the following changes:
   runs)
 """
 
+import os
 import copy
 import logging
 import time
@@ -32,6 +33,9 @@ from django.db import models
 from google.appengine.ext.deferred import PermanentTaskFailure  # noqa
 
 logger = logging.getLogger(__name__)
+
+
+DEFERRED_ITERATION_SHARD_INDEX_KEY = "DEFERRED_ITERATION_SHARD_INDEX"
 
 
 def _wipe_caches(args, kwargs):
@@ -143,8 +147,12 @@ class TimeoutException(Exception):
     pass
 
 
-def _process_shard(marker_id, model, query, callback, finalize, buffer_time, args, kwargs):
+def _process_shard(marker_id, shard_number, model, query, callback, finalize, buffer_time, args, kwargs):
     args = args or tuple()
+
+    # Set an index of the shard in the environment, which is useful for callbacks
+    # to have access too so they can identify a task
+    os.environ[DEFERRED_ITERATION_SHARD_INDEX_KEY] = str(shard_number)
 
     start_time = time.time()
 
@@ -157,7 +165,7 @@ def _process_shard(marker_id, model, query, callback, finalize, buffer_time, arg
     # Redefer if the task isn't ready to begin
     if not marker.is_ready:
         defer(
-            _process_shard, marker_id, model, query, callback, finalize,
+            _process_shard, marker_id, shard_number, model, query, callback, finalize,
             buffer_time=buffer_time,
             args=args,
             kwargs=kwargs,
@@ -248,7 +256,7 @@ def _process_shard(marker_id, model, query, callback, finalize, buffer_time, arg
             qs = qs.filter(pk__gte=last_pk)
 
         defer(
-            _process_shard, marker_id, qs.model, qs.query, callback, finalize,
+            _process_shard, marker_id, shard_number, qs.model, qs.query, callback, finalize,
             buffer_time=buffer_time,
             args=args,
             kwargs=kwargs,
@@ -274,6 +282,7 @@ def _generate_shards(
 
     for i, (start, end) in enumerate(key_ranges):
         is_last = i == (len(key_ranges) - 1)
+        shard_number = i
 
         qs = model.objects.all()
         qs.query = query
@@ -298,6 +307,7 @@ def _generate_shards(
             defer(
                 _process_shard,
                 marker.pk,
+                shard_number,
                 qs.model, qs.query, callback, finalize,
                 args=args,
                 kwargs=kwargs,
