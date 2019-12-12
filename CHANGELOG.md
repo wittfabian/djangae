@@ -3,6 +3,7 @@
 ### New features & improvements:
 
 - Backup all datastore namespaces.
+- Add a `"DEFERRED_ITERATION_SHARD_INDEX"` key to os.environ for callbacks running from `defer_iteration_with_finalize`
 
 ### Bug fixes:
 

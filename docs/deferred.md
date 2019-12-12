@@ -38,3 +38,13 @@ If `args` is specified, these arguments are passed as positional arguments to bo
 tracks complete shards is deleted. If you want to keep these (as a log of sorts) then set this to `False`.
 
 `_transactional` and `_queue` work in the same way as `defer()`
+
+## Identifying a task shard
+
+From a shard callback, you can identify the current shard by accessing `os.environ["DEFERRED_ITERATION_SHARD_INDEX"]` there is a constant defined for this key:
+
+```
+from djangae.deferred import DEFERRED_ITERATION_SHARD_INDEX_KEY
+shard_index = int(os.environ[DEFERRED_ITERATION_SHARD_INDEX_KEY])
+```
+

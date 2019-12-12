@@ -1,7 +1,11 @@
+import os
 from django.db import models
 
-from djangae.deferred import defer_iteration_with_finalize
+from djangae.deferred import defer_iteration_with_finalize, DEFERRED_ITERATION_SHARD_INDEX_KEY
 from djangae.test import TestCase
+
+
+_SHARD_COUNT = 5
 
 
 class DeferIterationTestModel(models.Model):
@@ -11,6 +15,11 @@ class DeferIterationTestModel(models.Model):
 
 
 def callback(instance, touch=True):
+    shard_index = int(os.environ[DEFERRED_ITERATION_SHARD_INDEX_KEY])
+
+    assert(shard_index >= 0)
+    assert(shard_index < 5)
+
     if touch:
         instance.touched = True
     instance.save()
@@ -45,7 +54,8 @@ class DeferIterationTestCase(TestCase):
             DeferIterationTestModel.objects.all(),
             callback,
             finalize,
-            touch=False  # kwarg to not touch the objects at all
+            touch=False,  # kwarg to not touch the objects at all
+            _shards=_SHARD_COUNT
         )
 
         self.process_task_queues()
@@ -58,7 +68,8 @@ class DeferIterationTestCase(TestCase):
         defer_iteration_with_finalize(
             DeferIterationTestModel.objects.all(),
             callback,
-            finalize
+            finalize,
+            _shards=_SHARD_COUNT
         )
 
         self.process_task_queues()
@@ -72,7 +83,8 @@ class DeferIterationTestCase(TestCase):
         defer_iteration_with_finalize(
             DeferIterationTestModel.objects.filter(ignored=False),
             callback,
-            finalize
+            finalize,
+            _shards=_SHARD_COUNT
         )
 
         self.process_task_queues()
@@ -90,7 +102,8 @@ class DeferIterationTestCase(TestCase):
         defer_iteration_with_finalize(
             DeferIterationTestModel.objects.all(),
             sporadic_error,
-            finalize
+            finalize,
+            _shards=_SHARD_COUNT
         )
 
         self.process_task_queues()
