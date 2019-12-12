@@ -16,7 +16,7 @@ install:
 - cd testapp
 - python install_deps.py
 script:
-- python manage.py test
+- travis_wait 30 python manage.py test
 after_script:
 - cd ..
 - rm django_tests
