@@ -1,11 +1,30 @@
-## v1.0 (in development)
+## v2.0.0 (in development)
+
+### New features & improvements:
+
+-
+
+### Bug fixes:
+
+-
+
+## v1.0.1 (bug fix release)
+
+### Bug fixes:
+
+-
+
+## v1.0.0
 
 ### New features & improvements:
 
 - Backup all datastore namespaces.
 - Add a `"DEFERRED_ITERATION_SHARD_INDEX"` key to os.environ for callbacks running from `defer_iteration_with_finalize`
+- Changed `ensure_instance_included` to `ensure_instance_consistent`
 
 ### Bug fixes:
+
+- N/A
 
 ## v0.9.12
 
