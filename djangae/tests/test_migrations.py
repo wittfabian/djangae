@@ -9,9 +9,6 @@ from django.db import connection, models
 from django.db.migrations.state import ProjectState
 from django.test import override_settings
 
-from google.appengine.api import datastore
-from google.appengine.runtime import DeadlineExceededError
-
 # DJANGAE
 from djangae.contrib import sleuth
 from djangae.db.migrations import operations

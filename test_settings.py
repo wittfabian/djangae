@@ -4,7 +4,8 @@ BASE_DIR = os.path.dirname(__file__)
 
 INSTALLED_APPS = (
     'gcloudc',
-    'djangae'
+    'djangae',
+    'djangae.commands',  # Takes care of emulator setup
 )
 
 DATABASES = {

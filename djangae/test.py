@@ -6,36 +6,11 @@ from django import test
 from django.http import Http404
 from django.test import Client, RequestFactory
 from django.test.runner import DiscoverRunner
-from djangae.test_runner import bed_wrap
 
 from djangae.environment import get_application_root
 
 from django.conf.urls import handler404, handler500
 from django.utils.module_loading import import_string
-
-from google.appengine.api import apiproxy_stub_map, appinfo
-from google.appengine.datastore import datastore_stub_util
-from google.appengine.tools.devappserver2.application_configuration import ModuleConfiguration
-from google.appengine.tools.devappserver2.module import _ScriptHandler
-
-
-@contextlib.contextmanager
-def inconsistent_db(probability=0, connection='default'):
-    """
-        A context manager that allows you to make the datastore inconsistent during testing.
-        This is vital for writing applications that deal with the Datastore's eventual consistency
-    """
-
-    stub = apiproxy_stub_map.apiproxy.GetStub('datastore_v3')
-
-    # Set the probability of the datastore stub
-    original_policy = stub._consistency_policy
-    stub.SetConsistencyPolicy(datastore_stub_util.PseudoRandomHRConsistencyPolicy(probability=probability))
-    try:
-        yield
-    finally:
-        # Restore to consistent mode
-        stub.SetConsistencyPolicy(original_policy)
 
 
 def _get_queued_tasks(stub, queue_name=None, flush=True, process_pull_tasks=True):
@@ -56,6 +31,7 @@ def _get_queued_tasks(stub, queue_name=None, flush=True, process_pull_tasks=True
             stub.FlushQueue(queue["name"])
 
     return tasks
+
 
 def _flush_tasks(stub, queue_name=None):
     if queue_name:
@@ -117,14 +93,14 @@ def process_task_queues(queue_name=None, failure_behaviour=TaskFailedBehaviour.R
 
     tasks = _get_queued_tasks(stub, queue_name, process_pull_tasks=False)
 
-    client = Client() # Instantiate a test client for processing the tasks
+    client = Client()  # Instantiate a test client for processing the tasks
 
     while tasks:
-        task = tasks.pop(0) # Get the first task
+        task = tasks.pop(0)  # Get the first task
 
         decoded_body = task['body'].decode('base64')
         post_data = decoded_body
-        headers = { "HTTP_{}".format(x.replace("-", "_").upper()): y for x, y in task['headers'] }
+        headers = {"HTTP_{}".format(x.replace("-", "_").upper()): y for x, y in task['headers']}
 
         method = task['method']
 

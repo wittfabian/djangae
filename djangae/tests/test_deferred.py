@@ -15,7 +15,7 @@ def assert_cache_wiped(instance):
 
 
 class DeferModelA(models.Model):
-    b = models.ForeignKey("DeferModelB")
+    b = models.ForeignKey("DeferModelB", on_delete=models.CASCADE)
 
     class Meta:
         app_label = "djangae"

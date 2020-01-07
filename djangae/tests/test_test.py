@@ -1,6 +1,4 @@
-from google.appengine.ext import deferred
-from google.appengine.api import taskqueue
-
+from djangae import deferred
 from djangae.test import TestCase, _get_queued_tasks, TaskFailedBehaviour, TaskFailedError
 
 
@@ -18,6 +16,7 @@ def throw_once():
 
 
 throw_once.counter = 0
+
 
 class TaskQueueTests(TestCase):
 

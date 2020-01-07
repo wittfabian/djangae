@@ -1,6 +1,6 @@
 import os
-from google.appengine.ext.deferred import defer
 
+from djangae.deferred import defer
 from djangae.environment import task_or_admin_only
 from djangae.test import TestCase
 from djangae.contrib import sleuth

@@ -10,7 +10,7 @@ LONG_DESCRIPTION = open(os.path.join(os.path.dirname(__file__), 'README.md')).re
 AUTHOR = 'Potato London Ltd.'
 
 EXTRAS = {
-    "test": ["webtest"],
+    "test": ["bs4"],
 }
 
 setup(

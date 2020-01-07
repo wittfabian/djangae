@@ -8,12 +8,9 @@ from django.core.files.base import File, ContentFile
 from django.db import models
 from django.test.utils import override_settings
 from django.utils import six
-from google.appengine.api import urlfetch
-from google.appengine.api.images import TransformationError, LargeImageError
 
 # DJANGAE
 from djangae.contrib import sleuth
-from djangae.db import transaction
 from djangae.storage import BlobstoreStorage, CloudStorage, has_cloudstorage
 from djangae.test import TestCase
 

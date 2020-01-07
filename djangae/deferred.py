@@ -22,15 +22,12 @@ import copy
 import logging
 import time
 
-from google.appengine.api.datastore import Delete
-
-from djangae.db import transaction
 from djangae.environment import task_queue_name
 from djangae.models import DeferIterationMarker
 from djangae.processing import find_key_ranges_for_queryset
 from djangae.utils import retry
 from django.db import models
-from google.appengine.ext.deferred import PermanentTaskFailure  # noqa
+
 
 logger = logging.getLogger(__name__)
 
