@@ -3,7 +3,7 @@ from functools import partial
 
 from django.utils import six
 
-from djangae.fields import ComputedCharField
+from gcloudc.db.models.fields import ComputedCharField
 from django.db.models.fields import FieldDoesNotExist
 
 NULL_CHARACTER = u"\0"

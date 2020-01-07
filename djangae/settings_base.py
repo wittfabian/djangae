@@ -5,17 +5,11 @@ FILE_UPLOAD_HANDLERS = (
     'django.core.files.uploadhandler.MemoryFileUploadHandler',
 )
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'djangae.db.backends.appengine'
-    }
-}
-
-GENERATE_SPECIAL_INDEXES_DURING_TESTING = False
-
 CACHES = {
+    # We default to the database cache, at least until
+    # there is a sensible caching alternative (or low MemoryStore latency)
     'default': {
-        'BACKEND': 'django.core.cache.backends.memcached.MemcachedCache',
+        'BACKEND': 'django.core.cache.backends.db.DatabaseCache',
     }
 }
 
@@ -51,11 +45,3 @@ EMAIL_BACKEND = 'djangae.mail.AsyncEmailBackend'
 # Setting to * is OK, because GAE takes care of domain routing - setting it to anything
 # else just causes unnecessary pain when something isn't accessible under a custom domain
 ALLOWED_HOSTS = ("*",)
-
-DJANGAE_RUNSERVER_IGNORED_FILES_REGEXES = ['^.+$(?<!\.py)(?<!\.yaml)(?<!\.html)']
-# Note that these should match a directory name, not directory path:
-DJANGAE_RUNSERVER_IGNORED_DIR_REGEXES = [r"^google_appengine$"]
-
-TEST_RUNNER = 'djangae.test.DjangaeDiscoverRunner'
-
-DJANGAE_USE_LEGACY_CONTAINS_LOGIC = False 

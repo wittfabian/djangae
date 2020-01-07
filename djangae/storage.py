@@ -4,7 +4,7 @@ import threading
 
 from django.conf import settings
 from django.core.exceptions import SuspiciousFileOperation
-from django.core.urlresolvers import reverse
+from django.urls import reverse
 from django.core.files.base import File
 from django.core.files.storage import Storage
 from django.core.files.uploadedfile import UploadedFile
@@ -12,29 +12,8 @@ from django.core.files.uploadhandler import FileUploadHandler, \
     StopFutureHandlers
 from django.http import HttpResponse
 from django.utils import six
-from django.utils.encoding import smart_str, force_unicode
+from django.utils.encoding import smart_str, force_text
 from django.test.client import encode_multipart, MULTIPART_CONTENT, BOUNDARY
-from djangae.db import transaction
-
-from google.appengine.api import urlfetch
-from google.appengine.api import app_identity
-from google.appengine.api.images import (
-    get_serving_url,
-    NotImageError,
-    BlobKeyRequiredError,
-    TransformationError,
-    LargeImageError,
-)
-from google.appengine.ext.blobstore import (
-    BlobInfo,
-    BlobKey,
-    delete,
-    BLOB_KEY_HEADER,
-    BLOB_RANGE_HEADER,
-    BlobReader,
-    create_gs_key,
-    create_upload_url,
-)
 
 try:
     import cloudstorage
@@ -116,7 +95,7 @@ def serve_file(request, blob_key_or_info, as_download=False, content_type=None, 
     else:
         raise ValueError("Invalid type %s" % blob_key_or_info.__class__)
 
-    if info == None:
+    if info is None:
         # Lack of blobstore_info means this is a Google Cloud Storage file
         if has_cloudstorage:
             blob_key, info = _get_or_create_cached_blob_key_and_info(blob_key_or_info)
@@ -243,9 +222,7 @@ class BlobstoreStorage(Storage, BlobstoreUploadMixin):
         try:
             # Return a protocol-less URL, because django can't/won't pass
             # down an argument saying whether it should be secure or not
-            with transaction.non_atomic():
-                # This causes a Datastore lookup which we don't want to interfere with transactions
-                return get_serving_url(self._get_blobinfo(name), secure_url=True)
+            return get_serving_url(self._get_blobinfo(name), secure_url=True)
         except (NotImageError, BlobKeyRequiredError, TransformationError, LargeImageError):
             # Django doesn't expect us to return None from this function, and in fact
             # relies on the "truthiness" of the return value when accessing .url on an
@@ -257,7 +234,7 @@ class BlobstoreStorage(Storage, BlobstoreUploadMixin):
         return self._get_blobinfo(name).creation
 
     def get_valid_name(self, name):
-        return force_unicode(name).strip().replace('\\', '/')
+        return force_text(name).strip().replace('\\', '/')
 
     def get_available_name(self, name, max_length=None):
         ret = name.replace('\\', '/')
@@ -274,8 +251,7 @@ class BlobstoreStorage(Storage, BlobstoreUploadMixin):
     def _create_upload_url(self):
         # Creating the upload URL can't be atomic, otherwise the session
         # key will not be consistent when uploading the file
-        with transaction.non_atomic():
-            return create_upload_url(reverse('djangae_internal_upload_handler'))
+        return create_upload_url(reverse('djangae_internal_upload_handler'))
 
 
 class CloudStorage(Storage, BlobstoreUploadMixin):
@@ -323,9 +299,7 @@ class CloudStorage(Storage, BlobstoreUploadMixin):
         try:
             # Return a protocol-less URL, because django can't/won't pass
             # down an argument saying whether it should be secure or not
-            with transaction.non_atomic():
-                # This causes a Datastore lookup which we don't want to interfere with transactions
-                return get_serving_url(self._get_blobkey(filename), secure_url=True)
+            return get_serving_url(self._get_blobkey(filename), secure_url=True)
         except (TransformationError, cloudstorage.NotFoundError):
             # Sometimes TransformationError will be thrown if you call get_serving_url on video files
             # this is probably a bug in App Engine
@@ -362,7 +336,7 @@ class CloudStorage(Storage, BlobstoreUploadMixin):
         return mimetypes.guess_type(name)[0] or DEFAULT_CONTENT_TYPE
 
     def _save(self, name, content):
-        name = self.get_valid_name(name) #Make sure the name is valid
+        name = self.get_valid_name(name)  # Make sure the name is valid
 
         kwargs = {
             'content_type': self._content_type_for_name(name),
@@ -467,7 +441,9 @@ class BlobstoreFileUploadHandler(FileUploadHandler):
             self.blobkey = BlobKey(self.blobkey)
             raise StopFutureHandlers()
         else:
-            return super(BlobstoreFileUploadHandler, self).new_file(field_name, file_name, content_type, content_length, charset)
+            return super(BlobstoreFileUploadHandler, self).new_file(
+                field_name, file_name, content_type, content_length, charset
+            )
 
     def receive_data_chunk(self, raw_data, start):
         """

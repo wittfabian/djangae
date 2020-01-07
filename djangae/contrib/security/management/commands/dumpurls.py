@@ -8,7 +8,7 @@ from itertools import chain
 
 from django.conf import settings
 from django.core.management.base import BaseCommand
-from django.core.urlresolvers import reverse, resolve
+from django.urls import reverse, resolve
 
 from djangae.contrib.security.commands_utils import (
     extract_views_from_urlpatterns,
