@@ -17,22 +17,106 @@ This defer is an adapted version of that one, with the following changes:
   runs)
 """
 
-import os
 import copy
 import logging
+import os
+import pickle
 import time
+import types
+
+from django.conf import settings
+from django.db import models
+from django.urls import reverse_lazy
 
 from djangae.environment import task_queue_name
 from djangae.models import DeferIterationMarker
 from djangae.processing import find_key_ranges_for_queryset
 from djangae.utils import retry
-from django.db import models
 
+from . import get_cloud_tasks_client
+from .models import DeferredTask
 
 logger = logging.getLogger(__name__)
 
 
 DEFERRED_ITERATION_SHARD_INDEX_KEY = "DEFERRED_ITERATION_SHARD_INDEX"
+
+_DEFAULT_QUEUE = "default"
+_DEFAULT_URL = reverse_lazy("tasks_deferred_handler")
+_TASKQUEUE_HEADERS = {
+    "Content-Type": "application/octet-stream"
+}
+
+
+class Error(Exception):
+    """Base class for exceptions in this module."""
+
+
+class PermanentTaskFailure(Error):
+    """Indicates that a task failed, and will never succeed."""
+
+
+class SingularTaskFailure(Error):
+    """Indicates that a task failed once."""
+
+
+def _run_from_datastore(deferred_task_id):
+    """
+        Retrieves a task from the database and executes it.
+    """
+
+    def run(data):
+        """
+            Unpickles and executes a task.
+        """
+        try:
+            func, args, kwds = pickle.loads(data)
+        except Exception as e:
+            raise PermanentTaskFailure(e)
+        else:
+            return func(*args, **kwds)
+
+    entity = DeferredTask.objects.filter(pk=deferred_task_id).first()
+    if not entity:
+        raise PermanentTaskFailure()
+
+    try:
+        run(entity.data)
+        entity.delete()
+    except PermanentTaskFailure:
+        entity.delete()
+        raise
+
+
+def invoke_member(obj, membername, *args, **kwargs):
+    return getattr(obj, membername)(*args, **kwargs)
+
+
+def _curry_callable(obj, *args, **kwargs):
+    """
+        Takes a callable and arguments and returns a task queue tuple.
+
+        The returned tuple consists of (callable, args, kwargs), and can be pickled
+        and unpickled safely.
+    """
+
+    if isinstance(obj, types.MethodType):
+        return (invoke_member, (obj.im_self, obj.im_func.__name__) + args, kwargs)
+
+    elif isinstance(obj, types.BuiltinMethodType):
+        if not obj.__self__:
+            return (obj, args, kwargs)
+        else:
+            return (invoke_member, (obj.__self__, obj.__name__) + args, kwargs)
+    elif isinstance(obj, types.ObjectType) and hasattr(obj, "__call__"):
+        return (obj, args, kwargs)
+    elif isinstance(obj, (
+        types.FunctionType, types.BuiltinFunctionType,
+        types.ClassType, types.UnboundMethodType
+    )):
+        return (obj, args, kwargs)
+    else:
+        raise ValueError("obj must be callable")
 
 
 def _wipe_caches(args, kwargs):
@@ -71,15 +155,9 @@ def defer(obj, *args, **kwargs):
         case it *never* uses an entity group (but you are limited by 100K)
     """
 
-    from google.appengine.ext.deferred.deferred import (
-        run_from_datastore,
-        serialize,
-        taskqueue,
-        _DeferredTaskEntity,
-        _DEFAULT_URL,
-        _TASKQUEUE_HEADERS,
-        _DEFAULT_QUEUE
-    )
+    def serialize(obj, *args, **kwargs):
+        curried = _curry_callable(obj, *args, **kwargs)
+        return pickle.dumps(curried, protocol=pickle.HIGHEST_PROTOCOL)
 
     KWARGS = {
         "countdown", "eta", "name", "target", "retry_options"
@@ -103,36 +181,56 @@ def defer(obj, *args, **kwargs):
 
     pickled = serialize(obj, *args, **kwargs)
 
-    key = None
+    project_id = os.environ.get("GOOGLE_CLOUD_PROJECT")
+    assert(project_id)  # Should be checked in apps.py ready()
+
+    location = getattr(settings, "CLOUD_TASKS_LOCATION_ID")
+    assert(location)  # Should be checked in apps.py
+
+    client = get_cloud_tasks_client()
+
+    deferred_task = None
     try:
         # Always use an entity group unless this has been
         # explicitly marked as a small task
         if not small_task:
-            key = _DeferredTaskEntity(data=pickled).put()
+            deferred_task = DeferredTask.objects.create(data=pickled)
+
+        path = client.queue_path(project_id, location, queue)
+
+        task = {
+            'app_engine_http_request': {  # Specify the type of request.
+                'http_method': 'POST',
+                'relative_uri': _DEFAULT_URL,
+                'body': pickled
+            }
+        }
 
         # Defer the task
-        task = taskqueue.Task(payload=pickled, **taskargs)
-        ret = task.add(queue, transactional=transactional)
+        task = client.create_task(path, task)  # FIXME: Handle transactional
 
         # Delete the key as it wasn't needed
-        if key:
-            Delete(key)
-        return ret
-
+        if deferred_task:
+            deferred_task.delete()
     except taskqueue.TaskTooLargeError:
         if small_task:
             raise
 
-        pickled = serialize(run_from_datastore, str(key))
-        task = taskqueue.Task(payload=pickled, **taskargs)
+        pickled = serialize(_run_from_datastore, deferred_task.pk)
 
-        # This is the line that fixes a bug in the SDK. The SDK
-        # code doesn't pass transactional here.
-        return task.add(queue, transactional=transactional)
+        task = {
+            'app_engine_http_request': {  # Specify the type of request.
+                'http_method': 'POST',
+                'relative_uri': _DEFAULT_URL,
+                'body': pickled
+            }
+        }
+
+        client.create_task(path, task)  # FIXME: Handle transactional
     except:  # noqa
         # Any other exception? Delete the key
-        if key:
-            Delete(key)
+        if deferred_task:
+            deferred_task.delete()
         raise
 
 

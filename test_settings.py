@@ -6,6 +6,7 @@ INSTALLED_APPS = (
     'gcloudc',
     'djangae',
     'djangae.commands',  # Takes care of emulator setup
+    # 'djangae.tasks',  # Disabled until fixed
 )
 
 DATABASES = {
