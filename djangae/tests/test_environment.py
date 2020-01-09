@@ -1,6 +1,6 @@
 import os
 
-from djangae.deferred import defer
+from djangae.tasks.deferred import defer
 from djangae.environment import task_or_admin_only
 from djangae.test import TestCase
 from djangae.contrib import sleuth

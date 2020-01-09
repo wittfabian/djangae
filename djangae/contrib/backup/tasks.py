@@ -1,18 +1,20 @@
 import logging
 import os
 
-from google.appengine.api import app_identity
-
-from google.auth import app_engine
-from google.oauth2 import service_account
-import googleapiclient.discovery
-
 from django.apps import apps
 
-from djangae.environment import is_production_environment
+import googleapiclient.discovery
+from djangae.environment import (
+    application_id,
+    is_production_environment,
+)
+from google.auth import app_engine
+from google.oauth2 import service_account
 
-from .utils import get_backup_setting, get_backup_path
-
+from .utils import (
+    get_backup_path,
+    get_backup_setting,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +50,7 @@ def backup_datastore(bucket=None, kinds=None):
             'kinds': valid_models,
         }
     }
-    app_id = app_identity.get_application_id()
+    app_id = application_id()
     request = service.projects().export(projectId=app_id, body=body)
     request.execute()
 

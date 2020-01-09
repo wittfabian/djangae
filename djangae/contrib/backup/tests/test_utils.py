@@ -2,8 +2,6 @@ from django.conf import settings
 from djangae.contrib import sleuth
 from djangae.test import TestCase
 
-from google.appengine.api import app_identity
-
 from ..utils import get_backup_setting, get_gcs_bucket
 
 

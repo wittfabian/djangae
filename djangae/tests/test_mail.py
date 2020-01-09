@@ -1,12 +1,11 @@
 # THIRD PARTY
 from django.core.mail import send_mail
 from django.test import override_settings
-from google.appengine.api.app_identity import get_application_id
-from google.appengine.api.mail_errors import InvalidSenderError
 
 # DJANGAE
 from djangae.contrib import sleuth
 from djangae.test import TestCase
+from djangae.environment import application_id
 
 
 class EmailBackendTests(TestCase):
@@ -15,7 +14,7 @@ class EmailBackendTests(TestCase):
         """ Return an email address which will be allowed as a 'from' address for the current App
             Engine app.
         """
-        return "example@%s.appspotmail.com" % get_application_id()
+        return "example@%s.appspotmail.com" % application_id()
 
     @override_settings(EMAIL_BACKEND='djangae.mail.EmailBackend')
     def test_send_email(self):
@@ -52,5 +51,5 @@ class EmailBackendTests(TestCase):
             self.assertTrue(log_err.called)
             call_args = log_err.calls[0].args
             # The invalid 'from' address  should be logged somewhere in the args
-            args_str = u"".join(unicode(a)for a in call_args)
+            args_str = u"".join(str(a)for a in call_args)
             self.assertTrue(invalid_from_address in args_str)

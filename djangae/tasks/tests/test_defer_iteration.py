@@ -1,9 +1,12 @@
 import os
+
 from django.db import models
 
-from djangae.deferred import defer_iteration_with_finalize, DEFERRED_ITERATION_SHARD_INDEX_KEY
+from djangae.tasks.deferred import (
+    DEFERRED_ITERATION_SHARD_INDEX_KEY,
+    defer_iteration_with_finalize,
+)
 from djangae.test import TestCase
-
 
 _SHARD_COUNT = 5
 

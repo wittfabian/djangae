@@ -1,5 +1,5 @@
 # STANDARD LIB
-from urlparse import urlparse
+from urllib.parse import urlparse
 
 # LIBRARIES
 from django.contrib.auth import get_user_model, get_user, BACKEND_SESSION_KEY

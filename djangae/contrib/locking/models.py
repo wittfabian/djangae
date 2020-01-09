@@ -8,9 +8,8 @@ from django.db import models
 from django.utils import timezone
 from django.utils.encoding import python_2_unicode_compatible
 
-# DJANGAE
-from djangae.db import transaction
-from djangae.fields import CharField
+from gcloudc.db import transaction
+from gcloudc.db.models.fields import CharField
 
 
 class LockQuerySet(models.query.QuerySet):

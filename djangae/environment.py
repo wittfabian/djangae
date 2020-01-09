@@ -14,22 +14,10 @@ from djangae.utils import memoized
 
 
 def application_id():
-    from google.appengine.api import app_identity
-
     try:
-        result = app_identity.get_application_id()
+        result = os.environ.get("GAE_APPLICATION").split("~", 1)[-1]
     except AttributeError:
         result = None
-
-    if not result:
-        # Apparently we aren't running live, probably inside a management command
-        from google.appengine.api import appinfo
-
-        info = appinfo.LoadSingleAppInfo(open(os.path.join(get_application_root(), "app.yaml")))
-
-        result = "dev~" + info.application
-        os.environ['APPLICATION_ID'] = result
-        result = app_identity.get_application_id()
 
     return result
 
@@ -135,3 +123,7 @@ def task_or_admin_only(view_function):
         return view_function(*args, **kwargs)
 
     return replacement
+
+
+def default_gcs_bucket_name():
+    return "%s.appspot.com" % application_id()

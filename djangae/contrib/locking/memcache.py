@@ -1,7 +1,8 @@
 import time
 from datetime import datetime
 
-from google.appengine.api import memcache
+from django.core.cache import cache as memcache
+
 
 class MemcacheLock(object):
     def __init__(self, identifier, cache):

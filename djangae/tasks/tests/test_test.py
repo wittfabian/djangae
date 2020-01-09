@@ -1,4 +1,4 @@
-from djangae import deferred
+from djangae.tasks import deferred
 from djangae.test import TestCase, _get_queued_tasks, TaskFailedBehaviour, TaskFailedError
 
 
