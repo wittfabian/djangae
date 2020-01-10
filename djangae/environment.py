@@ -127,3 +127,7 @@ def task_or_admin_only(view_function):
 
 def default_gcs_bucket_name():
     return "%s.appspot.com" % application_id()
+
+
+def project_id():
+    return os.environ["GOOGLE_CLOUD_PROJECT"]

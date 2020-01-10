@@ -2,9 +2,12 @@ from django.conf import settings
 from djangae import environment
 
 import os
+import grpc
+
+default_app_config = 'djangae.tasks.apps.DjangaeTasksConfig'
 
 CLOUD_TASKS_PROJECT_SETTING = "CLOUD_TASKS_PROJECT_ID"
-CLOUD_TASKS_LOCATION_SETTING = "CLOUD_TASKS_LOCATION_SETTING"
+CLOUD_TASKS_LOCATION_SETTING = "CLOUD_TASKS_LOCATION"
 
 
 def get_cloud_tasks_client():
@@ -41,7 +44,10 @@ def ensure_required_queues_exist():
         Reads settings.CLOUD_TASK_QUEUES_REQUIRED
         and calls create_queue for them if they don't exist
     """
-    pass
+    client = get_cloud_tasks_client()
+
+    for queue in getattr(settings, "CLOUD_TASKS_QUEUES", []):
+        client.create_queue(queue["name"])
 
 
 def cloud_tasks_parent_path():

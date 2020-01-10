@@ -5,10 +5,11 @@ import logging
 from django.conf import settings
 from django.http import HttpResponse
 from django.utils import timezone
-from google.appengine.ext.deferred import defer
+
 
 # DJANGAE
 from .models import DatastoreLock
+from djangae.tasks.deferred import defer
 
 
 logger = logging.getLogger(__name__)

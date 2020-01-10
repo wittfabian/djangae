@@ -6,7 +6,7 @@ INSTALLED_APPS = (
     'gcloudc',
     'djangae',
     'djangae.commands',  # Takes care of emulator setup
-    # 'djangae.tasks',  # Disabled until fixed
+    'djangae.tasks',
 )
 
 DATABASES = {
@@ -23,3 +23,5 @@ SECRET_KEY = "secret_key_for_testing"
 USE_TZ = True
 
 CSRF_USE_SESSIONS = True
+
+CLOUD_TASKS_LOCATION = "[LOCATION]"

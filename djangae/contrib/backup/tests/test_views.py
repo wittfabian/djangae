@@ -1,6 +1,10 @@
-from django.test import override_settings
-from djangae.test import TestCase, RequestFactory
+from django.test import (
+    RequestFactory,
+    override_settings,
+)
+
 from djangae.contrib import sleuth
+from djangae.test import TestCase
 
 from ..views import create_datastore_backup
 
