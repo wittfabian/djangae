@@ -24,7 +24,7 @@ class LockQuerySet(models.query.QuerySet):
             E.g. if you know that the section of code you're locking should never take more than
             3 seconds, then set this to 3000.
         """
-        identifier_hash = hashlib.md5(identifier).hexdigest()
+        identifier_hash = hashlib.md5(identifier.encode()).hexdigest()
 
         @transaction.atomic()
         def trans():

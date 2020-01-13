@@ -26,14 +26,18 @@ import types
 
 from django.conf import settings
 from django.db import models
-from django.urls import reverse_lazy
+from django.urls import reverse
 
 from djangae.environment import task_queue_name
 from djangae.models import DeferIterationMarker
 from djangae.processing import find_key_ranges_for_queryset
 from djangae.utils import retry
 
-from . import get_cloud_tasks_client
+from . import (
+    CLOUD_TASKS_LOCATION_SETTING,
+    cloud_tasks_project,
+    get_cloud_tasks_client,
+)
 from .models import DeferredTask
 
 logger = logging.getLogger(__name__)
@@ -42,7 +46,7 @@ logger = logging.getLogger(__name__)
 DEFERRED_ITERATION_SHARD_INDEX_KEY = "DEFERRED_ITERATION_SHARD_INDEX"
 
 _DEFAULT_QUEUE = "default"
-_DEFAULT_URL = reverse_lazy("tasks_deferred_handler")
+_DEFAULT_URL = reverse("tasks_deferred_handler")
 _TASKQUEUE_HEADERS = {
     "Content-Type": "application/octet-stream"
 }
@@ -108,12 +112,11 @@ def _curry_callable(obj, *args, **kwargs):
             return (obj, args, kwargs)
         else:
             return (invoke_member, (obj.__self__, obj.__name__) + args, kwargs)
-    elif isinstance(obj, types.ObjectType) and hasattr(obj, "__call__"):
-        return (obj, args, kwargs)
     elif isinstance(obj, (
-        types.FunctionType, types.BuiltinFunctionType,
-        types.ClassType, types.UnboundMethodType
+        types.FunctionType, types.BuiltinFunctionType, type
     )):
+        return (obj, args, kwargs)
+    elif hasattr(obj, "__call__"):
         return (obj, args, kwargs)
     else:
         raise ValueError("obj must be callable")
@@ -181,10 +184,10 @@ def defer(obj, *args, **kwargs):
 
     pickled = serialize(obj, *args, **kwargs)
 
-    project_id = os.environ.get("GOOGLE_CLOUD_PROJECT")
+    project_id = cloud_tasks_project()
     assert(project_id)  # Should be checked in apps.py ready()
 
-    location = getattr(settings, "CLOUD_TASKS_LOCATION_ID")
+    location = getattr(settings, CLOUD_TASKS_LOCATION_SETTING, None)
     assert(location)  # Should be checked in apps.py
 
     client = get_cloud_tasks_client()
@@ -212,7 +215,9 @@ def defer(obj, *args, **kwargs):
         # Delete the key as it wasn't needed
         if deferred_task:
             deferred_task.delete()
-    except taskqueue.TaskTooLargeError:
+    except Exception:  # taskqueue.TaskTooLargeError:
+        raise  # FIXME: Catch whatever is thrown when a task is > 100kb
+
         if small_task:
             raise
 

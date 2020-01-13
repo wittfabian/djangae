@@ -18,7 +18,7 @@ class DatastoreLocksTestCase(TestCase):
 
     def _make_lock(self, identifier, **kwargs):
         """ Shorcut for when we need to manually create DatastoreLock objects for tests. """
-        identifier_hash = hashlib.md5(identifier).hexdigest()
+        identifier_hash = hashlib.md5(identifier.encode()).hexdigest()
         return DatastoreLock.objects.create(identifier_hash=identifier_hash, **kwargs)
 
     def test_acquire_and_release(self):

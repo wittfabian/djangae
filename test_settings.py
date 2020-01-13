@@ -1,5 +1,10 @@
 import os
 
+from django.urls import (
+    include,
+    path,
+)
+
 BASE_DIR = os.path.dirname(__file__)
 
 INSTALLED_APPS = (
@@ -25,3 +30,10 @@ USE_TZ = True
 CSRF_USE_SESSIONS = True
 
 CLOUD_TASKS_LOCATION = "[LOCATION]"
+
+# Point the URL conf at this file
+ROOT_URLCONF = __name__
+
+urlpatterns = [
+    path('^tasks/', include('djangae.tasks.urls')),
+]
