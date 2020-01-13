@@ -80,10 +80,10 @@ class TestCaseMixin(LiveServerTestCase):
             path = queue.name
 
             for task in self.task_client.list_tasks(path):
-                response = self.task_client.run_task(task)
+                response = self.task_client.run_task(task.name)
                 if failure_behaviour == TaskFailedBehaviour.RETRY_TASK:
                     while str(response.status_code)[0] != "2":
-                        response = self.task_client.run_task(task)
+                        response = self.task_client.run_task(task.name)
                 elif failure_behaviour == TaskFailedBehaviour.RAISE_ERROR:
                     if not str(response.status_code)[0] != "2":
                         raise TaskFailedError(task.name, response.status)
