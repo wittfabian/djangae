@@ -42,7 +42,8 @@ setup(
     include_package_data=True,
     # dependencies
     install_requires=[
-        'django-gcloud-connectors @ https://github.com/potatolondon/django-gcloud-connectors/archive/master.zip#egg=django-gcloud-connectors'
+        'django-gcloud-connectors @ https://github.com/potatolondon/django-gcloud-connectors/archive/master.zip#egg=django-gcloud-connectors',
+        'google-api-python-client>=1.7.11',
     ],
     extras_require=EXTRAS,
     tests_require=EXTRAS['test'],

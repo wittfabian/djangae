@@ -2,11 +2,12 @@
 from django.test import LiveServerTestCase
 
 from djangae.tasks import (
+    cloud_tasks_parent_path,
+    cloud_tasks_queue_path,
     ensure_required_queues_exist,
     get_cloud_tasks_client,
-    cloud_tasks_parent_path,
-    cloud_tasks_queue_path
 )
+from google.api_core.exceptions import GoogleAPIError
 
 
 class TaskFailedBehaviour:
@@ -80,12 +81,13 @@ class TestCaseMixin(LiveServerTestCase):
             path = queue.name
 
             for task in self.task_client.list_tasks(path):
-                response = self.task_client.run_task(task.name)
-                if failure_behaviour == TaskFailedBehaviour.RETRY_TASK:
-                    while str(response.status_code)[0] != "2":
-                        response = self.task_client.run_task(task.name)
-                elif failure_behaviour == TaskFailedBehaviour.RAISE_ERROR:
-                    if not str(response.status_code)[0] != "2":
-                        raise TaskFailedError(task.name, response.status)
-                else:
-                    pass
+                while True:
+                    try:
+                        self.task_client.run_task(task.name)
+                    except GoogleAPIError as e:
+                        if failure_behaviour == TaskFailedBehaviour.RETRY_TASK:
+                            continue
+                        elif failure_behaviour == TaskFailedBehaviour.RAISE_ERROR:
+                            raise TaskFailedError(task.name, str(e))
+                        else:
+                            break

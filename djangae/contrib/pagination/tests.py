@@ -35,7 +35,6 @@ class TestUser(models.Model):
         return " ".join([self.first_name, self.last_name])
 
     class Meta:
-        db_table = "pagination"
         ordering = ("first_name", "last_name")
 
 @paginated_model(orderings=[
@@ -45,8 +44,6 @@ class TestUser(models.Model):
 class SimpleModelWithoutOrdering(models.Model):
     name = models.CharField(max_length=200)
 
-    class Meta:
-        db_table = "pagination"
 
 class SimpleModelWithOrdering(SimpleModelWithoutOrdering):
     class Meta:
