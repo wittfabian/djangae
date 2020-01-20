@@ -80,7 +80,7 @@ class DatastoreLocksTestCase(TestCase):
         """
         @lock('x', wait=True, steal_after_ms=10)
         def do_something():
-                return True
+            return True
 
         self._make_lock('x', timestamp=timezone.now() - timezone.timedelta(microseconds=2000))
         self.assertTrue(do_something())
