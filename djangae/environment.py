@@ -22,29 +22,12 @@ def application_id():
     return result
 
 
-def sdk_is_available():
-    try:
-        from google.appengine.api import apiproxy_stub_map
-        apiproxy_stub_map  # Silence pylint
-        return True
-    except ImportError:
-        return False
-
-
 def is_production_environment():
     return not is_development_environment()
 
 
 def is_development_environment():
     return 'SERVER_SOFTWARE' not in os.environ or os.environ['SERVER_SOFTWARE'].startswith("Development")
-
-
-def datastore_is_available():
-    if not sdk_is_available():
-        return False
-
-    from google.appengine.api import apiproxy_stub_map
-    return bool(apiproxy_stub_map.apiproxy.GetStub('datastore_v3'))
 
 
 def is_in_task():
@@ -105,19 +88,16 @@ def get_application_root():
     raise RuntimeError("Unable to locate app.yaml. Did you add it to skip_files?")
 
 
-def task_or_admin_only(view_function):
-    """ View decorator for restricting access to tasks (and crons) and admins of the application
+def task_only(view_function):
+    """ View decorator for restricting access to tasks (and crons) of the application
         only.
     """
-    # Avoiding an ImportError when the SDK is not already on sys.path.
-    from google.appengine.api import users
 
     @wraps(view_function)
     def replacement(*args, **kwargs):
         if not any((
             is_in_task(),
             is_in_cron(),
-            users.is_current_user_admin(),
         )):
             return HttpResponseForbidden("Access denied.")
         return view_function(*args, **kwargs)
