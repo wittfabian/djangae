@@ -92,7 +92,7 @@ class DatastoreLocksTestCase(TestCase):
         cleanup_locks(None)
         self.process_task_queues()
         # The old lock should have been deleted but the new one should not
-        self.assertItemsEqual(DatastoreLock.objects.all(), [recent_lock])
+        self.assertCountEqual(DatastoreLock.objects.all(), [recent_lock])
 
 
 class MemcacheLocksTestCase(TestCase):
