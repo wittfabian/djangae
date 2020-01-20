@@ -87,9 +87,9 @@ def queryset_identifier(queryset):
     """ Returns a string that uniquely identifies this query excluding its low and high mark"""
 
     hasher = md5()
-    hasher.update(queryset.model._meta.db_table)
-    hasher.update(str(queryset.query.where))
-    hasher.update(str(queryset.query.order_by))
+    hasher.update(queryset.model._meta.db_table.encode())
+    hasher.update(str(queryset.query.where).encode())
+    hasher.update(str(queryset.query.order_by).encode())
     return hasher.hexdigest()
 
 
