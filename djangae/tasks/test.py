@@ -80,10 +80,12 @@ class TestCaseMixin(LiveServerTestCase):
         for queue in self.task_client.list_queues(parent=parent):
             path = queue.name
 
-            for task in self.task_client.list_tasks(path):
+            tasks = [x for x in self.task_client.list_tasks(path)]
+            for task in tasks:
                 while True:
                     try:
                         self.task_client.run_task(task.name)
+                        break
                     except GoogleAPIError as e:
                         if failure_behaviour == TaskFailedBehaviour.RETRY_TASK:
                             continue
