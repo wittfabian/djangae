@@ -1,7 +1,7 @@
 import logging
 
 from django.http import HttpResponse
-from djangae.environment import task_or_admin_only
+from djangae.environment import task__only
 
 from .tasks import backup_datastore
 from .utils import get_backup_setting
@@ -10,7 +10,7 @@ from .utils import get_backup_setting
 logger = logging.getLogger(__name__)
 
 
-@task_or_admin_only
+@task_only
 def create_datastore_backup(request):
     """
     Handler which triggers a datastore backup if DJANGAE_BACKUP_ENABLED set.
