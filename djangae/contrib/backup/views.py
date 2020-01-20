@@ -1,7 +1,7 @@
 import logging
 
 from django.http import HttpResponse
-from djangae.environment import task__only
+from djangae.environment import task_only
 
 from .tasks import backup_datastore
 from .utils import get_backup_setting
