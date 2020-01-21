@@ -6,6 +6,7 @@ from django.urls import (
 )
 
 BASE_DIR = os.path.dirname(__file__)
+STATIC_URL = "/static/"
 
 INSTALLED_APPS = (
     'gcloudc',
@@ -31,9 +32,19 @@ CSRF_USE_SESSIONS = True
 
 CLOUD_TASKS_LOCATION = "[LOCATION]"
 
+# Define two required task queues
+CLOUD_TASKS_QUEUES = [
+    {
+        "name": "default"
+    },
+    {
+        "name": "another"
+    }
+]
+
 # Point the URL conf at this file
 ROOT_URLCONF = __name__
 
 urlpatterns = [
-    path('^tasks/', include('djangae.tasks.urls')),
+    path('tasks/', include('djangae.tasks.urls')),
 ]
