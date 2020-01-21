@@ -47,7 +47,7 @@ def ensure_required_queues_exist():
     client = get_cloud_tasks_client()
 
     for queue in getattr(settings, "CLOUD_TASKS_QUEUES", []):
-        client.create_queue(queue["name"])
+        client.create_queue(cloud_tasks_parent_path(), queue)
 
 
 def cloud_tasks_project():

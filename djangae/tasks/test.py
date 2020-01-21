@@ -1,4 +1,5 @@
 
+import os
 from django.test import LiveServerTestCase
 
 from djangae.tasks import (
@@ -39,6 +40,15 @@ class TestCaseMixin(LiveServerTestCase):
 
     def setUp(self):
         # Create all the queues required by this application
+
+        super().setUp()
+
+        # Find the port we were allocated
+        port = self.live_server_url.rsplit(":")[-1]
+
+        # Set that in the environment variable used by the Cloud Tasks Emulator
+        os.environ["APP_ENGINE_TARGET_PORT"] = port
+
         ensure_required_queues_exist()
 
         self.task_client = get_cloud_tasks_client()

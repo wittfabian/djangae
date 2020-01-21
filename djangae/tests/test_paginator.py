@@ -55,21 +55,6 @@ class PaginatorTests(TestCase):
         with self.assertRaises(NotImplementedError):
             paginator.num_pages
 
-    def test_page_runs_limited_query(self):
-         with sleuth.watch('djangae.db.backends.appengine.commands.datastore.Query.Run') as query:
-            paginator = Paginator(SimplePaginatedModel.objects.all(), 2)
-
-            self.assertFalse(query.called)
-            page = paginator.page(1)
-            self.assertFalse(page.has_previous())
-            self.assertTrue(page.has_next())
-            self.assertTrue(query.called)
-
-            # Should've queried for 1 more than we asked to determine if there is a next
-            # page or not
-            self.assertEqual(query.calls[0].kwargs["limit"], 3)
-            self.assertEqual(len(page.object_list), 2)
-
     def test_results_correct(self):
         paginator = Paginator(SimplePaginatedModel.objects.all(), 2)
         page = paginator.page(2)

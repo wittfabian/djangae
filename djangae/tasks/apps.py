@@ -1,6 +1,10 @@
+import logging
+
 from django.apps import AppConfig
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
+
+from google.api_core import exceptions
 
 
 class DjangaeTasksConfig(AppConfig):
@@ -13,7 +17,10 @@ class DjangaeTasksConfig(AppConfig):
             exist based on settings.CLOUD_TASKS_QUEUES
         """
         from . import ensure_required_queues_exist
-        ensure_required_queues_exist()
+        try:
+            ensure_required_queues_exist()
+        except exceptions.ServiceUnavailable:
+            logging.warning("Not creating required queues as Cloud Tasks client is unavailable")
 
         if not getattr(settings, "CLOUD_TASKS_LOCATION", None):
             raise ImproperlyConfigured(
