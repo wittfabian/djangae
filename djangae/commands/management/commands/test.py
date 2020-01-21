@@ -1,6 +1,10 @@
 import logging
 import time
 
+
+from djangae.tasks import ensure_required_queues_exist
+
+
 try:
     # First, try to import the TestCommand from the Datastore connector project
     from gcloudc.commands.management.commands import CloudDatastoreRunner
@@ -26,11 +30,16 @@ class Command(CloudDatastoreRunner, TestCommand):
     USE_MEMORY_DATASTORE_BY_DEFAULT = True
 
     def _start_task_emulator(self):
+        self.task_emulator = None
         self.task_emulator = create_server("localhost", 9022)
         if self.task_emulator:
             print("Starting Cloud Tasks Emulator...")
             self.task_emulator.start()
             time.sleep(1)
+
+            # Make sure we create any required queues that are defined in the
+            # settings
+            ensure_required_queues_exist()
 
     def _stop_task_emulator(self):
         if self.task_emulator:
