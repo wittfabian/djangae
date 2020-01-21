@@ -40,8 +40,6 @@ LOGGING = {
     }
 }
 
-EMAIL_BACKEND = 'djangae.mail.AsyncEmailBackend'
-
 # Setting to * is OK, because GAE takes care of domain routing - setting it to anything
 # else just causes unnecessary pain when something isn't accessible under a custom domain
 ALLOWED_HOSTS = ("*",)
