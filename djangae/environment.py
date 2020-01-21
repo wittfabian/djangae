@@ -14,11 +14,9 @@ from djangae.utils import memoized
 
 
 def application_id():
-    try:
-        result = os.environ.get("GAE_APPLICATION").split("~", 1)[-1]
-    except AttributeError:
-        result = None
-
+    # Fallback to example on local or if this is not specified in the
+    # environment already
+    result = os.environ.get("GAE_APPLICATION", "e~example").split("~", 1)[-1]
     return result
 
 
@@ -110,4 +108,6 @@ def default_gcs_bucket_name():
 
 
 def project_id():
-    return os.environ["GOOGLE_CLOUD_PROJECT"]
+    # Environment variable will exist on production servers
+    # fallback to "example" locally if it doesn't exist
+    return os.environ.get("GOOGLE_CLOUD_PROJECT", "example")
