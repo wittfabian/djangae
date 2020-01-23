@@ -132,10 +132,8 @@ def _wipe_caches(args, kwargs):
     # wipes the caches of related fields if any of the args or kwargs are
     # instances.
     def _wipe_instance(instance):
-        for field in (f for f in instance._meta.fields if f.rel):
-            cache_name = field.get_cache_name()
-            if hasattr(instance, cache_name):
-                delattr(instance, cache_name)
+        for field in (f for f in instance._meta.fields if f.remote_field):
+            field.delete_cached_value(instance)
 
     # We have to copy the instances before wiping the caches
     # otherwise the calling code will suddenly lose their cached things
@@ -177,7 +175,7 @@ def defer(obj, *args, **kwargs):
 
     taskargs["headers"] = dict(_TASKQUEUE_HEADERS)
     taskargs["headers"].update(kwargs.pop("_headers", {}))
-    queue = kwargs.pop("_queue", _DEFAULT_QUEUE)
+    queue = kwargs.pop("_queue", _DEFAULT_QUEUE) or _DEFAULT_QUEUE
 
     if wipe_related_caches:
         args = list(args)
@@ -201,7 +199,7 @@ def defer(obj, *args, **kwargs):
         if not small_task:
             deferred_task = DeferredTask.objects.create(data=pickled)
 
-        queue = queue or "default"
+        queue = queue or _DEFAULT_QUEUE
         path = client.queue_path(project_id, location, queue)
 
         task = {
