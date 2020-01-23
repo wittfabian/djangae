@@ -1,16 +1,12 @@
-import json
 from django.db import models
 from django.test import override_settings
-from django.contrib.admin.models import LogEntry
 
 from djangae.contrib import sleuth
-from djangae.environment import application_id
 from djangae.test import TestCase
 
 from djangae.contrib.backup.tasks import (
     _get_valid_export_models,
     backup_datastore,
-    SERVICE_URL,
     AUTH_SCOPES,
 )
 
@@ -22,9 +18,14 @@ class MockUser(models.Model):
         app_label = "backup"
 
 
+class MockLogEntry(models.Model):
+    class Meta:
+        app_label = "backup"
+
+
 def mock_get_app_models(**kwargs):
     return [
-        LogEntry,
+        MockLogEntry,
         MockUser,
     ]
 
@@ -32,20 +33,20 @@ def mock_get_app_models(**kwargs):
 class GetValidExportModelsTestCase(TestCase):
     """Tests focused on djangae.contrib.backup.tasks._get_valid_export_models"""
 
-    @override_settings(DJANGAE_BACKUP_EXCLUDE_MODELS=['django_admin_log'])
+    @override_settings(DJANGAE_BACKUP_EXCLUDE_MODELS=['backup_logentry'])
     @sleuth.switch('django.apps.apps.get_models', mock_get_app_models)
     def test_models_filtered(self):
         valid_models = _get_valid_export_models(
-            ['django_admin_log', 'backup_mockuser']
+            ['backup_logentry', 'backup_mockuser']
         )
-        self.assertNotIn('django_admin_log', valid_models)
+        self.assertNotIn('backup_logentry', valid_models)
         self.assertIn('backup_mockuser', valid_models)
 
     @override_settings(DJANGAE_BACKUP_EXCLUDE_APPS=['django'])
     @sleuth.switch('django.apps.apps.get_models', mock_get_app_models)
     def test_apps_filtered(self):
         valid_models = _get_valid_export_models(
-            ['django_admin_log', 'backup_mockuser']
+            ['backup_logentry', 'backup_mockuser']
         )
         self.assertIn('backup_mockuser', valid_models)
         self.assertNotIn('django_admin_log', valid_models)
