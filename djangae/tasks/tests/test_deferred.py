@@ -28,11 +28,11 @@ class DeferModelB(models.Model):
 
 class DeferTests(TestCase):
     def test_defer_uses_an_entity_group(self):
-        with sleuth.watch('google.appengine.api.datastore.Put') as Put:
+        with sleuth.watch('google.cloud.tasks.entity.Entity.put') as Put:
             defer(test_task)
             self.assertTrue(Put.called)
 
-        with sleuth.watch('google.appengine.api.datastore.Put') as Put:
+        with sleuth.watch('google.cloud.tasks.entity.Entity.put') as Put:
             defer(test_task, _small_task=True)
             self.assertFalse(Put.called)
 

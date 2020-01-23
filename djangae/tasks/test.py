@@ -37,6 +37,9 @@ class TestCaseMixin(LiveServerTestCase):
         are created and paused, and manually runs the
         queued tasks in them to check their responses
     """
+    def __init__(self, *args, **kwargs):
+        self.max_task_retry_count = 100
+        super().__init__(*args, **kwargs)
 
     def setUp(self):
         # Create all the queues required by this application
@@ -91,15 +94,29 @@ class TestCaseMixin(LiveServerTestCase):
             path = queue.name
 
             tasks = [x for x in self.task_client.list_tasks(path)]
-            for task in tasks:
-                while True:
-                    try:
-                        self.task_client.run_task(task.name)
-                        break
-                    except GoogleAPIError as e:
-                        if failure_behaviour == TaskFailedBehaviour.RETRY_TASK:
-                            continue
-                        elif failure_behaviour == TaskFailedBehaviour.RAISE_ERROR:
-                            raise TaskFailedError(task.name, str(e))
+            while tasks:
+                task = tasks.pop(0)
+
+                try:
+                    self.task_client.run_task(task.name)
+                except GoogleAPIError as e:
+                    if failure_behaviour == TaskFailedBehaviour.RETRY_TASK:
+                        if not hasattr(task, "_failed_count"):
+                            task._failed_count = 1
                         else:
-                            break
+                            task._failed_count += 1
+
+                        if task._failed_count >= self.max_task_retry_count:
+                            # Make sure we don't get an infinite loop while retrying
+                            raise
+
+                        tasks.append(task)  # Add back to the end of the queue
+                        continue
+                    elif failure_behaviour == TaskFailedBehaviour.RAISE_ERROR:
+                        raise TaskFailedError(task.name, str(e))
+                    else:
+                        # Do nothing, ignore the failure
+                        pass
+
+                if not tasks:
+                    tasks = [x for x in self.task_client.list_tasks(path)]

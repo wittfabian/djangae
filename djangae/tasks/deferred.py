@@ -23,7 +23,6 @@ import os
 import pickle
 import time
 import types
-
 from urllib.parse import unquote
 
 from django.conf import settings
@@ -34,6 +33,7 @@ from djangae.environment import task_queue_name
 from djangae.models import DeferIterationMarker
 from djangae.processing import find_key_ranges_for_queryset
 from djangae.utils import retry
+from gcloudc.db import transaction
 
 from . import (
     CLOUD_TASKS_LOCATION_SETTING,
@@ -201,6 +201,7 @@ def defer(obj, *args, **kwargs):
         if not small_task:
             deferred_task = DeferredTask.objects.create(data=pickled)
 
+        queue = queue or "default"
         path = client.queue_path(project_id, location, queue)
 
         task = {
