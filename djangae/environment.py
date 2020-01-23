@@ -30,12 +30,17 @@ def is_development_environment():
 
 def is_in_task():
     "Returns True if the request is a task, False otherwise"
-    return bool(task_name())
+    return bool(task_name()) or bool(queue_name())
 
 
 def is_in_cron():
     "Returns True if the request is in a cron, False otherwise"
     return bool(os.environ.get("HTTP_X_APPENGINE_CRON"))
+
+
+def queue_name():
+    "Returns the name of the current task if any, else None"
+    return os.environ.get("HTTP_X_APPENGINE_QUEUENAME")
 
 
 def task_name():
@@ -52,7 +57,7 @@ def task_retry_count():
 
 
 def task_queue_name():
-    "Returns the name of the current task queue (if this is a task) else None"
+    "Returns the name of the current task queue (if this is a task) else 'default'"
     if "HTTP_X_APPENGINE_QUEUENAME" in os.environ:
         return os.environ["HTTP_X_APPENGINE_QUEUENAME"]
     else:
