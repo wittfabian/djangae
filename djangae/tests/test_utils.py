@@ -73,7 +73,7 @@ class RetryTestCase(TestCase):
         def flakey():
             raise Exception("Oops")
 
-        with sleuth.watch("djangae.utils.time.sleep") as sleep_watch:
+        with sleuth.watch("djangae.utils._yield") as sleep_watch:
             try:
                 flakey()
             except Exception:
@@ -92,14 +92,14 @@ class RetryTestCase(TestCase):
         def flakey():
             raise Exception("Oops")
 
-        with sleuth.watch("djangae.utils.time.sleep") as sleep_watch:
+        with sleuth.watch("djangae.utils._yield") as sleep_watch:
             try:
                 flakey()
             except Exception:
                 pass
 
             self.assertTrue(sleep_watch.called)
-            self.assertEqual(len(sleep_watch.calls), 9)  # It doesn't sleep after the final attempt
+            self.assertEqual(sleep_watch.call_count, 9)  # It doesn't sleep after the final attempt
             sleep_times = [call.args[0] for call in sleep_watch.calls]
             self.assertEqual(max(sleep_times), 0.003)
 

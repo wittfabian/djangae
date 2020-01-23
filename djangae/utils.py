@@ -114,6 +114,10 @@ def retry_until_successful(func, *args, **kwargs):
     return retry(func, *args, _attempts=float('inf'), **kwargs)
 
 
+def _yield(seconds):  # Patchable
+    time.sleep(seconds)
+
+
 def retry(func, *args, **kwargs):
     """ Calls a function that may intermittently fail, catching the given error(s) and (re)trying
         for a maximum of `_attempts` times.
@@ -158,7 +162,7 @@ def retry(func, *args, **kwargs):
                 else:
                     random_factor = 0
 
-                time.sleep(min((timeout_ms + random_factor), max_wait) * 0.001)
+                _yield(min((timeout_ms + random_factor), max_wait) * 0.001)
                 timeout_ms *= 2
                 timeout_ms = min(timeout_ms, max_wait)
 
