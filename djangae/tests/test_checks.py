@@ -16,7 +16,7 @@ class ChecksTestCase(TestCase):
         errors = checks.check_session_csrf_enabled()
         self.assertEqual(len(errors), 0)
 
-        with override_settings(MIDDLEWARE=[], MIDDLEWARE_CLASSES=[]):
+        with override_settings(CSRF_USE_SESSIONS=False):
             errors = checks.check_session_csrf_enabled()
             self.assertEqual(len(errors), 1)
             self.assertEqual(errors[0].id, 'djangae.E001')
@@ -73,14 +73,3 @@ class ChecksTestCase(TestCase):
         with override_settings(TEMPLATES=template_setting):
             errors = checks.check_cached_template_loader_used()
             self.assertEqual(len(errors), 0)
-
-    def test_app_engine_sdk_version_check_supported(self):
-        with sleuth.switch('djangae.checks._VersionList', lambda x: [1, 0, 0]):
-            errors = checks.check_app_engine_sdk_version()
-            self.assertEqual(len(errors), 0)
-
-    def test_app_engine_sdk_version_check_unsupported(self):
-        with sleuth.switch('djangae.checks._VersionList', lambda x: [100, 0, 0]):
-            errors = checks.check_app_engine_sdk_version()
-            self.assertEqual(len(errors), 1)
-            self.assertEqual(errors[0].id, 'djangae.W002')
