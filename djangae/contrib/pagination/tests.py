@@ -66,7 +66,7 @@ class PaginatedModelTests(TestCase):
         self.assertEqual(u"Luke\x00Benstead\x001", user.pagination_first_name_last_name)
         self.assertEqual("%s\x001" % user.created.isoformat(), user.pagination_created)
 
-        reversed_last_name = "".join([ unichr(0xffff - ord(x)) for x in "Benstead" ])
+        reversed_last_name = "".join([chr(0xffff - ord(x)) for x in "Benstead"])
 
         self.assertEqual(u"Luke\x00{}\x001".format(reversed_last_name), user.pagination_first_name_neg_last_name)
 
