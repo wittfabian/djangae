@@ -81,16 +81,15 @@ class TestCaseMixin(LiveServerTestCase):
             self.task_client.purge_queue(queue.name)
 
     def get_task_count(self, queue_name=None):
-        path = cloud_tasks_queue_path(queue_name)
+        count = 0
+        for queue in self._get_queues(queue_name=queue_name):
+            path = queue.name
+            count += len(list(self.task_client.list_tasks(path)))
 
-        return sum([
-            len(list(self.task_client.list_tasks(path)))
-            for queue in self._get_queues(queue_name=queue_name)
-        ])
+        return count
 
     def process_task_queues(self, queue_name=None, failure_behaviour=TaskFailedBehaviour.RAISE_ERROR):
-        parent = cloud_tasks_parent_path()
-        for queue in self.task_client.list_queues(parent=parent):
+        for queue in self._get_queues(queue_name):
             path = queue.name
 
             tasks = [x for x in self.task_client.list_tasks(path)]
