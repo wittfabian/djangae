@@ -2,6 +2,7 @@ from django.db import models
 
 from djangae.contrib import sleuth
 from djangae.tasks.deferred import defer
+from djangae.tasks.models import DeferredTask
 from djangae.test import TestCase, TaskFailedError
 
 
@@ -10,8 +11,8 @@ def test_task(*args, **kwargs):
 
 
 def assert_cache_wiped(instance):
-    cache_name = DeferModelA._meta.get_field("b").get_cache_name()
-    assert(getattr(instance, cache_name, None) is None)
+    field = DeferModelA._meta.get_field("b")
+    assert(field.get_cached_value(instance, None) is None)
 
 
 class DeferModelA(models.Model):
@@ -27,15 +28,6 @@ class DeferModelB(models.Model):
 
 
 class DeferTests(TestCase):
-    def test_defer_uses_an_entity_group(self):
-        with sleuth.watch('google.cloud.tasks.entity.Entity.put') as Put:
-            defer(test_task)
-            self.assertTrue(Put.called)
-
-        with sleuth.watch('google.cloud.tasks.entity.Entity.put') as Put:
-            defer(test_task, _small_task=True)
-            self.assertFalse(Put.called)
-
     def test_wipe_related_caches(self):
         b = DeferModelB.objects.create()
         a = DeferModelA.objects.create(b=b)
