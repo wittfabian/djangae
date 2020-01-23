@@ -25,7 +25,7 @@ class PaginatorTests(TestCase):
         ]
 
     def test_no_previous_on_first_page(self):
-        with sleuth.watch('djangae.db.backends.appengine.commands.datastore.Query.Run') as query:
+        with sleuth.watch('gcloudc.db.backends.datastore.commands.Query.__init__') as query:
             paginator = Paginator(SimplePaginatedModel.objects.all(), 2)
 
             self.assertFalse(query.called)
