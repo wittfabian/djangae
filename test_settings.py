@@ -8,6 +8,15 @@ from django.urls import (
 BASE_DIR = os.path.dirname(__file__)
 STATIC_URL = "/static/"
 
+# Set the cache during tests to local memory, which is threadsafe
+# then our TestCase clears the cache in setUp()
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'unique-snowflake',
+    }
+}
+
 # Default Django middleware
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
