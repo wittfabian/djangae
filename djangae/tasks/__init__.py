@@ -31,10 +31,11 @@ def get_cloud_tasks_client():
         from google.cloud.tasks_v2.gapic.transports.cloud_tasks_grpc_transport import CloudTasksGrpcTransport
         from google.api_core.client_options import ClientOptions
 
-        port = 9022  # FIXME: Pass this somehow
+        host = os.environ.get("TASKS_EMULATOR_HOST", "127.0.0.1:9022")
+
         client = CloudTasksClient(
-            transport=CloudTasksGrpcTransport(channel=grpc.insecure_channel("127.0.0.1:%s" % port)),
-            client_options=ClientOptions(api_endpoint="127.0.0.1:%s" % port)
+            transport=CloudTasksGrpcTransport(channel=grpc.insecure_channel(host)),
+            client_options=ClientOptions(api_endpoint=host)
         )
         return client
 
