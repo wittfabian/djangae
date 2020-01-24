@@ -14,6 +14,9 @@ class SimplePaginatedModel(models.Model):
     field1 = models.IntegerField(default=0)
     field2 = models.CharField(max_length=10)
 
+    class Meta:
+        ordering = ("field1",)
+
 
 class PaginatorTests(TestCase):
     def setUp(self):
