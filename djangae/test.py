@@ -9,6 +9,7 @@ from djangae.tasks.test import (
     TaskFailedError,
     TestCaseMixin,
 )
+from django.core.cache import cache
 
 TaskFailedError = TaskFailedError
 TaskFailedBehaviour = TaskFailedBehaviour
@@ -99,6 +100,7 @@ class HandlerAssertionsMixin(object):
 class TestEnvironmentMixin(object):
     def setUp(self):
         enable_test_environment_variables()
+        cache.clear()
         super().setUp()
 
 
