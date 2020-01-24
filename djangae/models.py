@@ -3,14 +3,6 @@ from django.db import models
 from djangae import patches  # noqa
 
 
-class CounterShard(models.Model):
-    count = models.PositiveIntegerField()
-    label = models.CharField(max_length=500)
-
-    class Meta:
-        app_label = "djangae"
-
-
 class DeferIterationMarker(models.Model):
     """
         Marker to keep track of sharded defer
