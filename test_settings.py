@@ -8,6 +8,8 @@ from django.urls import (
 BASE_DIR = os.path.dirname(__file__)
 STATIC_URL = "/static/"
 
+TEST_RUNNER = "djangae.test.AppEngineDiscoverRunner"
+
 # Set the cache during tests to local memory, which is threadsafe
 # then our TestCase clears the cache in setUp()
 CACHES = {
@@ -32,7 +34,6 @@ INSTALLED_APPS = (
     'django.contrib.sessions',
     'gcloudc',
     'djangae',
-    'djangae.commands',  # Takes care of emulator setup
     'djangae.tasks',
 )
 

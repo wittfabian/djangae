@@ -1,13 +1,9 @@
-# STANDARD LIBRARY
-from functools import wraps
+
 import os
+from functools import wraps
 
-# THIRD PARTY
-from django.http import HttpResponseForbidden
-
-# DJANGAE
 from djangae.utils import memoized
-
+from django.http import HttpResponseForbidden
 
 # No SDK imports allowed in module namespace because `./manage.py runserver`
 # imports this before the SDK is added to sys.path. See bugs #899, #1055.
@@ -67,6 +63,8 @@ def task_queue_name():
 @memoized
 def get_application_root():
     """Traverse the filesystem upwards and return the directory containing app.yaml"""
+    from django.conf import settings  # Avoid circular
+
     path = os.path.dirname(os.path.abspath(__file__))
     app_yaml_path = os.environ.get('DJANGAE_APP_YAML_LOCATION', None)
 
@@ -88,7 +86,9 @@ def get_application_root():
             else:
                 path = parent
 
-    raise RuntimeError("Unable to locate app.yaml. Did you add it to skip_files?")
+    # Use the Django base directory as a fallback. We search for app.yaml
+    # first because that will be the "true" root of the GAE app
+    return settings.BASE_DIR
 
 
 def task_only(view_function):
