@@ -93,6 +93,8 @@ class TestCaseMixin(LiveServerTestCase):
             path = queue.name
 
             tasks = [x for x in self.task_client.list_tasks(path)]
+            task_failure_counts = {}
+
             while tasks:
                 task = tasks.pop(0)
 
@@ -100,10 +102,10 @@ class TestCaseMixin(LiveServerTestCase):
                     self.task_client.run_task(task.name)
                 except GoogleAPIError as e:
                     if failure_behaviour == TaskFailedBehaviour.RETRY_TASK:
-                        if not hasattr(task, "_failed_count"):
-                            task._failed_count = 1
+                        if task.name not in task_failure_counts:
+                            task_failure_counts[task.name] = 1
                         else:
-                            task._failed_count += 1
+                            task_failure_counts[task.name] += 1
 
                         if task._failed_count >= self.max_task_retry_count:
                             # Make sure we don't get an infinite loop while retrying
