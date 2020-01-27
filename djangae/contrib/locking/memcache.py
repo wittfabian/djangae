@@ -1,47 +1,40 @@
+import random
 import time
 from datetime import datetime
 
-from django.core.cache import cache as memcache
+from django.core.cache import cache
 
 
 class MemcacheLock(object):
-    def __init__(self, identifier, cache):
+    def __init__(self, identifier, cache, unique_value):
         self.identifier = identifier
         self._cache = cache
+        self.unique_value = unique_value
 
     @classmethod
     def acquire(cls, identifier, wait=True, steal_after_ms=None):
-        cache = memcache.Client()
+        start_time = datetime.utcnow()
+        unique_value = random.randint(1, 100000)
 
-        def expired(value):
-            if not value:
-                # No value? We're fine
-                return True
+        while True:
+            acquired = cache.add(identifier, unique_value)
+            if acquired:
+                return cls(identifier, cache, unique_value)
+            elif not wait:
+                return None
+            else:
+                # We are waiting for the lock
+                if (datetime.utcnow() - start_time).total_seconds() * 1000 > steal_after_ms:
+                    # Steal anyway
+                    cache.set(identifier, unique_value)
+                    return cls(identifier, cache, unique_value)
 
-            return (datetime.utcnow() - value).total_seconds() * 1000 > steal_after_ms
-
-        acquired = cache.add(identifier, datetime.utcnow())
-        if acquired:
-            # We set the key so we have the lock
-            return cls(identifier, cache)
-        elif not wait:
-            return None
-        else:
-            while True:
-                # We are waiting for a while
-                to_set = datetime.utcnow()
-
-                # Use compare-and-set to atomically set our new timestamp
-                # if the lock has expired
-                stored = cache.gets(identifier)
-                if expired(stored):
-                    if cache.cas(identifier, to_set):
-                        break
-
-                time.sleep(0.1)
-
-            return cls(identifier, cache)
+                time.sleep(0)
 
     def release(self):
         cache = self._cache
-        cache.delete(self.identifier)
+
+        # Delete the key if it was ours. There is a race condition here
+        # if something steals the lock between the if and the delete...
+        if cache.get(self.identifier) == self.unique_value:
+            cache.delete(self.identifier)

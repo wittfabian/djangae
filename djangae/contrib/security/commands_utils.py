@@ -1,14 +1,10 @@
 import inspect
 import re
 
-import django
 from django.contrib.admindocs import utils as admindocs_utils
 from django.contrib.admindocs import views as admindocs_views
 from django.core.exceptions import ViewDoesNotExist
-from django.urls import (
-    RegexURLPattern,
-    RegexURLResolver,
-)
+from django.urls.resolvers import URLResolver, URLPattern
 
 
 def extract_views_from_urlpatterns(urlpatterns, base='', namespace=None, ignored_modules=None):
@@ -19,8 +15,10 @@ def extract_views_from_urlpatterns(urlpatterns, base='', namespace=None, ignored
     """
     ignored_modules = ignored_modules if ignored_modules else []
     views = []
+
     for p in urlpatterns:
-        if isinstance(p, RegexURLPattern):
+
+        if isinstance(p, URLPattern):
             # Handle correct single URL patterns
             try:
                 if namespace:
@@ -29,25 +27,32 @@ def extract_views_from_urlpatterns(urlpatterns, base='', namespace=None, ignored
                     name = p.name
                 if hasattr(p.callback, '__module__'):
                     if p.callback.__module__.split('.')[0] not in ignored_modules:
-                        views.append((p.callback, base + p.regex.pattern, name))
+                        views.append((p.callback, base, name))
                 else:
-                    views.append((p.callback, base + p.regex.pattern, name))
+                    views.append((p.callback, base, name))
             except ViewDoesNotExist:
                 continue
 
-        elif isinstance(p, RegexURLResolver):
+        elif isinstance(p, URLResolver):
             # Handle include() definitions
             try:
                 patterns = p.url_patterns
             except ImportError:
                 continue
-            views.extend(extract_views_from_urlpatterns(patterns, base + p.regex.pattern,
-                namespace=(namespace or p.namespace), ignored_modules=ignored_modules))
+
+            print(dir(p.pattern))
+            views.extend(
+                extract_views_from_urlpatterns(
+                    patterns, base,
+                    namespace=(namespace or p.namespace),
+                    ignored_modules=ignored_modules
+                )
+            )
 
         elif hasattr(p, '_get_callback'):
             # Handle string like 'foo.views.view_name' or just function view
             try:
-                views.append((p._get_callback(), base + p.regex.pattern, p.name))
+                views.append((p._get_callback(), base + p.pattern, p.name))
             except ViewDoesNotExist:
                 continue
 
@@ -57,8 +62,13 @@ def extract_views_from_urlpatterns(urlpatterns, base='', namespace=None, ignored
                 patterns = p.url_patterns
             except ImportError:
                 continue
-            views.extend(extract_views_from_urlpatterns(patterns, base + p.regex.pattern,
-                namespace=namespace, ignored_modules=ignored_modules))
+
+            views.extend(
+                extract_views_from_urlpatterns(
+                    patterns, base + p.regex.pattern,
+                    namespace=namespace, ignored_modules=ignored_modules
+                )
+            )
         else:
             raise TypeError("%s does not appear to be a urlpattern object" % p)
     return views
@@ -71,7 +81,7 @@ def display_as_table(views, headers=('URL', 'Handler path', 'Decorators & Mixins
     """
     # Find the longest value in each column
     widths = [len(max(columns, key=len)) for columns in zip(*[headers] + sorted(views))]
-    widths = [width  if width < 100 else 100 for width in widths]
+    widths = [width if width < 100 else 100 for width in widths]
     table_views = []
 
     table_views.append(
@@ -134,7 +144,7 @@ def get_decorators(func):
                     if k.startswith('@'):
                         decorators.append(k.strip().split('(')[0])
                     j += 1
-                    if j >= i: # don't wrap around when we get to the start of the file
+                    if j >= i:  # don't wrap around when we get to the start of the file
                         break
                     k = source_code[i-j]
             i += 1
@@ -167,28 +177,24 @@ def get_mixins(func, ignored_modules=None):
 # TODO: submit this as a patch to Django.
 
 non_named_group_matcher = re.compile(
-    r'\(' # opening bracket of group
-    '(' # a group for THIS regex...
-        r'[^\)]*' # zero or more characters that are not a closing bracket
+    r'\('  # opening bracket of group
+    '('  # a group for THIS regex...
+        r'[^\)]*'  # noqa zero or more characters that are not a closing bracket
         # the next line allows us to have non-capturing groups within the overall group that we're matching
-        r'\(\?[^\)]*\)' # a non-capturing group
-        r'[^\)]*' # zero or more characters that are not a bracket
-    ')*' # all of that ^ bit zero or more times
-    r'\)' # the closing bracket of the group
+        r'\(\?[^\)]*\)'  # a non-capturing group
+        r'[^\)]*'  # zero or more characters that are not a bracket
+    ')*'  # all of that ^ bit zero or more times
+    r'\)'  # the closing bracket of the group
 )
 
 
 def simplify_regex(pattern):
     """ Do the same as django.contrib.admindocs.views.simplify_regex but with our improved regex.
     """
-    if django.VERSION[1] > 10:
-        original_regex = admindocs_utils.unnamed_group_matcher
-        admindocs_utils.unnamed_group_matcher = non_named_group_matcher
-        result = admindocs_views.simplify_regex(pattern)
-        admindocs_utils.unnamed_group_matcher = original_regex
-    else:
-        original_regex = admindocs_views.non_named_group_matcher
-        admindocs_views.non_named_group_matcher = non_named_group_matcher
-        result = admindocs_views.simplify_regex(pattern)
-        admindocs_views.non_named_group_matcher = original_regex
+
+    original_regex = admindocs_utils.unnamed_group_matcher
+    admindocs_utils.unnamed_group_matcher = non_named_group_matcher
+    result = admindocs_views.simplify_regex(pattern)
+    admindocs_utils.unnamed_group_matcher = original_regex
+
     return result
