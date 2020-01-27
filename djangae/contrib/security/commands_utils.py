@@ -40,7 +40,6 @@ def extract_views_from_urlpatterns(urlpatterns, base='', namespace=None, ignored
             except ImportError:
                 continue
 
-            print(dir(p.pattern))
             views.extend(
                 extract_views_from_urlpatterns(
                     patterns, base,
