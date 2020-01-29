@@ -137,38 +137,33 @@ def retry(func, *args, **kwargs):
     randomize = kwargs.pop('_avoid_clashes', True)
 
     i = 0
-    try:
-        while True:
-            try:
-                i += 1
-                return func(*args, **kwargs)
-            except catch as exc:
-                if i >= attempts:
-                    logger.error("Ran out of attempts while retrying function")
-                    raise  # Re-raise original exception
+    while True:
+        try:
+            i += 1
+            return func(*args, **kwargs)
+        except catch as exc:
+            if i >= attempts:
+                logger.error("Ran out of attempts while retrying function")
+                raise  # Re-raise original exception
 
-                # The location of the errors on each attempt may change, so we log
-                # each one
-                logger.exception("Exception during retry attempt. Will retry.")
+            # The location of the errors on each attempt may change, so we log
+            # each one
+            logger.exception("Exception during retry attempt. Will retry.")
 
-                logger.info("Retrying function: %s(%s, %s) - %s", func, args, kwargs, exc)
+            logger.info("Retrying function: %s(%s, %s) - %s", func, args, kwargs, exc)
 
-                # Add a slight bit of randomness (up to a second) to avoid competing tasks
-                # repeatedly clashing with each other on retries. We still cap at max_wait,
-                # because that's what the user requested, we also respect initial wait so don't
-                # add a random factor on the first sleep
-                if randomize:
-                    random_factor = random.randint(0, 1000) if i > 1 else 0
-                else:
-                    random_factor = 0
+            # Add a slight bit of randomness (up to a second) to avoid competing tasks
+            # repeatedly clashing with each other on retries. We still cap at max_wait,
+            # because that's what the user requested, we also respect initial wait so don't
+            # add a random factor on the first sleep
+            if randomize:
+                random_factor = random.randint(0, 1000) if i > 1 else 0
+            else:
+                random_factor = 0
 
-                _yield(min((timeout_ms + random_factor), max_wait) * 0.001)
-                timeout_ms *= 2
-                timeout_ms = min(timeout_ms, max_wait)
-
-    except DeadlineExceededError:
-        logger.error("Timeout while running function: %s(%s, %s)", func, args, kwargs)
-        raise
+            _yield(min((timeout_ms + random_factor), max_wait) * 0.001)
+            timeout_ms *= 2
+            timeout_ms = min(timeout_ms, max_wait)
 
 
 def retry_on_error(
