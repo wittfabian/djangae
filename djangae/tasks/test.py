@@ -47,10 +47,7 @@ class TestCaseMixin(LiveServerTestCase):
         super().setUp()
 
         # Find the port we were allocated
-        port = self.live_server_url.rsplit(":")[-1]
-
-        # Set that in the environment variable used by the Cloud Tasks Emulator
-        os.environ["APP_ENGINE_TARGET_PORT"] = port
+        self._server_port = self.live_server_url.rsplit(":")[-1]
 
         ensure_required_queues_exist()
 
@@ -99,7 +96,7 @@ class TestCaseMixin(LiveServerTestCase):
                 task = tasks.pop(0)
 
                 try:
-                    self.task_client.run_task(task.name)
+                    self.task_client.run_task(task.name + "?port=%s" % self._server_port)
                 except GoogleAPIError as e:
                     if failure_behaviour == TaskFailedBehaviour.RETRY_TASK:
                         if task.name not in task_failure_counts:
@@ -107,7 +104,7 @@ class TestCaseMixin(LiveServerTestCase):
                         else:
                             task_failure_counts[task.name] += 1
 
-                        if task._failed_count >= self.max_task_retry_count:
+                        if task_failure_counts[task.name] >= self.max_task_retry_count:
                             # Make sure we don't get an infinite loop while retrying
                             raise
 

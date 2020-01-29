@@ -16,7 +16,7 @@ _ALL_EMULATORS = ("datastore", "tasks", "storage")
 
 
 DATASTORE_PORT = 10901
-TASKS_PORT = 10902
+TASKS_PORT = 10908
 
 
 def _launch_process(command_line):
@@ -24,12 +24,20 @@ def _launch_process(command_line):
     return subprocess.Popen(command_line.split(" "), env=env)
 
 
-def _wait_for_datastore(port):
-    TIMEOUT = 60.0
+def _wait_for_tasks(port):
+    time.sleep(5)  # FIXME: Need to somehow check it's running
 
+
+def _wait_for_datastore(port):
+    _wait(port, "Cloud Datastore Emulator")
+
+
+def _wait(port, service):
+    print("Waiting for %s..." % service)
+
+    TIMEOUT = 60.0
     start = datetime.now()
 
-    print("Waiting for Cloud Datastore Emulator...")
     time.sleep(1)
 
     failures = 0
@@ -41,7 +49,7 @@ def _wait_for_datastore(port):
             time.sleep(1)
             if failures > 5:
                 # Only start logging if this becomes persistent
-                logging.exception("Error connecting to the Cloud Datastore Emulator. Retrying...")
+                logging.exception("Error connecting to the %s. Retrying..." % service)
             continue
 
         if response.status == 200:
@@ -50,7 +58,7 @@ def _wait_for_datastore(port):
             break
 
         if (datetime.now() - start).total_seconds() > TIMEOUT:
-            raise RuntimeError("Unable to start Cloud Datastore Emulator. Please check the logs.")
+            raise RuntimeError("Unable to start %s. Please check the logs." % service)
 
         time.sleep(1)
 
@@ -78,6 +86,7 @@ def start_emulators(persist_data, emulators=None, storage_dir=None):
         _ACTIVE_EMULATORS["tasks"] = _launch_process(
             "gcloud-tasks-emulator start --port=%s" % TASKS_PORT
         )
+        _wait_for_tasks(TASKS_PORT)
 
 
 def stop_emulators(emulators=None):
