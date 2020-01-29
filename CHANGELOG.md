@@ -12,7 +12,7 @@
 
 ### Bug fixes:
 
--
+- Fixes bug where `djangae.contrib.backups` would not backup models who explictly set table name with `db_table`.
 
 ## v1.0.0
 

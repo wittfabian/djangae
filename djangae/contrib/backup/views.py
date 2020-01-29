@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 def create_datastore_backup(request):
     """
     Handler which triggers a datastore backup if DJANGAE_BACKUP_ENABLED set.
-    
+
     GET params can be passed to override the default bucket target and entity
     kinds to backup. This allows us to have different types of backup and not
     be constrained by the settings config (e.g. we might have different cron
