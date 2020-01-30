@@ -96,7 +96,15 @@ class TestCaseMixin(LiveServerTestCase):
                 task = tasks.pop(0)
 
                 try:
-                    self.task_client.run_task(task.name + "?port=%s" % self._server_port)
+                    response = self.task_client.run_task(task.name + "?port=%s" % self._server_port)
+
+                    # If the returned status wasn't a success then
+                    # drop into the except block below to handle the
+                    # failure
+                    status = response.last_attempt.response_status.code
+                    if str(status)[0] != "2":
+                        raise GoogleAPIError("Task returned bad status: %s" % status)
+
                 except GoogleAPIError as e:
                     if failure_behaviour == TaskFailedBehaviour.RETRY_TASK:
                         if task.name not in task_failure_counts:
