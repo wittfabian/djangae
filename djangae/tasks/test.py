@@ -1,5 +1,4 @@
 
-import os
 from django.test import LiveServerTestCase
 
 from djangae.tasks import (
