@@ -1,11 +1,4 @@
-import os
-import tempfile
-
-import yaml
-
 from djangae import checks
-from djangae.contrib import sleuth
-from djangae.environment import get_application_root
 from djangae.test import TestCase
 from django.test.utils import override_settings
 

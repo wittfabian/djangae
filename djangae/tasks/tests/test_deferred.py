@@ -1,8 +1,5 @@
 from django.db import models
-
-from djangae.contrib import sleuth
 from djangae.tasks.deferred import defer
-from djangae.tasks.models import DeferredTask
 from djangae.test import TestCase, TaskFailedError
 
 

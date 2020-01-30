@@ -90,6 +90,8 @@ def clearsessions(request):
     try:
         engine.SessionStore.clear_expired()
     except NotImplementedError:
-        logger.exception("Session engine '%s' doesn't support clearing "
-                          "expired sessions.\n", settings.SESSION_ENGINE)
+        logger.exception(
+            "Session engine '%s' doesn't support clearing "
+            "expired sessions.\n", settings.SESSION_ENGINE
+        )
     return HttpResponse("Ok.")

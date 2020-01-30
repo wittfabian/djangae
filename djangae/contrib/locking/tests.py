@@ -65,7 +65,7 @@ class DatastoreLocksTestCase(TestCase):
         """
         @lock('x', wait=False)
         def do_something():
-                return True
+            return True
 
         # With the lock already in use, the function should not be run
         my_lock = Lock.acquire('x')
@@ -118,12 +118,12 @@ class MemcacheLocksTestCase(TestCase):
             with lock('x', wait=True, steal_after_ms=10, kind=LOCK_KINDS.WEAK):
                 return True
 
-        MemcacheLock.acquire('x') # Acquire the lock
+        MemcacheLock.acquire('x')  # Acquire the lock
 
         # If we don't wait, then the lock can't be acquired
         self.assertFalse(MemcacheLock.acquire('x', wait=False))
 
-        self.assertTrue(do_context()) # Should succeed eventually
+        self.assertTrue(do_context())  # Should succeed eventually
 
     def test_context_manager_no_wait(self):
         """ If the lock is already acquired, then our context manager with wait=False should raise
@@ -146,7 +146,7 @@ class MemcacheLocksTestCase(TestCase):
         """
         @lock('x', wait=False, kind=LOCK_KINDS.WEAK)
         def do_something():
-                return True
+            return True
 
         # With the lock already in use, the function should not be run
         my_lock = Lock.acquire('x', kind=LOCK_KINDS.WEAK)

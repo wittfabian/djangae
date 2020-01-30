@@ -1,6 +1,5 @@
-from django import VERSION
 from django.conf import settings
-from django.core.checks import register, Tags, Error, Warning
+from django.core.checks import register, Tags, Error
 
 
 CSP_SOURCE_NAMES = [

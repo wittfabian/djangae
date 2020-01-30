@@ -1,4 +1,3 @@
-import __builtin__
 import functools
 import json
 import logging
@@ -39,8 +38,10 @@ def get_default_argument(function, argument):
 
 def replace_default_argument(function, argument, replacement):
     argument_index = find_argument_index(function, argument)
-    num_positional_args = (function.func_code.co_argcount -
-                         len(function.func_defaults))
+    num_positional_args = (
+        function.func_code.co_argcount -
+        len(function.func_defaults)
+    )
     default_position = argument_index - num_positional_args
     if default_position < 0:
         raise ApiSecurityException('Attempt to modify positional default value')
@@ -71,6 +72,7 @@ class _JsonEncoderForHtml(json.JSONEncoder):
                 chunk = chunk.replace(character, replacement)
             yield chunk
 
+
 def _HttpUrlLoggingWrapper(func):
     """Decorates func, logging when 'url' params do not start with https://."""
     @functools.wraps(func)
@@ -92,7 +94,9 @@ def _HttpUrlLoggingWrapper(func):
         return func(*args, **kwargs)
     return _CheckAndLog
 
+
 PATCHES_APPLIED = False
+
 
 class AppEngineSecurityMiddleware(MiddlewareMixin):
     """

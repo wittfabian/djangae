@@ -1,2 +1,2 @@
-from .decorators import paginated_model # For nicer imports
-from .paginator import Paginator, PaginationOrderingRequired
+from .decorators import paginated_model  # noqa For nicer imports
+from .paginator import Paginator, PaginationOrderingRequired # noqa
