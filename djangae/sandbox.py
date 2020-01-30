@@ -84,7 +84,7 @@ def start_emulators(persist_data, emulators=None, storage_dir=None):
     if "tasks" in emulators:
         os.environ["TASKS_EMULATOR_HOST"] = "127.0.0.1:%s" % TASKS_PORT
         _ACTIVE_EMULATORS["tasks"] = _launch_process(
-            "gcloud-tasks-emulator start --port=%s" % TASKS_PORT
+            "gcloud-tasks-emulator start -q --port=%s" % TASKS_PORT
         )
         _wait_for_tasks(TASKS_PORT)
 
