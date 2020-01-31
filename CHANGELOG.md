@@ -12,7 +12,7 @@
 
 ### Bug fixes:
 
--
+- Handle transaction errors when trying to acquire a lock. Improved the retry countdown.
 
 ## v1.0.0
 
