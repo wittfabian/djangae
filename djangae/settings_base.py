@@ -37,3 +37,10 @@ LOGGING = {
 # Setting to * is OK, because GAE takes care of domain routing - setting it to anything
 # else just causes unnecessary pain when something isn't accessible under a custom domain
 ALLOWED_HOSTS = ("*",)
+
+
+# This is the model returned by djangae.config.get_app_config_model()
+# In your project, you should set the SECRET_KEY setting by using
+# SECRET_KEY = get_app_config(DJANGAE_APP_CONFIG_MODEL).secret_key
+# to prevent a circular import
+DJANGAE_APP_CONFIG_MODEL = "djangae.AppConfig"

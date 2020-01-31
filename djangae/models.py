@@ -34,3 +34,15 @@ class DeferIterationMarker(models.Model):
             self.finalize_name,
             self.created
         )
+
+
+class AppConfigBase(models.Model):
+    id = models.CharField(max_length=64, primary_key=True)
+    secret_key = models.TextField()
+
+    class Meta:
+        abstract = True
+
+
+class AppConfig(AppConfigBase):
+    pass
