@@ -5,6 +5,8 @@ import hashlib
 from django.utils import timezone
 
 # DJANGAE
+from djangae.contrib import sleuth
+from djangae.db.transaction import TransactionFailedError
 from djangae.test import TestCase
 from .lock import Lock, lock, LockAcquisitionError
 from .kinds import LOCK_KINDS
@@ -93,6 +95,13 @@ class DatastoreLocksTestCase(TestCase):
         self.process_task_queues()
         # The old lock should have been deleted but the new one should not
         self.assertItemsEqual(DatastoreLock.objects.all(), [recent_lock])
+
+    def test_transaction_errors_are_handled(self):
+        with sleuth.detonate(
+            'djangae.contrib.locking.models.LockQuerySet.filter', TransactionFailedError
+        ):
+            lock = Lock.acquire("my_lock")
+            self.assertIsNone(lock)
 
 
 class MemcacheLocksTestCase(TestCase):
