@@ -100,7 +100,7 @@ class DatastoreLocksTestCase(TestCase):
         with sleuth.detonate(
             'djangae.contrib.locking.models.LockQuerySet.filter', TransactionFailedError
         ):
-            lock = Lock.acquire("my_lock")
+            lock = Lock.acquire("my_lock", wait=False)
             self.assertIsNone(lock)
 
 
