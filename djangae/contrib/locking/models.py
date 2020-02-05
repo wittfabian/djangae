@@ -30,7 +30,7 @@ class LockQuerySet(models.query.QuerySet):
 
         def trans():
             """ Wrapper for the atomic transaction that handles transaction errors """
-            @transaction.atomic()
+            @transaction.atomic(independent=True)
             def _trans():
                 lock = self.filter(identifier_hash=identifier_hash).first()
                 if lock:
