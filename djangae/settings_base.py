@@ -41,6 +41,12 @@ ALLOWED_HOSTS = ("*",)
 
 # This is the model returned by djangae.config.get_app_config_model()
 # In your project, you should set the SECRET_KEY setting by using
-# SECRET_KEY = get_app_config(DJANGAE_APP_CONFIG_MODEL).secret_key
+# SECRET_KEY = SecretKey()
 # to prevent a circular import
 DJANGAE_APP_CONFIG_MODEL = "djangae.AppConfig"
+
+
+from .config import SecretKey  # noqa
+
+# Enable a lazy secret key, generated and stored in the DJANGAE_APP_CONFIG_MODEL
+SECRET_KEY = SecretKey()

@@ -38,3 +38,36 @@ def get_app_config(config_model=None, **defaults):
     return AppConfig.objects.get_or_create(
         pk=app_id, defaults=defaults
     )[0]
+
+
+class SecretKey:
+    def __init__(self, app_config_model=None):
+        self.app_config_model = app_config_model
+
+    def _get_secret_key(self):
+        return get_app_config(config_model=self.app_config_model).secret_key
+
+    def __str__(self):
+        return self._get_secret_key()
+
+    def __repr__(self):
+        return self._get_secret_key()
+
+    def __get__(self):
+        """
+            If set as an attribute, then we should
+            return the string
+        """
+        return self._get_secret_key()
+
+    def __eq__(self, other):
+        """
+            If compared with a string, we should compare with the secret_key
+        """
+        if isinstance(other, str):
+            return str(self) == other
+        else:
+            return NotImplemented
+
+    def __bool__(self):
+        return bool(self._get_secret_key())
