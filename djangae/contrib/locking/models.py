@@ -1,6 +1,7 @@
 # STANDARD LIB
 from datetime import timedelta
 import hashlib
+import random
 import time
 
 # THRID PARTY
@@ -27,28 +28,34 @@ class LockQuerySet(models.query.QuerySet):
         """
         identifier_hash = hashlib.md5(identifier).hexdigest()
 
-        @transaction.atomic()
         def trans():
-            lock = self.filter(identifier_hash=identifier_hash).first()
-            if lock:
-                # Lock already exists, so check if it's old enough to ignore/steal
-                if (
-                    steal_after_ms and
-                    timezone.now() - lock.timestamp > timedelta(microseconds=steal_after_ms * 1000)
-                ):
-                    # We can steal it.  Update timestamp to now and return it
-                    lock.timestamp = timezone.now()
-                    lock.save()
-                    return lock
-            else:
-                return DatastoreLock.objects.create(
-                    identifier_hash=identifier_hash,
-                    identifier=identifier
-                )
+            """ Wrapper for the atomic transaction that handles transaction errors """
+            @transaction.atomic(independent=True)
+            def _trans():
+                lock = self.filter(identifier_hash=identifier_hash).first()
+                if lock:
+                    # Lock already exists, so check if it's old enough to ignore/steal
+                    if (
+                        steal_after_ms and
+                        timezone.now() - lock.timestamp > timedelta(microseconds=steal_after_ms * 1000)
+                    ):
+                        # We can steal it.  Update timestamp to now and return it
+                        lock.timestamp = timezone.now()
+                        lock.save()
+                        return lock
+                else:
+                    return DatastoreLock.objects.create(
+                        identifier_hash=identifier_hash,
+                        identifier=identifier
+                    )
+            try:
+                return _trans()
+            except transaction.TransactionFailedError:
+                return None
 
         lock = trans()
         while wait and lock is None:
-            time.sleep(0.1)  # Sleep for a bit between retries
+            time.sleep(random.uniform(0, 1))  # Sleep for a random bit between retries
             lock = trans()
         return lock
 
