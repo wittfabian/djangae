@@ -77,6 +77,16 @@ For pull request to be merged, following requirements should be met:
 
 # Running tests
 
+On setting up the first time, create a Python 3 virtualenv and install the prerequisites with
+
+```
+# install tox
+pip install tox
+
+# install the datastore emulator
+gcloud components install cloud-datastore-emulator
+```
+
 For running the tests, you just need to run:
 
     $ tox -e py37
