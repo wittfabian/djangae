@@ -12,6 +12,7 @@
 
 ### Bug fixes:
 
+- Fixes bug where `djangae.contrib.backups` would not backup models who explictly set table name with `db_table`.
 - Handle transaction errors when trying to acquire a lock. Improved the retry countdown.
 
 ## v1.0.0

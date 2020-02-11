@@ -1,22 +1,18 @@
-import json
-
 from django.test import override_settings
 from django.contrib.admin.models import LogEntry
 
 from djangae.contrib.gauth_datastore.models import GaeDatastoreUser
 from djangae.contrib import sleuth
-from djangae.environment import application_id
 from djangae.test import TestCase
 
 from djangae.contrib.backup.tasks import (
-    _get_valid_export_models,
+    _get_valid_export_kinds,
     backup_datastore,
-    SERVICE_URL,
     AUTH_SCOPES,
 )
 
-from google.appengine.api import app_identity
 from google.auth import app_engine
+
 
 def mock_get_app_models(**kwargs):
     return [
@@ -25,25 +21,34 @@ def mock_get_app_models(**kwargs):
     ]
 
 
-class GetValidExportModelsTestCase(TestCase):
-    """Tests focused on djangae.contrib.backup.tasks._get_valid_export_models"""
+class GetValidExportKindsTestCase(TestCase):
+    """Tests focused on djangae.contrib.backup.tasks._get_valid_export_kinds"""
 
     @override_settings(DJANGAE_BACKUP_EXCLUDE_MODELS=['django_admin_log'])
     @sleuth.switch('django.apps.apps.get_models', mock_get_app_models)
-    def test_models_filtered(self):
-        valid_models = _get_valid_export_models(
+    def test_models_filtered_by_model(self):
+        valid_models = _get_valid_export_kinds(
             ['django_admin_log', 'gauth_datastore_gaedatastoreuser']
         )
         self.assertNotIn('django_admin_log', valid_models)
-        self.assertIn('gauth_datastore_gaedatastoreuser', valid_models)
+        self.assertIn('djangae_gaedatastoreuser', valid_models)
 
-    @override_settings(DJANGAE_BACKUP_EXCLUDE_APPS=['django'])
+    @override_settings(DJANGAE_BACKUP_EXCLUDE_MODELS=['django_admin_log'])
+    @sleuth.switch('django.apps.apps.get_models', mock_get_app_models)
+    def test_models_filtered_by_kind(self):
+        valid_models = _get_valid_export_kinds(
+            ['django_admin_log', 'djangae_gaedatastoreuser']
+        )
+        self.assertNotIn('django_admin_log', valid_models)
+        self.assertIn('djangae_gaedatastoreuser', valid_models)
+
+    @override_settings(DJANGAE_BACKUP_EXCLUDE_APPS=['admin'])
     @sleuth.switch('django.apps.apps.get_models', mock_get_app_models)
     def test_apps_filtered(self):
-        valid_models = _get_valid_export_models(
+        valid_models = _get_valid_export_kinds(
             ['django_admin_log', 'gauth_datastore_gaedatastoreuser']
         )
-        self.assertIn('gauth_datastore_gaedatastoreuser', valid_models)
+        self.assertIn('djangae_gaedatastoreuser', valid_models)
         self.assertNotIn('django_admin_log', valid_models)
 
 
