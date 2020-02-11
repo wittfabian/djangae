@@ -1,12 +1,18 @@
+import os
 
-
+import requests
 from django.apps import apps as django_apps
 from django.core.exceptions import ImproperlyConfigured
 from django.core.management.utils import get_random_secret_key
 
 from djangae.environment import application_id
+from google.cloud import (
+    datastore,
+    environment_vars,
+)
 
-from .models import AppConfigBase  # noqa, this just makes a nicer import for users
+from .models import \
+    AppConfigBase  # noqa, this just makes a nicer import for users
 
 
 def get_app_config_model(config_model=None):
@@ -40,34 +46,26 @@ def get_app_config(config_model=None, **defaults):
     )[0]
 
 
-class SecretKey:
-    def __init__(self, app_config_model=None):
-        self.app_config_model = app_config_model
+def get_or_create_secret_key(databases_settings_dict, app_config_model):
+    params = databases_settings_dict
 
-    def _get_secret_key(self):
-        return get_app_config(config_model=self.app_config_model).secret_key
+    # Uses the standard db_table, AppConfig can't work for secret keys
+    # if you've changed this, as we can't import the model
+    kind = app_config_model.lower().replace(".", "_")
 
-    def __str__(self):
-        return self._get_secret_key()
+    client = datastore.Client(
+        namespace=params.get("NAMESPACE"),
+        project=params.get("PROJECT") or os.environ["DATASTORE_PROJECT_ID"],
+        # avoid a bug in the google client - it tries to authenticate even when the emulator is enabled
+        # see https://github.com/googleapis/google-cloud-python/issues/5738
+        _http=requests.Session if os.environ.get(environment_vars.GCD_HOST) else None,
+    )
 
-    def __repr__(self):
-        return self._get_secret_key()
+    key = client.key(kind, application_id())
+    entity = client.get(key)
+    if not entity:
+        entity = datastore.Entity(key=key)
+        entity["secret_key"] = get_random_secret_key()
+        client.put(entity)
 
-    def __get__(self):
-        """
-            If set as an attribute, then we should
-            return the string
-        """
-        return self._get_secret_key()
-
-    def __eq__(self, other):
-        """
-            If compared with a string, we should compare with the secret_key
-        """
-        if isinstance(other, str):
-            return str(self) == other
-        else:
-            return NotImplemented
-
-    def __bool__(self):
-        return bool(self._get_secret_key())
+    return entity["secret_key"]

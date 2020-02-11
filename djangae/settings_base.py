@@ -1,4 +1,13 @@
 
+import os
+
+DATABASES = {
+    'default': {
+        'ENGINE': 'gcloudc.db.backends.datastore',
+        'INDEXES_FILE': os.path.join(os.path.abspath(os.path.dirname(__file__)), "djangaeidx.yaml"),
+    }
+}
+
 CACHES = {
     # We default to the database cache, at least until
     # there is a sensible caching alternative (or low MemoryStore latency)
@@ -46,7 +55,7 @@ ALLOWED_HOSTS = ("*",)
 DJANGAE_APP_CONFIG_MODEL = "djangae.AppConfig"
 
 
-from .config import SecretKey  # noqa
+from .config import get_or_create_secret_key  # noqa
 
 # Enable a lazy secret key, generated and stored in the DJANGAE_APP_CONFIG_MODEL
-SECRET_KEY = SecretKey()
+SECRET_KEY = get_or_create_secret_key(DATABASES['default'], DJANGAE_APP_CONFIG_MODEL)
