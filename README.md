@@ -87,6 +87,8 @@ pip install tox
 gcloud components install cloud-datastore-emulator
 ```
 
+If you don't have `gcloud` (the Google Cloud SDK) installed, installation instructions can be found [here](https://cloud.google.com/sdk/install) 
+
 For running the tests, you just need to run:
 
     $ tox -e py37
