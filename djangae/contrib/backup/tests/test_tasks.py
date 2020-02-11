@@ -1,22 +1,18 @@
-import json
-
 from django.test import override_settings
 from django.contrib.admin.models import LogEntry
 
 from djangae.contrib.gauth_datastore.models import GaeDatastoreUser
 from djangae.contrib import sleuth
-from djangae.environment import application_id
 from djangae.test import TestCase
 
 from djangae.contrib.backup.tasks import (
     _get_valid_export_kinds,
     backup_datastore,
-    SERVICE_URL,
     AUTH_SCOPES,
 )
 
-from google.appengine.api import app_identity
 from google.auth import app_engine
+
 
 def mock_get_app_models(**kwargs):
     return [
