@@ -87,12 +87,17 @@ def _get_valid_export_kinds(kinds=None):
     # If kinds we explcitly provided by the caller, we only return those
     # already validated by our previous checks
     if kinds:
-        return [
+        to_backup = [
             kind for (_model_def, kind) in to_backup
             if _model_def in kinds or kind in kinds
         ]
     else:
-        return [kind for (_model_def, kind) in to_backup]
+        to_backup = [kind for (_model_def, kind) in to_backup]
+
+    # If 2 models share the same underlying table they will return the same
+    # kind. The datastore backup API will return a validation error when a kind
+    # is listed more than once.
+    return list(set(to_backup))
 
 
 def _get_service():
