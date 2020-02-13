@@ -61,7 +61,7 @@ class LockQuerySet(models.query.QuerySet):
         lock = trans()
         while wait and lock is None:
             # If more than max_wait_ms has elapsed, then give up
-            if max_wait_ms is not None and timezone.now() - start_time > timedelta(microseconds=max_wait_ms * 1000):
+            if (max_wait_ms is not None) and (timezone.now() - start_time > timedelta(microseconds=max_wait_ms * 1000)):
                 break
 
             time.sleep(random.uniform(0, 1))  # Sleep for a random bit between retries

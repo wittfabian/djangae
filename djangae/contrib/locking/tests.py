@@ -107,7 +107,7 @@ class DatastoreLocksTestCase(TestCase):
         lock1 = Lock.acquire("my_lock")   # Get the lock
         self.assertTrue(lock1)
 
-        lock2 = Lock.acquire("my_lock", max_wait_ms=100, wait=True, steal_after_ms=150)  # Wait 100 ms
+        lock2 = Lock.acquire("my_lock", max_wait_ms=100, wait=True, steal_after_ms=10000)  # Wait 100 ms
 
         # If we stole it, this wouldn't be None
         self.assertIsNone(lock2)
