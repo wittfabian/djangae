@@ -1,13 +1,15 @@
-from datetime import datetime
+import logging
 import os
 import subprocess
-import logging
 import time
+from datetime import datetime
 from urllib.error import (
     HTTPError,
     URLError,
 )
 from urllib.request import urlopen
+
+from django.utils.autoreload import DJANGO_AUTORELOAD_ENV
 
 from djangae.environment import get_application_root
 
@@ -64,6 +66,11 @@ def _wait(port, service):
 
 
 def start_emulators(persist_data, emulators=None, storage_dir=None):
+    # This prevents restarting of the emulators when Django code reload
+    # kicks in
+    if os.environ.get(DJANGO_AUTORELOAD_ENV) == 'true':
+        return
+
     emulators = emulators or _ALL_EMULATORS
     storage_dir = storage_dir or os.path.join(get_application_root(), ".storage")
 
@@ -90,6 +97,11 @@ def start_emulators(persist_data, emulators=None, storage_dir=None):
 
 
 def stop_emulators(emulators=None):
+    # This prevents restarting of the emulators when Django code reload
+    # kicks in
+    if os.environ.get(DJANGO_AUTORELOAD_ENV) == 'true':
+        return
+
     emulators = emulators or _ALL_EMULATORS
     for k, v in _ACTIVE_EMULATORS.items():
         if k in emulators:
