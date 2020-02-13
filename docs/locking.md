@@ -42,6 +42,7 @@ The main utility is the `lock` object, which can be used as a function decorator
     - In the context manager case, bailing means that `LockAcquisitionError` will be raised when
     entering `with`.
 * `steal_after_ms` - if passed, then any existing lock which is older than this value will be ignored.
+* `wait_for_ms` - if passed, this is the max time to wait before giving up getting the lock
 * `kind` - which kind of lock implementation to use.
     - LOCK_KINDS.WEAK is not guaranteed to be robust, but can be used for situations where avoiding
       simultaneous code execution is preferable but not critical (uses memcache).

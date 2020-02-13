@@ -10,6 +10,9 @@
 
 ## v1.0.1 (bug fix release)
 
+### New features & improvements:
+ - Add `max_wait_ms` to `Lock.acquire` which returns early if no lock is available after this long
+
 ### Bug fixes:
 
 - Fixes bug where `djangae.contrib.backups` would fail if models shared the same kind.
