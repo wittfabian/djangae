@@ -6,12 +6,17 @@ from django.utils import timezone
 
 # DJANGAE
 from djangae.contrib import sleuth
-from djangae.db.transaction import TransactionFailedError
 from djangae.test import TestCase
-from .lock import Lock, lock, LockAcquisitionError
+from gcloudc.db.backends.datastore.transaction import TransactionFailedError
+
 from .kinds import LOCK_KINDS
-from .models import DatastoreLock
+from .lock import (
+    Lock,
+    LockAcquisitionError,
+    lock,
+)
 from .memcache import MemcacheLock
+from .models import DatastoreLock
 from .views import cleanup_locks
 
 
