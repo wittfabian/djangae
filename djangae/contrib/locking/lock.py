@@ -20,7 +20,7 @@ class Lock(object):
         return u"<Lock (%s) '%s'>" % (self._kind, self._identifier)
 
     @classmethod
-    def acquire(cls, identifier, wait=True, steal_after_ms=None, max_wait_ms=None, kind=LOCK_KINDS.STRONG):
+    def acquire(cls, identifier, wait=True, steal_after_ms=None, kind=LOCK_KINDS.STRONG, max_wait_ms=None):
         if kind == LOCK_KINDS.STRONG:
             from .models import DatastoreLock  # Avoid importing models before they're ready
             lock = DatastoreLock.objects.acquire(
