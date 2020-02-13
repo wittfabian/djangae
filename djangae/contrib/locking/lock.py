@@ -27,6 +27,9 @@ class Lock(object):
                 identifier, wait=wait, steal_after_ms=steal_after_ms, max_wait_ms=max_wait_ms
             )
         elif kind == LOCK_KINDS.WEAK:
+            if max_wait_ms is not None:
+                raise NotImplementedError("max_wait_ms is not implemented for WEAK locks")
+
             lock = MemcacheLock.acquire(
                 identifier, wait=wait, steal_after_ms=steal_after_ms
             )
