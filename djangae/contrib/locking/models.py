@@ -10,6 +10,7 @@ from django.utils import timezone
 from django.utils.encoding import python_2_unicode_compatible
 
 from gcloudc.db import transaction
+from gcloudc.db.backends.datastore.transaction import TransactionFailedError
 from gcloudc.db.models.fields.charfields import CharField
 
 
@@ -49,7 +50,7 @@ class LockQuerySet(models.query.QuerySet):
                     )
             try:
                 return _trans()
-            except transaction.TransactionFailedError:
+            except TransactionFailedError:
                 return None
 
         lock = trans()
