@@ -1,5 +1,6 @@
 from functools import wraps
 
+
 def additional_type_handler(func):
     @wraps(func)
     def _wrapper(self, o):
@@ -10,6 +11,7 @@ def additional_type_handler(func):
             return func(self, o)
 
     return _wrapper
+
 
 def patch():
     """

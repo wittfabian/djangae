@@ -20,13 +20,16 @@ class Lock(object):
         return u"<Lock (%s) '%s'>" % (self._kind, self._identifier)
 
     @classmethod
-    def acquire(cls, identifier, wait=True, steal_after_ms=None, kind=LOCK_KINDS.STRONG):
+    def acquire(cls, identifier, wait=True, steal_after_ms=None, kind=LOCK_KINDS.STRONG, max_wait_ms=None):
         if kind == LOCK_KINDS.STRONG:
             from .models import DatastoreLock  # Avoid importing models before they're ready
             lock = DatastoreLock.objects.acquire(
-                identifier, wait=wait, steal_after_ms=steal_after_ms
+                identifier, wait=wait, steal_after_ms=steal_after_ms, max_wait_ms=max_wait_ms
             )
         elif kind == LOCK_KINDS.WEAK:
+            if max_wait_ms is not None:
+                raise NotImplementedError("max_wait_ms is not implemented for WEAK locks")
+
             lock = MemcacheLock.acquire(
                 identifier, wait=wait, steal_after_ms=steal_after_ms
             )

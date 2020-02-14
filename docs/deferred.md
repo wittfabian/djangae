@@ -1,6 +1,6 @@
 # Deferred
 
-# djangae.deferred.defer
+# djangae.tasks.deferred.defer
 
 The App Engine SDK provides a utility function called `defer()` which is used to call
 functions and methods from the task queue.
@@ -16,7 +16,7 @@ The built-in `defer()` method suffers from a number of issues with both bugs, an
 
 Everything else should behave in the same way. The actual running of deferred tasks still uses the Google handler (which is wrapped by Djangae)
 
-# djange.deferred.defer_iteration_with_finalize
+# djange.tasks.deferred.defer_iteration_with_finalize
 
 `defer_iteration_with_finalize(queryset, callback, finalize, args=None, _queue='default', _shards=5, _delete_marker=True, _transactional=False)`
 

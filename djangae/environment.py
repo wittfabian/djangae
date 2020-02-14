@@ -1,46 +1,19 @@
-# STANDARD LIBRARY
-from functools import wraps
+
 import os
+from functools import wraps
 
-# THIRD PARTY
-from django.http import HttpResponseForbidden
-
-# DJANGAE
 from djangae.utils import memoized
-
+from django.http import HttpResponseForbidden
 
 # No SDK imports allowed in module namespace because `./manage.py runserver`
 # imports this before the SDK is added to sys.path. See bugs #899, #1055.
 
 
 def application_id():
-    from google.appengine.api import app_identity
-
-    try:
-        result = app_identity.get_application_id()
-    except AttributeError:
-        result = None
-
-    if not result:
-        # Apparently we aren't running live, probably inside a management command
-        from google.appengine.api import appinfo
-
-        info = appinfo.LoadSingleAppInfo(open(os.path.join(get_application_root(), "app.yaml")))
-
-        result = "dev~" + info.application
-        os.environ['APPLICATION_ID'] = result
-        result = app_identity.get_application_id()
-
+    # Fallback to example on local or if this is not specified in the
+    # environment already
+    result = os.environ.get("GAE_APPLICATION", "e~example").split("~", 1)[-1]
     return result
-
-
-def sdk_is_available():
-    try:
-        from google.appengine.api import apiproxy_stub_map
-        apiproxy_stub_map  # Silence pylint
-        return True
-    except ImportError:
-        return False
 
 
 def is_production_environment():
@@ -51,22 +24,19 @@ def is_development_environment():
     return 'SERVER_SOFTWARE' not in os.environ or os.environ['SERVER_SOFTWARE'].startswith("Development")
 
 
-def datastore_is_available():
-    if not sdk_is_available():
-        return False
-
-    from google.appengine.api import apiproxy_stub_map
-    return bool(apiproxy_stub_map.apiproxy.GetStub('datastore_v3'))
-
-
 def is_in_task():
     "Returns True if the request is a task, False otherwise"
-    return bool(task_name())
+    return bool(task_name()) or bool(queue_name())
 
 
 def is_in_cron():
     "Returns True if the request is in a cron, False otherwise"
     return bool(os.environ.get("HTTP_X_APPENGINE_CRON"))
+
+
+def queue_name():
+    "Returns the name of the current task if any, else None"
+    return os.environ.get("HTTP_X_APPENGINE_QUEUENAME")
 
 
 def task_name():
@@ -83,7 +53,7 @@ def task_retry_count():
 
 
 def task_queue_name():
-    "Returns the name of the current task queue (if this is a task) else None"
+    "Returns the name of the current task queue (if this is a task) else 'default'"
     if "HTTP_X_APPENGINE_QUEUENAME" in os.environ:
         return os.environ["HTTP_X_APPENGINE_QUEUENAME"]
     else:
@@ -93,6 +63,8 @@ def task_queue_name():
 @memoized
 def get_application_root():
     """Traverse the filesystem upwards and return the directory containing app.yaml"""
+    from django.conf import settings  # Avoid circular
+
     path = os.path.dirname(os.path.abspath(__file__))
     app_yaml_path = os.environ.get('DJANGAE_APP_YAML_LOCATION', None)
 
@@ -114,24 +86,33 @@ def get_application_root():
             else:
                 path = parent
 
-    raise RuntimeError("Unable to locate app.yaml. Did you add it to skip_files?")
+    # Use the Django base directory as a fallback. We search for app.yaml
+    # first because that will be the "true" root of the GAE app
+    return settings.BASE_DIR
 
 
-def task_or_admin_only(view_function):
-    """ View decorator for restricting access to tasks (and crons) and admins of the application
+def task_only(view_function):
+    """ View decorator for restricting access to tasks (and crons) of the application
         only.
     """
-    # Avoiding an ImportError when the SDK is not already on sys.path.
-    from google.appengine.api import users
 
     @wraps(view_function)
     def replacement(*args, **kwargs):
         if not any((
             is_in_task(),
             is_in_cron(),
-            users.is_current_user_admin(),
         )):
             return HttpResponseForbidden("Access denied.")
         return view_function(*args, **kwargs)
 
     return replacement
+
+
+def default_gcs_bucket_name():
+    return "%s.appspot.com" % application_id()
+
+
+def project_id():
+    # Environment variable will exist on production servers
+    # fallback to "example" locally if it doesn't exist
+    return os.environ.get("GOOGLE_CLOUD_PROJECT", "example")

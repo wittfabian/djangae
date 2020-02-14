@@ -3,14 +3,14 @@ from setuptools import setup, find_packages
 
 
 NAME = 'djangae'
-PACKAGES = find_packages(exclude=["testapp", "testprodapp"])
+PACKAGES = find_packages()
 DESCRIPTION = 'Django integration with Google App Engine'
 URL = "https://github.com/potatolondon/djangae"
 LONG_DESCRIPTION = open(os.path.join(os.path.dirname(__file__), 'README.md')).read()
 AUTHOR = 'Potato London Ltd.'
 
 EXTRAS = {
-    "test": ["webtest"],
+    "test": ["beautifulsoup4"],
 }
 
 setup(
@@ -27,12 +27,12 @@ setup(
     keywords=["django", "Google App Engine", "GAE"],
     url=URL,
     classifiers=[
-        'Development Status :: 4 - Beta',
+        'Development Status :: 3 - Alpha',
         'Framework :: Django',
-        'Framework :: Django :: 1.8',
-        'Framework :: Django :: 1.9',
-        'Framework :: Django :: 1.10',
-        'Framework :: Django :: 1.11',
+        'Framework :: Django :: 2.0',
+        'Framework :: Django :: 2.1',
+        'Framework :: Django :: 2.2',
+        'Framework :: Django :: 3.0',
         'Intended Audience :: Developers',
         'License :: OSI Approved :: BSD License',
         'Operating System :: OS Independent',
@@ -41,6 +41,10 @@ setup(
 
     include_package_data=True,
     # dependencies
+    install_requires=[
+        'django-gcloud-connectors @ git+https://gitlab.com/potato-oss/google-cloud/django-gcloud-connectors.git',
+        'google-api-python-client>=1.7.11',
+    ],
     extras_require=EXTRAS,
     tests_require=EXTRAS['test'],
 )

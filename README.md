@@ -15,29 +15,25 @@ want to) using Django's models with the App Engine Datastore as the underlying d
 :speech_balloon:&nbsp;&nbsp;[Gitter](https://gitter.im/potatolondon/djangae)&nbsp;&nbsp;|&nbsp;&nbsp;
 :busts_in_silhouette:&nbsp;&nbsp;[Google Group](https://groups.google.com/forum/#!forum/djangae-users)
 
-**Note: Djangae is under heavy development, stability is not guaranteed. See [1.0 release changes issue](https://github.com/potatolondon/djangae/issues/593) to follow progress on Djangae 1.0 release.**
+
+**Note: Djangae is under heavy development, stability is not guaranteed. A 2.0 release will happen when it's ready.**
 
 ## Features
 
-* A WSGI middleware that provides a clean way via which your Django app is plugged into App Engine.
-* A hook to allow App Engine's deferred tasks and mapreduce handlers to run through the same environment.
-* The ability to use the Datastore as the database for Django's models.  See **The Database Backend** for details.
-  You can also use App Engine's NDB, or you can use Google Cloud SQL (via the standard django MySQL backend) instead of
-  or along side the Datastore. Or use all 3!
-* `djangae.contrib.gauth` which provides user models (both concrete and extendable abstract versions), an auth backend, and a middleware; which allow you to authenticate users using the App Engine's built-in Google Accounts authentication, and also allow you to use Django's permissions system on the Datastore (i.e. without being caught out by the Many-To-Many relationships).
-* A `runserver` command which fires up the App Engine SDK to serve your app (while still using Django's code reloading).
-* The ability to run management commands locally or on the remote App Engine Datastore.
-* A `shell` command that correctly sets up the environment/database. (Note, we should support this set up for any
-  custom commands as well, see TODO.md).
+* Hooks to manage a series of Google Cloud emulators to simulate the Google App Engine environment locally
+* A tasks app which implements "deferred" tasks on Google Cloud Tasks, and functions for iterating large datasets
+* Utility functions to discover information about the running environment
+* A series of security patches and checks to improve the security of your project
+* Test utils for testing code that uses the Cloud Tasks API
+* Apps for cross-request locking and efficient pagination on the Google Cloud Datastore
+
+## Supported Django Versions
+
+Djangae currently supports Django 2.2.
 
 ## Documentation
 
 https://djangae.readthedocs.io/
-
-## Supported Django Versions
-
-The intention is always to support the currently-supported versions of Django, although older versions may work. Currently
-Django 1.8, 1.9, 1.10 and 1.11 are supported.
 
 # Installation
 
@@ -52,7 +48,7 @@ Djangae is actively developed and maintained, so if you're thinking of contribut
 
 1. First off, head to [our Github page](https://github.com/potatolondon/djangae) and fork the repository to have your own copy of it.
 2. Clone it locally to start setting up your development environment
-3. Run all tests to make sure your local version is working: `./runtests.sh`. This will also install all necessary dependencies.
+3. Run all tests to make sure your local version is working: `tox -e py37`
 
 ## Pick an issue & send a pull request
 
@@ -81,27 +77,26 @@ For pull request to be merged, following requirements should be met:
 
 # Running tests
 
+On setting up the first time, create a Python 3 virtualenv and install the prerequisites with
+
+```
+# install tox
+pip install tox
+
+# install the datastore emulator
+gcloud components install cloud-datastore-emulator
+```
+
+If you don't have `gcloud` (the Google Cloud SDK) installed, installation instructions can be found [here](https://cloud.google.com/sdk/install) 
+
 For running the tests, you just need to run:
 
-    $ ./runtests.sh
-
-On the first run this will download the App Engine SDK, pip install a bunch of stuff locally (into a folder, no virtualenv needed), download the Django tests and run them.  Subsequent runs will just run the tests. If you want to run the tests on a specific Django version, you can switch the installed version by doing:
-
-    $ DJANGO_VERSION=1.11 ./runtests.sh --install_deps
-
-Currently the default is 1.8. TravisCI runs on 1.8, 1.9, 1.10 and 1.11 currently.
-
-If you want to run the tests on a specific App Engine SDK version, then you can switch the installed version by doing:
-
-    $ SDK_VERSION=1.9.35 ./runtests.sh --install_sdk
-
-Note that this also re-installs the dependencies, so will reset the Django version to the default of 1.8.
-
+    $ tox -e py37
 
 
 You can run specific tests in the usual way by doing:
 
-    ./runtests.sh some_app.SomeTestCase.some_test_method
+    tox -e py37 -- some_app.SomeTestCase.some_test_method
 
 
 [build-status-image]: https://secure.travis-ci.org/potatolondon/djangae.png?branch=master

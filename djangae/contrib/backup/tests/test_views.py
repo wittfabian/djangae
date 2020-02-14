@@ -1,6 +1,10 @@
-from django.test import override_settings
-from djangae.test import TestCase, RequestFactory
+from django.test import (
+    RequestFactory,
+    override_settings,
+)
+
 from djangae.contrib import sleuth
+from djangae.test import TestCase
 
 from ..views import create_datastore_backup
 
@@ -21,7 +25,7 @@ class DatastoreBackupViewTestCase(TestCase):
     @sleuth.switch('djangae.environment.is_in_task', lambda: True)
     def test_get_params_propogate(self):
         request = RequestFactory().get('/?kind=django_admin_log&bucket=foobar')
-        with sleuth.watch('djangae.contrib.backup.views.backup_datastore') as backup_fn:
+        with sleuth.Fake('djangae.contrib.backup.views.backup_datastore', None) as backup_fn:
             create_datastore_backup(request)
             self.assertTrue(backup_fn.called)
             self.assertEqual(

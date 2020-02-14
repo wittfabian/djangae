@@ -1,8 +1,7 @@
 import datetime
 
 from django.conf import settings
-from google.appengine.api import app_identity
-
+from djangae import environment
 
 SETTINGS_PREFIX = "DJANGAE_BACKUP_"
 
@@ -27,7 +26,7 @@ def get_gcs_bucket():
     try:
         bucket = settings.DJANGAE_BACKUP_GCS_BUCKET
     except AttributeError:
-        bucket = app_identity.get_default_gcs_bucket_name()
+        bucket = environment.default_gcs_bucket_name()
 
         if bucket:
             bucket = '{}/djangae-backups'.format(bucket)
@@ -41,7 +40,7 @@ def get_gcs_bucket():
 def get_backup_path(bucket=None):
     """
     Returns the full path to write the backup to in GCS. This looks
-    something like 
+    something like
     `gs://example.appspot.com/scheduled-backups/2018-20-10/202059`
 
     Bucket can be provided as a kwarg (e.g. passed in from a GET param),

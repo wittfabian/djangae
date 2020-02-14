@@ -3,7 +3,7 @@ from functools import partial
 
 from django.utils import six
 
-from djangae.fields import ComputedCharField
+from gcloudc.db.models.fields.computed import ComputedCharField
 from django.db.models.fields import FieldDoesNotExist
 
 NULL_CHARACTER = u"\0"
@@ -27,15 +27,15 @@ def generator(fields, instance):
         if hasattr(value, "isoformat"):
             value = value.isoformat()
 
-        value = unicode(value)
+        value = str(value)
 
         if neg:
             # this creates the alphabetical mirror of a string, e.g. ab => zy, but for the full
             # range of unicode characters, e.g. first unicode char => last unicode char, etc
-            value = u"".join([ unichr(0xffff - ord(x)) for x in value ])
+            value = u"".join([chr(0xffff - ord(x)) for x in value])
         values.append(value)
 
-    values.append(unicode(instance.pk) if instance.pk else unicode(random.randint(0, 1000000000)))
+    values.append(str(instance.pk) if instance.pk else str(random.randint(0, 1000000000)))
 
     return NULL_CHARACTER.join(values)
 
@@ -95,5 +95,6 @@ class PaginatedModel(object):
                 ).contribute_to_class(cls, new_field_name)
 
         return cls
+
 
 paginated_model = PaginatedModel

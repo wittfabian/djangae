@@ -9,14 +9,14 @@ from django.db import models
 from django.utils import timezone
 from django.utils.encoding import python_2_unicode_compatible
 
-# DJANGAE
-from djangae.db import transaction
-from djangae.fields import CharField
+from gcloudc.db import transaction
+from gcloudc.db.backends.datastore.transaction import TransactionFailedError
+from gcloudc.db.models.fields.charfields import CharField
 
 
 class LockQuerySet(models.query.QuerySet):
 
-    def acquire(self, identifier, wait=True, steal_after_ms=None):
+    def acquire(self, identifier, wait=True, steal_after_ms=None, max_wait_ms=None):
         """ Create or fetch the Lock with the given `identifier`.
         `wait`:
             If True, wait until the Lock is available, otherwise if the lcok is not available then
@@ -25,8 +25,13 @@ class LockQuerySet(models.query.QuerySet):
             If the lock is not available (already exists), then steal it if it's older than this.
             E.g. if you know that the section of code you're locking should never take more than
             3 seconds, then set this to 3000.
+        `max_wait_ms`:
+            Wait, but only for this long. If no lock has been acquired then returns
+            None.
         """
-        identifier_hash = hashlib.md5(identifier).hexdigest()
+        identifier_hash = hashlib.md5(identifier.encode()).hexdigest()
+
+        start_time = timezone.now()
 
         def trans():
             """ Wrapper for the atomic transaction that handles transaction errors """
@@ -50,11 +55,15 @@ class LockQuerySet(models.query.QuerySet):
                     )
             try:
                 return _trans()
-            except transaction.TransactionFailedError:
+            except TransactionFailedError:
                 return None
 
         lock = trans()
         while wait and lock is None:
+            # If more than max_wait_ms has elapsed, then give up
+            if (max_wait_ms is not None) and (timezone.now() - start_time > timedelta(microseconds=max_wait_ms * 1000)):
+                break
+
             time.sleep(random.uniform(0, 1))  # Sleep for a random bit between retries
             lock = trans()
         return lock

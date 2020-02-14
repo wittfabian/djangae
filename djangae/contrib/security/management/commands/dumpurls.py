@@ -8,7 +8,7 @@ from itertools import chain
 
 from django.conf import settings
 from django.core.management.base import BaseCommand
-from django.core.urlresolvers import reverse, resolve
+from django.urls import reverse, resolve
 
 from djangae.contrib.security.commands_utils import (
     extract_views_from_urlpatterns,
@@ -30,7 +30,8 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument('--show_allowed_methods', action='store_true')
         parser.add_argument('--show_class_parents', action='store_true')
-        parser.add_argument('--output_file_type',
+        parser.add_argument(
+            '--output_file_type',
             nargs='?',
             choices=['json', 'csv'],
         )
@@ -152,7 +153,8 @@ def _write_to_file(rows, output_type='json'):
         filename = 'dumpurls.csv'
         with open(filename, 'w+') as f:
             csv_writer = csv.DictWriter(
-                f, delimiter=',', fieldnames={field for field in chain(*[r.keys() for r in rows])}, dialect='excel', quotechar='"'
+                f, delimiter=',', fieldnames={field for field in chain(*[r.keys() for r in rows])},
+                dialect='excel', quotechar='"'
             )
             csv_writer.writeheader()
             csv_writer.writerows(rows)

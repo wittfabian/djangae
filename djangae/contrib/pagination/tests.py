@@ -35,8 +35,8 @@ class TestUser(models.Model):
         return " ".join([self.first_name, self.last_name])
 
     class Meta:
-        db_table = "pagination"
         ordering = ("first_name", "last_name")
+
 
 @paginated_model(orderings=[
     "name",
@@ -45,8 +45,6 @@ class TestUser(models.Model):
 class SimpleModelWithoutOrdering(models.Model):
     name = models.CharField(max_length=200)
 
-    class Meta:
-        db_table = "pagination"
 
 class SimpleModelWithOrdering(SimpleModelWithoutOrdering):
     class Meta:
@@ -69,7 +67,7 @@ class PaginatedModelTests(TestCase):
         self.assertEqual(u"Luke\x00Benstead\x001", user.pagination_first_name_last_name)
         self.assertEqual("%s\x001" % user.created.isoformat(), user.pagination_created)
 
-        reversed_last_name = "".join([ unichr(0xffff - ord(x)) for x in "Benstead" ])
+        reversed_last_name = "".join([chr(0xffff - ord(x)) for x in "Benstead"])
 
         self.assertEqual(u"Luke\x00{}\x001".format(reversed_last_name), user.pagination_first_name_neg_last_name)
 
@@ -137,7 +135,10 @@ class DatastorePaginatorTests(TestCase):
     def test_that_readahead_stores_markers(self):
         paginator = Paginator(TestUser.objects.all().order_by("first_name"), 1, readahead=4)
 
-        expected_markers = [ None ] + list(TestUser.objects.all().order_by("first_name").values_list(paginator.field_required, flat=True))[:3]
+        expected_markers = [None] + list(
+            TestUser.objects.all().order_by("first_name").
+            values_list(paginator.field_required, flat=True)
+        )[:3]
 
         paginator.page(1)
 
@@ -152,7 +153,9 @@ class DatastorePaginatorTests(TestCase):
         # Now change the per page number
         paginator = Paginator(TestUser.objects.all().order_by("first_name"), 2, readahead=4)
 
-        all_markers = list(TestUser.objects.all().order_by("first_name").values_list(paginator.field_required, flat=True))
+        all_markers = list(TestUser.objects.all().order_by("first_name").values_list(
+            paginator.field_required, flat=True)
+        )
         expected_markers = [None, all_markers[1]]
 
         paginator.page(1)
@@ -168,17 +171,16 @@ class DatastorePaginatorTests(TestCase):
     def test_ordering_required_exception_is_thrown_when_no_order_specified(self):
         # The exception should not be thrown when an order is specified
         query_set = SimpleModelWithoutOrdering.objects.order_by("name")
-        paginator = Paginator(query_set, 25, readahead=10)
+        Paginator(query_set, 25, readahead=10)
 
         # The exception should not be thrown when the model has a default order
         query_set = SimpleModelWithOrdering.objects.all()
-        paginator = Paginator(query_set, 25, readahead=10)
+        Paginator(query_set, 25, readahead=10)
 
         # The exception should be thrown when no order is specified on the model or in the query set
         query_set = SimpleModelWithoutOrdering.objects.all()
         with self.assertRaises(PaginationOrderingRequired):
-            paginator = Paginator(query_set, 25, readahead=10)
-
+            Paginator(query_set, 25, readahead=10)
 
     def test_pages_correct(self):
         paginator = Paginator(TestUser.objects.all().order_by("first_name"), 1)  # 1 item per page
