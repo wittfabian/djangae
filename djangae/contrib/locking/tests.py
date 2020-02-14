@@ -108,6 +108,15 @@ class DatastoreLocksTestCase(TestCase):
             lock = Lock.acquire("my_lock", wait=False)
             self.assertIsNone(lock)
 
+    def test_max_wait_ms(self):
+        lock1 = Lock.acquire("my_lock")   # Get the lock
+        self.assertTrue(lock1)
+
+        lock2 = Lock.acquire("my_lock", max_wait_ms=100, wait=True, steal_after_ms=10000)  # Wait 100 ms
+
+        # If we stole it, this wouldn't be None
+        self.assertIsNone(lock2)
+
 
 class MemcacheLocksTestCase(TestCase):
     """ Tests for the implementation of the WEAK kind of lock (MemcacheLock). """

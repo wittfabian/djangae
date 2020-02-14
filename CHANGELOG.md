@@ -26,8 +26,13 @@
 
 ## v1.0.1 (bug fix release)
 
+### New features & improvements:
+ - Add `max_wait_ms` to `Lock.acquire` which returns early if no lock is available after this long
+
 ### Bug fixes:
 
+- Fixes bug where `djangae.contrib.backups` would fail if models shared the same kind.
+- Fixes bug where `djangae.contrib.backups` would not backup models who explictly set table name with `db_table`.
 - Handle transaction errors when trying to acquire a lock. Improved the retry countdown.
 
 ## v1.0.0
