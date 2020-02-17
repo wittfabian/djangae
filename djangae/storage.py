@@ -24,7 +24,7 @@ def _get_storage_client():
     """Gets an instance of a google CloudStorage Client
 
         Note: google storage python library depends on env variables read at
-        module import time, which requires nested imports
+        module import time, so that should be set before import if overwrite needed
     """
 
     is_app_engine = os.environ.get("GAE_ENV") == "standard"
@@ -49,6 +49,17 @@ def _get_default_bucket_name():
 
 
 def get_bucket_name():
+    """Returns the configured bucket name
+
+    Bucket name can be configured via settings[BUCKET_KEY]. If not set, it
+    defaults to the GCP default bucket (<project_id>.appspot.com)
+
+    Raises:
+        ImproperlyConfigured: if neither configuration nor default can be retreived
+
+    Returns:
+        str -- name of the configured bucket
+    """
     bucket_name = getattr(settings, BUCKET_KEY, None)
     if not bucket_name:
         bucket_name = _get_default_bucket_name()
@@ -99,6 +110,11 @@ class CloudStorage(Storage):
 
     @property
     def client(self):
+        """Returns the GCS client
+
+        Returns:
+            google.cloud.storage.Client -- GCS Client instance
+        """
         if self._client is None:
             self._client = _get_storage_client()
         return self._client
@@ -143,12 +159,28 @@ class CloudStorage(Storage):
         return blob.size
 
     def delete(self, name):
+        """Delete an object by name
+
+        Arguments:
+            name {str} -- Name of the object to delete
+        """
         return self._bucket.delete_blob(name)
 
     def url(self, name):
         return self.get_public_url(name)
 
     def get_public_url(self, name):
+        """Gets the public URL of a blob
+
+        Note: the public url is not guaranteed to be accessible. This depends on your bucket/object
+        ACL and IAM. When using the gcs emulator, all objects are treated as publicly accessible
+
+        Arguments:
+            name {str} -- name of the blob
+
+        Returns:
+            str -- Public url
+        """
         is_app_engine = os.environ.get("GAE_ENV") == "standard"
         if is_app_engine:
             blob = self.bucket.blob(name)

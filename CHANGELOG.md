@@ -5,6 +5,7 @@
 - Upgraded the codebase to Python 3
 - Switched to running the tests using tox (remove testapp etc.)
 - Replaced memcache with FileBasedCache (or Memorystore for Redis)
+- Replace storage implementation using the new python3 client
 - Removed the following:
   - djangae.db (moved to gcloud-connectors)
   - contrib.consistency (new datastore is strongly consistent)
@@ -13,7 +14,6 @@
   - contrib.gauth* (will come back in some form, but there's no users API anymore)
   - contrib.processing (partially superseded by djangae.tasks)
   - contrib.uniquetool (unique markers don't exist as new datastore is consistent)
-  - djangae.storage (will return, needs a rewrite)
   - djangae.mail (there's no built-in way to send email on Google Cloud)
   - djangae.test_runner / noseplugin (now we have separate emulators for cloud services)
   - djangae.fields (moved to gcloud-connectors)
