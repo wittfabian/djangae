@@ -93,10 +93,12 @@ def start_emulators(persist_data, emulators=None, storage_dir=None, task_target_
     if "tasks" in emulators:
         if task_target_port is None:
             if sys.argv[1] == "runserver" and autodetect_task_port:
-                try:
-                    task_target_port = int(sys.argv[-1].split(":")[-1])
-                except ValueError:
-                    # If last parameter is not a string (e.g. simply `./manage.py runserver`)
+                from django.core.management.commands.runserver import Command as RunserverCommand
+                parser = RunserverCommand().create_parser('django', 'runserver')
+                args = parser.parse_args(sys.argv[2:])
+                if args.addrport:
+                    task_target_port = args.addrport.split(":")[-1]
+                else:
                     task_target_port = _DJANGO_DEFAULT_PORT
             else:
                 task_target_port = _DJANGO_DEFAULT_PORT
