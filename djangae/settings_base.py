@@ -1,9 +1,13 @@
+from djangae.environment import is_production_environment
+
+FILE_CACHE_LOCATION = '/tmp/cache' if is_production_environment() else '.cache'
 
 CACHES = {
-    # We default to the database cache, at least until
-    # there is a sensible caching alternative (or low MemoryStore latency)
+    # We default to the filesystem cache, since it's quick and easy for simple app
+    # For larger application you should consider Cloud Memory Store (which does not have a free tier)
     'default': {
-        'BACKEND': 'django.core.cache.backends.db.DatabaseCache',
+        'BACKEND': 'django.core.cache.backends.filebased.FileBasedCache',
+        'LOCATION': FILE_CACHE_LOCATION,
     }
 }
 
