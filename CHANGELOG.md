@@ -4,6 +4,7 @@
 
 - Upgraded the codebase to Python 3
 - Switched to running the tests using tox (remove testapp etc.)
+- Replaced memcache with FileBasedCache (or Memorystore for Redis)
 - Removed the following:
   - djangae.db (moved to gcloud-connectors)
   - contrib.consistency (new datastore is strongly consistent)
