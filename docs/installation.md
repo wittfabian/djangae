@@ -8,7 +8,7 @@
 1. We also recommend that you:
     - Add `'djangae.contrib.security'` to `INSTALLED_APPS'`.
     - Add `'djangae.contrib.security.middleware.AppEngineSecurityMiddleware'` to `MIDDLEWARE_CLASSES`.
-1. At the top of your `settings.py`, insert the following line to setup some default settings: 
+1. At the top of your `settings.py`, insert the following line to setup some default settings:
 
 ```python
 from djangae.settings_base import *
@@ -73,3 +73,19 @@ It is recommended that for improved security you add `djangae.contrib.security.m
 ## Deployment
 
 Deploying your application is the same as deploying any Google App Engine project.
+
+## Cache Backend
+
+By default, Djangae uses `FileBasedCache` storing data in `.cache/` in your local env and in `/tmp` when deployed to GAE. This provides an in-memory caching system (`/tmp` is an in-memory filesystem), which is not shared across instances. If you need cross-instances cache we recomment using [Memorystore for Redis](https://cloud.google.com/memorystore/docs/redis) with [django-redis-cache](https://django-redis-cache.readthedocs.io/en/latest/index.html). Make sure you configure [VPC](https://cloud.google.com/appengine/docs/standard/python3/connecting-vpc) for your project to allow access to the redis instance from your GAE standard environment app. Your configuration should look something like this:
+
+```python
+# ...
+from djangae.settings_base import *
+
+CACHES = {
+    'default': {
+        'BACKEND': 'redis_cache.RedisCache',
+        'LOCATION': '10.237.7.251:6379',
+    },
+}
+```
