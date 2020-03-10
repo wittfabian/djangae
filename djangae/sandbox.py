@@ -1,6 +1,7 @@
 import logging
 import os
 import subprocess
+import sys
 import time
 from datetime import datetime
 from urllib.error import (
@@ -16,6 +17,7 @@ from djangae.environment import get_application_root
 _ACTIVE_EMULATORS = {}
 _ALL_EMULATORS = ("datastore", "tasks", "storage")
 
+_DJANGO_DEFAULT_PORT = 8000
 
 DATASTORE_PORT = 10901
 TASKS_PORT = 10908
@@ -65,7 +67,7 @@ def _wait(port, service):
         time.sleep(1)
 
 
-def start_emulators(persist_data, emulators=None, storage_dir=None):
+def start_emulators(persist_data, emulators=None, storage_dir=None, task_target_port=None, autodetect_task_port=True):
     # This prevents restarting of the emulators when Django code reload
     # kicks in
     if os.environ.get(DJANGO_AUTORELOAD_ENV) == 'true':
@@ -89,9 +91,21 @@ def start_emulators(persist_data, emulators=None, storage_dir=None):
         _wait_for_datastore(DATASTORE_PORT)
 
     if "tasks" in emulators:
+        if task_target_port is None:
+            if sys.argv[1] == "runserver" and autodetect_task_port:
+                from django.core.management.commands.runserver import Command as RunserverCommand
+                parser = RunserverCommand().create_parser('django', 'runserver')
+                args = parser.parse_args(sys.argv[2:])
+                if args.addrport:
+                    task_target_port = args.addrport.split(":")[-1]
+                else:
+                    task_target_port = _DJANGO_DEFAULT_PORT
+            else:
+                task_target_port = _DJANGO_DEFAULT_PORT
+
         os.environ["TASKS_EMULATOR_HOST"] = "127.0.0.1:%s" % TASKS_PORT
         _ACTIVE_EMULATORS["tasks"] = _launch_process(
-            "gcloud-tasks-emulator start -q --port=%s" % TASKS_PORT
+            "gcloud-tasks-emulator start -q --port=%s --target-port=%s" % (TASKS_PORT, task_target_port)
         )
         _wait_for_tasks(TASKS_PORT)
 
