@@ -23,8 +23,7 @@ def get_cloud_tasks_client():
     is_app_engine = os.environ.get("GAE_ENV") == "standard"
 
     if is_app_engine:
-        from google.auth import app_engine
-        return CloudTasksClient(credentials=app_engine.Credentials())
+        return CloudTasksClient()
     else:
         # Running locally, try to connect to the emulator
 
