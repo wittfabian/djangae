@@ -1,6 +1,7 @@
 from django.conf import settings
 from djangae import environment
 
+import logging
 import os
 import grpc
 
@@ -45,9 +46,21 @@ def ensure_required_queues_exist():
         and calls create_queue for them if they don't exist
     """
     client = get_cloud_tasks_client()
+    parent_path = cloud_tasks_parent_path()
 
     for queue in getattr(settings, "CLOUD_TASKS_QUEUES", []):
-        client.create_queue(cloud_tasks_parent_path(), queue)
+        queue_name = queue["name"]
+
+        # In our task settings we expect that the queue name will not
+        # include the path, otherwise moving the app, changing location
+        # etc. involves changing a load of settings.
+        assert("/" not in queue_name)  # Don't specify the full path
+
+        queue_dict = queue.copy()
+        queue_dict["name"] = "%s/queues/%s" % (parent_path, queue_name)
+
+        logging.info("Ensuring task queue: %s", queue_dict["name"])
+        client.create_queue(parent_path, queue_dict)
 
 
 def cloud_tasks_project():
