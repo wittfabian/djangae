@@ -67,7 +67,7 @@ def _wait(port, service):
         time.sleep(1)
 
 
-def start_emulators(persist_data, emulators=None, storage_dir=None):
+def start_emulators(persist_data, emulators=None, storage_dir=None, task_target_port=None, autodetect_task_port=True):
     # This prevents restarting of the emulators when Django code reload
     # kicks in
     if os.environ.get(DJANGO_AUTORELOAD_ENV) == 'true':
@@ -91,7 +91,7 @@ def start_emulators(persist_data, emulators=None, storage_dir=None):
         _wait_for_datastore(DATASTORE_PORT)
 
     if "tasks" in emulators:
-	from djangae.tasks import cloud_tasks_parent_path
+        from djangae.tasks import cloud_tasks_parent_path
         default_queue = "%s/queues/default" % cloud_tasks_parent_path()
 
         if task_target_port is None:
