@@ -11,7 +11,7 @@ from urllib.request import urlopen
 
 from django.utils.autoreload import DJANGO_AUTORELOAD_ENV
 
-from djangae.environment import get_application_root
+from djangae.environment import get_application_root, project_id
 
 _ACTIVE_EMULATORS = {}
 _ALL_EMULATORS = ("datastore", "tasks", "storage")
@@ -27,7 +27,7 @@ def _launch_process(command_line):
 
 
 def _wait_for_tasks(port):
-    time.sleep(5)  # FIXME: Need to somehow check it's running
+    time.sleep(2)  # FIXME: Need to somehow check it's running
 
 
 def _wait_for_datastore(port):
@@ -89,9 +89,15 @@ def start_emulators(persist_data, emulators=None, storage_dir=None):
         _wait_for_datastore(DATASTORE_PORT)
 
     if "tasks" in emulators:
+        from djangae.tasks import cloud_tasks_parent_path
+
+        default_queue = "%s/queues/default" % cloud_tasks_parent_path()
+
         os.environ["TASKS_EMULATOR_HOST"] = "127.0.0.1:%s" % TASKS_PORT
         _ACTIVE_EMULATORS["tasks"] = _launch_process(
-            "gcloud-tasks-emulator start -q --port=%s" % TASKS_PORT
+            "gcloud-tasks-emulator start -q --port=%s --default-queue=%s" % (
+                TASKS_PORT, default_queue
+            )
         )
         _wait_for_tasks(TASKS_PORT)
 
