@@ -11,7 +11,7 @@ from urllib.request import urlopen
 
 from django.utils.autoreload import DJANGO_AUTORELOAD_ENV
 
-from djangae.environment import get_application_root, project_id
+from djangae.environment import get_application_root
 
 _ACTIVE_EMULATORS = {}
 _ALL_EMULATORS = ("datastore", "tasks", "storage")
