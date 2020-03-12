@@ -10,22 +10,6 @@ import warnings
 from socket import socket
 
 
-try:
-    # If gcloudc is available, make sure we catch its TransactionFailedError
-    from gcloudc.db.transaction import TransactionFailedError
-except ImportError:
-    class TransactionFailedError:
-        pass
-
-
-try:
-    # Try to import the core GoogleAPIError
-    from google.api_core.exceptions import GoogleAPIError
-except ImportError:
-    class GoogleAPIError:
-        pass
-
-
 # No SDK imports allowed in module namespace because `./manage.py runserver`
 # imports this before the SDK is added to sys.path. See bugs #899, #1055.
 logger = logging.getLogger(__name__)
@@ -122,6 +106,23 @@ def retry(func, *args, **kwargs):
     """ Calls a function that may intermittently fail, catching the given error(s) and (re)trying
         for a maximum of `_attempts` times.
     """
+
+    # The following imports are inline because utils.py can end up being imported from settings.py
+    # and an attempt to access any database stuff from settings.py results in... importing settings.py
+
+    try:
+        # If gcloudc is available, make sure we catch its TransactionFailedError
+        from gcloudc.db.transaction import TransactionFailedError
+    except ImportError:
+        class TransactionFailedError:
+            pass
+
+    try:
+        # Try to import the core GoogleAPIError
+        from google.api_core.exceptions import GoogleAPIError
+    except ImportError:
+        class GoogleAPIError:
+            pass
 
     # Slightly weird `.pop(x, None) or default` thing here due to not wanting to repeat the tuple of
     # default things in `retry_on_error` and having to do inline imports
