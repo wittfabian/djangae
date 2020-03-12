@@ -270,7 +270,7 @@ def _process_shard(marker_id, shard_number, model, query, callback, finalize, bu
             buffer_time=buffer_time,
             args=args,
             kwargs=kwargs,
-            _queue=task_queue_name(),
+            _queue=task_queue_name().rsplit("/", 1)[-1],
             _countdown=1
         )
         return
@@ -333,7 +333,7 @@ def _process_shard(marker_id, shard_number, model, query, callback, finalize, bu
                         finalize,
                         *args,
                         _transactional=True,
-                        _queue=task_queue_name(),
+                        _queue=task_queue_name().rsplit("/", 1)[-1],
                         **kwargs
                     )
 
@@ -361,7 +361,7 @@ def _process_shard(marker_id, shard_number, model, query, callback, finalize, bu
             buffer_time=buffer_time,
             args=args,
             kwargs=kwargs,
-            _queue=task_queue_name(),
+            _queue=task_queue_name().rsplit("/", 1)[-1],
             _countdown=1
         )
 
@@ -413,7 +413,7 @@ def _generate_shards(
                 args=args,
                 kwargs=kwargs,
                 buffer_time=buffer_time,
-                _queue=task_queue_name(),
+                _queue=task_queue_name().rsplit("/", 1)[-1],
                 _transactional=True
             )
 

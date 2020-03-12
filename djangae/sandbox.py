@@ -29,7 +29,7 @@ def _launch_process(command_line):
 
 
 def _wait_for_tasks(port):
-    time.sleep(5)  # FIXME: Need to somehow check it's running
+    time.sleep(2)  # FIXME: Need to somehow check it's running
 
 
 def _wait_for_datastore(port):
@@ -91,6 +91,9 @@ def start_emulators(persist_data, emulators=None, storage_dir=None, task_target_
         _wait_for_datastore(DATASTORE_PORT)
 
     if "tasks" in emulators:
+        from djangae.tasks import cloud_tasks_parent_path
+        default_queue = "%s/queues/default" % cloud_tasks_parent_path()
+
         if task_target_port is None:
             if sys.argv[1] == "runserver" and autodetect_task_port:
                 from django.core.management.commands.runserver import Command as RunserverCommand
@@ -105,7 +108,9 @@ def start_emulators(persist_data, emulators=None, storage_dir=None, task_target_
 
         os.environ["TASKS_EMULATOR_HOST"] = "127.0.0.1:%s" % TASKS_PORT
         _ACTIVE_EMULATORS["tasks"] = _launch_process(
-            "gcloud-tasks-emulator start -q --port=%s --target-port=%s" % (TASKS_PORT, task_target_port)
+            "gcloud-tasks-emulator start -q --port=%s --target-port=%s --default-queue=%s" % (
+                TASKS_PORT, task_target_port, default_queue
+            )
         )
         _wait_for_tasks(TASKS_PORT)
 
