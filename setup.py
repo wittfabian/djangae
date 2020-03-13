@@ -44,6 +44,8 @@ setup(
     install_requires=[
         'django-gcloud-connectors @ git+https://gitlab.com/potato-oss/google-cloud/django-gcloud-connectors.git',
         'google-api-python-client>=1.7.11',
+        # requests required by cloud storage file backend
+        'requests>=2.22.0'
     ],
     extras_require=EXTRAS,
     tests_require=EXTRAS['test'],

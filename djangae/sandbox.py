@@ -21,6 +21,7 @@ _DJANGO_DEFAULT_PORT = 8000
 
 DATASTORE_PORT = 10901
 TASKS_PORT = 10908
+STORAGE_PORT = 10911
 
 
 def _launch_process(command_line):
@@ -34,6 +35,10 @@ def _wait_for_tasks(port):
 
 def _wait_for_datastore(port):
     _wait(port, "Cloud Datastore Emulator")
+
+
+def _wait_for_storage(port):
+    _wait(port, "Cloud Storage Emulator")
 
 
 def _wait(port, service):
@@ -113,6 +118,16 @@ def start_emulators(persist_data, emulators=None, storage_dir=None, task_target_
             )
         )
         _wait_for_tasks(TASKS_PORT)
+
+    if "storage" in emulators:
+        os.environ["STORAGE_EMULATOR_HOST"] = "http://127.0.0.1:%s" % STORAGE_PORT
+        command = "gcloud-storage-emulator start -q --port=%s" % STORAGE_PORT
+
+        if not persist_data:
+            command += " --no-store-on-disk"
+
+        _ACTIVE_EMULATORS["storage"] = _launch_process(command)
+        _wait_for_storage(STORAGE_PORT)
 
 
 def stop_emulators(emulators=None):
