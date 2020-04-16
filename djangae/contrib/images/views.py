@@ -5,14 +5,55 @@ from django.http import (
     HttpResponseRedirect,
 )
 
+from PIL import Image
+
 from .models import ProcessedImage
-from .processors import PROCESSOR_LOOKUP
+from .processors import PROCESSOR_MATCHER, PROCESSOR_LOOKUP
+import logging
 
 
-def _parse_querystring_parameters(url):
-    # FIXME: Return a list of tuples of the querystring
-    # commands and any arguments
-    return []
+class UnsupportedTransformationError(Exception):
+    def __init__(self, transform):
+        self.transform = transform
+
+
+def _parse_transformation_parameters(url):
+    """
+    Work out which transformations have been requested. Syntax for specifying
+    transformations is the same as how get_serving_url worked in the Python 2
+    standard environment on App Engine.
+
+    Example: https://www.example.com/serve/image.jpg=w1080 requests image.jpg
+    rescaled to 1080px width.
+    """
+    # FIXME: This will need changing when we introduce support for params
+    # which allow values (and thus need an `=` character)
+
+    # Get overall string representing transformations to apply
+    # e.g. https://www.example.com/serve/image.jpg=w1080-cc-fh-l78 => w1080-cc-fh-l78
+    transforms_string = url.rpartition('=')[2]
+
+    # Get list of individual transformations
+    # e.g. w1080-cc-fh-l78 => [w1080,cc,fh,l78]
+    transforms = transforms_string.split('-')
+
+    # Build into a list of tuples with transformation type and params
+    transforms_list = []
+
+    for t in transforms:
+        valid = False
+
+        for pattern, name in PROCESSOR_MATCHER:
+            match = pattern.fullmatch(t)
+            if match:
+                valid = True
+                transforms_list.append((name, match.groups()))
+
+        if not valid:
+            # Not a transform we support, ignore it.
+            logging.warning(f'Ignoring unrecognised transform: "{t}"')
+
+    return transforms_list
 
 
 def _is_source_image(url):
@@ -32,6 +73,21 @@ def _get_source_image(url):
     # return pil.Image created from the data
     pass
 
+
+def _process_image(image_path, transformations):
+    image = Image.open(image_path)
+    # image.show()
+
+    for command in transformations:
+        processor, args = command[0], command[1]
+
+        try:
+            func = PROCESSOR_LOOKUP[processor]
+            image = func(image, *args)
+        except KeyError:
+            raise UnsupportedTransformationError(processor)
+
+    return image
 
 def serve_or_process(request):
     url = request.get_full_path()
@@ -59,7 +115,7 @@ def serve_or_process(request):
         image = _get_source_image(url)
 
         # Run processing
-        for command in _parse_querystring_parameters(url):
+        for command in _parse_transformation_parameters(url):
             processor, args = command[0], command[1:]
 
             try:
