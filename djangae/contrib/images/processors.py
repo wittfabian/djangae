@@ -2,9 +2,25 @@ import re
 
 import PIL
 
-def resize(image, width, height):
-    # FIXME: Do stuff
-    return image
+def resize(image, size):
+    """
+    resize image, maintaining aspect ratio, so that it's longest edge
+    is `size` pixels.
+    """
+    orig_height = image.height
+    orig_width = image.width
+    aspect_ratio = orig_height / orig_width
+
+    edge = 'width' if image.width >= image.height else 'height'
+    if edge == 'width':
+        new_width = int(size)
+        new_height = int(round(new_width * aspect_ratio))
+    else:
+        new_height = int(size)
+        new_width = int(round(new_height / aspect_ratio))
+
+    resized = image.resize(size=(new_width, new_height), resample=PIL.Image.LANCZOS)
+    return resized
 
 def resize_height(image, height):
     # FIXME: Do stuff
