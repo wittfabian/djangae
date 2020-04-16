@@ -23,8 +23,13 @@ def resize(image, size):
     return resized
 
 def resize_height(image, height):
-    # FIXME: Do stuff
-    return image
+    height = int(height)
+    orig_height = image.height
+    orig_width = image.width
+    aspect_ratio = orig_height / orig_width
+    new_width = int(round(height / aspect_ratio))
+    resized = image.resize(size=(new_width, height), resample=PIL.Image.LANCZOS)
+    return resized
 
 def resize_width(image, width):
     width = int(width)
