@@ -2,7 +2,12 @@ import os
 
 from django.test.client import RequestFactory
 from djangae.test import TestCase
-from djangae.contrib.images.views import _parse_transformation_parameters, _process_image
+from djangae.contrib.images.views import (
+    _get_transformation_string,
+    _is_source_image,
+    _parse_transformation_parameters,
+    _process_image
+)
 
 class ImageServingViewTests(TestCase):
     def test_parse_transformation_parameters(self):
@@ -45,7 +50,6 @@ class ImageServingViewTests(TestCase):
             ('s', ('1000',)),
         ]
         result = _process_image(image_path, transformations)
-        result.show()
         self.assertEqual((1000, 667), result.size)
 
         # Portrait image
@@ -75,6 +79,27 @@ class ImageServingViewTests(TestCase):
         result = _process_image(image_path, transformations)
         self.assertEqual((1080, 720), result.size)
 
+    def test_is_source_image(self):
+        url = '/serve/image.jpg'
+        result = _is_source_image(url)
+        self.assertTrue(result)
+
+        url = '/serve/image.jpg=w1080'
+        result = _is_source_image(url)
+        self.assertFalse(result)
+
+    def test_get_transformation_string(self):
+        # Test single transformation
+        url = '/serve/image.jpg=s1200'
+        result = _get_transformation_string(url)
+        expected = 's1200'
+        self.assertEqual(result, expected)
+
+        # Multiple (even though mixing w, s and h doesn't make sense)
+        url = '/serve/image.jpg=w1080-s1280-h600'
+        result = _get_transformation_string(url)
+        expected = 'w1080-s1280-h600'
+        self.assertEqual(result, expected)
 
     # def tests_serve_or_process(self):
     #     rf = RequestFactory()

@@ -17,6 +17,21 @@ class UnsupportedTransformationError(Exception):
         self.transform = transform
 
 
+def _get_transformation_string(url):
+    # FIXME: Querystring should not be returned as part of transformation string
+
+    # FIXME: This will need changing when we introduce support for params
+    # which allow values (and thus need an `=` character)
+
+    # Get overall string representing transformations to apply
+    # e.g. https://www.example.com/serve/image.jpg=w1080-cc-fh-l78 => w1080-cc-fh-l78
+    parts = url.rpartition('=')
+    if parts[1] != '':
+        return parts[2]
+
+    return None
+
+
 def _parse_transformation_parameters(url):
     """
     Work out which transformations have been requested. Syntax for specifying
@@ -26,12 +41,7 @@ def _parse_transformation_parameters(url):
     Example: https://www.example.com/serve/image.jpg=w1080 requests image.jpg
     rescaled to 1080px width.
     """
-    # FIXME: This will need changing when we introduce support for params
-    # which allow values (and thus need an `=` character)
-
-    # Get overall string representing transformations to apply
-    # e.g. https://www.example.com/serve/image.jpg=w1080-cc-fh-l78 => w1080-cc-fh-l78
-    transforms_string = url.rpartition('=')[2]
+    transforms_string = _get_transformation_string(url)
 
     # Get list of individual transformations
     # e.g. w1080-cc-fh-l78 => [w1080,cc,fh,l78]
@@ -57,8 +67,7 @@ def _parse_transformation_parameters(url):
 
 
 def _is_source_image(url):
-    # FIXME: Probably just check if there's a querystring?
-    return False
+    return _get_transformation_string(url) is None
 
 
 def _serve_image(url):
