@@ -165,11 +165,10 @@ def serve_or_process(request, image_path, bucket=None):
             # so just return
             return HttpResponseRedirect(existing_image.serving_url)
 
-        image = _open_image(bucket, image_path)
-        # TODO:  Hash source file and pass to ProcessedImage
-
         # No existing image for these transformation params, generate it
-        source_image = _get_source_image(bucket, path)
+        image_path = get_url_parts(url)
+        image = _open_image(bucket, image_path)
+        source_image = _get_source_image(bucket, image_path)
         transformations = _parse_transformation_parameters(url)
         processed_image = _create_processed_image(bucket, image_path, transformations)
         processed_image.save()
