@@ -122,7 +122,7 @@ def _open_image(bucket, image_path):
 
     return storage._open(image_path)
 
-# FIXME: Unfinished
+# FIXME: Unfinished - Should this be moved to a classmethod?
 def _create_processed_image(bucket, path, transformations):
     # FIXME: Throw error if file does not exist at `path` in `bucket`
     source_file_path = '{bucket}/{path}'.format(bucket=bucket, path=path)
