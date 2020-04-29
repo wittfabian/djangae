@@ -11,6 +11,7 @@ from django.http import (
 from PIL import Image
 
 from .models import (
+    compute_image_hash,
     get_url_parts,
     ProcessedImage
 )
@@ -83,12 +84,8 @@ def _serve_image(url):
     return HttpResponse("Something")
 
 
-# FIXME: Not correct
+# FIXME: Needs testing
 def _get_source_image(bucket, path):
-    # FIXME: I can't think how to do this right now
-    # again it should probably leverage djangae.storage
-    # return pil.Image created from the data
-
     # Stick to Django File abstraction
     storage = CloudStorage()
     transformation_string = _get_transformation_string(path)
@@ -125,6 +122,23 @@ def _open_image(bucket, image_path):
 
     return storage._open(image_path)
 
+# FIXME: Unfinished
+def _create_processed_image(bucket, path, transformations):
+    # FIXME: Throw error if file does not exist at `path` in `bucket`
+    source_file_path = '{bucket}/{path}'.format(bucket=bucket, path=path)
+    source_image = _get_source_image(bucket, path)
+    source_image_hash = compute_image_hash(source_image)
+
+    processed_image_data = _process_image(source_image, transformations)
+    processed_image = ProcessedImage.objects.create(
+        path=path,
+        source_file_path=source_file_path,
+        source_file_hash=source_image_hash,
+        data=processed_image_data
+    )
+
+    return processed_image
+
 def serve_or_process(request, image_path, bucket=None):
     if bucket is None:
         raise ImproperlyConfigured('You must provide a bucket name')
@@ -157,12 +171,7 @@ def serve_or_process(request, image_path, bucket=None):
         # No existing image for these transformation params, generate it
         source_image = _get_source_image(bucket, path)
         transformations = _parse_transformation_parameters(url)
-        processed_image_data = _process_image(source_image_path, transformations)
-        processed_image = ProcessedImage.objects.create(
-            url=url,
-            source_file_path='',
-            source_file_hash='',
-            data=processed_image_data
-        )
+        processed_image = _create_processed_image(bucket, image_path, transformations)
+        processed_image.save()
 
     return _serve_image(processed_image.data)

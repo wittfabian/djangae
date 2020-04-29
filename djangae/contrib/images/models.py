@@ -38,7 +38,13 @@ class ProcessedImage(models.Model):
 
     def save(self, *args, **kwargs):
         self.path = self.normalise_url(self.path)
+
         # TODO: Populate source_file_path?
+
+        # TODO: Should we update `self.data` here on every save incase the
+        # data in storage has changed for the file with this path?
+
+
         super().save(*args, **kwargs)
 
 
