@@ -10,7 +10,10 @@ from django.http import (
 
 from PIL import Image
 
-from .models import ProcessedImage
+from .models import (
+    get_url_parts,
+    ProcessedImage
+)
 from .processors import PROCESSOR_MATCHER, PROCESSOR_LOOKUP
 import logging
 
@@ -20,25 +23,8 @@ class UnsupportedTransformationError(Exception):
         self.transform = transform
 
 
-def _get_url_parts(url):
-    """
-    Returns a tuple of length 2 which contains:
-        1) Path to source image within bucket
-        2) Transformation parameters
-    """
-    # FIXME: Any querystring provided should not be returned as part of transformation string
-    # FIXME: Ignore content after any additional occurance of = in the string?
-    path, sep, transformation = url.partition('=')
-
-    if sep == '' and transformation == '':
-        # = not found in url
-        return (path, None)
-
-    return (path, transformation)
-
-
 def _get_transformation_string(url):
-    return _get_url_parts(1)
+    return get_url_parts(1)
 
 
 def _parse_transformation_parameters(url):

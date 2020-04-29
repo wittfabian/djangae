@@ -37,3 +37,18 @@ class ProcessedImage(models.Model):
         self.path = self.normalise_url(self.path)
         # TODO: Populate source_file_path?
         super().save(*args, **kwargs)
+def get_url_parts(url):
+    """
+    Returns a tuple of length 2 which contains:
+        1) Path to source image within bucket
+        2) Transformation parameters
+    """
+    # FIXME: Any querystring provided should not be returned as part of transformation string
+    # FIXME: Ignore content after any additional occurance of = in the string?
+    path, sep, transformation = url.partition('=')
+
+    if sep == '' and transformation == '':
+        # = not found in url
+        return (path, None)
+
+    return (path, transformation)
