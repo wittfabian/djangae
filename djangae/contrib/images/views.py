@@ -108,7 +108,6 @@ def _process_image(image_file, transformations):
     :transformations: iterable of commands
     """
     image = Image.open(image_file)
-    image.show()
 
     for command in transformations:
         processor, args = command[0], command[1]
