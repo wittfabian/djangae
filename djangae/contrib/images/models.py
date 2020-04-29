@@ -1,4 +1,7 @@
+import hashlib
+
 from django.db import models
+from PIL import Image
 
 
 class ProcessedImage(models.Model):
@@ -37,6 +40,21 @@ class ProcessedImage(models.Model):
         self.path = self.normalise_url(self.path)
         # TODO: Populate source_file_path?
         super().save(*args, **kwargs)
+
+
+def compute_image_hash(image_file):
+    """ Returns the SHA256 hash of a images pixel data (i.e. ignoring Exif)
+
+        image -- an instance of Django ImageFile
+    """
+    image = Image.open(image_file)
+    pixels = Image.new(image.mode, image.size)
+    pixels.putdata(pixels.getdata())
+    m = hashlib.sha256()
+    m.update(pixels.tobytes())
+    return m.digest()
+
+
 def get_url_parts(url):
     """
     Returns a tuple of length 2 which contains:
