@@ -32,3 +32,8 @@ class ProcessedImage(models.Model):
         # FIXME: Implement to make sure querystring parameters are in some
         # kind of consistent order
         return url
+
+    def save(self, *args, **kwargs):
+        self.path = self.normalise_url(self.path)
+        # TODO: Populate source_file_path?
+        super().save(*args, **kwargs)
