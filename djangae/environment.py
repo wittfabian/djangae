@@ -3,10 +3,6 @@ import os
 from functools import wraps
 
 from djangae.utils import memoized
-from django.http import HttpResponseForbidden
-
-# No SDK imports allowed in module namespace because `./manage.py runserver`
-# imports this before the SDK is added to sys.path. See bugs #899, #1055.
 
 
 def application_id():
@@ -62,32 +58,9 @@ def task_queue_name():
 
 @memoized
 def get_application_root():
-    """Traverse the filesystem upwards and return the directory containing app.yaml"""
+    """Simply returns the BASE_DIR setting from Django"""
+
     from django.conf import settings  # Avoid circular
-
-    path = os.path.dirname(os.path.abspath(__file__))
-    app_yaml_path = os.environ.get('DJANGAE_APP_YAML_LOCATION', None)
-
-    # If the DJANGAE_APP_YAML_LOCATION variable is setup, will try to locate
-    # it from there.
-    if (app_yaml_path is not None and
-            os.path.exists(os.path.join(app_yaml_path, "app.yaml"))):
-        return app_yaml_path
-
-    # Failing that, iterates over the parent folders until it finds it,
-    # failing when it gets to the root
-    while True:
-        if os.path.exists(os.path.join(path, "app.yaml")):
-            return path
-        else:
-            parent = os.path.dirname(path)
-            if parent == path:  # Filesystem root
-                break
-            else:
-                path = parent
-
-    # Use the Django base directory as a fallback. We search for app.yaml
-    # first because that will be the "true" root of the GAE app
     return settings.BASE_DIR
 
 
@@ -95,6 +68,9 @@ def task_only(view_function):
     """ View decorator for restricting access to tasks (and crons) of the application
         only.
     """
+
+    # Inline import to prevent importing Django too early
+    from django.http import HttpResponseForbidden
 
     @wraps(view_function)
     def replacement(*args, **kwargs):
