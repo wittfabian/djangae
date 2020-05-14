@@ -92,3 +92,9 @@ def project_id():
     # Environment variable will exist on production servers
     # fallback to "example" locally if it doesn't exist
     return os.environ.get("GOOGLE_CLOUD_PROJECT", "example")
+
+
+def region_id():
+    # Environment variable will exist on production servers
+    # fallback to "e" locally if it doesn't exist
+    return os.environ.get("GAE_APPLICATION", "e~example").split("~", 1)[0]
