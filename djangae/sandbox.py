@@ -72,7 +72,7 @@ def _wait(port, service):
         time.sleep(1)
 
 
-def start_emulators(persist_data, storage_dir, emulators=None, task_target_port=None, autodetect_task_port=True):
+def start_emulators(persist_data, storage_dir=None, emulators=None, task_target_port=None, autodetect_task_port=True):
     # This prevents restarting of the emulators when Django code reload
     # kicks in
     if os.environ.get(DJANGO_AUTORELOAD_ENV) == 'true':
@@ -87,6 +87,9 @@ def start_emulators(persist_data, storage_dir, emulators=None, task_target_port=
         # Start the cloud datastore emulator
         command = "gcloud beta emulators datastore start --consistency=1.0 --quiet --project=example"
         command += " --host-port=127.0.0.1:%s" % DATASTORE_PORT
+
+        if storage_dir:
+            command += " --data-dir=%s" % storage_dir
 
         if not persist_data:
             command += " --no-store-on-disk"
