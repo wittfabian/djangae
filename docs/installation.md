@@ -39,6 +39,8 @@ Make your `manage.py` look something like this:
 import os
 import sys
 
+this_dir = os.path.abspath(os.path.dirname(__file__))
+
 if __name__ == '__main__':
     os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'myapp.settings')
     try:
@@ -54,7 +56,10 @@ if __name__ == '__main__':
 
     try:
         # Start all emulators, persisting data if we're not testing
-        start_emulators(persist_data="test" not in sys.argv)
+        start_emulators(
+            persist_data="test" not in sys.argv,
+            storage_dir=os.path.join(this_dir, ".storage")
+        )
         execute_from_command_line(sys.argv)
     finally:
         # Stop all emulators
