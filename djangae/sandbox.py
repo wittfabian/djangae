@@ -10,9 +10,9 @@ from urllib.error import (
 )
 from urllib.request import urlopen
 
-from django.utils.autoreload import DJANGO_AUTORELOAD_ENV
-
-from djangae.environment import get_application_root
+# This is copied from Django so that we don't import Django, and therefore
+# settings.py before we've got the Datastore etc. up and running
+DJANGO_AUTORELOAD_ENV = 'RUN_MAIN'
 
 _ACTIVE_EMULATORS = {}
 _ALL_EMULATORS = ("datastore", "tasks", "storage")
@@ -72,14 +72,13 @@ def _wait(port, service):
         time.sleep(1)
 
 
-def start_emulators(persist_data, emulators=None, storage_dir=None, task_target_port=None, autodetect_task_port=True):
+def start_emulators(persist_data, storage_dir, emulators=None, task_target_port=None, autodetect_task_port=True):
     # This prevents restarting of the emulators when Django code reload
     # kicks in
     if os.environ.get(DJANGO_AUTORELOAD_ENV) == 'true':
         return
 
     emulators = emulators or _ALL_EMULATORS
-    storage_dir = storage_dir or os.path.join(get_application_root(), ".storage")
 
     if "datastore" in emulators:
         os.environ["DATASTORE_EMULATOR_HOST"] = "127.0.0.1:%s" % DATASTORE_PORT
