@@ -9,7 +9,9 @@ from .state import generate_state
 
 
 _DEFAULT_OAUTH_SCOPES = [
-    "openid%20profile%20email"
+    "openid",
+    "profile",
+    "email"
 ]
 
 

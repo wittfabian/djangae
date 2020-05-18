@@ -28,7 +28,9 @@ def oauth2callback(request):
         # configurable failure page or whatever
         raise Http404()
 
-    flow = create_oauth2_flow()  # FIXME: scopes? Should be in the QS
+    scopes = request.GET.get("scopes", "").split("%20") or None
+
+    flow = create_oauth2_flow(scopes=scopes)
     flow.fetch_token(authorization_response=code)
 
     # FIXME: Pass params to oauth session
