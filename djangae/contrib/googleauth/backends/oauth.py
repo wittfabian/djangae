@@ -1,10 +1,28 @@
 from django.contrib.auth.backends import BaseBackend
-from ..models import User, UserPermission, Group
+from ..models import User, UserPermission, Group, _OAUTH_USER_SESSION_SESSION_KEY, OAuthUserSession
 
 
 class OAuthBackend(BaseBackend):
     def authenticate(self, request, **kwargs):
-        pass
+        oauth_session_id = request.session.get(_OAUTH_USER_SESSION_SESSION_KEY)
+
+        user = None
+        if oauth_session_id:
+            oauth_session = OAuthUserSession.objects.filter(
+                pk=oauth_session_id
+            ).first()
+
+            if oauth_session and oauth_session.is_valid():
+                # Valid session? Get or create the user by their email address
+                user, created = User.objects.get_or_create(
+                    email=oauth_session.email_address,
+                )
+
+            # Delete the session key now that it's been used, we don't
+            # need it now a User has been created (if the session was valid)
+            del request.session[_OAUTH_USER_SESSION_SESSION_KEY]
+
+        return user
 
     def user_can_authenticate(self, user):
         return user.is_active
