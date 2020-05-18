@@ -21,3 +21,18 @@ GOOGLEAUTH_CUSTOM_PERMISSIONS = {
     'events.Event': ['invite']
 }
 ```
+
+# OAuth 2.0 / OpenID Authentication
+
+To enable oauth2 authentication, you'll need to add the following to your `AUTHENTICATION_BACKENDS` setting:
+
+```
+AUTHENTICATION_BACKENDS = [
+  'djangae.contrib.googleauth.backends.oauth.OAuthBackend'
+]
+```
+
+Then, add djangae.contrib.googleauth.urls to your url patterns.
+
+After first launch, you should go to the Django admin and fill out your client_id and client_secret settings
+in the `AppOAuthCredentials` instance that should've been created for you.
