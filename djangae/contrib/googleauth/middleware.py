@@ -6,7 +6,7 @@ from django.contrib.auth import (
 )
 
 from .backends.oauth import OAuthBackend
-from .models import OAuthUserSession
+from .models import OAuthUserSession, IAPBackend
 
 
 def authentication_middleware(get_response):
@@ -14,7 +14,7 @@ def authentication_middleware(get_response):
     def middleware(request):
         if request.user.is_authenticated():
             backend_str = request.session.get(BACKEND_SESSION_KEY)
-            if (not backend_str) or not isinstance(load_backend(backend_str), OAuthBackend):
+            if backend_str and isinstance(load_backend(backend_str), OAuthBackend):
                 # The user is authenticated with Django, and they use the OAuth backend, so they
                 # should have a valid oauth session
                 oauth_session = OAuthUserSession.objects.filter(
@@ -29,3 +29,6 @@ def authentication_middleware(get_response):
                 # If we're still not valid, then log out the Django user
                 if not oauth_session or not oauth_session.is_valid():
                     logout(request.user)
+            elif backend_str and isinstance(load_backend(backend_str), IAPBackend):
+                # FIXME: Implement this
+                pass
