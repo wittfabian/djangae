@@ -1,5 +1,11 @@
-from django.contrib.auth.backends import BaseBackend
-from ..models import User, UserPermission, Group, _OAUTH_USER_SESSION_SESSION_KEY, OAuthUserSession
+from ..models import (
+    _OAUTH_USER_SESSION_SESSION_KEY,
+    Group,
+    OAuthUserSession,
+    User,
+    UserPermission,
+)
+from .base import BaseBackend
 
 
 class OAuthBackend(BaseBackend):

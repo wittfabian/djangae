@@ -1,10 +1,29 @@
 from djangae.test import TestCase
+from django.contrib.auth.decorators import login_required
+from django.http import HttpResponse
+from django.test import override_settings
+from django.urls import (
+    include,
+    path,
+)
 
 
 class PermissionTests(TestCase):
     pass
 
 
+@login_required
+def login(request):
+    return HttpResponse("OK")
+
+
+urlpatterns = [
+    path("login_required", login),
+    path("googleauth", include("djangae.contrib.googleauth"))
+]
+
+
+@override_settings(ROOT_URLCONF=__name__)
 class OAuthTests(TestCase):
 
     def test_redirect_to_authorization_url(self):
@@ -12,6 +31,10 @@ class OAuthTests(TestCase):
             Access to a page that is login_required
             should redirect to the authorization url
         """
+
+        response = self.client.get("/login_required")
+        self.assertEqual(302, response.status_code)
+        import ipdb; ipdb.set_trace()
         pass
 
     def test_oauth_callback_creates_session(self):

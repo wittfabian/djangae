@@ -19,10 +19,10 @@ CACHES = {
     }
 }
 
-# Default Django middleware
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'djangae.contrib.googleauth.middleware.AuthenticationMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
@@ -35,7 +35,10 @@ INSTALLED_APPS = (
     'gcloudc',
     'djangae',
     'djangae.tasks',
+    'djangae.contrib.googleauth',
 )
+
+AUTH_USER_MODEL = 'djangae.contrib.googleauth.User'
 
 DATABASES = {
     'default': {
