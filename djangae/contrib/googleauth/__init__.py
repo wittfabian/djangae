@@ -1,1 +1,1 @@
-default_app_config = 'googleauth.apps.GoogleauthConfig'
+default_app_config = 'djangae.contrib.googleauth.apps.GoogleauthConfig'
