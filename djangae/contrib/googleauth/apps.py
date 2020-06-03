@@ -2,7 +2,7 @@ from django.apps import AppConfig
 
 
 class GoogleauthConfig(AppConfig):
-    name = 'googleauth'
+    name = 'djangae.contrib.googleauth'
     verbose_name = "Googleauth"
 
     def ready(self):

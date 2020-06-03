@@ -33,7 +33,8 @@ def login(request):
     DEFAULT_SCOPES = getattr(settings, "GOOGLEAUTH_OAUTH_SCOPES", _DEFAULT_OAUTH_SCOPES)
 
     destination = request.GET.get("next", "/")
-    scopes = request.GET.get("scopes").split("%20")
+    scopes = request.GET.get("scopes", "").split("%20")
+    scopes = [x for x in scopes if x]
 
     # This is a security check to make sure we only ask for access
     # to scopes that we've whitelisted. Just in-case the querystring

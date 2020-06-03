@@ -1,5 +1,6 @@
-from django.apps import get_app_configs
+from django.apps import apps
 from django.conf import settings
+from django.db import models
 
 CUSTOM_PERMISSIONS = getattr(settings, "GOOGLEAUTH_CUSTOM_PERMISSIONS", {})
 
@@ -13,25 +14,41 @@ def get_permission_choices():
 
     DEFAULT_PERMISSIONS = ("add", "change", "delete", "view")
     GLOBAL_PERMISSIONS = tuple(
-        list(DEFAULT_PERMISSIONS) + list(CUSTOM_PERMISSIONS.get('__all__'))
+        list(DEFAULT_PERMISSIONS) + list(CUSTOM_PERMISSIONS.get('__all__', []))
     )
 
     result = []
 
-    for app in get_app_configs():
+    for app in apps.get_app_configs():
         for model in app.get_models():
-            model_name = str(type(model))
+            model_name = model.__name__
             app_model = "%s.%s" % (model._meta.app_label, model_name)
 
-            codenames = GLOBAL_PERMISSIONS + list(CUSTOM_PERMISSIONS.get(app_model, []))
+            codenames = list(GLOBAL_PERMISSIONS) + list(CUSTOM_PERMISSIONS.get(app_model, []))
 
             for permission in codenames:
                 result.append(
-                    "%s.%s_%s" % (
-                        model._meta.app_label,
-                        permission,
-                        model_name.lower()
+                    (
+                        "%s.%s_%s" % (
+                            model._meta.app_label,
+                            permission,
+                            model_name.lower()
+                        ),
+                        "Can %s %s.%s" % (permission, model._meta.app_label, model_name)
                     )
                 )
 
     return result
+
+
+class PermissionChoiceIterator(object):
+    def __iter__(self):
+        for perm in get_permission_choices():
+            yield perm
+
+
+class PermissionChoiceField(models.CharField):
+    def __init__(self, *args, **kwargs):
+        kwargs["max_length"] = 150
+        kwargs["choices"] = PermissionChoiceIterator()
+        super().__init__(self, *args, **kwargs)
