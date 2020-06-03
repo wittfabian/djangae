@@ -1,8 +1,14 @@
-from django.contrib.auth.backends import ModelBackend  # FIXME: In Django 3.0 this should be BaseBackend
-from ..models import User, UserPermission, Group, _OAUTH_USER_SESSION_SESSION_KEY, OAuthUserSession
+from ..models import (
+    _OAUTH_USER_SESSION_SESSION_KEY,
+    Group,
+    OAuthUserSession,
+    User,
+    UserPermission,
+)
+from .base import BaseBackend
 
 
-class OAuthBackend(ModelBackend):
+class OAuthBackend(BaseBackend):
     def authenticate(self, request, **kwargs):
         oauth_session_id = request.session.get(_OAUTH_USER_SESSION_SESSION_KEY)
 

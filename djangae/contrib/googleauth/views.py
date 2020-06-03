@@ -76,12 +76,6 @@ def login(request):
 
 
 def oauth2callback(request):
-    if request.user.is_authenticated():
-        raise Http404(
-            "For some reason we hit the oauth2callback even though"
-            " we're authenticated"
-        )
-
     state = request.GET.get("state")
     if not state:
         raise Http404("State is required for security token checking")
