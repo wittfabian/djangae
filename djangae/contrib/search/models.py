@@ -1,21 +1,49 @@
 from django.db import models
-from gcloudc.db.models.fields.iterable import ListField
+from gcloudc.db import transaction
+from gcloudc.db.models.fields.iterable import (
+    ListField,
+)
+
+from gcloudc.db.models.fields.related import RelatedSetField
+
+from .document import Document
+
+WORD_DOCUMENT_JOIN_STRING = "|"
 
 
-class Document(models.Model):
-    index_name = models.CharField(max_length=128)
+class DocumentData(models.Model):
+    """
+        'Document' is intentionally not a model;
+        it would ruin the abstraction, and we need to
+        store all kinds of data related to a Document.
+        So instead, each Document has an instance of DocumentData
+        this is the closest to a database representation of the doc
+        and indeed, is where the document ID comes from.
+
+        DocumentData exists to keep a reference to all word indexes
+        and any stats/settings about the document (e.g. its rank).
+    """
+    index_stats = models.ForeignKey("IndexStats", on_delete=models.CASCADE)
+
+    # This allows for up-to 10000 unique terms in a single
+    # document. We need this data when deleting a document
+    # from the index
+    word_indexes = RelatedSetField("WordIndex")
 
 
-class WordDocumentField(models.Model):
-    # key should be of the format XXXX_YYYY_ZZZZ where:
+class WordIndex(models.Model):
+    # key should be of the format WWWW|XXXX|YYYY|ZZZZ where:
+    # WWWW = index ID
     # XXXX = normalised word
-    # YYYY = document ID
-    # ZZZZ = field name
+    # YYYY = field name
+    # ZZZZ = document id
 
     # Querying for documents or fields containing the word
     # will just be a key__startswith query (effectively)
     id = models.CharField(primary_key=True, max_length=100)
 
+    index_stats = models.ForeignKey("IndexStats", on_delete=models.CASCADE)
+    document = models.ForeignKey("Document", on_delete=models.CASCADE)
     word = models.CharField(max_length=500)
     field_name = models.CharField(max_length=500)
     field_content = models.TextField()
@@ -26,20 +54,89 @@ class WordDocumentField(models.Model):
 
     @property
     def document_id(self):
-        return int(self.key.split("_")[1])
+        return int(self.key.split(WORD_DOCUMENT_JOIN_STRING)[1])
 
     @property
     def document(self):
         return Document.objects.get(pk=self.document_id)
 
+    def save(self, *args, **kwargs):
+        orig_pk = self.pk
+
+        self.pk = WORD_DOCUMENT_JOIN_STRING.join(
+            self.index_stats_id, self.word, self.field_name, self.document_id
+        )
+
+        # Just check that we didn't *change* the PK
+        assert((orig_pk is None) or orig_pk == self.pk)
+        super().save(*args, **kwargs)
+
+
+class IndexStats(models.Model):
+    """
+        This is a representation of the index
+        in the datastore. Its PK is used as
+        a prefix to documents and word tables
+        but it's only really used itself to maintain
+        statistics about the indexed data.
+    """
+
+    name = models.CharField(max_length=100, unique=True)
+    document_count = models.PositiveIntegerField(default=0)
+
 
 class Index(object):
 
-    def __init__(self, index_name):
-        self.name = index_name
+    def __init__(self, name):
+        self.name = name
+        self.index, created = IndexStats.objects.get_or_create(
+            name=name
+        )
 
     def add(self, document_or_documents):
-        pass
+        if isinstance(document_or_documents, Document):
+            documents = [document_or_documents]
+        else:
+            documents = document_or_documents[:]
+
+        for document in documents:
+            # We go through the document fields, pull out the values that have been set
+            # then we index them.
+
+            data = document._data
+
+            if data is None:
+                # Generate a database representation of this Document
+                data = DocumentData.objects.create(index_stats=self.index)
+                document._set_data(data)
+
+            assert(document.id)  # This should be a thing by now
+
+            for field_name, field in document.get_fields().items():
+                # Get the field value, use the default if it's not set
+                value = getattr(document, field.attname, None)
+                value = field.default if value is None else value
+                value = field.normalize_value(value)
+
+                # Tokenize the value, this will effectively mean lower-casing
+                # removing punctuation etc. and returning a list of things
+                # to index
+                tokens = field.tokenize_value(value)
+
+                for token in tokens:
+                    # FIXME: Update occurrances
+                    with transaction.atomic():
+                        obj, updated = WordIndex.objects.update_or_create(
+                            document_id=document.id,
+                            index_stats=self.index,
+                            word=token,
+                            field_name=field.attname,
+                            field_content=value
+                        )
+
+                        data.refresh_from_db()
+                        data.word_indexes.add(obj)
+                        data.save()
 
     def remove(self, document_or_documents):
         pass
@@ -47,78 +144,9 @@ class Index(object):
     def get(self, document_id):
         pass
 
-    def _qs_tokenize_one(self, query_string):
-        """
-            First pass. Tokenizes the string into logic-ops
-            and field:values
-        """
+    def search(self, query_string, limit=1000):
+        from .query import build_document_queryset
+        qs = build_document_queryset(query_string)[:limit]
 
-        tokens = []
-        brace_counter = 0
-        token = ""
-
-        for c in query_string:
-            if c == "(":
-                brace_counter += 1
-                continue
-            elif c == ")":
-                brace_counter -= 1
-                continue
-
-            if not brace_counter:
-                # We're not in some braces
-                if c == " " and token:
-                    tokens.append(token)
-                    token = ""
-                else:
-                    token += c
-            else:
-                token += c
-        else:
-            tokens.append(token)
-
-        return tokens
-
-    def _qs_tokenize_two(self, tokens):
-        # We now take the tokens resulting from the previous phase
-        # and build a node heirarchy of global operators
-
-        # AND takes precedence, let's branch that
-        and_branches = []
-        branch = []
-        for token in tokens:
-            if token != "AND":
-                branch.append(token)
-            else:
-                and_branches.append(branch)
-                branch = []
-        else:
-            and_branches.append(branch)
-
-        for and_branch in and_branches:
-            branch = []
-            new_and_branch = []
-            for token in and_branch:
-                if token != "OR":
-                    branch.append(token)
-                else:
-                    new_and_branch.append(branch)
-                    branch = []
-            else:
-                new_and_branch.append(branch)
-
-            if len(new_and_branch) == 1:
-                and_branch[:] = new_and_branch[0]
-            else:
-                and_branch[:] = new_and_branch
-
-        return and_branches
-
-    def search(self, query_string, limit=100, only_fields=None):
-        # The App Engine Search API is tricky to parse. Essentially though we are going
-        # to allow 2 levels of logic operations (e.g. AND, OR, NOT). There's the
-        # global level, then the field value level. I dunno if that's how it worked
-        # before but that's what we're going with here.
-
-        tokens = self._qs_tokenize_one(query_string)
-        print(tokens)
+        for document in qs:
+            yield Document(document)

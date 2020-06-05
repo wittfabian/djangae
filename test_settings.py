@@ -35,6 +35,7 @@ INSTALLED_APPS = (
     'gcloudc',
     'djangae',
     'djangae.tasks',
+    'djangae.contrib.search',
 )
 
 DATABASES = {
