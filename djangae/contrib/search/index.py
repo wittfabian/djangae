@@ -48,6 +48,10 @@ class Index(object):
                 # to index
                 tokens = field.tokenize_value(value)
 
+                if tokens is None:
+                    # Nothing to index
+                    continue
+
                 for token in tokens:
                     # FIXME: Update occurrances
                     with transaction.atomic():

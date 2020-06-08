@@ -66,7 +66,10 @@ class Field(object):
             Given a value set on a document, this
             returns a list of tokens that are indexed
         """
-        raise NotImplementedError()
+        if value is None:
+            return value
+
+        return value.split()  # Just split on whitespace, normalization would've done the work
 
 
 class AtomField(Field):
