@@ -74,16 +74,6 @@ def deferred(request):
     return response
 
 
-@csrf_exempt
-@require_POST
-def internalupload(request):
-    try:
-        return HttpResponse(str(request.FILES['file'].blobstore_info.key()))
-    except Exception:
-        logger.exception("DJANGAE UPLOAD FAILED: The internal upload handler couldn't retrieve the blob info key.")
-        return HttpResponseServerError()
-
-
 @environment.task_only
 def clearsessions(request):
     engine = import_module(settings.SESSION_ENGINE)
