@@ -4,7 +4,7 @@ from djangae.test import TestCase
 from djangae.contrib import search
 
 from .document import Document
-from .models import Index
+from .index import Index
 
 
 class QueryStringParseTests(TestCase):
