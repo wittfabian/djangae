@@ -1,10 +1,10 @@
-from django.conf.urls import url
+from django.urls import path
 
 from . import views
 
 urlpatterns = [
-    url(r'^start$', views.start),
-    url(r'^stop$', views.stop),
-    url(r'^warmup$', views.warmup),
-    url(r'^clearsessions$', views.clearsessions),
+    path('start', views.start, name="instance_start"),
+    path('stop', views.stop, name="instance_stop"),
+    path('warmup', views.warmup, name="instance_warmup"),
+    path('clearsessions', views.clearsessions, name="clearsessions"),
 ]

@@ -25,17 +25,17 @@ def warmup(request):
                 import_module('%s.%s' % (app, name))
             except ImportError:
                 pass
-    return HttpResponse("Ok.")
+    return HttpResponse("OK")
 
 
 def start(request):
     module_started.send(sender=__name__, request=request)
-    return HttpResponse("Ok.")
+    return HttpResponse("OK")
 
 
 def stop(request):
     module_stopped.send(sender=__name__, request=request)
-    return HttpResponse("Ok.")
+    return HttpResponse("OK")
 
 
 @csrf_exempt
@@ -84,7 +84,7 @@ def internalupload(request):
         return HttpResponseServerError()
 
 
-@environment.task_or_admin_only
+@environment.task_only
 def clearsessions(request):
     engine = import_module(settings.SESSION_ENGINE)
     try:
@@ -94,4 +94,4 @@ def clearsessions(request):
             "Session engine '%s' doesn't support clearing "
             "expired sessions.\n", settings.SESSION_ENGINE
         )
-    return HttpResponse("Ok.")
+    return HttpResponse("OK")
