@@ -19,8 +19,10 @@ def without_security_middleware(func):
     # thus allowing you to avoid the afore-described issue.
     middleware = list(settings.MIDDLEWARE_CLASSES[:])
     middleware.remove('djangae.contrib.security.middleware.AppEngineSecurityMiddleware')
+
     @wraps(func)
     def _wrapped(*args, **kwargs):
         with override_settings(MIDDLEWARE_CLASSES=middleware):
             return func(*args, **kwargs)
+
     return _wrapped

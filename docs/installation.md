@@ -89,3 +89,18 @@ CACHES = {
     },
 }
 ```
+
+# System views
+
+Djangae ships handlers for various system functions. To enable them include djangae.urls in your url patterns. E.g.
+
+```
+urlpatterns = [
+    path('_ah/', include('djangae.urls')),
+]
+```
+
+The `_ah/` path is important as the views handle the built-in App Engine requests to `/_ah/warmup`, `/_ah/start`, and `/_ah/stop`.
+
+Additionally Djangae implements a view at `/_ah/clearsessions` to handle clearing expired Django sessions from the database. You should
+configure cron to post to this URL (see [sessions.md](Sessions))
