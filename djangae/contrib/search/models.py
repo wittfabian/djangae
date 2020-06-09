@@ -1,5 +1,4 @@
 from django.db import models
-from gcloudc.db import transaction
 from gcloudc.db.models.fields.iterable import (
     ListField,
 )
@@ -40,10 +39,10 @@ class WordIndex(models.Model):
 
     # Querying for documents or fields containing the word
     # will just be a key__startswith query (effectively)
-    id = models.CharField(primary_key=True, max_length=100)
+    id = models.CharField(primary_key=True, max_length=100, default=None)
 
     index_stats = models.ForeignKey("IndexStats", on_delete=models.CASCADE)
-    document = models.ForeignKey("Document", on_delete=models.CASCADE)
+    document_data = models.ForeignKey("DocumentData", on_delete=models.CASCADE)
     word = models.CharField(max_length=500)
     field_name = models.CharField(max_length=500)
     field_content = models.TextField()
@@ -52,9 +51,19 @@ class WordIndex(models.Model):
     # This is used when searching for phrases
     occurrences = ListField(models.IntegerField(), blank=False)
 
+    @classmethod
+    def document_id_from_pk(cls, pk):
+        """
+            Given a PK in the right format, return the document ID
+        """
+        if pk is None:
+            return None
+
+        return int(pk.split(WORD_DOCUMENT_JOIN_STRING)[-1])
+
     @property
     def document_id(self):
-        return int(self.key.split(WORD_DOCUMENT_JOIN_STRING)[1])
+        return self.document_data_id
 
     @property
     def document(self):
@@ -64,7 +73,7 @@ class WordIndex(models.Model):
         orig_pk = self.pk
 
         self.pk = WORD_DOCUMENT_JOIN_STRING.join(
-            self.index_stats_id, self.word, self.field_name, self.document_id
+            [str(x) for x in (self.index_stats_id, self.word, self.field_name, self.document_id)]
         )
 
         # Just check that we didn't *change* the PK

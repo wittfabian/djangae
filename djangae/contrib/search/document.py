@@ -53,13 +53,11 @@ class Field(object):
         if value is None:
             return None
 
+        # Lower-case everything by default
         value = value.lower()
 
-        to_remove = set(STOP_WORDS).union(PUNCTUATION)
-
-        tokens = value.split()  # Split on whitespace
-        tokens = [x for x in tokens if x not in to_remove]
-        return " ".join(tokens)
+        # Normalize whitespace
+        return " ".join(value.split())
 
     def tokenize_value(self, value):
         """
@@ -70,6 +68,38 @@ class Field(object):
             return value
 
         return value.split()  # Just split on whitespace, normalization would've done the work
+
+    def clean_token(self, token):
+        """
+            Called on each token, if the token should be discarded,
+            return None.
+        """
+
+        token = token.strip()  # Just in case
+        if token in STOP_WORDS:
+            return None  # Ignore stop words
+
+        if token in PUNCTUATION:
+            return None  # Ignore standalone punctuation
+
+        # Remove + signs, unless they are trailing
+        if "+" in token:
+            plus_count = 0
+            while token[-1] == "+":
+                token = token[:-1]
+                plus_count += 1
+
+            token = token.replace("+", "") + ("+" * plus_count)
+
+        if "#" in token:
+            # Replace hashes unless it's a music note or programming language
+            if len(token) > 2 or token[-1] != "#" or token[0] not in "abcdefgjx":
+                token = token.replace("#", "")
+
+        # Remove leading or trailing periods. In acronyms it's fine FIXME: handle "abs.dasd"
+        token = token.strip(".")
+
+        return token
 
 
 class AtomField(Field):
@@ -90,7 +120,7 @@ class NumberField(Field):
 
 class Document(object):
     def __init__(self, **kwargs):
-        self._data = None
+        self._data = kwargs.get("_document_data", None)
 
         self._fields = {}
 
@@ -104,8 +134,8 @@ class Document(object):
                 self._fields[attr_name] = attr
 
                 # Apply any field values passed into the init
-                if attr in kwargs:
-                    setattr(self, attr_name, kwargs[attr])
+                if attr_name in kwargs:
+                    setattr(self, attr_name, kwargs[attr_name])
                 else:
                     # Set default if there was no value
                     setattr(self, attr_name, attr.default)

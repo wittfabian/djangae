@@ -13,10 +13,10 @@ def _tokenize_query_string(query_string):
         based on the query_string
     """
 
-    # Normalize OR operators
-    query_string = query_string.replace(" or ", " OR ")
+    # We always lower case. Even Atom fields are case-insensitive
+    query_string = query_string.lower()
 
-    branches = query_string.split(" OR ")
+    branches = query_string.split(" or ")
 
     # Split into [(fieldname, query)] tuples for each branch
     field_queries = [
@@ -30,7 +30,7 @@ def _tokenize_query_string(query_string):
     # By this point, given the following query:
     # pikachu OR name:charmander OR name:"Mew Two" OR "Mr Mime"
     # we should have:
-    # [(None, "pikachu"), ("name", "charmander"), ("name", '"Mew Two"'), (None, '"Mr Mime"')]
+    # [(None, "pikachu"), ("name", "charmander"), ("name", '"mew two"'), (None, '"mr mime"')]
     # Note that exact matches will have quotes around them
 
     result = [
@@ -41,30 +41,42 @@ def _tokenize_query_string(query_string):
     # Now we should have
     # [
     #     ("word", None, "pikachu"), ("word", "name", "charmander"),
-    #     ("exact", "name", 'Mew Two'), ("exact", None, 'Mr Mime')
+    #     ("exact", "name", 'mew two'), ("exact", None, 'mr mime')
     # ]
+
     return result
 
 
-def build_document_queryset(query_string):
+def build_document_queryset(query_string, index):
+    assert(index.id)
+
     tokenization = _tokenize_query_string(query_string)
     if not tokenization:
         return DocumentData.objects.none()
 
     filters = Q()
 
+    # All queries need to prefix the index
+    prefix = "%s%s" % (str(index.id), WORD_DOCUMENT_JOIN_STRING)
+
     for kind, field, string in tokenization:
         if kind == "word":
             if not field:
-                start = string
-                end = "%s%s" % (string + chr(0x10FFFF), WORD_DOCUMENT_JOIN_STRING)
+                start = "%s%s%s" % (prefix, string, WORD_DOCUMENT_JOIN_STRING)
+                end = "%s%s%s%s" % (prefix, string, chr(0x10FFFF), WORD_DOCUMENT_JOIN_STRING)
                 filters |= Q(pk__gte=start, pk__lt=end)
             else:
-                start = "%s%s%s" % (string, WORD_DOCUMENT_JOIN_STRING, field)
-                end = "%s%s%s" % (string + chr(0x10FFFF), WORD_DOCUMENT_JOIN_STRING, field)
+                start = "%s%s%s%s%s" % (prefix, string, WORD_DOCUMENT_JOIN_STRING, field, WORD_DOCUMENT_JOIN_STRING)
+                end = "%s%s%s%s%s" % (
+                    prefix, string + chr(0x10FFFF), WORD_DOCUMENT_JOIN_STRING, field, WORD_DOCUMENT_JOIN_STRING
+                )
                 filters |= Q(pk__gte=start, pk__lt=end)
         else:
             raise NotImplementedError("Need to implement exact matching")
 
-    document_ids = WordIndex.objects.filter(filters).values_list("pk", flat=True)
+    document_ids = [
+        WordIndex.document_id_from_pk(x)
+        for x in WordIndex.objects.filter(filters).values_list("pk", flat=True)
+    ]
+
     return DocumentData.objects.filter(pk__in=document_ids)

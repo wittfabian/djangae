@@ -13,6 +13,10 @@ class Index(object):
             name=name
         )
 
+    @property
+    def id(self):
+        return self.index.pk if self.index else None
+
     def add(self, document_or_documents):
         from .models import (  # Prevent import too early
             DocumentData,
@@ -53,14 +57,20 @@ class Index(object):
                     continue
 
                 for token in tokens:
+                    token = field.clean_token(token)
+                    if token is None:
+                        continue
+
                     # FIXME: Update occurrances
                     with transaction.atomic():
                         obj, updated = WordIndex.objects.update_or_create(
-                            document_id=document.id,
+                            document_data_id=document.id,
                             index_stats=self.index,
                             word=token,
                             field_name=field.attname,
-                            field_content=value
+                            defaults=dict(
+                                field_content=value
+                            )
                         )
 
                         data.refresh_from_db()
@@ -75,7 +85,7 @@ class Index(object):
 
     def search(self, query_string, limit=1000):
         from .query import build_document_queryset
-        qs = build_document_queryset(query_string)[:limit]
+        qs = build_document_queryset(query_string, self)[:limit]
 
         for document in qs:
-            yield Document(document)
+            yield Document(_document_data=document)

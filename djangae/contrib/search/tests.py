@@ -33,8 +33,8 @@ class IndexingTests(TestCase):
         class Doc(Document):
             text = search.TextField()
 
-        doc = Doc(text="This is a test")
-        doc2 = Doc(text="This is also a test")
+        doc = Doc(text="This is a test. Cheese.")
+        doc2 = Doc(text="This is also a test. Pickle.")
 
         index = Index(name="My Index")
         index.add(doc)
@@ -44,10 +44,43 @@ class IndexingTests(TestCase):
         self.assertTrue(doc.id)
         self.assertTrue(doc2.id)
 
-        results = [x for x in index.search("this")]
+        results = [x for x in index.search("test")]
 
         # Both documents should have come back
-        self.assertEqual(
+        self.assertCountEqual(
             [doc.id, doc2.id],
             [x.id for x in results]
         )
+
+        results = [x for x in index.search("TEST")]
+
+        # Both documents should have come back
+        self.assertCountEqual(
+            [doc.id, doc2.id],
+            [x.id for x in results]
+        )
+
+        results = [x for x in index.search("cheese OR pickle")]
+
+        # Both documents should have come back
+        self.assertCountEqual(
+            [doc.id, doc2.id],
+            [x.id for x in results]
+        )
+
+        results = [x for x in index.search('cheese OR text:pickle')]
+
+        # Both documents should have come back
+        self.assertCountEqual(
+            [doc.id, doc2.id],
+            [x.id for x in results]
+        )
+
+        # FIXME: Exact matching
+        # results = [x for x in index.search('"cheese" OR pickle')]
+
+        # Both documents should have come back
+        # self.assertCountEqual(
+        #   [doc.id, doc2.id],
+        #   [x.id for x in results]
+        # )
