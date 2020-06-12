@@ -139,6 +139,9 @@ DATABASES = {
     "nonamespace": {
         'ENGINE': 'djangae.db.backends.appengine',
     },
+    'sql': {
+        'ENGINE': 'django.db.backends.sqlite3',
+    }
 }
 
 DATABASE_ROUTERS = ['testapp.routers.TestRouter']

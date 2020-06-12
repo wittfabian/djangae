@@ -14,6 +14,14 @@ class DeferIterationTestModel(models.Model):
     ignored = models.BooleanField(default=False)
 
 
+class DeferIterationTestSQLModel(models.Model):
+    test_database = 'sql'
+
+    touched = models.BooleanField(default=False)
+    finalized = models.BooleanField(default=False)
+    ignored = models.BooleanField(default=False)
+
+
 def callback(instance, touch=True):
     shard_index = int(os.environ[DEFERRED_ITERATION_SHARD_INDEX_KEY])
 
@@ -46,7 +54,13 @@ def finalize(touch=True):
         instance.save()
 
 
-class DeferIterationTestCase(TestCase):
+def finalize_sql(touch=True):
+    for instance in DeferIterationTestSQLModel.objects.all():
+        instance.finalized = True
+        instance.save()
+
+
+class DeferDatastoreIterationTestCase(TestCase):
     def test_passing_args_and_kwargs(self):
         [DeferIterationTestModel.objects.create() for i in range(25)]
 
@@ -110,3 +124,36 @@ class DeferIterationTestCase(TestCase):
 
         self.assertEqual(25, DeferIterationTestModel.objects.filter(touched=True).count())
         self.assertEqual(25, DeferIterationTestModel.objects.filter(finalized=True).count())
+
+
+class DeferSQLIterationTestCase(TestCase):
+
+    def test_instances_hit(self):
+        [DeferIterationTestSQLModel.objects.create() for i in range(25)]
+
+        defer_iteration_with_finalize(
+            DeferIterationTestSQLModel.objects.all(),
+            callback,
+            finalize_sql,
+            _shards=_SHARD_COUNT
+        )
+
+        self.process_task_queues()
+
+        self.assertEqual(25, DeferIterationTestSQLModel.objects.filter(touched=True).count())
+        self.assertEqual(25, DeferIterationTestSQLModel.objects.filter(finalized=True).count())
+
+    def test_excluded_missed(self):
+        [DeferIterationTestSQLModel.objects.create(ignored=(i < 5)) for i in range(25)]
+
+        defer_iteration_with_finalize(
+            DeferIterationTestSQLModel.objects.filter(ignored=False),
+            callback,
+            finalize_sql,
+            _shards=_SHARD_COUNT
+        )
+
+        self.process_task_queues()
+
+        self.assertEqual(5, DeferIterationTestSQLModel.objects.filter(ignored=True).count())
+        self.assertEqual(20, DeferIterationTestSQLModel.objects.filter(touched=True).count())
