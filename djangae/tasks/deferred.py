@@ -34,6 +34,7 @@ from django.conf import settings
 from django.db import models
 from django.urls import reverse_lazy
 from django.utils import timezone
+from django.utils.encoding import force_str
 from gcloudc.db import transaction
 
 from . import (
@@ -172,7 +173,7 @@ def defer(obj, *args, **kwargs):
     if task_args['target'] or task_args['retry_options'] or task_args['transactional']:
         raise NotImplementedError("FIXME. Implement these options")
 
-    deferred_handler_url = kwargs.pop("_url", None) or str(unquote(_DEFAULT_URL))
+    deferred_handler_url = kwargs.pop("_url", None) or unquote(force_str(_DEFAULT_URL))
 
     transactional = kwargs.pop("_transactional", False)  # noqa FIXME!
     small_task = kwargs.pop("_small_task", False)
@@ -217,7 +218,7 @@ def defer(obj, *args, **kwargs):
             'schedule_time': schedule_time,
             'app_engine_http_request': {  # Specify the type of request.
                 'http_method': 'POST',
-                'relative_uri': str(deferred_handler_url),
+                'relative_uri': deferred_handler_url,
                 'body': pickled,
                 'headers': task_headers,
             }
