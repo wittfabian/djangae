@@ -3,8 +3,6 @@ import json
 import logging
 import yaml
 
-from google.appengine.api import urlfetch
-
 from django.conf import settings
 from django.core.exceptions import MiddlewareNotUsed
 
@@ -122,13 +120,6 @@ class AppEngineSecurityMiddleware(MiddlewareMixin):
             replace_default_argument(yaml.load_all, 'Loader', yaml.loader.SafeLoader)
             replace_default_argument(yaml.parse, 'Loader', yaml.loader.SafeLoader)
             replace_default_argument(yaml.scan, 'Loader', yaml.loader.SafeLoader)
-
-            # AppEngine urlfetch.
-            # Does not validate certificates by default.
-            replace_default_argument(urlfetch.fetch, 'validate_certificate', True)
-            replace_default_argument(urlfetch.make_fetch_call, 'validate_certificate', True)
-            urlfetch.fetch = _HttpUrlLoggingWrapper(urlfetch.fetch)
-            urlfetch.make_fetch_call = _HttpUrlLoggingWrapper(urlfetch.make_fetch_call)
 
             for setting in ("CSRF_COOKIE_SECURE", "SESSION_COOKIE_HTTPONLY", "SESSION_COOKIE_SECURE"):
                 if not getattr(settings, setting, False):
