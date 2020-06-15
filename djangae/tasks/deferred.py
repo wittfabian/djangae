@@ -217,7 +217,7 @@ def defer(obj, *args, **kwargs):
             'schedule_time': schedule_time,
             'app_engine_http_request': {  # Specify the type of request.
                 'http_method': 'POST',
-                'relative_uri': deferred_handler_url,
+                'relative_uri': str(deferred_handler_url),
                 'body': pickled,
                 'headers': task_headers,
             }
