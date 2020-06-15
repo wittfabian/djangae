@@ -172,7 +172,7 @@ def defer(obj, *args, **kwargs):
     if task_args['target'] or task_args['retry_options'] or task_args['transactional']:
         raise NotImplementedError("FIXME. Implement these options")
 
-    deferred_handler_url = kwargs.pop("_url", unquote(_DEFAULT_URL))
+    deferred_handler_url = kwargs.pop("_url", None) or str(unquote(_DEFAULT_URL))
 
     transactional = kwargs.pop("_transactional", False)  # noqa FIXME!
     small_task = kwargs.pop("_small_task", False)
