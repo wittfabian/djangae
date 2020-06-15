@@ -3,7 +3,7 @@ from django.db.models import Q
 from .models import (
     WORD_DOCUMENT_JOIN_STRING,
     DocumentData,
-    WordIndex,
+    WordFieldIndex,
 )
 
 
@@ -61,22 +61,18 @@ def build_document_queryset(query_string, index):
 
     for kind, field, string in tokenization:
         if kind == "word":
+            start = "%s%s%s" % (prefix, string, WORD_DOCUMENT_JOIN_STRING)
+            end = "%s%s%s%s" % (prefix, string, chr(0x10FFFF), WORD_DOCUMENT_JOIN_STRING)
             if not field:
-                start = "%s%s%s" % (prefix, string, WORD_DOCUMENT_JOIN_STRING)
-                end = "%s%s%s%s" % (prefix, string, chr(0x10FFFF), WORD_DOCUMENT_JOIN_STRING)
                 filters |= Q(pk__gte=start, pk__lt=end)
             else:
-                start = "%s%s%s%s%s" % (prefix, string, WORD_DOCUMENT_JOIN_STRING, field, WORD_DOCUMENT_JOIN_STRING)
-                end = "%s%s%s%s%s" % (
-                    prefix, string + chr(0x10FFFF), WORD_DOCUMENT_JOIN_STRING, field, WORD_DOCUMENT_JOIN_STRING
-                )
-                filters |= Q(pk__gte=start, pk__lt=end)
+                filters |= Q(pk__gte=start, pk__lt=end, field_name=field)
         else:
             raise NotImplementedError("Need to implement exact matching")
 
-    document_ids = [
-        WordIndex.document_id_from_pk(x)
-        for x in WordIndex.objects.filter(filters).values_list("pk", flat=True)
-    ]
+    document_ids = set([
+        WordFieldIndex.document_id_from_pk(x)
+        for x in WordFieldIndex.objects.filter(filters).values_list("pk", flat=True)
+    ])
 
     return DocumentData.objects.filter(pk__in=document_ids)

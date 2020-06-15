@@ -20,7 +20,7 @@ class Index(object):
     def add(self, document_or_documents):
         from .models import (  # Prevent import too early
             DocumentData,
-            WordIndex,
+            WordFieldIndex,
         )
 
         if isinstance(document_or_documents, Document):
@@ -63,18 +63,15 @@ class Index(object):
 
                     # FIXME: Update occurrances
                     with transaction.atomic():
-                        obj, updated = WordIndex.objects.update_or_create(
+                        obj, updated = WordFieldIndex.objects.update_or_create(
                             document_data_id=document.id,
                             index_stats=self.index,
                             word=token,
-                            field_name=field.attname,
-                            defaults=dict(
-                                field_content=value
-                            )
+                            field_name=field.attname
                         )
 
                         data.refresh_from_db()
-                        data.word_indexes.add(obj)
+                        data.word_field_indexes.add(obj)
                         data.save()
 
     def remove(self, document_or_documents):

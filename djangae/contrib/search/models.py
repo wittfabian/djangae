@@ -27,14 +27,14 @@ class DocumentData(models.Model):
     # This allows for up-to 10000 unique terms in a single
     # document. We need this data when deleting a document
     # from the index
-    word_indexes = RelatedSetField("WordIndex")
+    word_field_indexes = RelatedSetField("WordFieldIndex")
 
 
-class WordIndex(models.Model):
+class WordFieldIndex(models.Model):
     # key should be of the format WWWW|XXXX|YYYY|ZZZZ where:
     # WWWW = index ID
-    # XXXX = normalised word
-    # YYYY = field name
+    # XXXX = field_name
+    # YYYY = normalised word
     # ZZZZ = document id
 
     # Querying for documents or fields containing the word
@@ -45,7 +45,6 @@ class WordIndex(models.Model):
     document_data = models.ForeignKey("DocumentData", on_delete=models.CASCADE)
     word = models.CharField(max_length=500)
     field_name = models.CharField(max_length=500)
-    field_content = models.TextField()
 
     # List of indexes into field content where this word occurs
     # This is used when searching for phrases
