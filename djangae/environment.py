@@ -21,7 +21,7 @@ def is_production_environment():
 
 
 def is_development_environment():
-    return 'SERVER_SOFTWARE' not in os.environ or os.environ['SERVER_SOFTWARE'].startswith("Development")
+    return 'GAE_ENV' not in os.environ or os.environ['GAE_ENV'] != 'standard'
 
 
 def is_in_task():
