@@ -8,6 +8,6 @@ if extra_library_path not in sys.path:
 default_app_config = 'djangae.apps.DjangaeConfig'
 
 __title__ = 'Djangae'
-__version__ = '2.0.0'
+__version__ = '1.0.1'
 
 VERSION = __version__
