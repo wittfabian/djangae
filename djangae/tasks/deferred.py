@@ -23,17 +23,20 @@ import os
 import pickle
 import time
 import types
+from datetime import timedelta
 from urllib.parse import unquote
-
-from django.conf import settings
-from django.db import models
-from django.urls import reverse
 
 from djangae.environment import task_queue_name
 from djangae.models import DeferIterationMarker
 from djangae.processing import find_key_ranges_for_queryset
 from djangae.utils import retry
+from django.conf import settings
+from django.db import models
+from django.urls import reverse_lazy
+from django.utils import timezone
+from django.utils.encoding import force_str
 from gcloudc.db import transaction
+from google.protobuf.timestamp_pb2 import Timestamp
 
 from . import (
     CLOUD_TASKS_LOCATION_SETTING,
@@ -48,7 +51,7 @@ logger = logging.getLogger(__name__)
 DEFERRED_ITERATION_SHARD_INDEX_KEY = "DEFERRED_ITERATION_SHARD_INDEX"
 
 _DEFAULT_QUEUE = "default"
-_DEFAULT_URL = unquote(reverse("tasks_deferred_handler"))
+_DEFAULT_URL = reverse_lazy("tasks_deferred_handler")
 _TASKQUEUE_HEADERS = {
     "Content-Type": "application/octet-stream"
 }
@@ -163,18 +166,28 @@ def defer(obj, *args, **kwargs):
         return pickle.dumps(curried, protocol=pickle.HIGHEST_PROTOCOL)
 
     KWARGS = {
-        "countdown", "eta", "name", "target", "retry_options"
+        "countdown", "eta", "name", "target", "retry_options", "transactional"
     }
 
-    taskargs = {x: kwargs.pop(("_%s" % x), None) for x in KWARGS}
-    taskargs["url"] = kwargs.pop("_url", _DEFAULT_URL)
+    task_args = {x: kwargs.pop(("_%s" % x), None) for x in KWARGS}
+
+    if task_args['target'] or task_args['retry_options']:
+        raise NotImplementedError("FIXME. Implement these options")
+
+    if task_args['transactional']:
+        logger.warn(
+            "WARNING: Transactional tasks are not yet supported. This could lead to unexpected behaviour!"
+        )
+
+    deferred_handler_url = kwargs.pop("_url", None) or unquote(force_str(_DEFAULT_URL))
 
     transactional = kwargs.pop("_transactional", False)  # noqa FIXME!
     small_task = kwargs.pop("_small_task", False)
     wipe_related_caches = kwargs.pop("_wipe_related_caches", True)
 
-    taskargs["headers"] = dict(_TASKQUEUE_HEADERS)
-    taskargs["headers"].update(kwargs.pop("_headers", {}))
+    task_headers = dict(_TASKQUEUE_HEADERS)
+    task_headers.update(kwargs.pop("_headers", {}))
+
     queue = kwargs.pop("_queue", _DEFAULT_QUEUE) or _DEFAULT_QUEUE
 
     if wipe_related_caches:
@@ -202,11 +215,25 @@ def defer(obj, *args, **kwargs):
         queue = queue or _DEFAULT_QUEUE
         path = client.queue_path(project_id, location, queue)
 
+        schedule_time = task_args['eta']
+        if task_args['countdown']:
+            schedule_time = timezone.now() + timedelta(seconds=task_args['countdown'])
+
+        if schedule_time:
+            # If a schedule time has bee requested, we need to convert
+            # to a Timestamp
+            ts = Timestamp()
+            ts.FromDatetime(schedule_time)
+            schedule_time = ts
+
         task = {
+            'name': task_args['name'],
+            'schedule_time': schedule_time,
             'app_engine_http_request': {  # Specify the type of request.
                 'http_method': 'POST',
-                'relative_uri': _DEFAULT_URL,
-                'body': pickled
+                'relative_uri': deferred_handler_url,
+                'body': pickled,
+                'headers': task_headers,
             }
         }
 
@@ -227,7 +254,7 @@ def defer(obj, *args, **kwargs):
         task = {
             'app_engine_http_request': {  # Specify the type of request.
                 'http_method': 'POST',
-                'relative_uri': _DEFAULT_URL,
+                'relative_uri': deferred_handler_url,
                 'body': pickled
             }
         }
