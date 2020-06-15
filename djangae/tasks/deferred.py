@@ -23,11 +23,10 @@ import os
 import pickle
 import time
 import types
-from urllib.parse import unquote
 
 from django.conf import settings
 from django.db import models
-from django.urls import reverse
+from django.urls import reverse_lazy
 
 from djangae.environment import task_queue_name
 from djangae.models import DeferIterationMarker
@@ -48,7 +47,7 @@ logger = logging.getLogger(__name__)
 DEFERRED_ITERATION_SHARD_INDEX_KEY = "DEFERRED_ITERATION_SHARD_INDEX"
 
 _DEFAULT_QUEUE = "default"
-_DEFAULT_URL = unquote(reverse("tasks_deferred_handler"))
+_DEFAULT_URL = reverse_lazy("tasks_deferred_handler")
 _TASKQUEUE_HEADERS = {
     "Content-Type": "application/octet-stream"
 }
