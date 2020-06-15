@@ -170,8 +170,13 @@ def defer(obj, *args, **kwargs):
 
     task_args = {x: kwargs.pop(("_%s" % x), None) for x in KWARGS}
 
-    if task_args['target'] or task_args['retry_options'] or task_args['transactional']:
+    if task_args['target'] or task_args['retry_options']:
         raise NotImplementedError("FIXME. Implement these options")
+
+    if task_args['transactional']:
+        logger.warn(
+            "WARNING: Transactional tasks are not yet supported. This could lead to unexpected behaviour!"
+        )
 
     deferred_handler_url = kwargs.pop("_url", None) or unquote(force_str(_DEFAULT_URL))
 
