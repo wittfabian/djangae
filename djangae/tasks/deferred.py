@@ -36,6 +36,7 @@ from django.urls import reverse_lazy
 from django.utils import timezone
 from django.utils.encoding import force_str
 from gcloudc.db import transaction
+from google.protobuf.timestamp_pb2 import Timestamp
 
 from . import (
     CLOUD_TASKS_LOCATION_SETTING,
@@ -217,6 +218,13 @@ def defer(obj, *args, **kwargs):
         schedule_time = task_args['eta']
         if task_args['countdown']:
             schedule_time = timezone.now() + timedelta(seconds=task_args['countdown'])
+
+        if schedule_time:
+            # If a schedule time has bee requested, we need to convert
+            # to a Timestamp
+            ts = Timestamp()
+            ts.FromDatetime(schedule_time)
+            schedule_time = ts
 
         task = {
             'name': task_args['name'],
