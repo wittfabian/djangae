@@ -24,6 +24,7 @@ import pickle
 import time
 import types
 
+from urllib.parse import unquote
 from django.conf import settings
 from django.db import models
 from django.urls import reverse_lazy
@@ -166,7 +167,7 @@ def defer(obj, *args, **kwargs):
     }
 
     taskargs = {x: kwargs.pop(("_%s" % x), None) for x in KWARGS}
-    taskargs["url"] = kwargs.pop("_url", _DEFAULT_URL)
+    taskargs["url"] = kwargs.pop("_url", unquote(_DEFAULT_URL))
 
     transactional = kwargs.pop("_transactional", False)  # noqa FIXME!
     small_task = kwargs.pop("_small_task", False)
