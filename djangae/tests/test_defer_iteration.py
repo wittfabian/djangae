@@ -127,6 +127,7 @@ class DeferDatastoreIterationTestCase(TestCase):
 
 
 class DeferSQLIterationTestCase(TestCase):
+    multi_db = True
 
     def test_instances_hit(self):
         [DeferIterationTestSQLModel.objects.create() for i in range(25)]
