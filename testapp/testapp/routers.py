@@ -16,5 +16,5 @@ class TestRouter(object):
         try:
             model = hints.get('model', apps.get_model(app_label, model_name))
             return db == self._get_db(model)
-        except LookupError:
+        except (LookupError, ValueError):
             return False
