@@ -1,14 +1,9 @@
-## v2.0.0 (in development)
 
-### New features & improvements:
+## v1.0.1
 
--
+### New features & improvements
 
-### Bug fixes:
-
--
-
-## v1.0.1 (bug fix release)
+- Added SQL support for defer_iteration_with_finalize
 
 ### Bug fixes:
 
