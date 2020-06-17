@@ -96,7 +96,7 @@ def start_emulators(persist_data, emulators=None, storage_dir=None, task_target_
         _wait_for_datastore(DATASTORE_PORT)
 
     if "tasks" in emulators:
-        from djangae.tasks import cloud_tasks_parent_path
+        from djangae.tasks import cloud_tasks_parent_path, cloud_tasks_project, cloud_tasks_location
         default_queue = "%s/queues/default" % cloud_tasks_parent_path()
 
         if task_target_port is None:
@@ -111,12 +111,20 @@ def start_emulators(persist_data, emulators=None, storage_dir=None, task_target_
             else:
                 task_target_port = _DJANGO_DEFAULT_PORT
 
-        os.environ["TASKS_EMULATOR_HOST"] = "127.0.0.1:%s" % TASKS_PORT
-        _ACTIVE_EMULATORS["tasks"] = _launch_process(
-            "gcloud-tasks-emulator start -q --port=%s --target-port=%s --default-queue=%s" % (
-                TASKS_PORT, task_target_port, default_queue
-            )
+        command = "gcloud-tasks-emulator start -q --port=%s --target-port=%s --default-queue=%s" % (
+            TASKS_PORT, task_target_port, default_queue
         )
+
+        # If the project contains a queue.yaml, pass it to the Tasks Emulator so that those queues
+        # can be created (needs version >= 0.4.0)
+        queue_yaml = os.path.join(get_application_root(), "queue.yaml")
+        if os.path.exists(queue_yaml):
+            command += " --queue-yaml=%s --queue-yaml-project=%s --queue-yaml-location=%s" % (
+                queue_yaml, cloud_tasks_project(), cloud_tasks_location()
+            )
+
+        os.environ["TASKS_EMULATOR_HOST"] = "127.0.0.1:%s" % TASKS_PORT
+        _ACTIVE_EMULATORS["tasks"] = _launch_process(command)
         _wait_for_tasks(TASKS_PORT)
 
     if "storage" in emulators:
