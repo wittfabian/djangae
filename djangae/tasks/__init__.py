@@ -71,6 +71,12 @@ def cloud_tasks_project():
     return project_id
 
 
+def cloud_tasks_location():
+    location_id = getattr(settings, CLOUD_TASKS_LOCATION_SETTING, None)
+    assert(location_id)
+    return location_id
+
+
 def cloud_tasks_parent_path():
     """
         Returns the path based on settings.CLOUD_TASK_PROJECT_ID
