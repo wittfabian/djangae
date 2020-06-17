@@ -119,7 +119,7 @@ def start_emulators(persist_data, emulators=None, storage_dir=None, task_target_
         # can be created (needs version >= 0.4.0)
         queue_yaml = os.path.join(get_application_root(), "queue.yaml")
         if os.path.exists(queue_yaml):
-            command += " --queue-yaml=%s --queue-yaml-project=%s --queue-yaml-location=%s"  % (
+            command += " --queue-yaml=%s --queue-yaml-project=%s --queue-yaml-location=%s" % (
                 queue_yaml, cloud_tasks_project(), cloud_tasks_location()
             )
 
