@@ -84,6 +84,9 @@ class TestCaseMixin(LiveServerTestCase):
 
         return count
 
+    def assertNumTasksEquals(self, num, queue_name=None):
+        self.assertEqual(num, self.get_task_count(queue_name=queue_name))
+
     def process_task_queues(self, queue_name=None, failure_behaviour=TaskFailedBehaviour.RAISE_ERROR):
         for queue in self._get_queues(queue_name):
             path = queue.name
