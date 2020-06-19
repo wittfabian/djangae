@@ -110,7 +110,7 @@ def _curry_callable(obj, *args, **kwargs):
     """
 
     if isinstance(obj, types.MethodType):
-        return (invoke_member, (obj.im_self, obj.im_func.__name__) + args, kwargs)
+        return (invoke_member, (obj.__self__, obj.__func__.__name__) + args, kwargs)
 
     elif isinstance(obj, types.BuiltinMethodType):
         if not obj.__self__:
