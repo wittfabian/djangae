@@ -423,7 +423,8 @@ def _generate_shards(
         if end:
             filter_kwargs["pk__lt"] = end
 
-        qs = qs.filter(**filter_kwargs)
+        # calling order_by with no args to clear any pre-existing ordering (e.g. from Meta.ordering)
+        qs = qs.filter(**filter_kwargs).order_by()
 
         @transaction.atomic(xg=True)
         def make_shard():
