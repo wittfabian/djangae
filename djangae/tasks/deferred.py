@@ -110,7 +110,7 @@ def _curry_callable(obj, *args, **kwargs):
     """
 
     if isinstance(obj, types.MethodType):
-        return (invoke_member, (obj.im_self, obj.im_func.__name__) + args, kwargs)
+        return (invoke_member, (obj.__self__, obj.__func__.__name__) + args, kwargs)
 
     elif isinstance(obj, types.BuiltinMethodType):
         if not obj.__self__:
@@ -136,7 +136,8 @@ def _wipe_caches(args, kwargs):
     # instances.
     def _wipe_instance(instance):
         for field in (f for f in instance._meta.fields if f.remote_field):
-            field.delete_cached_value(instance)
+            if field.is_cached(instance):
+                field.delete_cached_value(instance)
 
     # We have to copy the instances before wiping the caches
     # otherwise the calling code will suddenly lose their cached things
