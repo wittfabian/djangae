@@ -94,10 +94,7 @@ class TestCaseMixin(LiveServerTestCase):
         return tasks
 
     def process_task_queues(self, queue_name=None, failure_behaviour=TaskFailedBehaviour.RAISE_ERROR):
-        if queue_name:
-            queue_names = [queue_name]
-        else:
-            queue_names = [q.name for q in self._get_queues()]
+        queue_names = [q.name for q in self._get_queues(queue_name)]
 
         tasks = self._get_all_tasks_for_queues(queue_names)
         task_failure_counts = {}
