@@ -87,44 +87,49 @@ class TestCaseMixin(LiveServerTestCase):
     def assertNumTasksEquals(self, num, queue_name=None):
         self.assertEqual(num, self.get_task_count(queue_name=queue_name))
 
+    def _get_all_tasks_for_queues(self, queue_names):
+        tasks = []
+        for path in queue_names:
+            tasks += [x for x in self.task_client.list_tasks(path)]
+        return tasks
+
     def process_task_queues(self, queue_name=None, failure_behaviour=TaskFailedBehaviour.RAISE_ERROR):
-        for queue in self._get_queues(queue_name):
-            path = queue.name
+        queue_names = [q.name for q in self._get_queues(queue_name)]
 
-            tasks = [x for x in self.task_client.list_tasks(path)]
-            task_failure_counts = {}
+        tasks = self._get_all_tasks_for_queues(queue_names)
+        task_failure_counts = {}
 
-            while tasks:
-                task = tasks.pop(0)
+        while tasks:
+            task = tasks.pop(0)
 
-                try:
-                    response = self.task_client.run_task(task.name + "?port=%s" % self._server_port)
+            try:
+                response = self.task_client.run_task(task.name + "?port=%s" % self._server_port)
 
-                    # If the returned status wasn't a success then
-                    # drop into the except block below to handle the
-                    # failure
-                    status = response.last_attempt.response_status.code
-                    if str(status)[0] != "2":
-                        raise GoogleAPIError("Task returned bad status: %s" % status)
+                # If the returned status wasn't a success then
+                # drop into the except block below to handle the
+                # failure
+                status = response.last_attempt.response_status.code
+                if str(status)[0] != "2":
+                    raise GoogleAPIError("Task returned bad status: %s" % status)
 
-                except GoogleAPIError as e:
-                    if failure_behaviour == TaskFailedBehaviour.RETRY_TASK:
-                        if task.name not in task_failure_counts:
-                            task_failure_counts[task.name] = 1
-                        else:
-                            task_failure_counts[task.name] += 1
-
-                        if task_failure_counts[task.name] >= self.max_task_retry_count:
-                            # Make sure we don't get an infinite loop while retrying
-                            raise
-
-                        tasks.append(task)  # Add back to the end of the queue
-                        continue
-                    elif failure_behaviour == TaskFailedBehaviour.RAISE_ERROR:
-                        raise TaskFailedError(task.name, str(e))
+            except GoogleAPIError as e:
+                if failure_behaviour == TaskFailedBehaviour.RETRY_TASK:
+                    if task.name not in task_failure_counts:
+                        task_failure_counts[task.name] = 1
                     else:
-                        # Do nothing, ignore the failure
-                        pass
+                        task_failure_counts[task.name] += 1
 
-                if not tasks:
-                    tasks = [x for x in self.task_client.list_tasks(path)]
+                    if task_failure_counts[task.name] >= self.max_task_retry_count:
+                        # Make sure we don't get an infinite loop while retrying
+                        raise
+
+                    tasks.append(task)  # Add back to the end of the queue
+                    continue
+                elif failure_behaviour == TaskFailedBehaviour.RAISE_ERROR:
+                    raise TaskFailedError(task.name, str(e))
+                else:
+                    # Do nothing, ignore the failure
+                    pass
+
+            if not tasks:
+                tasks = self._get_all_tasks_for_queues(queue_names)
