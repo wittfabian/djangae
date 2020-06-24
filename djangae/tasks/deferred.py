@@ -109,10 +109,7 @@ def _curry_callable(obj, *args, **kwargs):
         and unpickled safely.
     """
 
-    if isinstance(obj, types.MethodType):
-        return (invoke_member, (obj.__self__, obj.__func__.__name__) + args, kwargs)
-
-    elif isinstance(obj, types.BuiltinMethodType):
+    if isinstance(obj, (types.MethodType, types.BuiltinMethodType)):
         if not obj.__self__:
             return (obj, args, kwargs)
         else:
