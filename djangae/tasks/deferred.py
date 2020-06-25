@@ -33,7 +33,7 @@ from djangae.processing import find_key_ranges_for_queryset
 from djangae.utils import retry
 from django.conf import settings
 from django.db import (
-    connection,
+    connections,
     models,
 )
 from django.urls import reverse_lazy
@@ -245,7 +245,7 @@ def defer(obj, *args, **kwargs):
     """
 
     KWARGS = {
-        "countdown", "eta", "name", "target", "retry_options", "transactional"
+        "countdown", "eta", "name", "target", "retry_options", "transactional", "using"
     }
 
     task_args = {x: kwargs.pop(("_%s" % x), None) for x in KWARGS}
@@ -255,7 +255,15 @@ def defer(obj, *args, **kwargs):
 
     deferred_handler_url = kwargs.pop("_url", None) or unquote(force_str(_DEFAULT_URL))
 
-    transactional = kwargs.pop("_transactional", False)  # noqa FIXME!
+    using = task_args["using"] or "default"
+    connection = connections[using]
+
+    transactional = (
+        task_args["transactional"]
+        if task_args["transactional"] is not None
+        else connection.in_atomic_block
+    )
+
     small_task = kwargs.pop("_small_task", False)
     wipe_related_caches = kwargs.pop("_wipe_related_caches", True)
 
@@ -279,7 +287,7 @@ def defer(obj, *args, **kwargs):
 
     args = (project_id, location, queue, pickled, task_args, small_task, deferred_handler_url, task_headers)
 
-    if task_args['transactional']:
+    if transactional:
         # Django connections have an on_commit message that run things on
         # post-commit.
         connection.on_commit(functools.partial(_schedule_task, *args))

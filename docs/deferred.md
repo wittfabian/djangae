@@ -22,9 +22,12 @@ The built-in `defer()` method suffers from a number of issues with both bugs, an
 `djangae.deferred.defer` is a near-drop-in replacement for `google.appengine.ext.deferred.defer` with a few differences:
 
  - The code has been altered to always use a Datastore entity group unless the task is explicitly marked as being "small" (less than 100k) with the `_small_task=True` flag.
- - Transactional defers are always transactional, even if the task is > 100k (this is a bug in the original defer)
  - If a Django instance is passed as an argument to the called function, then the foreign key caches are wiped before
    deferring to avoid bloating and stale data when the task runs. This can be disabled with `_wipe_related_caches=False`
+ - Transactional tasks do not *guarantee* that the task will run. It's possible (but unlikely) for the transaction to complete
+   successfully, but the queuing of the task to fail. It is not possible for the transaction to fail and the task to queue however.
+ - `_transactional` defaults to `True` if called within an atomic() block, or `False` otherwise.
+ - `_using` is provided to choose which connection should control transactional queuing. Defaults to "default".
 
 Everything else should behave in the same way.
 
