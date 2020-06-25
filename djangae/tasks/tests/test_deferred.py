@@ -1,6 +1,7 @@
 from django.db import models
 from djangae.tasks.deferred import defer
 from djangae.test import TestCase, TaskFailedError
+from gcloudc.db import transaction
 
 
 def test_task(*args, **kwargs):
@@ -22,6 +23,10 @@ class DeferModelA(models.Model):
 class DeferModelB(models.Model):
     class Meta:
         app_label = "djangae"
+
+
+def create_defer_model_b(key_value):
+    DeferModelB.objects.create(pk=key_value)
 
 
 class DeferTests(TestCase):
@@ -48,3 +53,25 @@ class DeferTests(TestCase):
         initial_count = self.get_task_count()
         defer(test_task)
         self.assertEqual(self.get_task_count(), initial_count + 1)
+
+    def test_transactional_defer(self):
+        try:
+            with transaction.atomic():
+                defer(create_defer_model_b, 1, _transactional=True)
+                raise ValueError()  # Rollback the transaction
+        except ValueError:
+            pass
+
+        self.process_task_queues()
+
+        # Shouldn't have created anything
+        self.assertEqual(0, DeferModelB.objects.count())
+
+        with transaction.atomic():
+            defer(create_defer_model_b, 1, _transactional=True)
+            self.process_task_queues()
+            self.assertEqual(0, DeferModelB.objects.count())  # Still nothing
+
+        # Now we should be good!
+        self.process_task_queues()
+        self.assertEqual(1, DeferModelB.objects.count())

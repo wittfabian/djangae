@@ -18,6 +18,7 @@ This defer is an adapted version of that one, with the following changes:
 """
 
 import copy
+import functools
 import logging
 import os
 import pickle
@@ -31,7 +32,10 @@ from djangae.models import DeferIterationMarker
 from djangae.processing import find_key_ranges_for_queryset
 from djangae.utils import retry
 from django.conf import settings
-from django.db import models
+from django.db import (
+    connection,
+    models,
+)
 from django.urls import reverse_lazy
 from django.utils import timezone
 from django.utils.encoding import force_str
@@ -152,57 +156,15 @@ def _wipe_caches(args, kwargs):
             _wipe_instance(kwargs[k])
 
 
-def defer(obj, *args, **kwargs):
-    """
-        This is a replacement for google.appengine.ext.deferred.defer which doesn't
-        suffer the bug where tasks are deferred non-transactionally when they hit a
-        certain limit.
+def _serialize(obj, *args, **kwargs):
+    curried = _curry_callable(obj, *args, **kwargs)
+    return pickle.dumps(curried, protocol=pickle.HIGHEST_PROTOCOL)
 
-        It also *always* uses an entity group, unless you pass _small_task=True in which
-        case it *never* uses an entity group (but you are limited by 100K)
-    """
 
-    def serialize(obj, *args, **kwargs):
-        curried = _curry_callable(obj, *args, **kwargs)
-        return pickle.dumps(curried, protocol=pickle.HIGHEST_PROTOCOL)
-
-    KWARGS = {
-        "countdown", "eta", "name", "target", "retry_options", "transactional"
-    }
-
-    task_args = {x: kwargs.pop(("_%s" % x), None) for x in KWARGS}
-
-    if task_args['target'] or task_args['retry_options']:
-        raise NotImplementedError("FIXME. Implement these options")
-
-    if task_args['transactional']:
-        logger.warn(
-            "WARNING: Transactional tasks are not yet supported. This could lead to unexpected behaviour!"
-        )
-
-    deferred_handler_url = kwargs.pop("_url", None) or unquote(force_str(_DEFAULT_URL))
-
-    transactional = kwargs.pop("_transactional", False)  # noqa FIXME!
-    small_task = kwargs.pop("_small_task", False)
-    wipe_related_caches = kwargs.pop("_wipe_related_caches", True)
-
-    task_headers = dict(_TASKQUEUE_HEADERS)
-    task_headers.update(kwargs.pop("_headers", {}))
-
-    queue = kwargs.pop("_queue", _DEFAULT_QUEUE) or _DEFAULT_QUEUE
-
-    if wipe_related_caches:
-        args = list(args)
-        _wipe_caches(args, kwargs)
-        args = tuple(args)
-
-    pickled = serialize(obj, *args, **kwargs)
-
-    project_id = cloud_tasks_project()
-    assert(project_id)  # Should be checked in apps.py ready()
-
-    location = getattr(settings, CLOUD_TASKS_LOCATION_SETTING, None)
-    assert(location)  # Should be checked in apps.py
+def _schedule_task(
+    project_id, location, queue, pickled_data,
+    task_args, small_task, deferred_handler_url, task_headers
+):
 
     client = get_cloud_tasks_client()
 
@@ -211,7 +173,7 @@ def defer(obj, *args, **kwargs):
         # Always use an entity group unless this has been
         # explicitly marked as a small task
         if not small_task:
-            deferred_task = DeferredTask.objects.create(data=pickled)
+            deferred_task = DeferredTask.objects.create(data=pickled_data)
 
         queue = queue or _DEFAULT_QUEUE
         path = client.queue_path(project_id, location, queue)
@@ -233,7 +195,7 @@ def defer(obj, *args, **kwargs):
             'app_engine_http_request': {  # Specify the type of request.
                 'http_method': 'POST',
                 'relative_uri': deferred_handler_url,
-                'body': pickled,
+                'body': pickled_data,
                 'headers': task_headers,
             }
         }
@@ -250,7 +212,7 @@ def defer(obj, *args, **kwargs):
         if small_task:
             raise
 
-        pickled = serialize(_run_from_datastore, deferred_task.pk)
+        pickled = _serialize(_run_from_datastore, deferred_task.pk)
 
         task = {
             'app_engine_http_request': {  # Specify the type of request.
@@ -266,6 +228,63 @@ def defer(obj, *args, **kwargs):
         if deferred_task:
             deferred_task.delete()
         raise
+
+
+def defer(obj, *args, **kwargs):
+    """
+        This is a reimplementation of the defer() function that shipped with Google App Engine
+        before the Python 3 runtime.
+
+        It fixes a number of bugs in that implementation, but has some subtle differences. In
+        particular, the _transactional flag is not entirely atomic - deferred tasks will
+        run on successful commit, but they're not *guaranteed* to run if there is an error
+        submitting them.
+
+        It also *always* uses an entity group, unless you pass _small_task=True in which
+        case it *never* uses an entity group (but you are limited by 100K)
+    """
+
+    KWARGS = {
+        "countdown", "eta", "name", "target", "retry_options", "transactional"
+    }
+
+    task_args = {x: kwargs.pop(("_%s" % x), None) for x in KWARGS}
+
+    if task_args['target'] or task_args['retry_options']:
+        raise NotImplementedError("FIXME. Implement these options")
+
+    deferred_handler_url = kwargs.pop("_url", None) or unquote(force_str(_DEFAULT_URL))
+
+    transactional = kwargs.pop("_transactional", False)  # noqa FIXME!
+    small_task = kwargs.pop("_small_task", False)
+    wipe_related_caches = kwargs.pop("_wipe_related_caches", True)
+
+    task_headers = dict(_TASKQUEUE_HEADERS)
+    task_headers.update(kwargs.pop("_headers", {}))
+
+    queue = kwargs.pop("_queue", _DEFAULT_QUEUE) or _DEFAULT_QUEUE
+
+    if wipe_related_caches:
+        args = list(args)
+        _wipe_caches(args, kwargs)
+        args = tuple(args)
+
+    pickled = _serialize(obj, *args, **kwargs)
+
+    project_id = cloud_tasks_project()
+    assert(project_id)  # Should be checked in apps.py ready()
+
+    location = getattr(settings, CLOUD_TASKS_LOCATION_SETTING, None)
+    assert(location)  # Should be checked in apps.py
+
+    args = (project_id, location, queue, pickled, task_args, small_task, deferred_handler_url, task_headers)
+
+    if task_args['transactional']:
+        # Django connections have an on_commit message that run things on
+        # post-commit.
+        connection.on_commit(functools.partial(_schedule_task, *args))
+    else:
+        _schedule_task(*args)
 
 
 _TASK_TIME_LIMIT = 10 * 60
