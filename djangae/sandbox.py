@@ -23,6 +23,9 @@ DATASTORE_PORT = 10901
 TASKS_PORT = 9022
 STORAGE_PORT = 10911
 
+DEFAULT_PROJECT_ID = "example"
+DEFAULT_BUCKET = "%s.appspot.com" % DEFAULT_PROJECT_ID
+
 
 def _launch_process(command_line):
     env = os.environ.copy()
@@ -80,10 +83,11 @@ def start_emulators(persist_data, emulators=None, storage_dir=None, task_target_
 
     emulators = emulators or _ALL_EMULATORS
     storage_dir = storage_dir or os.path.join(get_application_root(), ".storage")
+    enable_test_environment_variables()
 
     if "datastore" in emulators:
         os.environ["DATASTORE_EMULATOR_HOST"] = "127.0.0.1:%s" % DATASTORE_PORT
-        os.environ["DATASTORE_PROJECT_ID"] = "example"
+        os.environ["DATASTORE_PROJECT_ID"] = DEFAULT_PROJECT_ID
 
         # Start the cloud datastore emulator
         command = "gcloud beta emulators datastore start --consistency=1.0 --quiet --project=example"
@@ -129,7 +133,7 @@ def start_emulators(persist_data, emulators=None, storage_dir=None, task_target_
 
     if "storage" in emulators:
         os.environ["STORAGE_EMULATOR_HOST"] = "http://127.0.0.1:%s" % STORAGE_PORT
-        command = "gcloud-storage-emulator start -q --port=%s" % STORAGE_PORT
+        command = "gcloud-storage-emulator start -q --port=%s --default-bucket=%s" % (STORAGE_PORT, DEFAULT_BUCKET)
 
         if not persist_data:
             command += " --no-store-on-disk"
@@ -148,3 +152,13 @@ def stop_emulators(emulators=None):
     for k, v in _ACTIVE_EMULATORS.items():
         if k in emulators:
             v.kill()
+
+
+def enable_test_environment_variables():
+    """
+        Sets up sample environment variables that are available on production
+    """
+
+    os.environ.setdefault("GOOGLE_CLOUD_PROJECT", DEFAULT_PROJECT_ID)
+    os.environ.setdefault("GAE_APPLICATION", "e~%s" % DEFAULT_PROJECT_ID)
+    os.environ.setdefault("GAE_ENV", "development")
