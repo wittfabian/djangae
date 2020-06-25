@@ -40,11 +40,11 @@ Djangae currently supports Django 2.2.
 
 ## Documentation
 
-https://djangae.readthedocs.io/
+[https://djangae.readthedocs.io/](https://djangae.readthedocs.io/)
 
 # Installation
 
-See https://djangae.readthedocs.io/en/latest/installation/
+See [https://djangae.readthedocs.io/en/latest/installation/](https://djangae.readthedocs.io/en/latest/installation/)
 
 
 # Contributing to Djangae
