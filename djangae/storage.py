@@ -35,6 +35,7 @@ def _get_storage_client():
 
     from google.cloud import storage
     return storage.Client(
+        project=os.environ['GOOGLE_CLOUD_PROJECT'],
         _http=http,
     )
 
