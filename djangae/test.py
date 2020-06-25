@@ -14,7 +14,6 @@ TaskFailedError = TaskFailedError
 TaskFailedBehaviour = TaskFailedBehaviour
 
 
-
 class TestEnvironmentMixin(object):
     def setUp(self):
         cache.clear()
