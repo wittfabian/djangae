@@ -5,11 +5,10 @@ import logging
 from django.conf import settings
 from django.http import HttpResponse
 from django.utils import timezone
-from google.appengine.ext.deferred import defer
+
 
 # DJANGAE
 from .models import DatastoreLock
-
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +22,9 @@ QUEUE = getattr(settings, 'DJANGAE_CLEANUP_LOCKS_QUEUE', 'default')
 
 def cleanup_locks(request):
     """ Delete all Lock objects that are older than 10 minutes. """
+
+    from djangae.tasks.deferred import defer
+
     logger.info("Deferring djangae.contrib.lock cleanup task")
     defer(cleanup_locks_task, _queue=QUEUE)
     return HttpResponse("Cleanup locks task is running")

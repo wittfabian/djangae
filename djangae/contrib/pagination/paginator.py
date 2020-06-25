@@ -1,16 +1,16 @@
 from hashlib import md5
 from django.conf import settings
-from django.db import models
+from django.db import models, router
 from django.core import paginator
 from django.core.cache import cache
 
 from djangae.contrib.pagination.decorators import _field_name_for_ordering
-from djangae.db.backends.appengine.query import extract_ordering
+from gcloudc.db.backends.datastore.query import extract_ordering
 
 
 # TODO: it would be nice to be able to define a function which is given the queryset and returns
 # the cache time.  That would allow different cache times for different queries.
-CACHE_TIME = getattr(settings, "DJANGAE_PAGINATION_CACHE_TIME", 30*60)
+CACHE_TIME = getattr(settings, "DJANGAE_PAGINATION_CACHE_TIME", 30 * 60)
 
 
 class PaginationOrderingRequired(RuntimeError):
@@ -86,10 +86,13 @@ def _get_marker(query_id, page_number):
 def queryset_identifier(queryset):
     """ Returns a string that uniquely identifies this query excluding its low and high mark"""
 
+    db_alias = router.db_for_read(queryset.model)
+    sql_and_params = u"%s:%s" % queryset.query.sql_with_params()
+    cache_key = u"%s:%s" % (db_alias, sql_and_params)
+    cache_key = cache_key.encode('utf-8')
+
     hasher = md5()
-    hasher.update(queryset.model._meta.db_table)
-    hasher.update(str(queryset.query.where))
-    hasher.update(str(queryset.query.order_by))
+    hasher.update(cache_key)
     return hasher.hexdigest()
 
 

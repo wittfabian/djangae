@@ -1,47 +1,15 @@
-import os
-import tempfile
-
-import yaml
-
 from djangae import checks
-from djangae.contrib import sleuth
-from djangae.environment import get_application_root
 from djangae.test import TestCase
 from django.test.utils import override_settings
 
 
 class ChecksTestCase(TestCase):
-    def test_deferred_builtin_on(self):
-        # Read and parse app.yaml
-        app_yaml_path = os.path.join(get_application_root(), "app.yaml")
-        with open(app_yaml_path, 'r') as f:
-            app_yaml = yaml.load(f.read())
-        builtins = app_yaml.get('builtins', [])
-
-        # Switch on deferred builtin
-        builtins.append({'deferred': 'on'})
-        app_yaml['builtins'] = builtins
-
-        # Write to temporary app.yaml
-        temp_app_yaml_dir = tempfile.mkdtemp()
-        temp_app_yaml_path = os.path.join(temp_app_yaml_dir, "app.yaml")
-        temp_app_yaml = file(temp_app_yaml_path, 'w')
-        yaml.dump(app_yaml, temp_app_yaml)
-
-        with sleuth.switch('djangae.checks.get_application_root', lambda : temp_app_yaml_dir) as mock_app_root:
-            warnings = checks.check_deferred_builtin()
-            self.assertEqual(len(warnings), 1)
-            self.assertEqual(warnings[0].id, 'djangae.W001')
-
-    def test_deferred_builtin_off(self):
-        warnings = checks.check_deferred_builtin()
-        self.assertEqual(len(warnings), 0)
 
     def test_csrf_check(self):
         errors = checks.check_session_csrf_enabled()
         self.assertEqual(len(errors), 0)
 
-        with override_settings(MIDDLEWARE=[], MIDDLEWARE_CLASSES=[]):
+        with override_settings(CSRF_USE_SESSIONS=False):
             errors = checks.check_session_csrf_enabled()
             self.assertEqual(len(errors), 1)
             self.assertEqual(errors[0].id, 'djangae.E001')
@@ -98,14 +66,3 @@ class ChecksTestCase(TestCase):
         with override_settings(TEMPLATES=template_setting):
             errors = checks.check_cached_template_loader_used()
             self.assertEqual(len(errors), 0)
-
-    def test_app_engine_sdk_version_check_supported(self):
-        with sleuth.switch('djangae.checks._VersionList', lambda x: [1, 0, 0]):
-            errors = checks.check_app_engine_sdk_version()
-            self.assertEqual(len(errors), 0)
-
-    def test_app_engine_sdk_version_check_unsupported(self):
-        with sleuth.switch('djangae.checks._VersionList', lambda x: [100, 0, 0]):
-            errors = checks.check_app_engine_sdk_version()
-            self.assertEqual(len(errors), 1)
-            self.assertEqual(errors[0].id, 'djangae.W002')

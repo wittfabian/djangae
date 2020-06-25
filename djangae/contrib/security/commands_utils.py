@@ -1,10 +1,10 @@
-import re, inspect
-import django
+import inspect
+import re
 
-from django.contrib.admindocs import views as admindocs_views
 from django.contrib.admindocs import utils as admindocs_utils
+from django.contrib.admindocs import views as admindocs_views
 from django.core.exceptions import ViewDoesNotExist
-from django.core.urlresolvers import RegexURLPattern, RegexURLResolver
+from django.urls.resolvers import URLResolver, URLPattern
 
 
 def extract_views_from_urlpatterns(urlpatterns, base='', namespace=None, ignored_modules=None):
@@ -15,8 +15,10 @@ def extract_views_from_urlpatterns(urlpatterns, base='', namespace=None, ignored
     """
     ignored_modules = ignored_modules if ignored_modules else []
     views = []
+
     for p in urlpatterns:
-        if isinstance(p, RegexURLPattern):
+
+        if isinstance(p, URLPattern):
             # Handle correct single URL patterns
             try:
                 if namespace:
@@ -25,25 +27,31 @@ def extract_views_from_urlpatterns(urlpatterns, base='', namespace=None, ignored
                     name = p.name
                 if hasattr(p.callback, '__module__'):
                     if p.callback.__module__.split('.')[0] not in ignored_modules:
-                        views.append((p.callback, base + p.regex.pattern, name))
+                        views.append((p.callback, base, name))
                 else:
-                    views.append((p.callback, base + p.regex.pattern, name))
+                    views.append((p.callback, base, name))
             except ViewDoesNotExist:
                 continue
 
-        elif isinstance(p, RegexURLResolver):
+        elif isinstance(p, URLResolver):
             # Handle include() definitions
             try:
                 patterns = p.url_patterns
             except ImportError:
                 continue
-            views.extend(extract_views_from_urlpatterns(patterns, base + p.regex.pattern,
-                namespace=(namespace or p.namespace), ignored_modules=ignored_modules))
+
+            views.extend(
+                extract_views_from_urlpatterns(
+                    patterns, base,
+                    namespace=(namespace or p.namespace),
+                    ignored_modules=ignored_modules
+                )
+            )
 
         elif hasattr(p, '_get_callback'):
             # Handle string like 'foo.views.view_name' or just function view
             try:
-                views.append((p._get_callback(), base + p.regex.pattern, p.name))
+                views.append((p._get_callback(), base + p.pattern, p.name))
             except ViewDoesNotExist:
                 continue
 
@@ -53,23 +61,26 @@ def extract_views_from_urlpatterns(urlpatterns, base='', namespace=None, ignored
                 patterns = p.url_patterns
             except ImportError:
                 continue
-            views.extend(extract_views_from_urlpatterns(patterns, base + p.regex.pattern,
-                namespace=namespace, ignored_modules=ignored_modules))
+
+            views.extend(
+                extract_views_from_urlpatterns(
+                    patterns, base + p.regex.pattern,
+                    namespace=namespace, ignored_modules=ignored_modules
+                )
+            )
         else:
             raise TypeError("%s does not appear to be a urlpattern object" % p)
     return views
 
 
-def display_as_table(views):
+def display_as_table(views, headers=('URL', 'Handler path', 'Decorators & Mixins')):
     """
         Get list of views from dumpurls security management command
         and returns them in the form of table to print in command line
     """
-    headers = ('URL', 'Handler path', 'Decorators & Mixins')
-    views = [row.split('||', 3) for row in sorted(views)]
     # Find the longest value in each column
-    widths = [len(max(columns, key=len)) for columns in zip(*[headers] + views)]
-    widths = [width  if width < 100 else 100 for width in widths]
+    widths = [len(max(columns, key=len)) for columns in zip(*[headers] + sorted(views))]
+    widths = [width if width < 100 else 100 for width in widths]
     table_views = []
 
     table_views.append(
@@ -78,26 +89,19 @@ def display_as_table(views):
     table_views.append('-+-'.join('-' * width for width in widths))
 
     for row in views:
-        if len(row[2]) > 100:
-            row[2] = row[2].split(',')
-            row[2] = [",".join(row[2][i:i+2]) for i in range(0, len(row[2]), 2)]
+        for cell in row:
+            if len(cell) > 100:
+                cell = cell.split(',')
+                cell = [",".join(cell[i:i+2]) for i in range(0, len(cell), 2)]
 
-        mixins = row[2]
-        if type(mixins) == list:
-            i = 0
-            for line in mixins:
-                row[2] = line.strip()
-                if i > 0:
-                    row[0] = ''
-                    row[1] = ''
-                table_views.append(
-                    ' | '.join('{0:<{1}}'.format(cdata, width) for width, cdata in zip(widths, row))
-                )
-                i += 1
-        else:
-            table_views.append(
-                ' | '.join('{0:<{1}}'.format(cdata, width) for width, cdata in zip(widths, row))
-            )
+            mixins = cell
+            if type(mixins) == list:
+                for i, line in enumerate(mixins):
+                    cell = line.strip()
+
+        table_views.append(
+            ' | '.join('{0:<{1}}'.format(cdata, width) for width, cdata in zip(widths, row))
+        )
 
     return "\n".join([v for v in table_views]) + "\n"
 
@@ -139,7 +143,7 @@ def get_decorators(func):
                     if k.startswith('@'):
                         decorators.append(k.strip().split('(')[0])
                     j += 1
-                    if j >= i: # don't wrap around when we get to the start of the file
+                    if j >= i:  # don't wrap around when we get to the start of the file
                         break
                     k = source_code[i-j]
             i += 1
@@ -172,28 +176,24 @@ def get_mixins(func, ignored_modules=None):
 # TODO: submit this as a patch to Django.
 
 non_named_group_matcher = re.compile(
-    r'\(' # opening bracket of group
-    '(' # a group for THIS regex...
-        r'[^\)]*' # zero or more characters that are not a closing bracket
+    r'\('  # opening bracket of group
+    '('  # a group for THIS regex...
+        r'[^\)]*'  # noqa zero or more characters that are not a closing bracket
         # the next line allows us to have non-capturing groups within the overall group that we're matching
-        r'\(\?[^\)]*\)' # a non-capturing group
-        r'[^\)]*' # zero or more characters that are not a bracket
-    ')*' # all of that ^ bit zero or more times
-    r'\)' # the closing bracket of the group
+        r'\(\?[^\)]*\)'  # a non-capturing group
+        r'[^\)]*'  # zero or more characters that are not a bracket
+    ')*'  # all of that ^ bit zero or more times
+    r'\)'  # the closing bracket of the group
 )
 
 
 def simplify_regex(pattern):
     """ Do the same as django.contrib.admindocs.views.simplify_regex but with our improved regex.
     """
-    if django.VERSION[1] > 10:
-        original_regex = admindocs_utils.unnamed_group_matcher
-        admindocs_utils.unnamed_group_matcher = non_named_group_matcher
-        result = admindocs_views.simplify_regex(pattern)
-        admindocs_utils.unnamed_group_matcher = original_regex
-    else:
-        original_regex = admindocs_views.non_named_group_matcher
-        admindocs_views.non_named_group_matcher = non_named_group_matcher
-        result = admindocs_views.simplify_regex(pattern)
-        admindocs_views.non_named_group_matcher = original_regex
+
+    original_regex = admindocs_utils.unnamed_group_matcher
+    admindocs_utils.unnamed_group_matcher = non_named_group_matcher
+    result = admindocs_views.simplify_regex(pattern)
+    admindocs_utils.unnamed_group_matcher = original_regex
+
     return result

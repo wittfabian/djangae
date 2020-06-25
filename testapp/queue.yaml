@@ -1,9 +1,0 @@
-queue:
-- name: default
-  rate: 1/s
-
-- name: another
-  rate: 1/s
-
-- name: pull
-  mode: pull

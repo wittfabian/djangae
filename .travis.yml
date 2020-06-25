@@ -1,29 +1,22 @@
 language: python
-sudo: false
-python:
-- 2.7
-env:
-  - DJANGO_VERSION=1.8
-  - DJANGO_VERSION=1.9
-  - DJANGO_VERSION=1.10
-  - DJANGO_VERSION=1.11
 matrix:
-  fast_finish: true
-before_install:
-- pip install codecov
-
+  include:
+    - python: 3.7
+      env: TOXENV=py37
+    - python: 3.8
+      env: TOXENV=py38
+    - python: 3.8
+      env: TOXENV=flake8
 install:
-- cd testapp
-- python install_deps.py
+  - pip install tox
+cache:
+  directories:
+    - "$HOME/google-cloud-sdk/"
 script:
-- python manage.py test
-after_script:
-- cd ..
-- rm django_tests
-after_success:
-- codecov
-notifications:
-  slack:
-    rooms:
-      - djangae:3tHoJEVCSGLDrLj9ZZAOSMhr#general
-      - secure: UBhOWAtUrp9sqN6hm4PWir23GK67wo3tb0Ic7tXLpvKYnACz8kjRIiLUMZjl6kftwO+hwhVQdyZ2iSD6isGfB8Q/CyKCej693N2GZ7wxl/dCGqm6CmKrTQZ7Bkwov22fe1/j8U1fhIuR2j/qkFPkvONi+fXirQqFYxmqor1I9a0=
+  # https://stackoverflow.com/a/38776394/48362
+  - gcloud version || true
+  - if [ ! -d "$HOME/google-cloud-sdk/bin" ]; then rm -rf $HOME/google-cloud-sdk; export CLOUDSDK_CORE_DISABLE_PROMPTS=1; curl https://sdk.cloud.google.com | bash; fi
+  - source /home/travis/google-cloud-sdk/path.bash.inc
+  - gcloud version
+  - CLOUDSDK_CORE_DISABLE_PROMPTS=1 gcloud components install cloud-datastore-emulator beta
+  - tox

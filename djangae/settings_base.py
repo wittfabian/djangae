@@ -1,21 +1,13 @@
-DEFAULT_FILE_STORAGE = 'djangae.storage.CloudStorage'
-FILE_UPLOAD_MAX_MEMORY_SIZE = 1024 * 1024
-FILE_UPLOAD_HANDLERS = (
-    'djangae.storage.BlobstoreFileUploadHandler',
-    'django.core.files.uploadhandler.MemoryFileUploadHandler',
-)
+from djangae.environment import is_production_environment
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'djangae.db.backends.appengine'
-    }
-}
-
-GENERATE_SPECIAL_INDEXES_DURING_TESTING = False
+FILE_CACHE_LOCATION = '/tmp/cache' if is_production_environment() else '.cache'
 
 CACHES = {
+    # We default to the filesystem cache, since it's quick and easy for simple app
+    # For larger application you should consider Cloud Memory Store (which does not have a free tier)
     'default': {
-        'BACKEND': 'django.core.cache.backends.memcached.MemcachedCache',
+        'BACKEND': 'django.core.cache.backends.filebased.FileBasedCache',
+        'LOCATION': FILE_CACHE_LOCATION,
     }
 }
 
@@ -46,16 +38,6 @@ LOGGING = {
     }
 }
 
-EMAIL_BACKEND = 'djangae.mail.AsyncEmailBackend'
-
 # Setting to * is OK, because GAE takes care of domain routing - setting it to anything
 # else just causes unnecessary pain when something isn't accessible under a custom domain
 ALLOWED_HOSTS = ("*",)
-
-DJANGAE_RUNSERVER_IGNORED_FILES_REGEXES = ['^.+$(?<!\.py)(?<!\.yaml)(?<!\.html)']
-# Note that these should match a directory name, not directory path:
-DJANGAE_RUNSERVER_IGNORED_DIR_REGEXES = [r"^google_appengine$"]
-
-TEST_RUNNER = 'djangae.test.DjangaeDiscoverRunner'
-
-DJANGAE_USE_LEGACY_CONTAINS_LOGIC = False 

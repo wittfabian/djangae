@@ -1,6 +1,7 @@
 # STANDARD LIB
 from datetime import timedelta
 import hashlib
+import random
 import time
 
 # THRID PARTY
@@ -8,14 +9,14 @@ from django.db import models
 from django.utils import timezone
 from django.utils.encoding import python_2_unicode_compatible
 
-# DJANGAE
-from djangae.db import transaction
-from djangae.fields import CharField
+from gcloudc.db import transaction
+from gcloudc.db.backends.datastore.transaction import TransactionFailedError
+from gcloudc.db.models.fields.charfields import CharField
 
 
 class LockQuerySet(models.query.QuerySet):
 
-    def acquire(self, identifier, wait=True, steal_after_ms=None):
+    def acquire(self, identifier, wait=True, steal_after_ms=None, max_wait_ms=None):
         """ Create or fetch the Lock with the given `identifier`.
         `wait`:
             If True, wait until the Lock is available, otherwise if the lcok is not available then
@@ -24,31 +25,46 @@ class LockQuerySet(models.query.QuerySet):
             If the lock is not available (already exists), then steal it if it's older than this.
             E.g. if you know that the section of code you're locking should never take more than
             3 seconds, then set this to 3000.
+        `max_wait_ms`:
+            Wait, but only for this long. If no lock has been acquired then returns
+            None.
         """
-        identifier_hash = hashlib.md5(identifier).hexdigest()
+        identifier_hash = hashlib.md5(identifier.encode()).hexdigest()
 
-        @transaction.atomic()
+        start_time = timezone.now()
+
         def trans():
-            lock = self.filter(identifier_hash=identifier_hash).first()
-            if lock:
-                # Lock already exists, so check if it's old enough to ignore/steal
-                if (
-                    steal_after_ms and
-                    timezone.now() - lock.timestamp > timedelta(microseconds=steal_after_ms * 1000)
-                ):
-                    # We can steal it.  Update timestamp to now and return it
-                    lock.timestamp = timezone.now()
-                    lock.save()
-                    return lock
-            else:
-                return DatastoreLock.objects.create(
-                    identifier_hash=identifier_hash,
-                    identifier=identifier
-                )
+            """ Wrapper for the atomic transaction that handles transaction errors """
+            @transaction.atomic(independent=True)
+            def _trans():
+                lock = self.filter(identifier_hash=identifier_hash).first()
+                if lock:
+                    # Lock already exists, so check if it's old enough to ignore/steal
+                    if (
+                        steal_after_ms and
+                        timezone.now() - lock.timestamp > timedelta(microseconds=steal_after_ms * 1000)
+                    ):
+                        # We can steal it.  Update timestamp to now and return it
+                        lock.timestamp = timezone.now()
+                        lock.save()
+                        return lock
+                else:
+                    return DatastoreLock.objects.create(
+                        identifier_hash=identifier_hash,
+                        identifier=identifier
+                    )
+            try:
+                return _trans()
+            except TransactionFailedError:
+                return None
 
         lock = trans()
         while wait and lock is None:
-            time.sleep(0.1)  # Sleep for a bit between retries
+            # If more than max_wait_ms has elapsed, then give up
+            if (max_wait_ms is not None) and (timezone.now() - start_time > timedelta(microseconds=max_wait_ms * 1000)):
+                break
+
+            time.sleep(random.uniform(0, 1))  # Sleep for a random bit between retries
             lock = trans()
         return lock
 

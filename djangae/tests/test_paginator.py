@@ -14,6 +14,9 @@ class SimplePaginatedModel(models.Model):
     field1 = models.IntegerField(default=0)
     field2 = models.CharField(max_length=10)
 
+    class Meta:
+        ordering = ("field1",)
+
 
 class PaginatorTests(TestCase):
     def setUp(self):
@@ -25,7 +28,7 @@ class PaginatorTests(TestCase):
         ]
 
     def test_no_previous_on_first_page(self):
-        with sleuth.watch('djangae.db.backends.appengine.commands.datastore.Query.Run') as query:
+        with sleuth.watch('gcloudc.db.backends.datastore.commands.Query.__init__') as query:
             paginator = Paginator(SimplePaginatedModel.objects.all(), 2)
 
             self.assertFalse(query.called)
@@ -54,21 +57,6 @@ class PaginatorTests(TestCase):
         paginator = Paginator(SimplePaginatedModel.objects.all(), 2)
         with self.assertRaises(NotImplementedError):
             paginator.num_pages
-
-    def test_page_runs_limited_query(self):
-         with sleuth.watch('djangae.db.backends.appengine.commands.datastore.Query.Run') as query:
-            paginator = Paginator(SimplePaginatedModel.objects.all(), 2)
-
-            self.assertFalse(query.called)
-            page = paginator.page(1)
-            self.assertFalse(page.has_previous())
-            self.assertTrue(page.has_next())
-            self.assertTrue(query.called)
-
-            # Should've queried for 1 more than we asked to determine if there is a next
-            # page or not
-            self.assertEqual(query.calls[0].kwargs["limit"], 3)
-            self.assertEqual(len(page.object_list), 2)
 
     def test_results_correct(self):
         paginator = Paginator(SimplePaginatedModel.objects.all(), 2)

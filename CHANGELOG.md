@@ -1,4 +1,54 @@
-## v0.9.12 (in development)
+## v2.0.0 (in development)
+
+### New features & improvements:
+
+- Upgraded the codebase to Python 3
+- Switched to running the tests using tox (remove testapp etc.)
+- Replaced memcache with FileBasedCache (or Memorystore for Redis)
+- Replace storage implementation using the new python3 client
+- Removed the following:
+  - djangae.db (moved to gcloud-connectors)
+  - contrib.consistency (new datastore is strongly consistent)
+  - contrib.mappers (partially superseded by djangae.tasks)
+  - contrib.contenttypes (may come back, originally for eventual consistency reasons)
+  - contrib.gauth* (will come back in some form, but there's no users API anymore)
+  - contrib.processing (partially superseded by djangae.tasks)
+  - contrib.uniquetool (unique markers don't exist as new datastore is consistent)
+  - djangae.mail (there's no built-in way to send email on Google Cloud)
+  - djangae.test_runner / noseplugin (now we have separate emulators for cloud services)
+  - djangae.fields (moved to gcloud-connectors)
+  - djangae.forms (used for database fields which no longer exist in djangae)
+  - lib.memcache (memcache doesn't exist on the Python 3 runtime)
+
+
+### Bug fixes:
+
+- Made pagination cache keys deterministic
+
+## v1.0.1 (bug fix release)
+
+### New features & improvements:
+ - Add `max_wait_ms` to `Lock.acquire` which returns early if no lock is available after this long
+
+### Bug fixes:
+
+- Fixes bug where `djangae.contrib.backups` would fail if models shared the same kind.
+- Fixes bug where `djangae.contrib.backups` would not backup models who explictly set table name with `db_table`.
+- Handle transaction errors when trying to acquire a lock. Improved the retry countdown.
+
+## v1.0.0
+
+### New features & improvements:
+
+- Backup all datastore namespaces.
+- Add a `"DEFERRED_ITERATION_SHARD_INDEX"` key to os.environ for callbacks running from `defer_iteration_with_finalize`
+- Changed `ensure_instance_included` to `ensure_instance_consistent`
+
+### Bug fixes:
+
+- N/A
+
+## v0.9.12
 
 ### New features & improvements:
 
@@ -6,11 +56,21 @@
 - Additional option to not start mapper pipeline; and provide outputs to finalize function.
 - `atomic()` (when used as a context manager) now returns an object representing the current transaction
 - Added `djangae.db.transaction.current_transaction()` to return the same thing from inside an `atomic()` decorator
+- Added `Transaction.has_been_read(instance)`, `Transaction.has_been_written` and `Transaction.refresh_if_unread(instance)` which allows writing safe transactional code.
 - Added `Transaction.has_already_been_read(instance)` and `Transaction.refresh_if_unread(instance)` which allows writing safe transactional code.
 - Added App Engine SDK version check on project startup.
+- Added support for named class-based views to dumpurls.  Also now supports export to either json or csv
+- Added `deferred.defer_iteration_with_finalize`
+- Added `Transaction.protect_read` which prevents a specific instance being read inside a transaction.
+- Improved `djangae.utils.retry` to catch the Datastore's `InternalError`, and to better select wait times between attempts. Also improved the logging and prevented losing the source of the final exception when retrying fails.
+- Updated `djangae.contrib.backup` to use the new export API (the existing API was deprecated in Feb 2018). This adds a dependency of `google-auth` and `google-api-python-client`,
+  and also requires some manual permissions to be configured for the app service account. Existing djangae settings will be respected. Read https://cloud.google.com/datastore/docs/schedule-export for details on the new permissions required, and https://cloud.google.com/datastore/docs/export-import-entities
+  for an overview including differences between the two APIs.
+- Added new option `remove_duplicates` to ListField and RelatedListField which removes duplicated elements and retain order while saving.
 
 ### Bug fixes:
 
+- Fixed bug where when running test suite with a target module, if any of the targetted tests had an import error, they were being skipped / silently failing.
 - Fixed `ImportError` when running `./manage.py runserver` and the SDK is not already on the Python import path.
 - Fix a ValueError when sharding string keys in the migrations mapper library.
 - Fixed Djangae's project description on pypi.org.
@@ -25,6 +85,11 @@
 - Simplified the atomic() and non_atomic() decorator/context managers to hopefully eliminate edge-case/threading bugs that have been seen.
 - Fix a bug where the context cache would be incorrectly set after leaving a non_atomic block
 - Fixed serialization/deserialization of JSONFields
+- Fixed migrations failing to map all entities of a kind.
+- Mapping queryset should support shard slicing.
+- Replaced deprecated resources(`models.get_models`, `models.get_apps` and `Options.module_name`) in `djangae.forms.fields.py`.
+- Fixed AttributeError when calling method `UniqueActionAdmin.model_choices()` on `djangae.contrib.uniquetool` app
+- Fixed a bug where UUIDField values weren't correctly converted to uuid.UUID objects when read from the Datastore
 
 ## v0.9.11
 
@@ -67,6 +132,7 @@
  - Create .editorconfig to ensure basic editor settings are consistent between users
  - Fix import error in SDK 1.9.60
  - Add .flake8 file to move towards enforcement code standard
+ - Correctly select initial values for SetField form widget
  - Previously `instance.relatedlistfield.all()[0]` would retrieve all items before indexing, now it only grabs the first
  - Fixed `instance.relatedlistfield.values_list(...)` which would die with an error in 0.9.10 and earlier
  - Add missing `djangae/fields/allkeys-5.2.0.zip` file to `MANIFEST.in`

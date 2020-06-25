@@ -1,10 +1,7 @@
-import __builtin__
 import functools
 import json
 import logging
 import yaml
-
-from google.appengine.api import urlfetch
 
 from django.conf import settings
 from django.core.exceptions import MiddlewareNotUsed
@@ -39,8 +36,10 @@ def get_default_argument(function, argument):
 
 def replace_default_argument(function, argument, replacement):
     argument_index = find_argument_index(function, argument)
-    num_positional_args = (function.func_code.co_argcount -
-                         len(function.func_defaults))
+    num_positional_args = (
+        function.func_code.co_argcount -
+        len(function.func_defaults)
+    )
     default_position = argument_index - num_positional_args
     if default_position < 0:
         raise ApiSecurityException('Attempt to modify positional default value')
@@ -71,6 +70,7 @@ class _JsonEncoderForHtml(json.JSONEncoder):
                 chunk = chunk.replace(character, replacement)
             yield chunk
 
+
 def _HttpUrlLoggingWrapper(func):
     """Decorates func, logging when 'url' params do not start with https://."""
     @functools.wraps(func)
@@ -92,7 +92,9 @@ def _HttpUrlLoggingWrapper(func):
         return func(*args, **kwargs)
     return _CheckAndLog
 
+
 PATCHES_APPLIED = False
+
 
 class AppEngineSecurityMiddleware(MiddlewareMixin):
     """
@@ -118,13 +120,6 @@ class AppEngineSecurityMiddleware(MiddlewareMixin):
             replace_default_argument(yaml.load_all, 'Loader', yaml.loader.SafeLoader)
             replace_default_argument(yaml.parse, 'Loader', yaml.loader.SafeLoader)
             replace_default_argument(yaml.scan, 'Loader', yaml.loader.SafeLoader)
-
-            # AppEngine urlfetch.
-            # Does not validate certificates by default.
-            replace_default_argument(urlfetch.fetch, 'validate_certificate', True)
-            replace_default_argument(urlfetch.make_fetch_call, 'validate_certificate', True)
-            urlfetch.fetch = _HttpUrlLoggingWrapper(urlfetch.fetch)
-            urlfetch.make_fetch_call = _HttpUrlLoggingWrapper(urlfetch.make_fetch_call)
 
             for setting in ("CSRF_COOKIE_SECURE", "SESSION_COOKIE_HTTPONLY", "SESSION_COOKIE_SECURE"):
                 if not getattr(settings, setting, False):

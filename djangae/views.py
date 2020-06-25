@@ -3,8 +3,7 @@ import logging
 from importlib import import_module
 
 from django.conf import settings
-from django.http import HttpResponse, HttpResponseServerError
-from django.views.decorators.http import require_POST
+from django.http import HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 
 from djangae import environment
@@ -25,17 +24,17 @@ def warmup(request):
                 import_module('%s.%s' % (app, name))
             except ImportError:
                 pass
-    return HttpResponse("Ok.")
+    return HttpResponse("OK")
 
 
 def start(request):
     module_started.send(sender=__name__, request=request)
-    return HttpResponse("Ok.")
+    return HttpResponse("OK")
 
 
 def stop(request):
     module_stopped.send(sender=__name__, request=request)
-    return HttpResponse("Ok.")
+    return HttpResponse("OK")
 
 
 @csrf_exempt
@@ -74,22 +73,14 @@ def deferred(request):
     return response
 
 
-@csrf_exempt
-@require_POST
-def internalupload(request):
-    try:
-        return HttpResponse(str(request.FILES['file'].blobstore_info.key()))
-    except Exception:
-        logger.exception("DJANGAE UPLOAD FAILED: The internal upload handler couldn't retrieve the blob info key.")
-        return HttpResponseServerError()
-
-
-@environment.task_or_admin_only
+@environment.task_only
 def clearsessions(request):
     engine = import_module(settings.SESSION_ENGINE)
     try:
         engine.SessionStore.clear_expired()
     except NotImplementedError:
-        logger.exception("Session engine '%s' doesn't support clearing "
-                          "expired sessions.\n", settings.SESSION_ENGINE)
-    return HttpResponse("Ok.")
+        logger.exception(
+            "Session engine '%s' doesn't support clearing "
+            "expired sessions.\n", settings.SESSION_ENGINE
+        )
+    return HttpResponse("OK")

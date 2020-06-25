@@ -10,7 +10,7 @@ It is useful for things such as performing Datastore transactions which may coll
 ### `djangae.utils.retry`
 
 ```python
-retry(function, _catch=None, _attempts=3, _initial_wait=375, _max_wait=30000)
+retry(function, _catch=None, _attempts=3, _initial_wait=375, _max_wait=30000, _avoid_clashes=True)
 ```
 
 Calls the given function, catching the given exception(s), and (re)trying up to a maximum of `_attempts` times.
@@ -26,6 +26,10 @@ The wait will double on each subsequent retry, up to a maximum of `_max_wait` mi
 	google.appengine.runtime.apiproxy_errors.Error
 )
 ```
+
+If `_avoid_clashes` is True (default) then a random time up to a second will be added after the first
+retry (the retry time is still capped at `_max_wait`). This is to help avoid situations where several
+tasks collide, and then all back off for the same amount of time before clashing again.
 
 ### `djangae.utils.retry_on_error`
 

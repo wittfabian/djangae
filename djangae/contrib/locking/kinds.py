@@ -8,4 +8,3 @@ class LOCK_KINDS(object):
     """
     WEAK = 'weak'
     STRONG = 'strong'
-
