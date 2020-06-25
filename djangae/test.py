@@ -1,4 +1,3 @@
-import os
 
 from django.test.runner import DiscoverRunner
 from djangae.tasks.test import (
@@ -15,19 +14,9 @@ TaskFailedError = TaskFailedError
 TaskFailedBehaviour = TaskFailedBehaviour
 
 
-def enable_test_environment_variables():
-    """
-        Sets up sample environment variables that are available on production
-    """
-
-    os.environ.setdefault("GOOGLE_CLOUD_PROJECT", "example")
-    os.environ.setdefault("GAE_APPLICATION", "e~example")
-    os.environ.setdefault("GAE_ENV", "development")
-
 
 class TestEnvironmentMixin(object):
     def setUp(self):
-        enable_test_environment_variables()
         cache.clear()
         super().setUp()
 
