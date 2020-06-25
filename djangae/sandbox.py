@@ -17,10 +17,10 @@ from djangae.environment import get_application_root
 _ACTIVE_EMULATORS = {}
 _ALL_EMULATORS = ("datastore", "tasks", "storage")
 
-_DJANGO_DEFAULT_PORT = 8000
+_DJANGO_DEFAULT_PORT = 8080
 
 DATASTORE_PORT = 10901
-TASKS_PORT = 10908
+TASKS_PORT = 9022
 STORAGE_PORT = 10911
 
 
